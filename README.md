@@ -1,0 +1,15 @@
+# DataForce
+
+A collaborative data annotation platform for labeling, reviewing, and validating datasets for AI model training. Teams import raw data, label it against a declarative project schema, review each other's work, and export immutable, versioned snapshots in training-ready formats.
+
+Status: **specification**. No implementation yet.
+
+## Specs
+
+| Spec | What it covers |
+|---|---|
+| [`docs/dataforce-platform`](docs/dataforce-platform/spec.md) | Core platform — projects, label schemas, task distribution, review, agreement metrics, export, dataset catalog and subscriptions |
+| [`docs/agent-toolkit`](docs/agent-toolkit/spec.md) | Shared Python library — LLM client, JSON/string/file utilities. Built in its own repository |
+| [`docs/guided-validation`](docs/guided-validation/spec.md) | Presentation mode serving LLM-generated validation questions one at a time |
+
+Build order: `agent-toolkit` → platform → `guided-validation`.
