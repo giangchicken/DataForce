@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    paths: ["agent-toolkit/**"]
+  pull_request:
+    paths: ["agent-toolkit/**"]
+
+defaults:
+  run:
+    working-directory: agent-toolkit
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra llm
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy --strict src/agent_toolkit
+      - run: uv run pytest -q
+      - run: uv build
