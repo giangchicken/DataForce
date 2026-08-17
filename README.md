@@ -8,8 +8,9 @@ Status: **specification**. No implementation yet.
 
 | Spec | What it covers |
 |---|---|
-| [`docs/dataforce-platform`](docs/dataforce-platform/spec.md) | Core platform — projects, label schemas, task distribution, review, agreement metrics, export, dataset catalog and subscriptions |
+| [`docs/sft-dataset-pipeline`](docs/sft-dataset-pipeline/spec.md) | **Start here.** The end-to-end workflow that produces a released SFT dataset — gated DVC stages over existing open source, with the annotation surface on Label Studio |
 | [`docs/agent-toolkit`](docs/agent-toolkit/spec.md) | Shared Python library — LLM client, JSON/string/file utilities. Built in its own repository |
 | [`docs/guided-validation`](docs/guided-validation/spec.md) | Presentation mode serving LLM-generated validation questions one at a time |
+| [`docs/dataforce-platform`](docs/dataforce-platform/spec.md) | Core platform — projects, label schemas, task distribution, review, agreement metrics, export, dataset catalog and subscriptions. Deferred behind the pipeline's Label Studio v0 |
 
-Build order: `agent-toolkit` → platform → `guided-validation`.
+Build order: `agent-toolkit` → `sft-dataset-pipeline` (smoke → pilot → scale) → the platform, if the pilot shows it is needed.
