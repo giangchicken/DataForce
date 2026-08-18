@@ -108,10 +108,10 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 ### The profile and modality contracts
 
 1. A **modality** supplies exactly four things: a content loader (raw → typed parts), an embedder (record → vector) for duplicate detection, a list of privacy detectors, and the annotation-UI control that *displays* a record. Nothing else.
-2. A **profile** supplies exactly seven things: a source adapter (raw → canonical record), an answer JSON Schema, `delta`, `consensus`, a map of provable-problem checks, a question template set, and an exporter. It declares which modality it composes with.
+2. A **profile** supplies exactly seven things: a source adapter (raw → canonical record), an answer JSON Schema, `delta`, `consensus`, a map of validity checks, a question template set, and an exporter. It declares which modality it composes with.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
 4. `delta` must be a metric on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. A profile whose `delta` fails any of these is rejected at registration, not at the jury stage.
-5. `consensus` is deterministic given a list of answers, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 30 and is otherwise fully supported.
+5. `consensus` is deterministic given a list of answers, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported.
 6. Every profile passes a shared **conformance suite** before it can be named on a run: `delta` is checked as a metric over generated answer pairs, `consensus` for determinism and for agreeing with `delta` on unanimous input, the answer schema for round-tripping, the adapter for preserving every field it does not own, and the exporter for reproducing the adapter's answer. A profile that does not pass cannot be selected. This suite is what makes "generic" a checked claim rather than a hope.
 7. Profiles and modalities are resolved from a registry by name, and the resolved pair, with each one's version, is recorded on every artifact and in the release manifest. A run cannot silently change which code produced a dataset.
 
@@ -125,14 +125,14 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 ### Ingest and source integrity
 
-**What `quarantine_broken` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
+**What `quarantine_invalid` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
 
-Running it first is what makes the rest affordable. In the first profile it moves **1,563 of 21,172 records — 7.4%** out of the main path in a few seconds of arithmetic. Left in, those records would have consumed 7.4% of the jury's ~121M estimated tokens, taken annotator hours, and then taught the model something false. Nothing is deleted: each goes to `quarantine/problems/<problem>.jsonl` with its reason, and can be re-admitted by an explicit command once the cause is fixed.
+Running it first is what makes the rest affordable. In the first profile it moves **1,563 of 21,172 records — 7.4%** out of the main path in a few seconds of arithmetic. Left in, those records would have consumed 7.4% of the jury's ~121M estimated tokens, taken annotator hours, and then taught the model something false. Nothing is deleted: each goes to `quarantine/invalid/<check>.jsonl` naming the check it failed, and can be re-admitted by an explicit command once the cause is fixed.
 
 13. Ingest streams the source via `file_utils.iter_json_array_file` or the modality's loader. A source file is never loaded whole.
 14. Ingest records provenance per record: source file SHA-256, byte offset, the raw record verbatim, the modality and profile names with versions, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
-15. The **source-integrity gate** runs the profile's problem checks, and each match writes the record to `data/quarantine/problems/<problem>.jsonl` with the problem name and removes it from the main path. Records are never silently deleted and never silently kept.
-16. Expected problem counts per class are declared in `params.yaml`, and a count moving more than ±10% fails the gate. The source changed, and that must be a decision rather than a surprise. Re-admission is an explicit `dataforce requeue --problem <name>` that versions the pipeline.
+15. The **source-integrity gate** runs the profile's validity checks, and each failure writes the record to `data/quarantine/invalid/<check>.jsonl` naming the check it failed, and removes it from the main path. Records are never silently deleted and never silently kept.
+16. Expected invalid counts per check are declared in `params.yaml`, and a count moving more than ±10% fails the gate. The source changed, and that must be a decision rather than a surprise. Re-admission is an explicit `dataforce requeue --check <name>` that versions the pipeline.
 17. Every artifact is written with `file_utils.write_jsonlines` or `write_json` and read with the matching reader. Both are atomic and create parent directories, so an interrupted stage leaves the previous artifact intact. No stage opens an artifact file directly.
 
 ### Privacy
@@ -222,7 +222,7 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 | # | Phase | Stage | What it is for | Output | Gate |
 |---|---|---|---|---|---|
 | 0 | prepare | `load` | Read the source in, one record at a time, keeping where each came from | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
-| 1 | prepare | `quarantine_broken` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | problem counts within ±10% of declared |
+| 1 | prepare | `quarantine_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
 | 2 | prepare | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_prepared/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
 | 3 | find_duplicates | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/2_deduped/embeddings.npy` | row count matches records |
 | 4 | find_duplicates | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/2_deduped/records.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
@@ -239,7 +239,7 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 
 Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings.
 
-A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `quarantine_broken` names the action and its object; `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were all rejected: each needed a glossary, and none of them said whether the stage changes the data.
+A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `quarantine_invalid` names the action and its object, and the action is true: `remove_invalid` was rejected because nothing is removed — every excluded record is kept under `quarantine/invalid/` and can be re-admitted. `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were rejected for the opposite failure: each needed a glossary, and none of them said whether the stage changes the data.
 
 ### Repository layout
 
@@ -268,7 +268,7 @@ dataforce/
 │   │                            · questions · answer control · exporter
 │   │
 │   ├── pipeline/                ← the fifteen stages, written once
-│   │   ├── prepare/             load.py  quarantine_broken.py  pii_check.py
+│   │   ├── prepare/             load.py  quarantine_invalid.py  pii_check.py
 │   │   ├── find_duplicates/     embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
@@ -290,7 +290,7 @@ dataforce/
 │   │   ├── media/               content-addressed, sharded by digest prefix
 │   │   └── pii_vault.jsonl
 │   ├── interim/{1_prepared,2_deduped,3_reviewed_ai,4_reviewed_human}/
-│   ├── processed/   release/v1/   quarantine/{problems,pii,human_review}/
+│   ├── processed/   release/v1/   quarantine/{invalid,pii,human_review}/
 │
 ├── tests/{unit,integration,e2e,conformance,fixtures}/
 ├── deploy/                      docker-compose Label Studio, CI config
@@ -320,7 +320,7 @@ class Profile(Protocol):
     def adapt(self, raw: Any, parts: list[Part]) -> Record: ...
     def delta(self, a: Answer, b: Answer) -> float: ...
     def consensus(self, answers: list[Answer]) -> Answer | None: ...
-    def problem_checks(self) -> dict[str, Callable[[Record], bool]]: ...
+    def validity_checks(self) -> dict[str, Callable[[Record], bool]]: ...
     def question(self, record: Record, focus: str) -> str: ...
     def answer_control(self, record: Record) -> UIControl: ...
     def group_key(self, record: Record) -> str: ...
@@ -351,7 +351,7 @@ One shape flows through every stage; each stage adds fields and removes none.
   "meta": { "…": "verbatim from source" },
 
   "parse_status": "ok",
-  "problems": [],
+  "invalid": [],
   "privacy": { "spans_replaced": 2, "classes": ["PHONE", "EMAIL"] },
   "dup_cluster_id": "c_0331", "is_representative": true,
   "group_key": "g_7a1e…",
@@ -390,7 +390,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **Non-text modalities are a seam, not an implementation.** *Alternatives:* build image support now; leave modality unmodelled and refactor later. *Why:* building now spends real effort on requirements nobody has stated, and the pipeline's value is proved by shipping one dataset first. But three things could not be retrofitted without touching all fifteen stages — typed content parts, media by reference, and a uniform privacy-span shape — so those are in now and the rest waits. *Reversible:* the seam is cheap to widen; the record shape would not have been cheap to change.
 
-**Problem records are quarantined, never auto-repaired.** *Alternatives:* resolve contradictions by preferring one source; truncate out-of-space labels. *Why:* both are guesses about which of two disagreeing sources is right, applied at scale, invisibly. A quarantine file is a morning's work and a permanent record of what was decided; an auto-repair is a data cascade with a clean-looking count. *Reversible:* re-admission is an explicit command that versions the pipeline.
+**Invalid records are quarantined, never auto-repaired.** *Alternatives:* resolve contradictions by preferring one source; truncate out-of-space labels. *Why:* both are guesses about which of two disagreeing sources is right, applied at scale, invisibly. A quarantine file is a morning's work and a permanent record of what was decided; an auto-repair is a data cascade with a clean-looking count. *Reversible:* re-admission is an explicit command that versions the pipeline.
 
 **Privacy is replaced with stable placeholders, not deleted or hashed.** *Alternatives:* delete the span; hash it; drop the record. *Why:* for many tasks the ground truth turns on whether a value was *supplied*, and deleting it silently inverts the label. A stable typed placeholder preserves suppliedness and co-reference while carrying no personal data. *Reversible:* only from the vault, which never leaves the raw tier.
 
@@ -463,7 +463,7 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 
 - **Conformance.** The suite of requirement 6, run against every registered profile in CI: δ as a metric over generated answer pairs, consensus determinism and unanimity agreement, answer-schema round-trip, adapter field preservation, exporter reproducing the adapter's answer. A new profile is not merged until it passes.
 - **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
-- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `quarantine_broken` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
+- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `quarantine_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
 - **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.
 - **Agreement.** α over an arbitrary δ against a hand-computed example, plus the degenerate check that α with an identity distance equals `krippendorff`'s nominal α on the same data. Consensus against hand-worked vote sets, including where consensus differs from every individual answer.
