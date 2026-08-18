@@ -221,23 +221,23 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 
 | # | Phase | Stage | What it is for | Output | Gate |
 |---|---|---|---|---|---|
-| 0 | prepare | `load` | Read the source in, one record at a time, keeping where each came from | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
+| 0 | prepare | `load` | Turn the raw source into canonical records, and pin which version of the source file this run used | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
 | 1 | prepare | `remove_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
 | 2 | prepare | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_prepared/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
-| 3 | find_duplicates | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/2_deduped/embeddings.npy` | row count matches records |
-| 4 | find_duplicates | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/2_deduped/records.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
-| 5 | ai_review | `jury` | Have several models answer the task independently, so their disagreement can be measured | `interim/3_reviewed_ai/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
-| 6 | ai_review | `rank_for_review` | Decide which records a human should look at, and why | `interim/3_reviewed_ai/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
-| 7 | human_review | `generate_questions` | Turn each queued record into one focused, answerable question | `interim/4_reviewed_human/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
+| 3 | prepare | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/1_prepared/embeddings.npy` | row count matches records |
+| 4 | prepare | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/1_prepared/deduped.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
+| 5 | ai_review | `jury` | Have several models answer the task independently, so their disagreement can be measured | `interim/2_reviewed_ai/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
+| 6 | ai_review | `rank_for_review` | Decide which records a human should look at, and why | `interim/2_reviewed_ai/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
+| 7 | human_review | `generate_questions` | Turn each queued record into one focused, answerable question | `interim/3_reviewed_human/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
 | 8 | human_review | `publish` | Put the questions in front of annotators, carrying nothing a model produced | project + `published.jsonl` | payload key set equals the allowlist |
-| 9 | human_review | `pull` | Collect the answers and normalize them | `interim/4_reviewed_human/responses.jsonl` | every incorrect verdict has a correction |
-| 10 | human_review | `aggregate` | Combine two annotators into one verdict, weighted by how reliable each has been | `interim/4_reviewed_human/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
-| 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/4_reviewed_human/curated.jsonl` | every correction inside the profile's answer space |
+| 9 | human_review | `pull` | Collect the answers and normalize them | `interim/3_reviewed_human/responses.jsonl` | every incorrect verdict has a correction |
+| 10 | human_review | `aggregate` | Combine two annotators into one verdict, weighted by how reliable each has been | `interim/3_reviewed_human/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
+| 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/3_reviewed_human/curated.jsonl` | every correction inside the profile's answer space |
 | 12 | release | `split` | Divide into train / validation / test so no scenario appears on both sides | `processed/{train,val,test}.jsonl` | zero group leakage; zero n-gram overlap |
 | 13 | release | `export` | Write the training files in the shape a trainer expects | `release/v1/*.jsonl` | test 100% human-validated; counts reconcile |
 | 14 | release | `document` | Write down what this dataset is made of, so a consumer can judge it | `release/v1/{datasheet.md,croissant.json}` | all required fields present; Croissant validates |
 
-Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings.
+Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings, and both sit in `prepare` because nothing in that phase judges the task — `prepare` ends with a corpus, `ai_review` is the first opinion about it.
 
 A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `remove_invalid` names the action and its object, and "remove" is scoped by what the pipeline is: records are removed **from the main path**, not deleted. Each one is written to `quarantine/invalid/<check>.jsonl` naming the check it failed, and `dataforce requeue --check <name>` puts it back. `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were rejected for the opposite failure: each needed a glossary, and none of them said whether the stage changes the data.
 
@@ -268,8 +268,7 @@ dataforce/
 │   │                            · questions · answer control · exporter
 │   │
 │   ├── pipeline/                ← the fifteen stages, written once
-│   │   ├── prepare/             load.py  remove_invalid.py  pii_check.py
-│   │   ├── find_duplicates/     embed.py  dedup.py
+│   │   ├── prepare/             load.py  remove_invalid.py  pii_check.py  embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
 │   │   ├── human_review/        generate_questions.py publish.py pull.py aggregate.py curate.py
@@ -289,7 +288,7 @@ dataforce/
 │   ├── raw/                     PRIVACY TIER — NOT DVC-tracked, never committed
 │   │   ├── media/               content-addressed, sharded by digest prefix
 │   │   └── pii_vault.jsonl
-│   ├── interim/{1_prepared,2_deduped,3_reviewed_ai,4_reviewed_human}/
+│   ├── interim/{1_prepared,2_reviewed_ai,3_reviewed_human}/
 │   ├── processed/   release/v1/   quarantine/{invalid,pii,human_review}/
 │
 ├── tests/{unit,integration,e2e,conformance,fixtures}/
