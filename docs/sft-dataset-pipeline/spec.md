@@ -33,16 +33,19 @@ Measured over the whole file (21,172 records, 126 MiB) rather than sampled:
 | Exact-duplicate (system, user) pairs | 1 |
 | Prompt size (system + user) | mean 4,750 chars, p50 4,446, p90 6,310, p99 17,044 |
 
-Four defects are already detectable without a single human judgment:
+Three defects are detectable without a single human judgment, and a fourth was fixed in the
+source on 2026-08-17 — which is itself the finding that matters most here:
 
 | Defect | Count | Why it is fatal for SFT |
 |---|---:|---|
-| `meta.label` disagrees with the assistant message | **48** (0.227%) | The assistant message *is* the training target. Two sources of truth disagree; one of them trains the model. |
+| `meta.label` disagrees with the assistant message | **0** — was 48 (0.227%) | Fixed upstream on 2026-08-17. The gate stays, with an expected count of 0: the fix proves the file moves, and a regression here silently trains the model on the losing side of two disagreeing sources. |
 | Label names a tool absent from that record's own catalog | **722** (3.41%) | The target tells the model to call something it was never offered. Unlearnable, and it teaches hallucination. |
 | Catalog parser finds no `[ToolName]` block | **841** (3.97%) | Either genuinely toolless prompts or a parser miss — the two must be distinguished before either is trusted. |
 | `source_index` is unique per record (13,366 distinct over 13,366 records) | — | It looks like a grouping key and is not one. Splitting on it gives no leakage protection. |
 
-The 48-record contradiction also explains a discrepancy inside our own documents: [`guided-validation`](../guided-validation/spec.md) reports 7,486 zero-label records, counted from the assistant message; counting from `meta.label` gives 7,498. The 12-record net difference is the arithmetic of those 48 disagreements. That is exactly the class of quiet defect this pipeline exists to surface, and it survived a careful read of the corpus.
+That fix closed a discrepancy inside our own documents. [`guided-validation`](../guided-validation/spec.md) reports 7,486 zero-label records, counted from the assistant message, against 7,498 from `meta.label` — a 12-record net difference that was the arithmetic of those 48 disagreements. Both counts are now 7,498, so that spec's figure is stale rather than wrong, and it needs a sync pass.
+
+**The source file changed three times in four weeks, and that is the load-bearing observation.** Measured with one parser across the versions on disk, `label_assistant_mismatch` was 48 in the 2026-08-17 backup and is 0 in the current file. Every count in this section is therefore a statement about one SHA-256, not about "the corpus" — which is exactly why requirement 8 pins the expected counts in `params.yaml` and requirement 7's gate hard-stops when they move. That mechanism was specified before this change was noticed, and it is what would have caught it.
 
 **The label space rules out classifier-based quality tooling.** 14,411 distinct tool names with a modal frequency of 35 means no fixed class space exists, so Confident Learning, label-error classifiers, and any method needing `predict_proba` over a label vocabulary cannot be applied to this corpus as it stands. The alternative is not to reshape the task until such a method fits — it is to use a method that needs no class space at all. A generative LLM asked to produce the tool set is exactly that, which is why the quality signal here comes from an LLM jury rather than from Cleanlab.
 
@@ -143,7 +146,7 @@ This spec sits **above** the other three and narrows two of them. Applying it re
 4. Ingest streams the source via `file_utils.iter_json_array_file`. The 126 MiB file must never be loaded whole.
 5. Every record gets a stable `rid = string_utils.compute_hash(system ‖ user ‖ assistant, "sha256")[:16]`, independent of position, so artifacts are diffable across re-ingests and re-ordering is not a change.
 6. Ingest records source provenance per record: source file SHA-256, byte offset, `meta` verbatim, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
-7. The **source-integrity gate** detects and quarantines, as separate named defect classes: `label_assistant_mismatch` (48 expected), `label_not_in_catalog` (722 expected), `empty_catalog` (841 expected), and `label_cardinality_anomaly`. Quarantined records leave the main path into `data/quarantine/<defect>.jsonl` with the defect recorded; they are never silently deleted and never silently kept.
+7. The **source-integrity gate** detects and quarantines, as separate named defect classes: `label_assistant_mismatch` (0 expected, was 48 before the 2026-08-17 source fix), `label_not_in_catalog` (722 expected), `empty_catalog` (841 expected), and `label_cardinality_anomaly`. Quarantined records leave the main path into `data/quarantine/<defect>.jsonl` with the defect recorded; they are never silently deleted and never silently kept.
 8. Expected defect counts are declared in `params.yaml`. A count that moves by more than ±10% fails the gate — the source changed, and that must be a decision rather than a surprise.
 9. Every artifact is written with `file_utils.write_jsonlines` or `write_json` and read with the matching reader. Both writers are atomic and create parent directories, so an interrupted stage leaves the previous artifact intact rather than a truncated one; no stage opens an artifact file directly.
 
@@ -221,7 +224,7 @@ This spec sits **above** the other three and narrows two of them. Applying it re
 55. Splitting is **group-based on `group_key`**, never random. A group is wholly in one split.
 56. The test split is **100% human-validated**. A record that has not been through annotation cannot enter test, at any budget, and `jury_consensus` records are barred permanently. This is the rule that keeps every reported number meaningful.
 57. Decontamination verifies zero 13-gram overlap between the test split and train, and zero shared `group_key`. Overlap fails the gate.
-58. Export emits SFT JSONL in the source `messages` shape, with the curated label in both the assistant message and `meta.label` — which, given the 48 contradictions found at ingest, must be asserted equal on the way out.
+58. Export emits SFT JSONL in the source `messages` shape, with the curated label in both the assistant message and `meta.label` — which must be asserted equal on the way out. Upstream drove that class to 0 on 2026-08-17; the assertion stays because a curation step that writes one and not the other would reintroduce it.
 59. Every exported record carries provenance: source SHA-256, pipeline version, `agent-toolkit` version, validation status, validator, dedup cluster, split, stratum, and — where the jury touched it — the panel version and the consensus it produced.
 60. The release is a DVC-tracked directory with a manifest listing every file's SHA-256, and the whole release is reproducible from one git commit plus `dvc repro`.
 
@@ -572,7 +575,7 @@ data/release/v1/
 
 **Token budgets are enforced on estimates, and the spec says so.** *Alternatives:* read `usage` from the response (not available — `Completion` discards it); parse provider billing APIs; skip budgeting. *Why:* the honest options are an estimate or nothing, and an estimate with declared headroom stops a runaway run while a missing budget does not. Claiming measured consumption when the number came from `count_tokens` would be worse than the imprecision, especially given the ±33–64% drift the toolkit documents on Vietnamese. *Reversible:* yes, and cheaply, once the toolkit surfaces `usage` — at which point this becomes measurement and the assumption below retires.
 
-**Defects are quarantined, never auto-repaired.** The 48 contradictions could be resolved by preferring the assistant message; the 722 out-of-catalog labels could be truncated to the catalog. *Alternatives:* exactly that, silently. *Why:* both "fixes" are guesses about which of two disagreeing sources is right, applied at scale, invisibly. A quarantine file with 722 records is a morning's work for someone who knows the corpus and a permanent record of what was decided; an auto-repair is a data cascade with a clean-looking count. *Reversible:* re-admission is an explicit command that versions the pipeline.
+**Defects are quarantined, never auto-repaired.** The 48 label/assistant contradictions could have been resolved by preferring the assistant message — and upstream did resolve them, deliberately and outside this pipeline, which is the right place for that call. The 722 out-of-catalog labels could be truncated to the catalog. *Alternatives:* exactly that, silently. *Why:* both "fixes" are guesses about which of two disagreeing sources is right, applied at scale, invisibly. A quarantine file with 722 records is a morning's work for someone who knows the corpus and a permanent record of what was decided; an auto-repair is a data cascade with a clean-looking count. *Reversible:* re-admission is an explicit command that versions the pipeline.
 
 **PII is replaced with stable placeholders, not deleted or hashed.** *Alternatives:* delete the span; hash it; drop the record. *Why:* the ground truth of this corpus turns on whether a required value was supplied. Deleting a phone number converts a correct call into what now looks like a correct `{hold_missing}`, silently inverting the label on ~2% of records. A stable typed placeholder preserves suppliedness and co-reference while carrying no personal data. *Reversible:* only from the vault, which never leaves the raw tier — so getting this right the first time matters.
 
@@ -637,7 +640,7 @@ Rejected: **Argilla** 2.8.0 — last release 2025-03-10, no functional commit si
 11. **Corrections stay in the catalog.** Every stored correction is a subset of that record's own catalog, or the explicit empty set. *Check:* structurally guaranteed by dynamic choices, and asserted again at pull time, because a structural guarantee in someone else's UI is not one of ours.
 12. **No group spans splits.** No `group_key` appears in more than one of train/val/test, and none in a curve slice that is absent from train. *Check:* a set-intersection assertion in the split gate.
 13. **Test is fully human-validated.** Every test record has `validation.status ∈ {original, corrected}` — never `unvalidated`, never `jury_consensus`. *Check:* export gate.
-14. **Label and assistant agree on the way out.** For every exported record, `meta.label` equals the parsed assistant message. *Check:* export gate — the same assertion that found the 48 defects on the way in.
+14. **Label and assistant agree on the way out.** For every exported record, `meta.label` equals the parsed assistant message. *Check:* export gate, running the same assertion that counted 48 of these before the source was fixed.
 15. **Releases are reproducible.** `dvc repro` from a clean checkout at a given commit reproduces every artifact's SHA-256. *Check:* CI runs it on the S0 fixture and diffs `MANIFEST.sha256`.
 16. **The sampling design is reconstructible.** Every annotated record records which stratum selected it and with what probability. *Check:* the residual-error estimator refuses to run when any annotated record lacks a stratum.
 17. **The library is not re-implemented.** No module under `src/dataforce/` defines a hash helper, a JSONL reader or writer, an atomic-write context manager, a JSON-from-text extractor, a template filler, or a retry wrapper. *Check:* a lint test over the source tree asserting `agent_toolkit` is the importer of record for each, and that `openai`, `tenacity`, `tiktoken`, and `jsonschema` appear in no pipeline import.
