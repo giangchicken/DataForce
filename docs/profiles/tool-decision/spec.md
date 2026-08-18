@@ -4,7 +4,7 @@
 
 The first profile for the [annotation pipeline](../../annotation-pipeline/spec.md), and the first real dataset through it: 21,172 Vietnamese call-centre conversations in `fc_train_final.json`, each pairing a tool catalog with a conversation, labelled with the set of tools that should fire.
 
-This document specifies only what is specific to this dataset and this task. The fifteen stages, the gates, the jury, the triage buckets, the agreement statistics, and the release artifact are the core's, written once. This profile supplies **seven pieces** and composes with the `text` modality's **four**:
+This document specifies only what is specific to this dataset and this task. The sixteen stages, the gates, the jury, the triage buckets, the agreement statistics, and the release artifact are the core's, written once. This profile supplies **seven pieces** and composes with the `text` modality's **four**:
 
 | Piece | Owner | This profile / modality |
 |---|---|---|
@@ -12,7 +12,7 @@ This document specifies only what is specific to this dataset and this task. The
 | answer schema | profile | `{"type":"array","items":{"type":"string","enum":<this record's catalog>}}` |
 | `delta` | profile | `1 − |A∩B| / |A∪B|`, with `δ(∅,∅) = 0` |
 | `consensus` | profile | tools included by a strict majority of valid votes |
-| defect detectors | profile | four classes, all provable without a human |
+| problem checks | profile | four classes, all provable without a human |
 | question templates | profile | per [`guided-validation`](../../guided-validation/spec.md), focus by marker rule |
 | exporter | profile | SFT JSONL in the source `messages` shape |
 | content loader | `text` | system / user / assistant turns as text parts |
@@ -45,9 +45,9 @@ Measured over the whole file rather than sampled, most recently 2026-08-18:
 | Prompt size, system + user | mean 4,750 chars · p50 4,446 · p90 6,310 · p99 17,044 |
 | Total prompt characters | 100,557,307 |
 
-Three defects are detectable without a single human judgment, and a fourth was fixed in the source on 2026-08-17:
+Three problems are detectable without a single human judgment, and a fourth was fixed in the source on 2026-08-17:
 
-| Defect class | Count | Why it is fatal for SFT |
+| Problem class | Count | Why it is fatal for SFT |
 |---|---:|---|
 | `label_assistant_mismatch` | **0** — was 48 (0.227%) | Fixed upstream. The gate stays, expecting 0: the assistant message *is* the training target, and a regression trains the model on the losing side of two disagreeing sources. |
 | `label_not_in_catalog` | **722** (3.41%) | The target names a tool the record never offered. Unlearnable, and it teaches hallucination. |
@@ -88,8 +88,10 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 
 ### The adapter
 
+The four problem classes below are all provable by counting — no person decides any of them — which is what makes them the pipeline's first gate rather than an annotation task.
+
 1. The adapter parses the `TOOLS:` block into a structured catalog — name, purpose, `call_when`, `hold_when`, required parameters, per-parameter constraints — and **preserves every marker token byte-identically**. A parser that strips them would pass every other test while destroying the annotator's evidence.
-2. `answer_space` per record is the list of catalog tool names. `defects()` returns the four detectors above. `group_key` is the catalog fingerprint, and never `source_index`.
+2. `answer_space` per record is the list of catalog tool names. `problem_checks()` returns the four detectors above. `group_key` is the catalog fingerprint, and never `source_index`.
 3. `rid = compute_hash(system ‖ user ‖ assistant)[:16]`, so the identity is independent of position.
 4. Fixtures cover all 13 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, and malformed `TOOLS:` blocks.
 
@@ -98,13 +100,13 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 5. The answer is a **set of tool names drawn from that record's own catalog**, and the empty set is a first-class answer, not a missing value. No stage may substitute a per-tool binary, a coarse proxy class, or a cardinality bucket.
 6. `delta(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`delta(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
 7. `consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
-8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the defect detectors of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
+8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the problem checks of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
 
 ### The text modality's privacy detectors
 
 9. Detectors cover, in both literal and Vietnamese spoken form: phone numbers, email addresses, national ID numbers, bank account numbers, and full personal names in the customer turn. Spoken-form coverage includes digit words (`không`…`chín`, plus `mốt`, `tư`, `lăm`), spoken `@` (`a còng`), and spoken punctuation (`chấm`, `gạch dưới`).
 10. Detection runs against both the raw text and `string_utils.normalize_text(text, remove_tone_marks=True)`, so a transcript spelling `khong` or `chin` is not missed while patterns stay written in correct Vietnamese. Offsets resolve back onto the original; the normalized form is a matching aid and is never stored.
-11. Verification uses a ±80-character window through `llm.complete_structured` against a fixed classification schema, deciding personal data versus price, date, or reference code. The regex layer sets recall; the LLM layer sets precision.
+11. Verification uses a ±80-character window through `llm.complete_structured` against a fixed classification schema, deciding personal data versus price, date, or reference code, and reporting whether it was confident. The regex layer sets recall, the LLM layer sets precision, and a human accepts before anything is redacted. The digit-word signal fires on 3,485 records, so the review list is the unconfident spans plus a sample of the rest — not all 3,485.
 12. Placeholders are stable within a record, so a phone given in turn 3 and confirmed in turn 7 is `<PHONE_1>` both times. **This is why replacement, not deletion, is specified:** the ground truth of this corpus turns on whether a required value was *supplied*, so deleting a phone number converts a correct call into what looks like a correct `{hold_missing}`, silently inverting the label on ~2% of records.
 
 ### The jury panel
@@ -265,14 +267,15 @@ Beyond the core's table:
 | `label_assistant_mismatch` count rises above 0 | Hard stop. Upstream drove this class to zero; a return means a curation step wrote one field and not the other. |
 | Marker token altered by the adapter | Hard stop at the adapter's own test, before any run. |
 | `likely_label_error` precision below 0.30 at the pilot gate | Hard stop. The panel or the thresholds change before the full corpus depends on them. |
-| A record cannot be redacted with confidence | Quarantined to `quarantine/redact/pii_uncertain.jsonl`, excluded from the release, counted in the datasheet. |
+| A span the verifier is unconfident about | Goes on the review list; it is never redacted, and never dropped, without a human accepting it. |
+| A record still uncertain after review | Quarantined to `quarantine/pii/uncertain.jsonl`, excluded from the release, counted in the datasheet. |
 
 ## Testing Strategy
 
 Beyond the core's suite, and beyond the conformance suite this profile must pass:
 
 - **Adapter.** All 13 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, malformed `TOOLS:` blocks. One test asserts marker tokens survive **verbatim**.
-- **Defect gate.** A fixture with one instance of each class, asserting each lands in the right quarantine file with the right label and that the main path count drops by exactly the expected number.
+- **Problem gate.** A fixture with one instance of each class, asserting each lands in the right quarantine file with the right label and that the main path count drops by exactly the expected number.
 - **δ and consensus.** Property tests for the metric axioms including the empty case. Consensus against hand-worked vote sets, including where consensus differs from every individual vote.
 - **Set-valued α.** Against a hand-computed example, plus the degenerate check that α with an identity distance equals the `krippendorff` package's nominal α on the same data.
 - **Templating.** A template whose fill values contain `{trigger}` and `{hold_missing}`, asserting `slot_filling` returned them untouched — invariant 1. A second asserts an uncovered `{{placeholder}}` is left in place rather than blanked.
