@@ -117,8 +117,8 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 ### The modality seam
 
-8. A record's content is an **ordered list of typed parts**, never a bare string. Each part carries its `kind`, its role, and either inline text or a reference. Text profiles see a list of text parts; nothing about the shape changes when a part becomes audio.
-9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"kind": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all fifteen stages.
+8. A record's content is an **ordered list of typed parts**, never a bare string. Each part carries its `type`, its role, and either inline text or a reference. Text profiles see a list of text parts; nothing about the shape changes when a part becomes audio.
+9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"type": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all fifteen stages.
 10. `rid` is derived from the content parts' digests, not from raw bytes: text parts contribute their text, media parts contribute their `sha256`. So the identity of a record is modality-independent and stable across re-ingests and re-ordering.
 11. Privacy detection is a modality concern with a **uniform result shape** — a list of typed spans over a named part — so the redaction stage, its report, its vault, and its gate are written once. What a "span" indexes is the modality's business: character offsets in text, a time range in audio, a box in a frame.
 12. A modality that cannot yet redact a part **fails closed**: the record is quarantined, never advanced. Failing open on personal data is the one failure this pipeline will not take, and a new modality inherits that rather than choosing it.
@@ -339,10 +339,10 @@ One shape flows through every stage; each stage adds fields and removes none.
   "producer": { "modality": "text@1", "profile": "tool_decision@1" },
 
   "content": [
-    { "kind": "text",  "role": "system", "text": "…" },
-    { "kind": "text",  "role": "user",   "text": "…" }
+    { "type": "text",  "role": "system", "text": "…" },
+    { "type": "text",  "role": "user",   "text": "…" }
     // a voice profile would add, with no other change to any stage:
-    // { "kind": "audio", "role": "user", "uri": "media/ab/abc123.wav",
+    // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
   ],
   "answer_space": { "…": "profile-defined; a catalog, a class list, or absent" },
@@ -385,7 +385,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **Every profile passes a conformance suite before it can be selected.** *Alternatives:* trust the protocol's types; check at first use. *Why:* the types cannot express "δ is a metric" or "consensus is deterministic", and a profile violating either produces cohesion numbers that look fine and mean nothing. Failing at registration rather than at the jury stage moves the error from a 100M-token run to a test. *Reversible:* the suite grows; it does not go away.
 
-**Content parts say `kind`, never `type`.** *Alternatives:* `type`, matching OpenAI content parts and Anthropic content blocks. *Why:* the concept is identical and near-universal — an ordered array of typed parts is how every multimodal provider models content — but the vocabularies are not interchangeable: OpenAI's part types are `input_text` / `input_image` / `input_audio` with the payload nested under a matching key, Anthropic's blocks differ, Gemini's differ again. A record whose field is called `type` invites a reader to assume one provider's values, and a profile exporting to two of them would need `type` to mean two things. `kind` is ours and its values are closed — `text | image | audio | video`, payload flat on the part. `type` stays the provider's word, produced by a profile's `export` when it writes that provider's format. *Reversible:* yes, but only before any artifact exists.
+**Content parts say `type`, the same word every provider uses.** *Alternatives:* `kind`, a name reserved for us so it could never be mistaken for a provider's field. *Why:* an ordered array of typed parts is how OpenAI, Anthropic and Gemini all model content, and all three call the discriminator `type` — so `type` is the field an engineer already recognises, which is worth more than avoiding a collision that cannot actually happen. The values disambiguate on their own: ours are closed and bare — `text | image | audio | video` — where OpenAI's are `input_text` / `input_image` / `input_audio` and Anthropic's differ again, so `"type": "audio"` is unambiguously a DataForce part. No provider's JSON is ever stored: a profile's `export` produces it, mapping both the value and its nesting to whatever that provider wants — ours keeps the payload flat on the part, where OpenAI nests it under a key repeating the type. The one real cost is that `type` shadows a Python builtin if a part is ever modelled as a dataclass attribute rather than a mapping key; that is a lint note, not a bug. *Reversible:* yes, but only before any artifact exists.
 
 **Media by reference and checksum, never inlined.** *Alternatives:* base64 in the JSONL; a parallel manifest keyed by `rid`. *Why:* artifacts must stay streamable and diffable, and inlining a video corpus makes both impossible. Content addressing also gives deduplication and integrity checks for free. *Reversible:* no — this is the decision that has to be right before the first line of code, and it is why it is specified now rather than with the first non-text modality.
 
