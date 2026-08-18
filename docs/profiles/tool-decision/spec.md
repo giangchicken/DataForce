@@ -4,7 +4,7 @@
 
 The first profile for the [annotation pipeline](../../annotation-pipeline/spec.md), and the first real dataset through it: 21,172 Vietnamese call-centre conversations in `fc_train_final.json`, each pairing a tool catalog with a conversation, labelled with the set of tools that should fire.
 
-This document specifies only what is specific to this dataset and this task. The sixteen stages, the gates, the jury, the triage buckets, the agreement statistics, and the release artifact are the core's, written once. This profile supplies **seven pieces** and composes with the `text` modality's **four**:
+This document specifies only what is specific to this dataset and this task. The fifteen stages, the gates, the jury, the triage buckets, the agreement statistics, and the release artifact are the core's, written once. This profile supplies **seven pieces** and composes with the `text` modality's **four**:
 
 | Piece | Owner | This profile / modality |
 |---|---|---|
@@ -88,7 +88,7 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 
 ### The adapter
 
-The four problem classes below are all provable by counting — no person decides any of them — which is what makes them the pipeline's first gate rather than an annotation task.
+The four problem classes below are all provable by counting — no person decides any of them — which is why `quarantine_broken` runs first. Together they move 1,563 records (7.4%) out of the main path before the jury spends a token on them.
 
 1. The adapter parses the `TOOLS:` block into a structured catalog — name, purpose, `call_when`, `hold_when`, required parameters, per-parameter constraints — and **preserves every marker token byte-identically**. A parser that strips them would pass every other test while destroying the annotator's evidence.
 2. `answer_space` per record is the list of catalog tool names. `problem_checks()` returns the four detectors above. `group_key` is the catalog fingerprint, and never `source_index`.
@@ -106,7 +106,7 @@ The four problem classes below are all provable by counting — no person decide
 
 9. Detectors cover, in both literal and Vietnamese spoken form: phone numbers, email addresses, national ID numbers, bank account numbers, and full personal names in the customer turn. Spoken-form coverage includes digit words (`không`…`chín`, plus `mốt`, `tư`, `lăm`), spoken `@` (`a còng`), and spoken punctuation (`chấm`, `gạch dưới`).
 10. Detection runs against both the raw text and `string_utils.normalize_text(text, remove_tone_marks=True)`, so a transcript spelling `khong` or `chin` is not missed while patterns stay written in correct Vietnamese. Offsets resolve back onto the original; the normalized form is a matching aid and is never stored.
-11. Verification uses a ±80-character window through `llm.complete_structured` against a fixed classification schema, deciding personal data versus price, date, or reference code, and reporting whether it was confident. The regex layer sets recall, the LLM layer sets precision, and a human accepts before anything is redacted. The digit-word signal fires on 3,485 records, so the review list is the unconfident spans plus a sample of the rest — not all 3,485.
+11. Verification uses a ±80-character window through `llm.complete_structured` against a fixed classification schema, deciding personal data versus price, date, or reference code. The regex layer sets recall; the LLM layer sets precision. The digit-word signal fires on 3,485 records, so the findings report is read to tune the patterns and the prompt, and `enable_redact` is turned on once it looks right.
 12. Placeholders are stable within a record, so a phone given in turn 3 and confirmed in turn 7 is `<PHONE_1>` both times. **This is why replacement, not deletion, is specified:** the ground truth of this corpus turns on whether a required value was *supplied*, so deleting a phone number converts a correct call into what looks like a correct `{hold_missing}`, silently inverting the label on ~2% of records.
 
 ### The jury panel
@@ -267,8 +267,7 @@ Beyond the core's table:
 | `label_assistant_mismatch` count rises above 0 | Hard stop. Upstream drove this class to zero; a return means a curation step wrote one field and not the other. |
 | Marker token altered by the adapter | Hard stop at the adapter's own test, before any run. |
 | `likely_label_error` precision below 0.30 at the pilot gate | Hard stop. The panel or the thresholds change before the full corpus depends on them. |
-| A span the verifier is unconfident about | Goes on the review list; it is never redacted, and never dropped, without a human accepting it. |
-| A record still uncertain after review | Quarantined to `quarantine/pii/uncertain.jsonl`, excluded from the release, counted in the datasheet. |
+| A record cannot be redacted with confidence | Quarantined to `quarantine/pii/uncertain.jsonl`, excluded from the release, counted in the datasheet. |
 
 ## Testing Strategy
 

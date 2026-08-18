@@ -2,7 +2,7 @@
 
 ## What
 
-A reproducible pipeline that turns a raw corpus into a versioned, documented, training-ready dataset. It is sixteen DVC stages, each producing a checksummed artifact and each guarded by a machine-checked **gate** that fails the run rather than passing bad data downstream. Several models answer the dataset's own task first, and their disagreement decides which records a human looks at.
+A reproducible pipeline that turns a raw corpus into a versioned, documented, training-ready dataset. It is fifteen DVC stages, each producing a checksummed artifact and each guarded by a machine-checked **gate** that fails the run rather than passing bad data downstream. Several models answer the dataset's own task first, and their disagreement decides which records a human looks at.
 
 Nothing in this document is specific to one dataset, one task, or one modality. A run is **one modality × one profile**:
 
@@ -10,7 +10,7 @@ Nothing in this document is specific to one dataset, one task, or one modality. 
 dataforce run --modality text --profile tool_decision
 ```
 
-The **modality** knows how to load content, embed it for duplicate detection, and find personal data in it. The **profile** knows what an answer is, how to compare two answers, how to ask a human about a record, and how to export a training example. Everything else — the sixteen stages, the gates, the invariants, the jury, the triage, the agreement statistics, the release artifact — is written once, here.
+The **modality** knows how to load content, embed it for duplicate detection, and find personal data in it. The **profile** knows what an answer is, how to compare two answers, how to ask a human about a record, and how to export a training example. Everything else — the fifteen stages, the gates, the invariants, the jury, the triage, the agreement statistics, the release artifact — is written once, here.
 
 The first modality is `text` and the first profile is `tool_decision`, specified in [`profiles/tool-decision`](../profiles/tool-decision/spec.md). Image, audio, and video are **out of scope as implementations** and **in scope as a seam**: this document specifies the boundary they plug into and one structural decision that must be made now because retrofitting it later would touch every stage.
 
@@ -118,14 +118,16 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 ### The modality seam
 
 8. A record's content is an **ordered list of typed parts**, never a bare string. Each part carries its `kind`, its role, and either inline text or a reference. Text profiles see a list of text parts; nothing about the shape changes when a part becomes audio.
-9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"kind": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all sixteen stages.
+9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"kind": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all fifteen stages.
 10. `rid` is derived from the content parts' digests, not from raw bytes: text parts contribute their text, media parts contribute their `sha256`. So the identity of a record is modality-independent and stable across re-ingests and re-ordering.
 11. Privacy detection is a modality concern with a **uniform result shape** — a list of typed spans over a named part — so the redaction stage, its report, its vault, and its gate are written once. What a "span" indexes is the modality's business: character offsets in text, a time range in audio, a box in a frame.
 12. A modality that cannot yet redact a part **fails closed**: the record is quarantined, never advanced. Failing open on personal data is the one failure this pipeline will not take, and a new modality inherits that rather than choosing it.
 
 ### Ingest and source integrity
 
-A **problem** is something provably wrong with a record, found by counting rather than by judgment: a label that contradicts the training target, an answer naming something the record never offered, content whose answer space is empty. Provability is the whole definition — if telling right from wrong needs a person, it is not a problem, it is an annotation task, and it belongs downstream with the jury and the annotators. Problems are found before anything else touches the data, because they cost nothing to find and everything to miss.
+**What `quarantine_broken` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
+
+Running it first is what makes the rest affordable. In the first profile it moves **1,563 of 21,172 records — 7.4%** out of the main path in a few seconds of arithmetic. Left in, those records would have consumed 7.4% of the jury's ~121M estimated tokens, taken annotator hours, and then taught the model something false. Nothing is deleted: each goes to `quarantine/problems/<problem>.jsonl` with its reason, and can be re-admitted by an explicit command once the cause is fixed.
 
 13. Ingest streams the source via `file_utils.iter_json_array_file` or the modality's loader. A source file is never loaded whole.
 14. Ingest records provenance per record: source file SHA-256, byte offset, the raw record verbatim, the modality and profile names with versions, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
@@ -135,9 +137,9 @@ A **problem** is something provably wrong with a record, found by counting rathe
 
 ### Privacy
 
-18. **`pii_check` looks and reports; it changes nothing.** Detection is two layers with separate jobs: the modality's detectors maximise recall and are allowed to be noisy, and an LLM pass over a bounded window, via `llm.complete_structured` against a fixed classification schema, sets precision. The stage writes a findings artifact — every candidate span with its class, its surrounding window, the verifier's verdict, and whether the verifier was confident — leaving record content untouched. A verification response that fails its schema leaves the span **unverified, not negative**.
-19. **Redaction requires explicit human acceptance.** `pii_redact` reads the findings plus an approval file naming the accepted spans and classes, and applies only those. Without an approval covering every finding, the stage fails its gate and nothing downstream runs. The default is that nothing is redacted and nothing proceeds — failing closed on personal data is the one failure this pipeline will not take. Replacement is a **stable typed placeholder** scoped per record (`<PHONE_1>`, `<EMAIL_1>`), so a value referenced twice stays co-referent, and it is never deletion: deleting a value can change the ground truth of the very judgment the record encodes.
-20. Review of the findings is **bounded by the same triage idea the jury uses**, not by reading every hit: every span the verifier marked unconfident is reviewed individually, plus a uniform random sample of the confident ones, sized by requirement 43's formula to estimate the verifier's own error rate. The approval file records who accepted what and when, and is a declared input to `pii_redact`, so the sign-off is auditable and `dvc repro` stays reproducible.
+18. `pii_check` detects in two layers with separate jobs: the modality's detectors maximise recall and are allowed to be noisy, and an LLM pass over a bounded window, via `llm.complete_structured` against a fixed classification schema, sets precision. It **always** writes a findings artifact — every candidate span with its class, its surrounding window, and the verifier's verdict — which is what a person reads before deciding anything. A verification response that fails its schema leaves the span **unverified, not negative**.
+19. Rewriting content is controlled by one parameter, `enable_redact`, **false by default**. False: the stage reports and leaves content untouched. True: verified spans are replaced with **stable typed placeholders** scoped per record (`<PHONE_1>`, `<EMAIL_1>`), so a value referenced twice stays co-referent — and never deleted, because deleting a value can change the ground truth of the very judgment the record encodes.
+20. The gate is what makes the default safe. With redaction off, release-tier artifacts still match literal personal-data patterns, so the scan below fails and nothing ships. Turning it on is a change to `params.yaml`, which is committed and a declared DVC dependency — so the decision is attributable and `dvc repro` stays reproducible, without a bespoke approval format.
 21. The placeholder-to-original mapping is written to `data/raw/pii_vault.jsonl`. `data/raw/` is **not DVC-tracked and not committed**: the source file's identity is a SHA-256 in `params.yaml`, and the vault appears in `.gitignore`, in no `.dvc` file, and in no `dvc.yaml` output list. Every other directory under `data/` is DVC-tracked. The findings and redaction reports record, per class, the counts and a sample of 20 *placeholders in context* — never original values — and the gate fails if any release-tier artifact matches a literal personal-data pattern.
 
 ### Duplicates and grouping
@@ -215,30 +217,29 @@ A **problem** is something provably wrong with a record, found by counting rathe
 
 ### Stage graph
 
-Sixteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs only what changed.
+Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs only what changed.
 
-| # | Phase | Stage | Output | Gate |
-|---|---|---|---|---|
-| 0 | prepare | `load` | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
-| 1 | prepare | `find_problems` | `interim/1_prepared/checked.jsonl`, `quarantine/` | problem counts within ±10% of declared |
-| 2 | prepare | `pii_check` | `interim/1_prepared/pii_findings.jsonl` | every high-recall hit is verified or marked for review; content unchanged |
-| 3 | prepare | `pii_redact` | `interim/1_prepared/redacted.jsonl` | an approval covers every finding; zero literal personal-data matches downstream |
-| 4 | find_duplicates | `embed` | `interim/2_deduped/embeddings.npy` | row count matches records |
-| 5 | find_duplicates | `dedup` | `interim/2_deduped/records.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
-| 6 | ai_review | `jury` | `interim/3_reviewed_ai/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
-| 7 | ai_review | `rank_for_review` | `interim/3_reviewed_ai/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
-| 8 | human_review | `generate` | `interim/4_reviewed_human/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
-| 9 | human_review | `publish` | project + `published.jsonl` | payload key set equals the allowlist |
-| 10 | human_review | `pull` | `interim/4_reviewed_human/responses.jsonl` | every incorrect verdict has a correction |
-| 11 | human_review | `aggregate` | `interim/4_reviewed_human/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
-| 12 | human_review | `curate` | `interim/4_reviewed_human/curated.jsonl` | every correction inside the profile's answer space |
-| 13 | release | `split` | `processed/{train,val,test}.jsonl` | zero group leakage; zero n-gram overlap |
-| 14 | release | `export` | `release/v1/*.jsonl` | test 100% human-validated; counts reconcile |
-| 15 | release | `document` | `release/v1/{datasheet.md,croissant.json}` | all required fields present; Croissant validates |
+| # | Phase | Stage | What it is for | Output | Gate |
+|---|---|---|---|---|---|
+| 0 | prepare | `load` | Read the source in, one record at a time, keeping where each came from | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
+| 1 | prepare | `quarantine_broken` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | problem counts within ±10% of declared |
+| 2 | prepare | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_prepared/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
+| 3 | find_duplicates | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/2_deduped/embeddings.npy` | row count matches records |
+| 4 | find_duplicates | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/2_deduped/records.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
+| 5 | ai_review | `jury` | Have several models answer the task independently, so their disagreement can be measured | `interim/3_reviewed_ai/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
+| 6 | ai_review | `rank_for_review` | Decide which records a human should look at, and why | `interim/3_reviewed_ai/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
+| 7 | human_review | `generate_questions` | Turn each queued record into one focused, answerable question | `interim/4_reviewed_human/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
+| 8 | human_review | `publish` | Put the questions in front of annotators, carrying nothing a model produced | project + `published.jsonl` | payload key set equals the allowlist |
+| 9 | human_review | `pull` | Collect the answers and normalize them | `interim/4_reviewed_human/responses.jsonl` | every incorrect verdict has a correction |
+| 10 | human_review | `aggregate` | Combine two annotators into one verdict, weighted by how reliable each has been | `interim/4_reviewed_human/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
+| 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/4_reviewed_human/curated.jsonl` | every correction inside the profile's answer space |
+| 12 | release | `split` | Divide into train / validation / test so no scenario appears on both sides | `processed/{train,val,test}.jsonl` | zero group leakage; zero n-gram overlap |
+| 13 | release | `export` | Write the training files in the shape a trainer expects | `release/v1/*.jsonl` | test 100% human-validated; counts reconcile |
+| 14 | release | `document` | Write down what this dataset is made of, so a consumer can judge it | `release/v1/{datasheet.md,croissant.json}` | all required fields present; Croissant validates |
 
-Stages 9–11 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 6 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings.
+Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings.
 
-Stage names say what the stage does to what, without needing a glossary: `find_problems` names what it finds, `pii_check` promises only to look, `pii_redact` names both the action and its object, and `rank_for_review` names what the ranking is *for*. `validate`, `scrub`, `defect`, and `triage` were rejected for failing that test — a reader should not need a glossary to know what a stage does, or whether it changes the data.
+A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `quarantine_broken` names the action and its object; `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were all rejected: each needed a glossary, and none of them said whether the stage changes the data.
 
 ### Repository layout
 
@@ -266,12 +267,12 @@ dataforce/
 │   │   └── tool_decision/       adapter · schema · δ · consensus · checks
 │   │                            · questions · answer control · exporter
 │   │
-│   ├── pipeline/                ← the sixteen stages, written once
-│   │   ├── prepare/             load.py  find_problems.py  pii_check.py  pii_redact.py
+│   ├── pipeline/                ← the fifteen stages, written once
+│   │   ├── prepare/             load.py  quarantine_broken.py  pii_check.py
 │   │   ├── find_duplicates/     embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
-│   │   ├── human_review/        generate.py publish.py pull.py aggregate.py curate.py
+│   │   ├── human_review/        generate_questions.py publish.py pull.py aggregate.py curate.py
 │   │   │   ├── labelstudio/{config,client}.py
 │   │   │   └── lib/{questions,alpha,gold,adjudicate}.py
 │   │   └── release/             split.py  export.py  document.py
@@ -377,7 +378,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 ## Decisions
 
-**Two composed axes, not one bundle per dataset kind.** *Alternatives:* one plugin supplying all eleven pieces; a full stage graph forked per modality. *Why:* a bundle makes a voice classification dataset and a voice tool-decision dataset each re-declare the same audio loader, embedder, and privacy detectors — the duplication lands exactly where correctness matters most. Forking the stage graph per modality copies sixteen gates, and gates that exist in two places drift. Composition means a new modality is one implementation that every existing profile can immediately use. *Reversible:* yes, and cheaply, since both are protocols resolved from a registry.
+**Two composed axes, not one bundle per dataset kind.** *Alternatives:* one plugin supplying all eleven pieces; a full stage graph forked per modality. *Why:* a bundle makes a voice classification dataset and a voice tool-decision dataset each re-declare the same audio loader, embedder, and privacy detectors — the duplication lands exactly where correctness matters most. Forking the stage graph per modality copies fifteen gates, and gates that exist in two places drift. Composition means a new modality is one implementation that every existing profile can immediately use. *Reversible:* yes, and cheaply, since both are protocols resolved from a registry.
 
 **The generic core is `(answer, δ, consensus)`.** *Alternatives:* a per-task pipeline; a task-type enum branched on inside each stage. *Why:* this is what the machinery actually needs. Cohesion, conflict, the four buckets, α, adjudication, and juror calibration are all expressible in those three terms, so genericity here is an interface rather than a framework — which is the difference between a cheap abstraction and a speculative one. *Reversible:* no in practice, and it should not be: it is the whole thesis.
 
@@ -387,7 +388,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **Media by reference and checksum, never inlined.** *Alternatives:* base64 in the JSONL; a parallel manifest keyed by `rid`. *Why:* artifacts must stay streamable and diffable, and inlining a video corpus makes both impossible. Content addressing also gives deduplication and integrity checks for free. *Reversible:* no — this is the decision that has to be right before the first line of code, and it is why it is specified now rather than with the first non-text modality.
 
-**Non-text modalities are a seam, not an implementation.** *Alternatives:* build image support now; leave modality unmodelled and refactor later. *Why:* building now spends real effort on requirements nobody has stated, and the pipeline's value is proved by shipping one dataset first. But three things could not be retrofitted without touching all sixteen stages — typed content parts, media by reference, and a uniform privacy-span shape — so those are in now and the rest waits. *Reversible:* the seam is cheap to widen; the record shape would not have been cheap to change.
+**Non-text modalities are a seam, not an implementation.** *Alternatives:* build image support now; leave modality unmodelled and refactor later. *Why:* building now spends real effort on requirements nobody has stated, and the pipeline's value is proved by shipping one dataset first. But three things could not be retrofitted without touching all fifteen stages — typed content parts, media by reference, and a uniform privacy-span shape — so those are in now and the rest waits. *Reversible:* the seam is cheap to widen; the record shape would not have been cheap to change.
 
 **Problem records are quarantined, never auto-repaired.** *Alternatives:* resolve contradictions by preferring one source; truncate out-of-space labels. *Why:* both are guesses about which of two disagreeing sources is right, applied at scale, invisibly. A quarantine file is a morning's work and a permanent record of what was decided; an auto-repair is a data cascade with a clean-looking count. *Reversible:* re-admission is an explicit command that versions the pipeline.
 
@@ -409,7 +410,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 1. **Nothing is lost between stages.** `output + quarantined + deduped_out == input`, asserted on every stage and written to `metrics.json`.
 2. **`rid` is stable.** Re-ingesting the same source yields byte-identical `rid` values regardless of order. *Check:* shuffle a fixture, re-ingest, compare.
-3. **No personal data downstream of `pii_redact`, and the vault is untracked.** *Check:* a gate scanning every release-tier file, plus a repo test asserting the vault is in `.gitignore`, in no `.dvc` file, in no `dvc.yaml` output, and that `data/raw/` is absent from DVC entirely.
+3. **No personal data downstream of `pii_check`, and the vault is untracked.** *Check:* a gate scanning every release-tier file, plus a repo test asserting the vault is in `.gitignore`, in no `.dvc` file, in no `dvc.yaml` output, and that `data/raw/` is absent from DVC entirely.
 4. **No media is inlined.** No artifact under `interim/`, `processed/`, or `release/` contains a base64 blob or a non-text part without a `uri` and `sha256`. *Check:* a schema assertion on every artifact carrying content.
 5. **Every answer is inside the profile's answer space.** Every vote, correction, and exported label validates against `profile.answer_schema`. *Check:* pandera on every artifact carrying an answer — a second line of defence behind the schema the jury already passed to the library.
 6. **Every juror vote is valid or an abstention.** No stored vote is a truncation of a malformed response. *Check:* structurally guaranteed by `complete_structured` returning `None`, plus a test feeding malformed, prose-wrapped, over-long, and out-of-space responses through a stubbed endpoint.
@@ -436,7 +437,7 @@ A failed gate writes `data/<stage>/GATE_FAILED.json` with the assertion, the obs
 | Profile fails the conformance suite | Hard stop at registration, before any stage runs. |
 | Profile and modality names disagree | Hard stop. A profile declares its modality; a mismatched pair is a configuration error, not a coercion. |
 | A modality has no redactor for a part | Record quarantined to `quarantine/pii/`, never advanced. |
-| `pii_redact` runs with no approval, or an approval missing a finding | Hard stop. Nothing is redacted and nothing downstream runs. A partial approval is not a partial redaction. |
+| `enable_redact` is false | The stage reports and stops there. The downstream personal-data scan then fails, so nothing ships — the default cannot silently release personal data. |
 | Privacy verification returns a schema-invalid response | Span is unverified, not negative. Record quarantined. |
 | LLM unavailable during privacy verification | Stage stops and resumes from its checkpoint; verified spans are kept. |
 | A juror unreachable for a whole run | Continue on the rest if ≥3 recognised families remain, recording the reduced panel per record. Below the floor, stop. |
@@ -462,7 +463,7 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 
 - **Conformance.** The suite of requirement 6, run against every registered profile in CI: δ as a metric over generated answer pairs, consensus determinism and unanimity agreement, answer-schema round-trip, adapter field preservation, exporter reproducing the adapter's answer. A new profile is not merged until it passes.
 - **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
-- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `find_problems` → `pii_check` → `pii_redact` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
+- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `quarantine_broken` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
 - **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.
 - **Agreement.** α over an arbitrary δ against a hand-computed example, plus the degenerate check that α with an identity distance equals `krippendorff`'s nominal α on the same data. Consensus against hand-worked vote sets, including where consensus differs from every individual answer.
