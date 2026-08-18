@@ -20,12 +20,12 @@ This mode exists because the dataset it targets cannot be validated with a plain
 }
 ```
 
-Measured across the file: **21,172 records**, and the label is not a simple yes/no.
+Measured across the file — SHA-256 `6f7d2a40…`, re-counted 2026-08-18 — **21,172 records**, and the label is not a simple yes/no. The counts below come from `meta.label`, which is the training target; a count read from the assistant message instead gave 7,486 / 10,608 before the 2026-08-17 upstream fix, and every figure here describes that one SHA-256.
 
 | Tools called | Records | Share |
 |---|---:|---:|
-| 0 (call nothing) | 7,486 | 35.4% |
-| 1 | 10,608 | 50.1% |
+| 0 (call nothing) | 7,498 | 35.4% |
+| 1 | 10,596 | 50.0% |
 | 2 | 2,757 | 13.0% |
 | 3 | 321 | 1.5% |
 
@@ -241,7 +241,7 @@ Inherits DataForce's stack. Additional pins:
 
 | Component | Pinned | Source |
 |---|---|---|
-| agent-toolkit | `>=0.1,<0.2`, extra `[llm]` | [spec](../agent-toolkit/spec.md) — provides the LLM client, `slot_filling`, `extract_json_from_text`, `iter_json_array_file` |
+| agent-toolkit | `agent-toolkit[llm] @ git+…@v0.1.0` — a git tag, not a registry range | [spec](../agent-toolkit/spec.md) — provides the LLM client, `slot_filling`, `extract_json_from_text`, `iter_json_array_file` |
 | Generator model | project config, default `GLM-5.1` | Matches `agent-evaluation`'s default in `config.py:90`; any OpenAI-compatible endpoint works |
 
 ## Invariants

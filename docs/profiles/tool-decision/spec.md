@@ -60,7 +60,7 @@ The 722 and 841 figures are **parser-dependent** and are the numbers to reproduc
 
 `source_index` is unique per record — 13,366 distinct over 13,366 records. It looks like a grouping key and is not one; splitting on it gives no leakage protection. Measured, not assumed.
 
-That upstream fix also closed a discrepancy in our own documents: [`guided-validation`](../../guided-validation/spec.md) reports 7,486 zero-label records counted from the assistant message against 7,498 from `meta.label`, a 12-record difference that was the arithmetic of those 48. Both counts are now 7,498, so that figure is stale and needs a sync pass.
+That upstream fix also closed a discrepancy in our own documents: [`guided-validation`](../../guided-validation/spec.md) reports 7,486 zero-label records counted from the assistant message against 7,498 from `meta.label`, a 12-record difference that was the arithmetic of those 48. Both counts are now 7,498, and `guided-validation` has been corrected to match — its table read 7,486 / 10,608.
 
 ### Why this task has no fixed class space
 

@@ -4,7 +4,7 @@
 
 DataForce is a self-hosted, collaborative platform where teams import raw data, label it against a declarative project schema, review each other's work, and export immutable, versioned snapshots in training-ready formats. v1 covers **text** (classification, NER spans, free text) and **image** (classification, bounding box, polygon) across a shared task/annotation/review pipeline, with multi-annotator overlap, inter-annotator agreement scoring, ground-truth honeypots, and COCO/YOLO/JSONL/CSV export. Contributors get work two ways: they **browse a catalog** of datasets open to them and opt in, or they **subscribe** and receive a continuous feed. It ships as a Docker Compose deployment with an Organization → Workspace → Project hierarchy and role-based access control.
 
-This is one of three specs. [`agent-toolkit`](../agent-toolkit/spec.md) is the shared Python library DataForce depends on for LLM access and JSON/file utilities, built in its own repository. [`guided-validation`](../guided-validation/spec.md) is the presentation mode that serves LLM-generated questions one at a time for dataset review, built on the task and review machinery specified here. Build order is agent-toolkit → platform → guided-validation.
+**This spec is deferred, and is kept as the design of record for the platform we may still build.** [`agent-toolkit`](../agent-toolkit/spec.md) is the shared Python library, built and released. [`annotation-pipeline`](../annotation-pipeline/spec.md) supersedes this document as the thing being built now: it runs the same review work as DVC stages against a self-hosted Label Studio, so no service here has to exist before the first dataset ships. [`guided-validation`](../guided-validation/spec.md) is the presentation mode, and its question model is consumed by the pipeline directly. Build order is agent-toolkit → annotation-pipeline with the `tool_decision` profile → this platform, only if the pilot shows Label Studio is the constraint.
 
 ## Context
 
@@ -448,7 +448,7 @@ The React client is generated from the OpenAPI document, so API and UI types can
 | Alembic | 1.19.1 | PyPI (checked live) |
 | Uvicorn | 0.52.3 | PyPI (checked live) |
 | Celery | 5.6.3 | PyPI (checked live) |
-| agent-toolkit | `>=0.1,<0.2`, extra `[llm]` | [spec](../agent-toolkit/spec.md) — built first; DataForce is its first consumer |
+| agent-toolkit | `agent-toolkit[llm] @ git+…@v0.1.0` — a git tag, not a registry range | [spec](../agent-toolkit/spec.md) — built first; DataForce is its first consumer |
 | PostgreSQL | 18.6 | [postgresql.org, 2026-08-13](https://www.postgresql.org/about/news/postgresql-186-1711-1615-1519-1424-and-19-beta-3-released-3365/) |
 | Node.js | 24.x LTS | [nodejs/Release](https://github.com/nodejs/Release) — 26 is Current until Oct 2026; stay on LTS |
 | React | 19.2.8 | npm (checked live) |
