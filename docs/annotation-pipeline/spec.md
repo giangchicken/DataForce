@@ -221,23 +221,23 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 
 | # | Phase | Stage | What it is for | Output | Gate |
 |---|---|---|---|---|---|
-| 0 | prepare | `load` | Turn the raw source into canonical records, and pin which version of the source file this run used | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
-| 1 | prepare | `remove_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
-| 2 | prepare | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_prepared/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
-| 3 | prepare | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/1_prepared/embeddings.npy` | row count matches records |
-| 4 | prepare | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/1_prepared/deduped.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
-| 5 | ai_review | `jury` | Have several models answer the task independently, so their disagreement can be measured | `interim/2_reviewed_ai/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
-| 6 | ai_review | `rank_for_review` | Decide which records a human should look at, and why | `interim/2_reviewed_ai/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
-| 7 | human_review | `generate_questions` | Turn each queued record into one focused, answerable question | `interim/3_reviewed_human/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
+| 0 | data_quality | `load` | Turn the raw source into canonical records, and pin which version of the source file this run used | `interim/1_data_quality/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
+| 1 | data_quality | `remove_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_data_quality/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
+| 2 | data_quality | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_data_quality/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
+| 3 | data_quality | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/1_data_quality/embeddings.npy` | row count matches records |
+| 4 | data_quality | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/1_data_quality/deduped.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
+| 5 | ai_review | `jury` | Have several models answer the task independently, so their disagreement can be measured | `interim/2_ai_review/votes.jsonl`, `consensus.jsonl` | ≥3 families, none `unknown`; no corpus-family juror; estimated tokens ≤ budget; invalid-vote rate ≤ 5% |
+| 6 | ai_review | `rank_for_review` | Decide which records a human should look at, and why | `interim/2_ai_review/queue.jsonl` | every stratum met its quota; audit `n` ≥ computed |
+| 7 | human_review | `generate_questions` | Turn each queued record into one focused, answerable question | `interim/3_human_review/questions.jsonl` | schema-valid ≥ 98%; estimated tokens ≤ budget |
 | 8 | human_review | `publish` | Put the questions in front of annotators, carrying nothing a model produced | project + `published.jsonl` | payload key set equals the allowlist |
-| 9 | human_review | `pull` | Collect the answers and normalize them | `interim/3_reviewed_human/responses.jsonl` | every incorrect verdict has a correction |
-| 10 | human_review | `aggregate` | Combine two annotators into one verdict, weighted by how reliable each has been | `interim/3_reviewed_human/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
-| 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/3_reviewed_human/curated.jsonl` | every correction inside the profile's answer space |
+| 9 | human_review | `pull` | Collect the answers and normalize them | `interim/3_human_review/responses.jsonl` | every incorrect verdict has a correction |
+| 10 | human_review | `aggregate` | Combine two annotators into one verdict, weighted by how reliable each has been | `interim/3_human_review/aggregated.jsonl` | α ≥ 0.667; flag ≤ 10%; gold ≥ 0.85 |
+| 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/3_human_review/curated.jsonl` | every correction inside the profile's answer space |
 | 12 | release | `split` | Divide into train / validation / test so no scenario appears on both sides | `processed/{train,val,test}.jsonl` | zero group leakage; zero n-gram overlap |
 | 13 | release | `export` | Write the training files in the shape a trainer expects | `release/v1/*.jsonl` | test 100% human-validated; counts reconcile |
 | 14 | release | `document` | Write down what this dataset is made of, so a consumer can judge it | `release/v1/{datasheet.md,croissant.json}` | all required fields present; Croissant validates |
 
-Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings, and both sit in `prepare` because nothing in that phase judges the task — `prepare` ends with a corpus, `ai_review` is the first opinion about it.
+Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings, and all five sit in `data_quality` because each is a property you can check without an opinion: validity (`remove_invalid`), privacy (`pii_check`), uniqueness (`dedup`), with `load` and `embed` as what makes checking them possible. The phase ends with a corpus; `ai_review` is the first opinion about it.
 
 A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `remove_invalid` names the action and its object, and "remove" is scoped by what the pipeline is: records are removed **from the main path**, not deleted. Each one is written to `quarantine/invalid/<check>.jsonl` naming the check it failed, and `dataforce requeue --check <name>` puts it back. `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were rejected for the opposite failure: each needed a glossary, and none of them said whether the stage changes the data.
 
@@ -268,7 +268,7 @@ dataforce/
 │   │                            · questions · answer control · exporter
 │   │
 │   ├── pipeline/                ← the fifteen stages, written once
-│   │   ├── prepare/             load.py  remove_invalid.py  pii_check.py  embed.py  dedup.py
+│   │   ├── data_quality/        load.py  remove_invalid.py  pii_check.py  embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
 │   │   ├── human_review/        generate_questions.py publish.py pull.py aggregate.py curate.py
@@ -288,7 +288,7 @@ dataforce/
 │   ├── raw/                     PRIVACY TIER — NOT DVC-tracked, never committed
 │   │   ├── media/               content-addressed, sharded by digest prefix
 │   │   └── pii_vault.jsonl
-│   ├── interim/{1_prepared,2_reviewed_ai,3_reviewed_human}/
+│   ├── interim/{1_data_quality,2_ai_review,3_human_review}/
 │   ├── processed/   release/v1/   quarantine/{invalid,pii,human_review}/
 │
 ├── tests/{unit,integration,e2e,conformance,fixtures}/
@@ -384,6 +384,8 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 **A profile may declare `consensus = None`.** *Why:* free-text generation has no defensible consensus, and inventing one would produce a plausible machine-written label that the optional tier could ship. Declaring the gap keeps such profiles fully supported for triage — where they are genuinely useful — while making the one thing they cannot do explicit. *Reversible:* a profile can gain a consensus later; nothing depends on its absence.
 
 **Every profile passes a conformance suite before it can be selected.** *Alternatives:* trust the protocol's types; check at first use. *Why:* the types cannot express "δ is a metric" or "consensus is deterministic", and a profile violating either produces cohesion numbers that look fine and mean nothing. Failing at registration rather than at the jury stage moves the error from a 100M-token run to a test. *Reversible:* the suite grows; it does not go away.
+
+**Content parts say `kind`, never `type`.** *Alternatives:* `type`, matching OpenAI content parts and Anthropic content blocks. *Why:* the concept is identical and near-universal — an ordered array of typed parts is how every multimodal provider models content — but the vocabularies are not interchangeable: OpenAI's part types are `input_text` / `input_image` / `input_audio` with the payload nested under a matching key, Anthropic's blocks differ, Gemini's differ again. A record whose field is called `type` invites a reader to assume one provider's values, and a profile exporting to two of them would need `type` to mean two things. `kind` is ours and its values are closed — `text | image | audio | video`, payload flat on the part. `type` stays the provider's word, produced by a profile's `export` when it writes that provider's format. *Reversible:* yes, but only before any artifact exists.
 
 **Media by reference and checksum, never inlined.** *Alternatives:* base64 in the JSONL; a parallel manifest keyed by `rid`. *Why:* artifacts must stay streamable and diffable, and inlining a video corpus makes both impossible. Content addressing also gives deduplication and integrity checks for free. *Reversible:* no — this is the decision that has to be right before the first line of code, and it is why it is specified now rather than with the first non-text modality.
 
