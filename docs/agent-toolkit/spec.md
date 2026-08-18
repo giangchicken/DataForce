@@ -167,7 +167,7 @@ One commit, mechanical: add `agent-toolkit[llm]`, drop `voice-agent-toolkit`, re
 
 **Assumption:** the internal GitLab package registry is the publish target, and this repo sits alongside the existing `voice-agent-toolkit` project. Confirm the group and the CI credentials before the first tag.
 
-**Assumption:** `voice_agent_toolkit.agent.tool_utils.extract_tool_calls_from_text` is the only symbol from the old toolkit not reproduced in v1. If other FCI projects depend on more of it, this library's surface needs a second pass before they can migrate.
+**Assumption:** `voice_agent_toolkit.agent.tool_utils.extract_tool_calls_from_text` is the only symbol from the old toolkit not reproduced in v1. If other internal projects depend on more of it, this library's surface needs a second pass before they can migrate.
 
 ## Versions
 
@@ -218,4 +218,4 @@ Two behaviors are pinned that are currently implicit:
 - Sync wrappers. The LLM client is async-only, as it is today.
 - Anthropic, Gemini, or Bedrock bindings beyond the OpenAI-compatible path. The `binding` parameter is carried through but only `"openai"` is implemented, matching current behavior.
 - Streaming tool calls, structured outputs, prompt caching, and token counting.
-- Retiring `voice-agent-toolkit`. Other FCI projects consume it; this library only removes `agent-evaluation`'s dependency on most of it.
+- Retiring `voice-agent-toolkit`. Other internal projects consume it; this library only removes `agent-evaluation`'s dependency on most of it.
