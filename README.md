@@ -16,4 +16,11 @@ Status: **specification**. No implementation yet.
 
 Build order: `agent-toolkit` → `annotation-pipeline` + the `tool-decision` profile (smoke → pilot → scale) → the platform, if the pilot shows it is needed.
 
+## Plans
+
+| Plan | Covers |
+|---|---|
+| [`docs/annotation-pipeline/plan.md`](docs/annotation-pipeline/plan.md) | **Next up.** Six phases, 33 tasks, from an empty repository to a reproducible `release/v1` — the core and the `tool-decision` profile together, since neither is buildable alone |
+| [`docs/agent-toolkit/plan.md`](docs/agent-toolkit/plan.md) | Done. The library, released as v0.1.0 |
+
 `agent-toolkit` 0.1.0 is done and lives in its own repository. Everything below it is still specification, so this repository holds no code.
