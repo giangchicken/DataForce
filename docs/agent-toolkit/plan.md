@@ -1,6 +1,6 @@
 # agent-toolkit — Implementation Plan (v0.1-minimal)
 
-Source spec: [`spec.md`](./spec.md). Consumer: [`../sft-dataset-pipeline/spec.md`](../sft-dataset-pipeline/spec.md).
+Source spec: [`spec.md`](./spec.md). Consumer: [`../profiles/tool-decision/spec.md`](../profiles/tool-decision/spec.md).
 
 This plan builds the **smallest library that unblocks the pipeline's S0 smoke run**, not the full library the spec describes. Everything cut is listed in [v0.2](#deferred-to-v02) with the reason.
 
@@ -316,7 +316,7 @@ for _ in range(2): print(asyncio.run(go()))   # must not raise on the second run
 - `count_tokens` returns a positive integer for a Vietnamese message list and is within 10% of the provider's reported `prompt_tokens` on one recorded real response.
 - Adding a model line means editing one table and adding one test case; nothing else changes.
 
-**Source reference.** Consumer requirements: `../sft-dataset-pipeline/spec.md` requirements 19, 20, 26.
+**Source reference.** Consumer requirements: `../profiles/tool-decision/spec.md` requirements 19, 20, 26.
 
 **Verify.**
 ```
@@ -349,7 +349,7 @@ print(model_family('gemma-4-31B-it'), model_family('glm-5.1'))"
 - An enum-constrained schema built from a per-call list of allowed strings rejects any value outside it, which is what makes a juror vote structurally catalog-bounded.
 - `mode="grammar"` against an endpoint that rejects grammars falls back rather than failing the call, and records which strategy was used.
 
-**Source reference.** D3; consumer requirement `../sft-dataset-pipeline/spec.md` requirement 18.
+**Source reference.** D3; consumer requirement `../profiles/tool-decision/spec.md` requirement 18.
 
 **Verify.** `uv run pytest tests/test_structured_output.py -q` — port the relevant cases from `$VAT/tests/test_structured_output.py` (17 KB) as the starting corpus.
 
@@ -367,7 +367,7 @@ print(model_family('gemma-4-31B-it'), model_family('glm-5.1'))"
 
 **Context.** The pipeline pins Python 3.12.14 and needs exactly: `iter_json_array_file`, `read_json`, `read_jsonlines`, `write_jsonlines`, `write_json`, `slot_filling`, `extract_json_from_text`, `normalize_text`, `compute_hash`, `complete`, `complete_structured`, `model_family`, `count_tokens`, `TrafficController`, and the `LLMError` hierarchy. Registry publishing is deferred, so the pipeline installs from a local path or a git ref — which also removes the registry-credentials assumption from the critical path.
 
-**Relevant files.** `../sft-dataset-pipeline/spec.md` §Versions; spec §Public surface.
+**Relevant files.** `../profiles/tool-decision/spec.md` §Versions; spec §Public surface.
 
 **Proposed approach.** Set `__version__ = "0.1.0"`, tag it, build the wheel. Write a README covering install (both extras), the three config resolvers, and a short example per module. Install into a clean 3.12 virtualenv and run a consumer smoke script importing all fifteen symbols. Record the v0.2 backlog in the README.
 
