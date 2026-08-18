@@ -88,7 +88,7 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 
 ### The adapter
 
-The four validity checks below are all provable by counting — no person decides any of them — which is why `quarantine_invalid` runs first. Together they move 1,563 records (7.4%) out of the main path before the jury spends a token on them.
+The four validity checks below are all provable by counting — no person decides any of them — which is why `remove_invalid` runs first. Together they move 1,563 records (7.4%) out of the main path before the jury spends a token on them.
 
 1. The adapter parses the `TOOLS:` block into a structured catalog — name, purpose, `call_when`, `hold_when`, required parameters, per-parameter constraints — and **preserves every marker token byte-identically**. A parser that strips them would pass every other test while destroying the annotator's evidence.
 2. `answer_space` per record is the list of catalog tool names. `validity_checks()` returns the four checks above. `group_key` is the catalog fingerprint, and never `source_index`.

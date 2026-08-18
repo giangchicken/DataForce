@@ -125,7 +125,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 ### Ingest and source integrity
 
-**What `quarantine_invalid` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
+**What `remove_invalid` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
 
 Running it first is what makes the rest affordable. In the first profile it moves **1,563 of 21,172 records — 7.4%** out of the main path in a few seconds of arithmetic. Left in, those records would have consumed 7.4% of the jury's ~121M estimated tokens, taken annotator hours, and then taught the model something false. Nothing is deleted: each goes to `quarantine/invalid/<check>.jsonl` naming the check it failed, and can be re-admitted by an explicit command once the cause is fixed.
 
@@ -222,7 +222,7 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 | # | Phase | Stage | What it is for | Output | Gate |
 |---|---|---|---|---|---|
 | 0 | prepare | `load` | Read the source in, one record at a time, keeping where each came from | `interim/1_prepared/loaded.jsonl` | parsed + unparsed == source count; source SHA-256 matches params |
-| 1 | prepare | `quarantine_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
+| 1 | prepare | `remove_invalid` | Move the records that cannot be used out of the main path, before anything expensive touches them | `interim/1_prepared/usable.jsonl`, `quarantine/` | invalid counts within ±10% of declared |
 | 2 | prepare | `pii_check` | Find personal data, report it, and replace it if `enable_redact` says so | `interim/1_prepared/pii_findings.jsonl`, `redacted.jsonl` | every high-recall hit is verified; zero literal personal-data matches downstream |
 | 3 | find_duplicates | `embed` | Turn each record into a vector so near-duplicates can be found | `interim/2_deduped/embeddings.npy` | row count matches records |
 | 4 | find_duplicates | `dedup` | Group records that say the same thing, so variants of one scenario cannot straddle a split | `interim/2_deduped/records.jsonl`, `clusters.jsonl` | exact dups 0; cluster report emitted |
@@ -239,7 +239,7 @@ Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs 
 
 Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings.
 
-A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `quarantine_invalid` names the action and its object, and the action is true: `remove_invalid` was rejected because nothing is removed — every excluded record is kept under `quarantine/invalid/` and can be re-admitted. `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were rejected for the opposite failure: each needed a glossary, and none of them said whether the stage changes the data.
+A stage name is a promise about what the stage does to the data, and the table above carries the purpose in a column rather than leaving it to be inferred from the name. `remove_invalid` names the action and its object, and "remove" is scoped by what the pipeline is: records are removed **from the main path**, not deleted. Each one is written to `quarantine/invalid/<check>.jsonl` naming the check it failed, and `dataforce requeue --check <name>` puts it back. `pii_check` names what it always does, with rewriting behind a parameter rather than behind a second stage; `rank_for_review` names what the ranking is *for*; `generate_questions` names what is generated. `validate`, `scrub`, `defect`, `find_problems`, and `triage` were rejected for the opposite failure: each needed a glossary, and none of them said whether the stage changes the data.
 
 ### Repository layout
 
@@ -268,7 +268,7 @@ dataforce/
 │   │                            · questions · answer control · exporter
 │   │
 │   ├── pipeline/                ← the fifteen stages, written once
-│   │   ├── prepare/             load.py  quarantine_invalid.py  pii_check.py
+│   │   ├── prepare/             load.py  remove_invalid.py  pii_check.py
 │   │   ├── find_duplicates/     embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
@@ -463,7 +463,7 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 
 - **Conformance.** The suite of requirement 6, run against every registered profile in CI: δ as a metric over generated answer pairs, consensus determinism and unanimity agreement, answer-schema round-trip, adapter field preservation, exporter reproducing the adapter's answer. A new profile is not merged until it passes.
 - **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
-- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `quarantine_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
+- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `remove_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
 - **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.
 - **Agreement.** α over an arbitrary δ against a hand-computed example, plus the degenerate check that α with an identity distance equals `krippendorff`'s nominal α on the same data. Consensus against hand-worked vote sets, including where consensus differs from every individual answer.
