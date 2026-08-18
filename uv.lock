@@ -10,7 +10,7 @@ resolution-markers = [
 [[package]]
 name = "agent-toolkit"
 version = "0.1.0"
-source = { git = "https://github.com/giangchicken/agent-toolkit.git?rev=2ac0fc2581a346df581cbfb5d639baf87b1d23ea#2ac0fc2581a346df581cbfb5d639baf87b1d23ea" }
+source = { git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.1.0#2b603a6ebb98ba28815ce78a5d0c22f85b05083d" }
 dependencies = [
     { name = "json-repair" },
     { name = "pyyaml" },
@@ -447,7 +447,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-toolkit", extras = ["llm"], git = "https://github.com/giangchicken/agent-toolkit.git?rev=2ac0fc2581a346df581cbfb5d639baf87b1d23ea" },
+    { name = "agent-toolkit", extras = ["llm"], git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.1.0" },
     { name = "dvc", specifier = ">=3.67.1" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pandera", specifier = ">=0.32.1" },

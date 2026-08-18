@@ -6,11 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 dependencies = [
-    # The library is pinned to an immutable git ref because it is on no registry.
-    # This is the commit tagged v0.1.0; the tag itself is not on the remote yet, and
-    # `uv lock` cannot resolve a ref that does not exist. Flip to `@v0.1.0` once it is
-    # pushed -- same tree, and the tag is the name the specs use.
-    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@2ac0fc2581a346df581cbfb5d639baf87b1d23ea",
+    # Pinned to a git tag because the library is on no registry. `uv.lock` records
+    # the commit the tag resolves to, so a moved tag shows up as a lockfile diff
+    # rather than as a release built from a tree nobody chose -- which matters,
+    # because this tag has already been moved once.
+    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0",
     "dvc>=3.67.1",
     "pandera>=0.32.1",
     "pandas>=2.2",
