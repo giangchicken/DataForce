@@ -1,0 +1,30 @@
+name: ci
+
+on: [push, pull_request]
+
+env:
+  # The library's consumer contract calls count_tokens, which cannot answer
+  # without tiktoken's cl100k_base vocabulary. Cached so the integration job does
+  # not depend on that download staying available.
+  TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.tiktoken-cache
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: make check
+      - run: uv run dvc repro
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.TIKTOKEN_CACHE_DIR }}
+          key: tiktoken-cl100k-base
+      - name: populate the tiktoken cache
+        run: uv run python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+      - name: the pinned library, and its own consumer contract
+        run: make integration

@@ -1,0 +1,19 @@
+# The privacy tier. Outside DVC entirely, never committed: the source's identity
+# is a SHA-256 in params.yaml, and the PII vault lives here.
+data/raw/
+
+# Artifacts. DVC tracks what is under data/ apart from raw/; git tracks neither.
+data/interim/
+data/processed/
+data/release/
+data/quarantine/
+*.jsonl
+!tests/fixtures/**/*.jsonl
+
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

@@ -1,0 +1,23 @@
+# Every threshold the pipeline reads at runtime. A number here is a decision that
+# is committed, reviewable, and a declared DVC dependency -- so changing it
+# re-runs the stages that depend on it. Code holds no thresholds.
+
+source:
+  # Repo-relative. data/raw/ is not DVC-tracked and not committed; the SHA-256 is
+  # the source's identity, and `load` hard-stops when the file does not match it.
+  path: data/raw/fc_train_final.json
+  sha256: 6f7d2a404a9c9ca428236aba1109dce34f73039f3acb3347f5359205b5ee548c
+
+# False by default. False means pii_check reports and leaves content untouched,
+# and the downstream personal-data scan then fails, so nothing ships. Turning it
+# on is a change to this file, which makes the decision attributable.
+enable_redact: false
+
+# Expected count per validity check, declared so a source change is a decision
+# rather than a surprise. Populated from the adapter's own first run (T8).
+invalid_counts: {}
+
+thresholds:
+  jury: {}          # panel floor, invalid-vote rate, estimated-token ceiling (T18)
+  triage: {}        # bucket boundaries, stratum quotas, audit sizing (T20)
+  pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T25)

@@ -1,0 +1,77 @@
+[project]
+name = "dataforce"
+version = "0.1.0"
+description = "Gated DVC stages that turn a raw corpus into a versioned, documented, training-ready dataset."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+dependencies = [
+    # The library is pinned to an immutable git ref because it is on no registry.
+    # This is the commit tagged v0.1.0; the tag itself is not on the remote yet, and
+    # `uv lock` cannot resolve a ref that does not exist. Flip to `@v0.1.0` once it is
+    # pushed -- same tree, and the tag is the name the specs use.
+    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@2ac0fc2581a346df581cbfb5d639baf87b1d23ea",
+    "dvc>=3.67.1",
+    "pandera>=0.32.1",
+    "pandas>=2.2",
+    "pydantic>=2.13",
+]
+
+[project.scripts]
+dataforce = "dataforce.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# The library is a direct git reference; hatchling refuses one unless told.
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dataforce"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14",
+    "pytest>=8.0.0",
+    "ruff>=0.13.1",
+    "pandas-stubs",
+]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+target-version = "py312"
+# Specs and plans quote a code surface that does not all exist yet; reformatting
+# their fenced blocks would misquote them.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["pandera.*", "dvc.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs the network or a service; excluded from `make check`",
+]
