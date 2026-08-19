@@ -1,0 +1,391 @@
+[
+  {
+    "idx": 0,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Based on the available tools and conversation history, determine which tool(s) the assistant should call next.\nReturn a JSON array of tool names.\nThe array may contain zero, one, or multiple tool names.\nReturn an empty array if no tool should be called."
+      },
+      {
+        "role": "user",
+        "content": "câu hỏi số 0"
+      },
+      {
+        "role": "assistant",
+        "content": "[\"Lookup00_0a\"]"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup00_0a",
+          "description": "Mục đích: tra cứu số dư cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu số dư {or} hỏi về số dư.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup01_1a",
+          "description": "Mục đích: tra cứu hạn mức cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu hạn mức {or} hỏi về hạn mức.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup02_2a",
+          "description": "Mục đích: tra cứu lịch sử giao dịch cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu lịch sử giao dịch {or} hỏi về lịch sử giao dịch.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup03_3a",
+          "description": "Mục đích: tra cứu địa chỉ cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu địa chỉ {or} hỏi về địa chỉ.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup04_4a",
+          "description": "Mục đích: tra cứu hợp đồng cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu hợp đồng {or} hỏi về hợp đồng.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup05_5a",
+          "description": "Mục đích: tra cứu khuyến mãi cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu khuyến mãi {or} hỏi về khuyến mãi.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup06_6a",
+          "description": "Mục đích: tra cứu điểm thưởng cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu điểm thưởng {or} hỏi về điểm thưởng.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup07_7a",
+          "description": "Mục đích: tra cứu phí dịch vụ cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu phí dịch vụ {or} hỏi về phí dịch vụ.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      }
+    ],
+    "meta": {
+      "label": [
+        "Lookup00_0a"
+      ],
+      "llm_model": "gemma-4-31B-it",
+      "source_index": 0
+    }
+  },
+  {
+    "idx": 1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Based on the available tools and conversation history, determine which tool(s) the assistant should call next.\nReturn a JSON array of tool names.\nThe array may contain zero, one, or multiple tool names.\nReturn an empty array if no tool should be called."
+      },
+      {
+        "role": "user",
+        "content": "câu hỏi số 1"
+      },
+      {
+        "role": "assistant",
+        "content": "[\"card.search_faq\", \"calculate_triangl\\te_area\"]"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "card.search_faq",
+          "description": "Mục đích: tra cứu câu hỏi thường gặp cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu câu hỏi thường gặp {or} hỏi về câu hỏi thường gặp.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "end-call",
+          "description": "Mục đích: tra cứu kết thúc cuộc gọi cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu kết thúc cuộc gọi {or} hỏi về kết thúc cuộc gọi.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "calculate BMI",
+          "description": "Mục đích: tra cứu chỉ số cơ thể cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu chỉ số cơ thể {or} hỏi về chỉ số cơ thể.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "calculate_triangl\te_area",
+          "description": "Mục đích: tra cứu diện tích tam giác cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu diện tích tam giác {or} hỏi về diện tích tam giác.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      }
+    ],
+    "meta": {
+      "label": [
+        "card.search_faq",
+        "calculate_triangl\te_area"
+      ],
+      "llm_model": "gemma-4-31B-it",
+      "source_index": 1
+    }
+  },
+  {
+    "idx": 2,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Based on the available tools and conversation history, determine which tool(s) the assistant should call next.\nReturn a JSON array of tool names.\nThe array may contain zero, one, or multiple tool names.\nReturn an empty array if no tool should be called."
+      },
+      {
+        "role": "user",
+        "content": "câu hỏi số 2"
+      },
+      {
+        "role": "assistant",
+        "content": "[]"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "Lookup00_0a",
+          "description": "Mục đích: tra cứu số dư cho khách hàng.\nKhi nào gọi: {trigger} khách hàng yêu cầu số dư {or} hỏi về số dư.\nKhi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "ma_khach": {
+                "type": "string",
+                "description": "Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số."
+              },
+              "ghi_chu": {
+                "type": "string",
+                "description": "Ghi chú thêm.",
+                "default": "rỗng"
+              }
+            },
+            "required": [
+              "ma_khach"
+            ]
+          }
+        }
+      }
+    ],
+    "meta": {
+      "label": [],
+      "llm_model": "gemma-4-31B-it",
+      "source_index": 2
+    }
+  }
+]

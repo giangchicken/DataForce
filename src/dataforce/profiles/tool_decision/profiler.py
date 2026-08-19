@@ -22,8 +22,8 @@ from agent_toolkit.file_utils import iter_json_array_file, read_yaml, write_json
 from agent_toolkit.string_utils import compute_hash
 
 from dataforce.modalities.base import Modality
-from dataforce.profiles.base import Profile
 from dataforce.profiles.tool_decision.adapter import PROVENANCE_KEY, catalog_names
+from dataforce.profiles.tool_decision.profile import ToolDecisionProfile
 from dataforce.shared.record import Record, TextPart
 
 __all__ = ["BASELINE", "drift", "measure", "profile_corpus", "source_digest"]
@@ -48,7 +48,7 @@ def _percentile(ordered: list[int], quantile: float) -> int:
 
 
 def _records(
-    path: Path, modality: Modality, profile: Profile, digest: str
+    path: Path, modality: Modality, profile: ToolDecisionProfile, digest: str
 ) -> Iterator[tuple[Any, Record]]:
     """Every raw item with the record it adapts to, one at a time."""
     for offset, raw in enumerate(iter_json_array_file(path)):
@@ -85,11 +85,27 @@ def _turn(record: Record, role: str) -> str:
     )
 
 
-def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
-    """Every property this corpus is described by, measured over every record."""
+def measure(
+    path: Path, modality: Modality, profile: ToolDecisionProfile
+) -> dict[str, Any]:
+    """Every property this corpus is described by, measured over every record.
+
+    Every field name it reads comes from the profile's source contract. A profiler that
+    spells `llm_model` is a profiler about one file, and this one has to keep working when
+    the next file calls it something else.
+    """
     digest = source_digest(path)
+    contract = profile.contract
     checks = profile.validity_checks()
     detectors = modality.privacy_detectors()
+
+    instruction_role = contract.role("instruction")
+    conversation_role = contract.role("conversation")
+    labelling_model = contract.field("labelling_model")
+    prior_label = contract.field("prior_label")
+    label_provenance = contract.field("label_provenance")
+    human_checked = contract.field("human_checked")
+    human_checked_by = contract.field("human_checked_by")
 
     records = 0
     cardinality: Counter[int] = Counter()
@@ -124,27 +140,28 @@ def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
         key_sets[tuple(sorted(raw.get("meta") or {}))] += 1
         # `.keys()`, not the mapping: Counter.update over a dict adds its *values*.
         meta_keys.update((raw.get("meta") or {}).keys())
-        if record.meta.get("human_checked"):
+        if record.meta.get(human_checked):
             checked += 1
-            checked_by.update(record.meta.get("human_check_src") or ["unstated"])
-            if record.meta.get("orig_label", label) != label:
+            checked_by.update(record.meta.get(human_checked_by) or ["unstated"])
+            if record.meta.get(prior_label, label) != label:
                 checked_and_changed += 1
-        if "label_source" in record.meta:
-            label_sources[str(record.meta["label_source"])] += 1
-        models[record.meta.get("llm_model") or "unstated"] += 1
+        if label_provenance in record.meta:
+            label_sources[str(record.meta[label_provenance])] += 1
+        models[record.meta.get(labelling_model) or "unstated"] += 1
         for name, check in checks.items():
             if check(record):
                 invalid[name] += 1
         for detector in detectors:
             signals[detector.__name__] += bool(detector(record.content))
-        system, user = _turn(record, "system"), _turn(record, "user")
+        system = _turn(record, instruction_role)
+        user = _turn(record, conversation_role)
         prompt_sizes.append(len(system) + len(user))
         total_characters += len(system) + len(user)
         user_digests[compute_hash(user, "sha256")] += 1
         pair_digests[compute_hash(f"{system}\n{user}", "sha256")] += 1
-        if "orig_label" in record.meta:
+        if prior_label in record.meta:
             relabelled += 1
-            if record.meta["orig_label"] != label:
+            if record.meta[prior_label] != label:
                 relabelled_changed += 1
 
     prompt_sizes.sort()
@@ -182,12 +199,12 @@ def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
             ],
         },
         "labelling_model": dict(sorted(models.items())),
-        # Which records a person has already looked at. Counted per key as well as per
-        # key-set, so a population appearing or shrinking in `meta` is a drift rather
-        # than a discovery: `human_checked` is the only record of prior human work in
-        # this corpus and no document mentions it.
+        # Which records a person has already looked at -- the gold pool, which the
+        # manifest names. Counted per key as well as per key-set, so a population
+        # appearing or shrinking in `meta` is a drift rather than a discovery.
         "meta_keys": dict(sorted(meta_keys.items())),
-        "human_checked": {
+        "gold": {
+            "field": contract.gold_from,
             "records": checked,
             "by_source": dict(sorted(checked_by.items())),
             "and_the_label_changed": checked_and_changed,
@@ -238,7 +255,7 @@ def drift(baseline: Mapping[str, Any], measured: Mapping[str, Any]) -> list[str]
 
 def profile_corpus(
     modality: Modality,
-    profile: Profile,
+    profile: ToolDecisionProfile,
     *,
     accept: bool = False,
     baseline: Path = BASELINE,

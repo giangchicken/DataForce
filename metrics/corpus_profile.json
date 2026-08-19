@@ -298,7 +298,8 @@
     "source_index": 13366,
     "subscenario": 300
   },
-  "human_checked": {
+  "gold": {
+    "field": "human_checked",
     "records": 951,
     "by_source": {
       "confuse_b1": 34,

@@ -8,11 +8,11 @@ only passes when invoked by its own test is not registered.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+from agent_toolkit.file_utils import read_yaml
 
 from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
@@ -63,17 +63,13 @@ def record_for(**kwargs: Any) -> Record:
     return TOOL_DECISION.adapt(raw, TEXT.load(raw))
 
 
-@pytest.fixture(autouse=True)
-def _params_are_the_repo_s(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """The checks read a committed threshold; point them at it regardless of cwd.
+PARAMS = FIXTURES.parents[2] / "params.yaml"
 
-    Cleared on the way out as well as in: the ceiling is cached, and a test that
-    points it at a temporary file would otherwise leave that value behind.
-    """
-    monkeypatch.setattr(checks, "PARAMS", FIXTURES.parents[2] / "params.yaml")
-    checks._max_cardinality.cache_clear()
-    yield
-    checks._max_cardinality.cache_clear()
+
+@pytest.fixture
+def check() -> dict[str, Any]:
+    """The four checks, bound to the profile's contract and the committed ceiling."""
+    return checks.validity_checks(TOOL_DECISION.contract, params=PARAMS)
 
 
 # --- the suite ---------------------------------------------------------------
@@ -126,90 +122,90 @@ def test_a_zero_label_record_passes_the_suite_too() -> None:
 # --- the four validity checks ------------------------------------------------
 
 
-def test_a_well_formed_record_fails_no_check() -> None:
+def test_a_well_formed_record_fails_no_check(check: dict[str, Any]) -> None:
     record = record_for(label=["Lookup00_0a"])
 
-    fired = [
-        name for name, check in TOOL_DECISION.validity_checks().items() if check(record)
-    ]
-
-    assert fired == []
+    assert [name for name, fires in check.items() if fires(record)] == []
 
 
-def test_validity_checks_are_the_four_the_spec_names() -> None:
-    assert list(TOOL_DECISION.validity_checks()) == [
-        "label_assistant_mismatch",
-        "label_not_in_catalog",
-        "empty_catalog",
-        "label_cardinality_anomaly",
-    ]
+def test_validity_checks_are_the_four_names_params_declares_counts_for() -> None:
+    """The names are identifiers `params.yaml` keys on, so they are not free to drift."""
+    built = TOOL_DECISION.validity_checks()
+
+    assert tuple(built) == checks.CHECK_NAMES
+    assert set(built) == set(read_yaml(PARAMS)["invalid_counts"])
 
 
-def test_label_assistant_mismatch_fires_when_the_two_targets_disagree() -> None:
+def test_label_assistant_mismatch_fires_when_the_two_targets_disagree(
+    check: dict[str, Any],
+) -> None:
     record = record_for(label=["Lookup00_0a"], assistant='["Lookup01_1a"]')
 
-    assert checks.label_assistant_mismatch(record)
+    assert check["label_assistant_mismatch"](record)
 
 
-def test_label_assistant_mismatch_ignores_order_and_repetition() -> None:
+def test_label_assistant_mismatch_ignores_order_and_repetition(
+    check: dict[str, Any],
+) -> None:
     record = record_for(
         label=["Lookup00_0a", "Lookup01_1a"], assistant='["Lookup01_1a", "Lookup00_0a"]'
     )
 
-    assert not checks.label_assistant_mismatch(record)
+    assert not check["label_assistant_mismatch"](record)
 
 
-def test_an_unparseable_assistant_message_is_a_mismatch() -> None:
+def test_an_unparseable_assistant_message_is_a_mismatch(check: dict[str, Any]) -> None:
     """Agreement that cannot be confirmed is not agreement."""
     record = record_for(label=["Lookup00_0a"], assistant="tôi sẽ gọi tool")
 
-    assert checks.label_assistant_mismatch(record)
+    assert check["label_assistant_mismatch"](record)
 
 
-def test_label_not_in_catalog_fires_when_the_target_names_a_tool_never_offered() -> (
-    None
-):
+def test_label_not_in_catalog_fires_when_the_target_names_a_tool_never_offered(
+    check: dict[str, Any],
+) -> None:
     record = record_for(catalog="one_tool.txt", label=["Lookup07_7a"])
 
-    assert checks.label_not_in_catalog(record)
-    assert not checks.empty_catalog(record)
+    assert check["label_not_in_catalog"](record)
+    assert not check["empty_catalog"](record)
 
 
-def test_a_name_with_a_dot_or_a_tab_is_in_its_catalog() -> None:
+def test_a_name_with_a_dot_or_a_tab_is_in_its_catalog(check: dict[str, Any]) -> None:
     """The convention that decides whether 722 records are invalid or none are."""
     record = record_for(
         catalog="odd_names.txt", label=["card.search_faq", "calculate_triangl\te_area"]
     )
 
-    assert not checks.label_not_in_catalog(record)
+    assert not check["label_not_in_catalog"](record)
 
 
-def test_empty_catalog_fires_when_the_record_offers_no_tools() -> None:
+def test_empty_catalog_fires_when_the_record_offers_no_tools(
+    check: dict[str, Any],
+) -> None:
     record = record_for(catalog="header_without_entries.txt", label=[])
 
-    assert checks.empty_catalog(record)
-    assert not checks.label_not_in_catalog(record)
+    assert check["empty_catalog"](record)
+    assert not check["label_not_in_catalog"](record)
 
 
-def test_label_cardinality_anomaly_reads_its_ceiling_from_params() -> None:
+def test_label_cardinality_anomaly_reads_its_ceiling_from_params(
+    check: dict[str, Any],
+) -> None:
     record = record_for(
         label=["Lookup00_0a", "Lookup01_1a", "Lookup02_2a", "Lookup03_3a"],
         assistant='["Lookup00_0a", "Lookup01_1a", "Lookup02_2a", "Lookup03_3a"]',
     )
 
-    assert checks.label_cardinality_anomaly(record)
-    assert not checks.label_cardinality_anomaly(record_for(label=["Lookup00_0a"]))
+    assert check["label_cardinality_anomaly"](record)
+    assert not check["label_cardinality_anomaly"](record_for(label=["Lookup00_0a"]))
 
 
-def test_an_undeclared_ceiling_is_a_config_error_not_a_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(checks, "PARAMS", tmp_path / "params.yaml")
+def test_an_undeclared_ceiling_fails_when_the_checks_are_built(tmp_path: Path) -> None:
+    """Not on the first of 21,172 records: the threshold is read once, up front."""
     (tmp_path / "params.yaml").write_text("source: {}\n", encoding="utf-8")
-    checks._max_cardinality.cache_clear()
 
     with pytest.raises(ConfigError, match="max_answer_cardinality"):
-        checks.label_cardinality_anomaly(record_for(label=[]))
+        checks.validity_checks(TOOL_DECISION.contract, params=tmp_path / "params.yaml")
 
 
 # --- export, group key, controls ---------------------------------------------

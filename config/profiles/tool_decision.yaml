@@ -63,14 +63,9 @@ gold:
     - flag_is_one_sided
     - targeted_pass_not_random_sample
 
-# Read only when shape is legacy_system_prompt. These are the strings the forward
-# renderer writes, so the reader's contract is stated beside them rather than compiled
-# in. The three Vietnamese clause labels are deliberately absent: a tool's description
-# is taken verbatim between the name and `require:`, so nothing needs to know them.
-legacy:
-  catalog_header: "TOOLS:\n"
-  require_label: "require:"
-  params_label: "params:"
-  enum_clause: "Giá trị khả dụng:"
-  default_clause: "Nếu khách không đề cập, mặc định là"
-  inline_object_clause: "Gồm các trường:"
+# There is no `legacy:` block. The catalog format -- its header, its `require:` and
+# `params:` labels, its enum and default clauses -- is defined once in
+# `profiles/tool_decision/catalog.py`, which both renders and reads it, and a round-trip
+# test over all 21,172 corpus catalogs is what proves the two directions agree. Copying
+# those strings here would be a second source of truth for one grammar; `shape` above is
+# the only thing this file needs to say about it.

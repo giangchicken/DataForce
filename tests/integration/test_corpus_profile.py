@@ -129,8 +129,9 @@ def test_the_records_a_person_already_checked_are_counted(
     `human_check_src` names a targeted generation pass rather than a random sample, so
     this is a candidate pool with a known bias, not a gold set.
     """
-    checked = measured["human_checked"]
+    checked = measured["gold"]
 
+    assert checked["field"] == "human_checked"
     assert checked["records"] == 951
     assert checked["by_source"] == {"confuse_b1": 34, "debait": 917}
     assert checked["and_the_label_changed"] == 94
