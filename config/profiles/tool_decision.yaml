@@ -1,0 +1,76 @@
+# Everything about this profile that is not behaviour: who it is, what it composes
+# with, which prompts it asks, what its source is shaped like, and what that source's
+# own field names mean.
+#
+# Identity is declared here rather than assigned in the class because `version` is
+# stamped onto every record it produces -- `producer.profile` reads `tool_decision@1`
+# -- and a version bumped by editing a class attribute is a version nobody reviewed.
+name: tool_decision
+version: "1"
+modality: text
+
+prompts:
+  question: profiles/tool_decision/question.v1
+
+# --- the source ----------------------------------------------------------------
+#
+# What the source is shaped like, and what its own field names mean.
+#
+# Every corpus-specific name the pipeline reads is declared here, so no module names
+# one. That is the difference between supporting a second source and adding a branch:
+# `Mục đích:` compiled into a parser is a fact about one Vietnamese renderer living
+# inside code that claims to be generic.
+#
+# Shapes, and why there are two:
+#   openai_tools         `messages` plus a top-level `tools` array, OpenAI standard.
+#                        The catalog is data. Nothing parses a prompt. Canonical.
+#   legacy_system_prompt no `tools` key; the catalog is rendered into the system
+#                        message after a `TOOLS:` line. What fc_train_final.json holds
+#                        today, so ingest converts it once, on the way in.
+shape: legacy_system_prompt
+
+# Which turn is which. The pipeline says "target"; this file says the source spells it
+# "assistant".
+roles:
+  instruction: system
+  conversation: [user]
+  target: assistant
+
+label:
+  at: meta.label # where the answer is stated
+  restated_in: target # and the second place, which must agree -- invariant 4
+
+# Source field name -> what the pipeline calls it. A meta field absent here is kept
+# verbatim and counted by the profiler, but nothing reads it.
+meta:
+  labelling_model: llm_model
+  prior_label: orig_label
+  label_provenance: label_source
+  human_checked: human_checked
+  human_checked_by: human_check_src
+
+gold:
+  # The gold set is the records a person has already checked. Declared because the
+  # core needs gold in four places -- juror weights (36), the >=50 records mixed into
+  # every project (50), per-annotator accuracy at the pilot gate (64), and the
+  # 100%-human-validated test split -- and no document said where one comes from.
+  from: human_checked
+  # What this pool is not, carried into the datasheet rather than forgotten:
+  # `human_checked` is only ever true, so it records that a record was looked at and
+  # not that it was found correct; and `human_checked_by` names a targeted generation
+  # pass, so the pool is not a random sample of the corpus.
+  disclose:
+    - flag_is_one_sided
+    - targeted_pass_not_random_sample
+
+# Read only when shape is legacy_system_prompt. These are the strings the forward
+# renderer writes, so the reader's contract is stated beside them rather than compiled
+# in. The three Vietnamese clause labels are deliberately absent: a tool's description
+# is taken verbatim between the name and `require:`, so nothing needs to know them.
+legacy:
+  catalog_header: "TOOLS:\n"
+  require_label: "require:"
+  params_label: "params:"
+  enum_clause: "Giá trị khả dụng:"
+  default_clause: "Nếu khách không đề cập, mặc định là"
+  inline_object_clause: "Gồm các trường:"

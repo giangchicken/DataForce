@@ -1,0 +1,2 @@
+Dựa trên danh mục tool và hội thoại, những tool nào cần được gọi? Có thể là tập rỗng nếu không tool nào nên được gọi.
+Tập trung vào: {{focus}}

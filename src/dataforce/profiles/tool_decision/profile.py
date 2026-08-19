@@ -6,25 +6,21 @@ import html
 from collections.abc import Callable
 from typing import Any
 
-from agent_toolkit.string_utils import slot_filling
-
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import adapter, answers, checks
 
 # By its module path, not through the package: `__init__` re-exports the function
 # under the same name as its module, and `export` here would be the function.
 from dataforce.profiles.tool_decision.export import export as export_example
+from dataforce.shared import manifest, prompts
 from dataforce.shared.record import Part, Record, UIControl
 
-__all__ = ["TOOL_DECISION", "ToolDecisionProfile"]
+__all__ = ["MANIFEST_NAME", "TOOL_DECISION", "ToolDecisionProfile"]
 
-# Filled with `slot_filling`, whose `{{placeholder}}` syntax leaves the marker DSL's
-# single braces alone. `str.format` would raise on the first `{trigger}` it met.
-_QUESTION = (
-    "Dựa trên danh mục tool và hội thoại, những tool nào cần được gọi? "
-    "Có thể là tập rỗng nếu không tool nào nên được gọi.\n"
-    "Tập trung vào: {{focus}}"
-)
+# The manifest this profile is: `config/profiles/tool_decision.yaml`. Its name, version,
+# the modality it composes with and the `prompt_version` it asks with are all declared
+# there, because every one of them is stamped into an artifact.
+MANIFEST_NAME = "tool_decision"
 
 
 def _attribute(value: str) -> str:
@@ -40,12 +36,20 @@ def _attribute(value: str) -> str:
 
 
 class ToolDecisionProfile:
-    """Tool selection over Vietnamese call-centre text, composed with `text`."""
+    """Tool selection over Vietnamese call-centre text, composed with `text`.
 
-    name = "tool_decision"
-    version = "1"
-    modality = "text"
-    answer_schema = answers.ANSWER_SCHEMA
+    Behaviour is here; identity is in the manifest. Nothing in this class names its own
+    version, so bumping one is a reviewed line in a declared file rather than an edit
+    that silently changes what `producer.profile` claims about every record produced.
+    """
+
+    def __init__(self, declared: manifest.Manifest) -> None:
+        self.manifest = declared
+        self.name = declared.name
+        self.version = declared.version
+        self.modality: str = declared.require("modality")
+        self.question_prompt: str = declared.require("prompts")["question"]
+        self.answer_schema = answers.ANSWER_SCHEMA
 
     def adapt(self, raw: Any, parts: list[Part]) -> Record:
         return adapter.adapt(raw, parts)
@@ -60,8 +64,8 @@ class ToolDecisionProfile:
         return checks.validity_checks()
 
     def question(self, record: Record, focus: str) -> str:
-        """One focused question. The template library is `generate_questions`'s."""
-        return slot_filling(_QUESTION, {"focus": focus})
+        """One focused question. Choosing the focus is `generate_questions`'s job."""
+        return prompts.render(self.question_prompt, {"focus": focus})
 
     def answer_control(self, record: Record) -> UIControl:
         """The capture half of the config, constrained to this record's catalog."""
@@ -82,4 +86,4 @@ class ToolDecisionProfile:
         return export_example(record)
 
 
-TOOL_DECISION = ToolDecisionProfile()
+TOOL_DECISION = ToolDecisionProfile(manifest.load("profiles", MANIFEST_NAME))

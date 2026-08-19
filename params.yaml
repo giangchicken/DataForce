@@ -25,6 +25,11 @@ invalid_counts:
   empty_catalog: 0
   label_cardinality_anomaly: 0
 
+# The gold set, declared as a count so it drifts loudly. `config/source/` says which
+# field identifies it; this says how many records that field is expected to select.
+gold:
+  records: 951
+
 # The largest answer this source contains. A record above it means a catalog or a
 # parser change inflated answer size, which is a decision rather than data.
 max_answer_cardinality: 3

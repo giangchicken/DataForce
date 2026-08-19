@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dataforce:tool_decision:tool",
+  "title": "One tool, in OpenAI function-calling form",
+  "description": "The catalog's unit and its source of truth. `description` is one verbatim string that carries all usage guidance -- the Mục đích / Khi nào gọi / Khi nào KHÔNG gọi clauses and their marker DSL for a structured catalog, freeform prose for a legacy one. Nothing here splits it, which is how the markers survive by construction rather than by a parser being careful.",
+  "type": "object",
+  "required": ["type", "function"],
+  "additionalProperties": false,
+  "properties": {
+    "type": { "const": "function" },
+    "function": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "parameters": { "$ref": "#/$defs/objectSchema" }
+      }
+    }
+  },
+  "$defs": {
+    "objectSchema": {
+      "description": "The JSON Schema subset the catalog format can hold both ways. Anything outside it renders to text that cannot be read back, so it is excluded here rather than discovered later.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "object" },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/parameter" }
+        },
+        "required": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "description": "The six types the corpus uses: 164,011 string, 31,959 number, 19,508 integer, 6,554 array, 5,386 boolean, 1,591 object.",
+          "enum": ["string", "number", "integer", "boolean", "array", "object"]
+        },
+        "description": { "type": "string" },
+        "enum": {
+          "description": "Renders as `Giá trị khả dụng: a, b.` Values may contain dots.",
+          "type": "array", "minItems": 1
+        },
+        "default": {
+          "description": "Renders as `Nếu khách không đề cập, mặc định là v.` A parameter carrying a default is never required: the default wins and the name is kept out of `required`."
+        },
+        "items": {
+          "description": "An array's item schema. An array's allowed values live here, at items.enum.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["string", "number", "integer", "boolean"] },
+            "enum": { "type": "array", "minItems": 1 }
+          }
+        },
+        "properties": {
+          "description": "An object parameter's subfields, one level or more. Rendered as deeper-indented lines when any subfield carries a description, a non-string type, an enum or a default; as the compact `Gồm các trường: a*, b.` when they are all bare strings.",
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/parameter" }
+        },
+        "required": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

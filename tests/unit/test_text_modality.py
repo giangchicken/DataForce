@@ -11,7 +11,7 @@ import pytest
 
 from dataforce.modalities import registry
 from dataforce.modalities.base import Modality
-from dataforce.modalities.text import TEXT, TextModality
+from dataforce.modalities.text import TEXT
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import (
     MediaPart,
@@ -123,9 +123,9 @@ def test_embeddings_are_deterministic_across_two_runs() -> None:
     """Static embeddings, so dedup gives the same clusters on a re-run."""
     parts = TEXT.load(RAW)
 
-    first = TextModality().embed(parts)
-    second = TextModality().embed(parts)
+    first = TEXT.embed(parts)
+    second = TEXT.embed(parts)
 
     assert list(first) == list(second)
-    assert len(first) == 256
+    assert len(first) == 256  # potion-multilingual-128M
     assert all(isinstance(value, float) for value in first)

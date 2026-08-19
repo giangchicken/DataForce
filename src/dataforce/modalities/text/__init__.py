@@ -15,32 +15,25 @@ from typing import Any
 from model2vec import StaticModel
 
 from dataforce.modalities.base import Detector
+from dataforce.shared import manifest
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Part, Record, TextPart, UIControl
 
-__all__ = ["EMBEDDING_MODEL", "TEXT", "TextModality"]
+__all__ = ["MANIFEST_NAME", "TEXT", "TextModality"]
 
-# Static embeddings: a vector is a pure function of its input, with no sampling
-# and no ordering effect, so two runs over one corpus dedup identically.
-EMBEDDING_MODEL = "minishlab/potion-multilingual-128M"
+# The manifest this modality is: `config/modalities/text.yaml`. It declares the name and
+# version stamped into `producer.modality`, the embedding model, and which roles stay
+# out of a vector.
+MANIFEST_NAME = "text"
 
 # What separates one turn from the next when parts are embedded as one document.
 _TURN_SEPARATOR = "\n\n"
 
-# The system turn is left out of the vector. Measured on 200 real duplicate pairs
-# from the first corpus: retrieving a record's near-duplicate succeeds 200/200 times
-# on the conversation alone and 0/200 times with the system turn included, because a
-# 4,000-character instruction block swamps a 780-character conversation and every
-# record's nearest neighbour becomes whichever other record was given similar
-# instructions. Catalog similarity is what `group_key` measures; this measures
-# whether two records say the same thing.
-_NOT_EMBEDDED = frozenset({"system"})
-
 
 @lru_cache(maxsize=1)
-def _model() -> StaticModel:
-    """The embedder, loaded once. Downloads on first use, then reads the cache."""
-    return StaticModel.from_pretrained(EMBEDDING_MODEL)
+def _model(name: str) -> StaticModel:
+    """The embedder, loaded once per model name. Downloads first use, then caches."""
+    return StaticModel.from_pretrained(name)
 
 
 def _text_parts(parts: Sequence[Part]) -> list[TextPart]:
@@ -60,10 +53,24 @@ def _text_parts(parts: Sequence[Part]) -> list[TextPart]:
 
 
 class TextModality:
-    """Conversational text, one part per turn."""
+    """Conversational text, one part per turn.
 
-    name = "text"
-    version = "1"
+    Identity, the embedding model and the roles left out of a vector are all declared,
+    because `producer.modality` stamps this version onto every record it reads and the
+    role exclusion is a measured choice rather than an implementation detail.
+    """
+
+    def __init__(self, declared: manifest.Manifest) -> None:
+        self.manifest = declared
+        self.name = declared.name
+        self.version = declared.version
+        embedding = declared.require("embedding")
+        self.embedding_model: str = embedding["model"]
+        # Roles that stay out of the vector. Measured on 200 real duplicate pairs:
+        # retrieving a record's near-duplicate succeeds 200/200 on the conversation
+        # alone and 0/200 with the system turn included, because a 4,000-character
+        # instruction block swamps a 780-character conversation.
+        self.not_embedded = frozenset(embedding["exclude_roles"])
 
     def load(self, raw: Any) -> list[Part]:
         """One source item's turns, in order, each carrying its role.
@@ -79,9 +86,13 @@ class TextModality:
     def embed(self, parts: list[Part]) -> Sequence[float]:
         """One vector over the conversation, for near-duplicate detection only."""
         document = _TURN_SEPARATOR.join(
-            part.text for part in _text_parts(parts) if part.role not in _NOT_EMBEDDED
+            part.text
+            for part in _text_parts(parts)
+            if part.role not in self.not_embedded
         )
-        vector: list[float] = _model().encode([document])[0].tolist()
+        vector: list[float] = (
+            _model(self.embedding_model).encode([document])[0].tolist()
+        )
         return vector
 
     def privacy_detectors(self) -> list[Detector]:
@@ -107,4 +118,4 @@ class TextModality:
         )
 
 
-TEXT = TextModality()
+TEXT = TextModality(manifest.load("modalities", MANIFEST_NAME))
