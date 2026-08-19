@@ -97,6 +97,11 @@ def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
     catalog_sizes: Counter[int] = Counter()
     fingerprints: Counter[str] = Counter()
     key_sets: Counter[tuple[str, ...]] = Counter()
+    meta_keys: Counter[str] = Counter()
+    checked_by: Counter[str] = Counter()
+    label_sources: Counter[str] = Counter()
+    checked = 0
+    checked_and_changed = 0
     models: Counter[str] = Counter()
     invalid = Counter({name: 0 for name in checks})
     signals = Counter({detector.__name__: 0 for detector in detectors})
@@ -117,6 +122,15 @@ def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
         # The source's own `meta`, not the record's: `adapt` adds the fields the
         # item carried outside `meta`, and what drifted is what the file contains.
         key_sets[tuple(sorted(raw.get("meta") or {}))] += 1
+        # `.keys()`, not the mapping: Counter.update over a dict adds its *values*.
+        meta_keys.update((raw.get("meta") or {}).keys())
+        if record.meta.get("human_checked"):
+            checked += 1
+            checked_by.update(record.meta.get("human_check_src") or ["unstated"])
+            if record.meta.get("orig_label", label) != label:
+                checked_and_changed += 1
+        if "label_source" in record.meta:
+            label_sources[str(record.meta["label_source"])] += 1
         models[record.meta.get("llm_model") or "unstated"] += 1
         for name, check in checks.items():
             if check(record):
@@ -168,6 +182,17 @@ def measure(path: Path, modality: Modality, profile: Profile) -> dict[str, Any]:
             ],
         },
         "labelling_model": dict(sorted(models.items())),
+        # Which records a person has already looked at. Counted per key as well as per
+        # key-set, so a population appearing or shrinking in `meta` is a drift rather
+        # than a discovery: `human_checked` is the only record of prior human work in
+        # this corpus and no document mentions it.
+        "meta_keys": dict(sorted(meta_keys.items())),
+        "human_checked": {
+            "records": checked,
+            "by_source": dict(sorted(checked_by.items())),
+            "and_the_label_changed": checked_and_changed,
+        },
+        "label_source": dict(sorted(label_sources.items())),
         "duplicates": {
             "user_turn_groups": sum(1 for c in user_digests.values() if c > 1),
             "user_turn_records": sum(c for c in user_digests.values() if c > 1),

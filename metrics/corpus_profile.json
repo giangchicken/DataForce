@@ -282,6 +282,33 @@
     "gemma-4-31B-it": 14241,
     "unstated": 6931
   },
+  "meta_keys": {
+    "base_label": 500,
+    "domain": 5101,
+    "gen_category": 875,
+    "human_check_src": 951,
+    "human_checked": 951,
+    "job_id": 300,
+    "label": 21172,
+    "label_source": 1358,
+    "llm_model": 14241,
+    "orig_label": 1358,
+    "scenario": 5901,
+    "source": 7806,
+    "source_index": 13366,
+    "subscenario": 300
+  },
+  "human_checked": {
+    "records": 951,
+    "by_source": {
+      "confuse_b1": 34,
+      "debait": 917
+    },
+    "and_the_label_changed": 94
+  },
+  "label_source": {
+    "claude_corrected": 1358
+  },
   "duplicates": {
     "user_turn_groups": 491,
     "user_turn_records": 982,

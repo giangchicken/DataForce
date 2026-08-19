@@ -118,6 +118,52 @@ def test_no_catalog_in_this_file_is_empty(measured: dict[str, Any]) -> None:
     assert measured["catalog_size"]["max"] == 20
 
 
+def test_the_records_a_person_already_checked_are_counted(
+    measured: dict[str, Any],
+) -> None:
+    """951 records carry `human_checked`, and no spec or plan mentions the key.
+
+    Counted here because the pipeline needs a gold set in five places -- juror
+    weights, annotator scoring, the pilot gate, the 100%-human-validated test split
+    -- and no document says where one comes from. `human_checked` is always True and
+    `human_check_src` names a targeted generation pass rather than a random sample, so
+    this is a candidate pool with a known bias, not a gold set.
+    """
+    checked = measured["human_checked"]
+
+    assert checked["records"] == 951
+    assert checked["by_source"] == {"confuse_b1": 34, "debait": 917}
+    assert checked["and_the_label_changed"] == 94
+    assert measured["label_source"] == {"claude_corrected": 1358}
+    assert (
+        measured["meta_keys"]["human_checked"]
+        == measured["meta_keys"]["human_check_src"]
+    )
+
+
+def test_every_meta_key_is_counted_not_just_the_documented_ones(
+    measured: dict[str, Any],
+) -> None:
+    """Six of the fourteen appear in no spec: a key-set count alone hides which."""
+    assert set(measured["meta_keys"]) == {
+        "base_label",
+        "domain",
+        "gen_category",
+        "human_check_src",
+        "human_checked",
+        "job_id",
+        "label",
+        "label_source",
+        "llm_model",
+        "orig_label",
+        "scenario",
+        "source",
+        "source_index",
+        "subscenario",
+    }
+    assert measured["meta_keys"]["label"] == measured["records"]
+
+
 def test_privacy_signals_are_empty_until_the_modality_declares_detectors(
     measured: dict[str, Any],
 ) -> None:
