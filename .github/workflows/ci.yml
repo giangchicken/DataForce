@@ -7,6 +7,10 @@ env:
   # without tiktoken's cl100k_base vocabulary. Cached so the integration job does
   # not depend on that download staying available.
   TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.tiktoken-cache
+  # The text modality's embedder is 512 MiB of static weights. Cached for the same
+  # reason: an integration job that re-downloads it every run is an integration job
+  # that fails when Hugging Face is slow.
+  HF_HOME: ${{ github.workspace }}/.hf-cache
 
 jobs:
   check:
@@ -26,5 +30,14 @@ jobs:
           key: tiktoken-cl100k-base
       - name: populate the tiktoken cache
         run: uv run python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.HF_HOME }}
+          key: potion-multilingual-128M
+      - name: populate the embedder cache
+        run: |
+          uv run python -c "from dataforce.modalities.text import EMBEDDING_MODEL, _model; \
+            print(EMBEDDING_MODEL, _model().dim)"
       - name: the pinned library, and its own consumer contract
         run: make integration

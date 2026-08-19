@@ -1,0 +1,16 @@
+Based on the available tools and conversation history, determine which tool(s) the assistant should call next.
+Return a JSON array of tool names.
+The array may contain zero, one, or multiple tool names.
+Return an empty array if no tool should be called.
+
+TOOLS:
+[Bare_01a]
+
+[Full_02b]
+Mục đích: tra cứu số dư cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu số dư {or} hỏi về số dư.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.

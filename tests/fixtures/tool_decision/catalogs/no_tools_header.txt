@@ -1,0 +1,2 @@
+Based on the available tools and conversation history, determine which tool(s) the assistant should call next.
+Return a JSON array of tool names.

@@ -1,0 +1,304 @@
+{
+  "source": {
+    "sha256": "0899b9ce88c2d2b4d3f6cad1bb9f2fcb7fc20e3016e21adafd37cd4e5282f0ec",
+    "bytes": 132286182
+  },
+  "records": 21172,
+  "answer_cardinality": {
+    "0": 7498,
+    "1": 10596,
+    "2": 2757,
+    "3": 321
+  },
+  "labels": {
+    "distinct_tool_names": 14411,
+    "most_frequent": [
+      "check_past",
+      35
+    ],
+    "relabelled_once": 1358,
+    "relabelled_and_changed": 1346
+  },
+  "catalog_size": {
+    "min": 1,
+    "max": 20,
+    "distribution": {
+      "1": 2560,
+      "2": 2649,
+      "3": 3440,
+      "4": 3372,
+      "5": 3046,
+      "6": 409,
+      "7": 1298,
+      "8": 2776,
+      "9": 158,
+      "10": 76,
+      "11": 244,
+      "12": 224,
+      "13": 46,
+      "14": 46,
+      "15": 24,
+      "20": 804
+    }
+  },
+  "catalog_fingerprints": {
+    "distinct": 17583,
+    "singletons": 16276,
+    "largest": {
+      "fingerprint": "13fcdbc67145af61",
+      "records": 112
+    }
+  },
+  "meta_key_sets": {
+    "distinct": 22,
+    "sets": [
+      {
+        "keys": [
+          "label",
+          "llm_model",
+          "source_index"
+        ],
+        "records": 12007
+      },
+      {
+        "keys": [
+          "domain",
+          "label",
+          "scenario",
+          "source"
+        ],
+        "records": 2998
+      },
+      {
+        "keys": [
+          "label",
+          "scenario",
+          "source"
+        ],
+        "records": 1582
+      },
+      {
+        "keys": [
+          "domain",
+          "gen_category",
+          "label",
+          "llm_model",
+          "scenario",
+          "source"
+        ],
+        "records": 827
+      },
+      {
+        "keys": [
+          "domain",
+          "label",
+          "source"
+        ],
+        "records": 774
+      },
+      {
+        "keys": [
+          "human_check_src",
+          "human_checked",
+          "label",
+          "llm_model",
+          "source_index"
+        ],
+        "records": 702
+      },
+      {
+        "keys": [
+          "label",
+          "label_source",
+          "llm_model",
+          "orig_label",
+          "source_index"
+        ],
+        "records": 561
+      },
+      {
+        "keys": [
+          "base_label",
+          "label",
+          "source"
+        ],
+        "records": 477
+      },
+      {
+        "keys": [
+          "domain",
+          "label",
+          "label_source",
+          "orig_label",
+          "source"
+        ],
+        "records": 329
+      },
+      {
+        "keys": [
+          "label",
+          "label_source",
+          "orig_label",
+          "scenario",
+          "source"
+        ],
+        "records": 310
+      },
+      {
+        "keys": [
+          "job_id",
+          "label",
+          "source",
+          "subscenario"
+        ],
+        "records": 299
+      },
+      {
+        "keys": [
+          "human_check_src",
+          "human_checked",
+          "label",
+          "label_source",
+          "llm_model",
+          "orig_label",
+          "source_index"
+        ],
+        "records": 96
+      },
+      {
+        "keys": [
+          "domain",
+          "human_check_src",
+          "human_checked",
+          "label",
+          "scenario",
+          "source"
+        ],
+        "records": 68
+      },
+      {
+        "keys": [
+          "domain",
+          "label",
+          "label_source",
+          "orig_label",
+          "scenario",
+          "source"
+        ],
+        "records": 52
+      },
+      {
+        "keys": [
+          "domain",
+          "gen_category",
+          "human_check_src",
+          "human_checked",
+          "label",
+          "llm_model",
+          "scenario",
+          "source"
+        ],
+        "records": 48
+      },
+      {
+        "keys": [
+          "base_label",
+          "human_check_src",
+          "human_checked",
+          "label",
+          "source"
+        ],
+        "records": 19
+      },
+      {
+        "keys": [
+          "human_check_src",
+          "human_checked",
+          "label",
+          "scenario",
+          "source"
+        ],
+        "records": 11
+      },
+      {
+        "keys": [
+          "base_label",
+          "label",
+          "label_source",
+          "orig_label",
+          "source"
+        ],
+        "records": 4
+      },
+      {
+        "keys": [
+          "domain",
+          "human_check_src",
+          "human_checked",
+          "label",
+          "label_source",
+          "orig_label",
+          "scenario",
+          "source"
+        ],
+        "records": 3
+      },
+      {
+        "keys": [
+          "domain",
+          "human_check_src",
+          "human_checked",
+          "label",
+          "source"
+        ],
+        "records": 2
+      },
+      {
+        "keys": [
+          "human_check_src",
+          "human_checked",
+          "label",
+          "label_source",
+          "orig_label",
+          "scenario",
+          "source"
+        ],
+        "records": 2
+      },
+      {
+        "keys": [
+          "job_id",
+          "label",
+          "label_source",
+          "orig_label",
+          "source",
+          "subscenario"
+        ],
+        "records": 1
+      }
+    ]
+  },
+  "labelling_model": {
+    "gemma-4-31B-it": 14241,
+    "unstated": 6931
+  },
+  "duplicates": {
+    "user_turn_groups": 491,
+    "user_turn_records": 982,
+    "system_user_pair_groups": 1
+  },
+  "prompt_characters": {
+    "total": 100557297,
+    "mean": 4750,
+    "p50": 4446,
+    "p90": 6310,
+    "p99": 17044
+  },
+  "invalid_counts": {
+    "label_assistant_mismatch": 0,
+    "label_not_in_catalog": 0,
+    "empty_catalog": 0,
+    "label_cardinality_anomaly": 0
+  },
+  "privacy_signals": {}
+}

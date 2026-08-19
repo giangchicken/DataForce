@@ -1,0 +1,185 @@
+Based on the available tools and conversation history, determine which tool(s) the assistant should call next.
+Return a JSON array of tool names.
+The array may contain zero, one, or multiple tool names.
+Return an empty array if no tool should be called.
+
+TOOLS:
+[Lookup00_0a]
+Mục đích: tra cứu số dư cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu số dư {or} hỏi về số dư.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup01_1a]
+Mục đích: tra cứu hạn mức cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu hạn mức {or} hỏi về hạn mức.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup02_2a]
+Mục đích: tra cứu lịch sử giao dịch cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu lịch sử giao dịch {or} hỏi về lịch sử giao dịch.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup03_3a]
+Mục đích: tra cứu địa chỉ cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu địa chỉ {or} hỏi về địa chỉ.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup04_4a]
+Mục đích: tra cứu hợp đồng cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu hợp đồng {or} hỏi về hợp đồng.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup05_5a]
+Mục đích: tra cứu khuyến mãi cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu khuyến mãi {or} hỏi về khuyến mãi.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup06_6a]
+Mục đích: tra cứu điểm thưởng cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu điểm thưởng {or} hỏi về điểm thưởng.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup07_7a]
+Mục đích: tra cứu phí dịch vụ cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu phí dịch vụ {or} hỏi về phí dịch vụ.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup08_8a]
+Mục đích: tra cứu lãi suất cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu lãi suất {or} hỏi về lãi suất.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup09_9a]
+Mục đích: tra cứu kỳ hạn cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu kỳ hạn {or} hỏi về kỳ hạn.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup10_aa]
+Mục đích: tra cứu trạng thái thẻ cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu trạng thái thẻ {or} hỏi về trạng thái thẻ.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup11_ba]
+Mục đích: tra cứu hồ sơ vay cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu hồ sơ vay {or} hỏi về hồ sơ vay.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup12_ca]
+Mục đích: tra cứu bảo hiểm cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu bảo hiểm {or} hỏi về bảo hiểm.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup13_da]
+Mục đích: tra cứu cước phí cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu cước phí {or} hỏi về cước phí.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup14_ea]
+Mục đích: tra cứu gói cước cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu gói cước {or} hỏi về gói cước.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup15_fa]
+Mục đích: tra cứu thời tiết cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu thời tiết {or} hỏi về thời tiết.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup16_10a]
+Mục đích: tra cứu tỷ giá cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu tỷ giá {or} hỏi về tỷ giá.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup17_11a]
+Mục đích: tra cứu chi nhánh cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu chi nhánh {or} hỏi về chi nhánh.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup18_12a]
+Mục đích: tra cứu cây ATM cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu cây ATM {or} hỏi về cây ATM.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.
+
+[Lookup19_13a]
+Mục đích: tra cứu mã OTP cho khách hàng.
+Khi nào gọi: {trigger} khách hàng yêu cầu mã OTP {or} hỏi về mã OTP.
+Khi nào KHÔNG gọi: {hold_other} khách hàng hỏi việc khác {or} {hold_missing} chưa cung cấp mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng cần tra cứu. {constraint} gồm đúng 6 chữ số.
+  ghi_chu (string): Ghi chú thêm. Nếu khách không đề cập, mặc định là rỗng.

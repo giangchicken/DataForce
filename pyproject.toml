@@ -12,6 +12,9 @@ dependencies = [
     # because this tag has already been moved once.
     "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0",
     "dvc>=3.67.1",
+    # The text modality's embedder. Static embeddings, so a vector is a pure
+    # function of its input and dedup is reproducible run to run.
+    "model2vec>=0.9",
     "pandera>=0.32.1",
     "pandas>=2.2",
     "pydantic>=2.13",
