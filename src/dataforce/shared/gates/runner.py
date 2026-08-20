@@ -13,28 +13,21 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-from agent_toolkit.file_utils import write_json
 from agent_toolkit.logging import get_logger
 
 from dataforce.shared.errors import DataForceError
 
 __all__ = [
-    "GATE_FAILED_FILENAME",
     "MAX_OFFENDING_RIDS",
-    "METRICS_FILENAME",
     "GateFailed",
     "GateResult",
+    "assert_gates",
     "conservation",
-    "require_upstream_ok",
 ]
 
 log = get_logger(__name__)
-
-GATE_FAILED_FILENAME = "GATE_FAILED.json"
-METRICS_FILENAME = "metrics.json"
 
 # Enough offending ids to find the pattern, few enough to read. A gate failing on
 # every record would otherwise write the corpus into its own failure report.
@@ -67,14 +60,16 @@ class GateFailed(DataForceError):
     """A gate did not pass, so the run stops here.
 
     Raised rather than returned: an uncaught exception exits non-zero, which is
-    what makes `dvc repro` halt instead of reproducing the next stage from an
-    artifact nobody checked.
+    what halts the run instead of letting the next stage read an artifact nobody
+    checked. Every result is attached, passing ones included, so the caller can
+    record the whole verdict and not just what broke.
     """
 
-    def __init__(self, stage: str, failures: Sequence[GateResult]) -> None:
+    def __init__(self, stage: str, results: Sequence[GateResult]) -> None:
         self.stage = stage
-        self.failures = tuple(failures)
-        named = ", ".join(f.name for f in failures)
+        self.results = tuple(results)
+        self.failures = tuple(result for result in results if not result.ok)
+        named = ", ".join(result.name for result in self.failures)
         super().__init__(f"gate failed in stage {stage!r}: {named}")
 
 
@@ -108,42 +103,11 @@ def conservation(
     )
 
 
-def require_upstream_ok(*stage_dirs: Path) -> None:
-    """Refuse to read an artifact whose own stage failed its gate."""
-    for stage_dir in stage_dirs:
-        marker = stage_dir / GATE_FAILED_FILENAME
-        if marker.exists():
-            raise DataForceError(
-                f"refusing to consume {stage_dir}: {GATE_FAILED_FILENAME} is present. "
-                "Fix the upstream stage and re-run it."
-            )
-
-
-def check(stage: str, results: Sequence[GateResult], *, out_dir: Path) -> None:
-    """Record every gate's verdict, and stop the run if any of them failed."""
-    write_json(
-        out_dir / METRICS_FILENAME,
-        {"stage": stage, "gates": [r.as_dict() for r in results]},
-    )
-
+def assert_gates(stage: str, results: Sequence[GateResult]) -> None:
+    """Stop the run if any gate failed. Writes nothing: that is the caller's job."""
     failures = [result for result in results if not result.ok]
-    marker = out_dir / GATE_FAILED_FILENAME
     if not failures:
-        marker.unlink(missing_ok=True)  # a previous run's failure, now fixed
         log.info("stage %s: %d gates passed", stage, len(results))
         return
-
-    first = failures[0].as_dict()
-    write_json(
-        marker,
-        {
-            "stage": stage,
-            "assertion": first["assertion"],
-            "observed": first["observed"],
-            "expected": first["expected"],
-            "offending_rids": first["offending_rids"],
-            "failures": [result.as_dict() for result in failures],
-        },
-    )
     log.error("stage %s: %d gates failed", stage, len(failures))
-    raise GateFailed(stage, failures)
+    raise GateFailed(stage, results)

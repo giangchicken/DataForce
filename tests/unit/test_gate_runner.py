@@ -1,4 +1,9 @@
-"""The gate engine: what it writes, what it refuses, and that it exits non-zero."""
+"""The gate engine: what it raises, and what the caller does with the verdict.
+
+The engine writes nothing -- `assert_gates` raises with every result attached. Writing
+`metrics.json` and `GATE_FAILED.json` is the caller's, which is `cli.record_gates`
+until `api/artifacts.py` takes it over, so the persistence assertions point there.
+"""
 
 from __future__ import annotations
 
@@ -10,16 +15,18 @@ from pathlib import Path
 import pytest
 from agent_toolkit.file_utils import read_json
 
-from dataforce.declared.thresholds import thresholds
-from dataforce.shared.errors import DataForceError
-from dataforce.shared.gates.runner import (
+from dataforce.cli import (
     GATE_FAILED_FILENAME,
+    record_gates,
+    require_upstream_ok,
+)
+from dataforce.declared.thresholds import thresholds
+from dataforce.shared.gates.runner import (
     MAX_OFFENDING_RIDS,
     GateFailed,
     GateResult,
-    check,
+    assert_gates,
     conservation,
-    require_upstream_ok,
 )
 
 
@@ -42,7 +49,9 @@ def test_conservation_catches_a_stage_that_dropped_records() -> None:
 
 
 def test_a_passing_stage_writes_its_metrics(tmp_path: Path) -> None:
-    check("load", [conservation(input_count=3, output_count=3)], out_dir=tmp_path)
+    record_gates(
+        "load", [conservation(input_count=3, output_count=3)], out_dir=tmp_path
+    )
     metrics = read_json(tmp_path / "metrics.json")
     assert metrics["stage"] == "load"
     assert metrics["gates"][0]["gate"] == "conservation"
@@ -56,7 +65,7 @@ def test_a_failing_gate_writes_all_four_fields_and_stops_the_run(
         input_count=100, output_count=90, offending_rids=("a" * 16, "b" * 16)
     )
     with pytest.raises(GateFailed, match="conservation"):
-        check("remove_invalid", [failing], out_dir=tmp_path)
+        record_gates("remove_invalid", [failing], out_dir=tmp_path)
 
     written = read_json(tmp_path / GATE_FAILED_FILENAME)
     assert written["assertion"] == "output + quarantined + deduped_out == input"
@@ -68,7 +77,7 @@ def test_a_failing_gate_writes_all_four_fields_and_stops_the_run(
 def test_offending_ids_are_capped(tmp_path: Path) -> None:
     many = tuple(f"{i:016x}" for i in range(500))
     with pytest.raises(GateFailed):
-        check(
+        record_gates(
             "dedup",
             [conservation(input_count=1, output_count=0, offending_rids=many)],
             out_dir=tmp_path,
@@ -79,7 +88,7 @@ def test_offending_ids_are_capped(tmp_path: Path) -> None:
 
 def test_a_fixed_stage_clears_its_previous_failure(tmp_path: Path) -> None:
     (tmp_path / GATE_FAILED_FILENAME).write_text("{}", encoding="utf-8")
-    check("load", [_passing()], out_dir=tmp_path)
+    record_gates("load", [_passing()], out_dir=tmp_path)
     assert not (tmp_path / GATE_FAILED_FILENAME).exists()
 
 
@@ -89,15 +98,18 @@ def test_no_stage_consumes_an_input_whose_gate_did_not_pass(tmp_path: Path) -> N
     require_upstream_ok(upstream)
 
     (upstream / GATE_FAILED_FILENAME).write_text("{}", encoding="utf-8")
-    with pytest.raises(DataForceError, match="refusing to consume"):
+    with pytest.raises(GateFailed, match="upstream_ok"):
         require_upstream_ok(upstream)
 
 
-def test_a_failing_gate_exits_non_zero_which_is_what_halts_dvc(tmp_path: Path) -> None:
+def test_a_failing_gate_exits_non_zero_which_is_what_halts_the_run(
+    tmp_path: Path,
+) -> None:
     script = f"""
 from pathlib import Path
-from dataforce.shared.gates.runner import check, conservation
-check("load", [conservation(input_count=2, output_count=1)], out_dir=Path({str(tmp_path)!r}))
+from dataforce.cli import record_gates
+from dataforce.shared.gates.runner import conservation
+record_gates("load", [conservation(input_count=2, output_count=1)], out_dir=Path({str(tmp_path)!r}))
 """
     done = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True
@@ -115,6 +127,19 @@ def test_thresholds_come_from_the_config_file(tmp_path: Path) -> None:
 
 def test_the_shipped_config_declares_the_universal_gate(repo_root: Path) -> None:
     assert thresholds("conservation", path=repo_root / "config" / "gates.yaml") == {}
+
+
+def test_the_engine_raises_its_verdict_and_writes_nothing(tmp_path: Path) -> None:
+    """Requirement 7. Every result is attached, passing ones included, so a caller can
+    record the whole verdict from the exception alone."""
+    passing, failing = _passing(), conservation(input_count=100, output_count=90)
+
+    with pytest.raises(GateFailed) as raised:
+        assert_gates("remove_invalid", [passing, failing])
+
+    assert [result.name for result in raised.value.results] == ["ok", "conservation"]
+    assert [result.name for result in raised.value.failures] == ["conservation"]
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_engine_holds_no_threshold(repo_root: Path) -> None:

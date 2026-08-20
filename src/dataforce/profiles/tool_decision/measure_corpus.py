@@ -8,19 +8,18 @@ describes one SHA-256 rather than "the corpus", so this command emits them all
 against the digest of the file it read, and refuses to overwrite a committed
 baseline that disagrees with what it just measured.
 
-Streamed throughout: the file is 126 MiB and is never held whole, which is why the
-user turns are counted by digest rather than kept.
+Nothing here opens a file. It is handed the raw items one at a time, their digest and
+their byte count, and it consumes the iterator once -- so the 126 MiB source is never
+held whole, and the caller that read it decides how. The user turns are counted by
+digest rather than kept for the same reason.
 """
 
 from __future__ import annotations
 
-import hashlib
 from collections import Counter
-from collections.abc import Iterator, Mapping
-from pathlib import Path
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any
 
-from agent_toolkit.file_utils import iter_json_array_file, read_yaml, write_json
 from agent_toolkit.string_utils import compute_hash
 
 from dataforce.modalities.base import Modality
@@ -28,26 +27,7 @@ from dataforce.profiles.tool_decision import PROVENANCE_KEY, ToolDecisionProfile
 from dataforce.profiles.tool_decision.tool_schema import catalog_names
 from dataforce.shared.record import Record, TextPart
 
-__all__ = [
-    "BASELINE",
-    "corpus_measurements",
-    "moved_measurements",
-    "profile_corpus",
-    "source_digest",
-]
-
-BASELINE = Path("metrics/corpus_profile.json")
-PARAMS = Path("params.yaml")
-
-# Read in blocks, so a 126 MiB source never becomes a 126 MiB string. `compute_hash`
-# hashes text already in memory, which is the one thing this must not do.
-_DIGEST_BLOCK = 1 << 20
-
-
-def source_digest(path: Path) -> str:
-    """The file's SHA-256, without reading the file into memory."""
-    with path.open("rb") as handle:
-        return hashlib.file_digest(handle, "sha256", _bufsize=_DIGEST_BLOCK).hexdigest()
+__all__ = ["corpus_measurements", "moved_measurements"]
 
 
 def _percentile(ordered: list[int], quantile: float) -> int:
@@ -56,10 +36,13 @@ def _percentile(ordered: list[int], quantile: float) -> int:
 
 
 def _records(
-    path: Path, modality: Modality, profile: ToolDecisionProfile, digest: str
+    raw_items: Iterable[Mapping[str, Any]],
+    modality: Modality,
+    profile: ToolDecisionProfile,
+    digest: str,
 ) -> Iterator[tuple[Any, Record]]:
     """Every raw item with the record it adapts to, one at a time."""
-    for offset, raw in enumerate(iter_json_array_file(path)):
+    for offset, raw in enumerate(raw_items):
         parts = modality.content_parts(raw)
         yield (
             raw,
@@ -94,15 +77,22 @@ def _turn(record: Record, role: str) -> str:
 
 
 def corpus_measurements(
-    path: Path, modality: Modality, profile: ToolDecisionProfile
+    raw_items: Iterable[Mapping[str, Any]],
+    modality: Modality,
+    profile: ToolDecisionProfile,
+    *,
+    digest: str,
+    size: int,
 ) -> dict[str, Any]:
     """Every property this corpus is described by, measured over every record.
 
     Every field name it reads comes from the profile's source contract. A profiler that
     spells `llm_model` is a profiler about one file, and this one has to keep working when
     the next file calls it something else.
+
+    The digest and the byte count are the two facts about the source that measuring the
+    records cannot recover, so they are handed in by whoever opened it.
     """
-    digest = source_digest(path)
     contract = profile.contract
     checks = profile.validity_checks()
     detectors = modality.personal_data_detectors()
@@ -136,7 +126,7 @@ def corpus_measurements(
     relabelled = 0
     relabelled_changed = 0
 
-    for raw, record in _records(path, modality, profile, digest):
+    for raw, record in _records(raw_items, modality, profile, digest):
         records += 1
         label = record.label or []
         cardinality[len(label)] += 1
@@ -178,7 +168,7 @@ def corpus_measurements(
         # No path. A source is identified by its digest, `params.yaml` already
         # declares where it was read from, and the one thing a committed metrics file
         # must never carry is somebody's absolute filesystem layout.
-        "source": {"sha256": digest, "bytes": path.stat().st_size},
+        "source": {"sha256": digest, "bytes": size},
         "records": records,
         "answer_cardinality": {str(k): cardinality[k] for k in sorted(cardinality)},
         "labels": {
@@ -261,28 +251,3 @@ def moved_measurements(
         if where not in dict(_leaves(baseline))
     ]
     return moved + appeared
-
-
-def profile_corpus(
-    modality: Modality,
-    profile: ToolDecisionProfile,
-    *,
-    accept: bool = False,
-    baseline: Path = BASELINE,
-    params: Path = PARAMS,
-) -> tuple[dict[str, Any], list[str]]:
-    """Measure the declared source, and write the baseline only if nothing moved.
-
-    Returns the measurement and the drift. A drift is not written over: the point of
-    the file is to be the last agreed measurement, and agreeing to a new one is a
-    commit, which is what `accept` stands for.
-    """
-    declared = read_yaml(params)["source"]
-    measured = corpus_measurements(Path(declared["path"]), modality, profile)
-    if not baseline.exists() or accept:
-        write_json(baseline, measured)
-        return measured, []
-    moved = moved_measurements(read_yaml(baseline), measured)
-    if not moved:
-        write_json(baseline, measured)
-    return measured, moved

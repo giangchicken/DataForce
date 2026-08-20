@@ -16,9 +16,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from agent_toolkit.file_utils import read_yaml
+from agent_toolkit.file_utils import iter_json_array_file, read_yaml
 from conftest import REPO_ROOT, TEXT, TOOL_DECISION
 
+from dataforce.cli import source_digest
 from dataforce.profiles.tool_decision import measure_corpus
 
 pytestmark = pytest.mark.integration
@@ -49,9 +50,24 @@ def source_path() -> Path:
     return path
 
 
+def measurements_of(path: Path) -> dict[str, Any]:
+    """One file measured, with the reading the CLI does around the engine.
+
+    The engine is handed an iterator, a digest and a byte count. Passing a generator
+    is what keeps the 126 MiB file out of memory, and it is the caller's choice.
+    """
+    return measure_corpus.corpus_measurements(
+        iter_json_array_file(path),
+        TEXT,
+        TOOL_DECISION,
+        digest=source_digest(path),
+        size=path.stat().st_size,
+    )
+
+
 @pytest.fixture(scope="module")
 def measured() -> dict[str, Any]:
-    return measure_corpus.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
+    return measurements_of(source_path())
 
 
 def test_the_committed_baseline_matches_a_fresh_measurement(
@@ -75,7 +91,7 @@ def test_every_figure_is_stamped_with_the_digest_of_the_file_read(
     declared = read_yaml(REPO_ROOT / "params.yaml")["source"]
 
     assert measured["source"]["sha256"] == declared["sha256"]
-    assert measured["source"]["sha256"] == measure_corpus.source_digest(source_path())
+    assert measured["source"]["sha256"] == source_digest(source_path())
 
 
 def test_the_profiler_reproduces_the_counts_the_profile_spec_quotes(
@@ -186,7 +202,7 @@ def test_an_older_source_drifts_and_the_moved_count_is_named(
     if not BACKUP.exists():
         pytest.skip(f"{BACKUP.name} is not present in data/raw/")
 
-    before = measure_corpus.corpus_measurements(BACKUP, TEXT, TOOL_DECISION)
+    before = measurements_of(BACKUP)
 
     assert before["invalid_counts"]["label_assistant_mismatch"] == 48
     moved = measure_corpus.moved_measurements(measured, before)
@@ -201,7 +217,7 @@ def test_drift_names_a_count_that_appeared_and_one_that_vanished() -> None:
 
 
 def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
-    """A drift has to stop `dvc repro` and CI, not print a warning into a log."""
+    """A drift has to stop the run and CI, not print a warning into a log."""
     baseline = tmp_path / "corpus_profile.json"
     stale = (
         json.loads(BASELINE.read_text(encoding="utf-8")) if BASELINE.exists() else {}
@@ -217,8 +233,8 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
             "-c",
             "import sys;"
             "from pathlib import Path;"
-            "from dataforce.cli import text_modality, tool_decision_profile;"
-            "from dataforce.profiles.tool_decision.measure_corpus import profile_corpus;"
+            "from dataforce.cli import "
+            "profile_corpus, text_modality, tool_decision_profile;"
             "_, moved = profile_corpus("
             "text_modality(), tool_decision_profile(), "
             f"baseline=Path({str(baseline)!r}));"
@@ -240,7 +256,7 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
 def test_the_profiler_never_holds_the_file(measured: dict[str, Any]) -> None:
     """126 MiB on disk. Traced allocation stays a fraction of it, so it streams."""
     tracemalloc.start()
-    measure_corpus.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
+    measurements_of(source_path())
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 

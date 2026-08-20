@@ -14,8 +14,10 @@ from typing import Any
 
 import pytest
 from agent_toolkit.file_utils import read_yaml
-from conftest import TEXT, TOOL_DECISION
+from conftest import CONFIG, TEXT, TOOL_DECISION
 
+from dataforce.cli import tool_decision_profile
+from dataforce.declared.thresholds import max_answer_cardinality
 from dataforce.profiles.tool_decision import build_record
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record
@@ -68,7 +70,7 @@ PARAMS = FIXTURES.parents[2] / "params.yaml"
 @pytest.fixture
 def check() -> dict[str, Any]:
     """The four checks, bound to the profile's contract and the committed ceiling."""
-    return build_record.validity_checks(TOOL_DECISION.contract, params=PARAMS)
+    return TOOL_DECISION.validity_checks()
 
 
 # --- registration ------------------------------------------------------------
@@ -163,14 +165,21 @@ def test_label_cardinality_anomaly_reads_its_ceiling_from_params(
     assert not check["label_cardinality_anomaly"](record_for(label=["Lookup00_0a"]))
 
 
-def test_an_undeclared_ceiling_fails_when_the_checks_are_built(tmp_path: Path) -> None:
-    """Not on the first of 21,172 records: the threshold is read once, up front."""
+def test_an_undeclared_ceiling_fails_before_the_profile_that_would_check_with_it(
+    tmp_path: Path,
+) -> None:
+    """Not on the first of 21,172 records, and now earlier still.
+
+    The ceiling is a constructor argument, so an undeclared one fails while the
+    profile is being built rather than when a stage asks it for its checks.
+    """
     (tmp_path / "params.yaml").write_text("source: {}\n", encoding="utf-8")
 
     with pytest.raises(ConfigError, match="max_answer_cardinality"):
-        build_record.validity_checks(
-            TOOL_DECISION.contract, params=tmp_path / "params.yaml"
-        )
+        max_answer_cardinality(params=tmp_path / "params.yaml")
+
+    with pytest.raises(ConfigError, match="max_answer_cardinality"):
+        tool_decision_profile(config_root=CONFIG, params=tmp_path / "params.yaml")
 
 
 # --- training example, group key, controls ------------------------------------

@@ -14,10 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
 from typing import Any
-
-from agent_toolkit.file_utils import read_yaml
 
 from dataforce.profiles.tool_decision.answer import answer_distance, answer_space
 from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY, SourceContract
@@ -40,11 +37,9 @@ from dataforce.shared.record import (
 
 __all__ = [
     "CHECK_NAMES",
-    "PARAMS",
     "PROVENANCE_KEY",
     "build_record",
     "group_key",
-    "max_answer_cardinality",
     "read_catalog",
     "validity_checks",
 ]
@@ -53,8 +48,6 @@ __all__ = [
 # and which implementations were resolved to read it. Required rather than defaulted, so
 # a record without provenance cannot be constructed at all.
 PROVENANCE_KEY = "__provenance__"
-
-PARAMS = Path("params.yaml")
 
 # The order the checks are reported in, and the keys `params.yaml` declares counts
 # against.
@@ -169,17 +162,6 @@ def group_key(record: Record) -> str:
 # is what tells you when it stops reading 0.
 
 
-def max_answer_cardinality(*, params: Path = PARAMS) -> int:
-    """The largest answer this source is declared to contain."""
-    declared = (read_yaml(params) or {}).get("max_answer_cardinality")
-    if not isinstance(declared, int):
-        raise ConfigError(
-            f"{params}: max_answer_cardinality must be declared as an integer, got "
-            f"{declared!r} -- thresholds are committed, not inferred"
-        )
-    return declared
-
-
 def _restated_answer(record: Record, role: str) -> Any:
     """The label as the restating turn states it, or None if it does not."""
     text = next(
@@ -199,15 +181,15 @@ def _restated_answer(record: Record, role: str) -> Any:
 
 
 def validity_checks(
-    contract: SourceContract, *, params: Path = PARAMS
+    contract: SourceContract, *, ceiling: int
 ) -> dict[str, Callable[[Record], bool]]:
     """The four, bound to one source's vocabulary and one declared ceiling.
 
-    The ceiling is read once here rather than once per record, so an undeclared threshold
-    fails when a stage builds its checks and not on the first row of 21,172.
+    The ceiling is handed in rather than read, so an undeclared threshold fails
+    before a profile exists to check with -- earlier than the first of 21,172 rows,
+    and without this module knowing what a file is. `declared/thresholds.py` reads it.
     """
     restating_role = contract.restating_role
-    ceiling = max_answer_cardinality(params=params)
 
     def label_assistant_mismatch(record: Record) -> bool:
         """The two statements of the target disagree.
