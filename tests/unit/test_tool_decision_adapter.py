@@ -110,7 +110,7 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     as_legacy = {
         **canonical,
         "messages": [
-            {"role": "system", "content": cat.render_system_prompt(tools)},
+            {"role": "system", "content": cat.build_system_prompt(tools)},
             *canonical["messages"][1:],
         ],
     }
@@ -165,7 +165,9 @@ def test_rid_changes_when_a_turn_changes() -> None:
 
 def test_the_answer_space_is_this_record_s_own_catalog() -> None:
     record = adapt_legacy(legacy_records()[0])
-    expected = cat.parse((CATALOGS / "eight_tools.txt").read_text(encoding="utf-8"))
+    expected = cat.catalog_to_tools(
+        (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
+    )
 
     assert record.answer_space is not None
     assert record.answer_space["items"]["enum"] == list(expected.names)
@@ -173,7 +175,9 @@ def test_the_answer_space_is_this_record_s_own_catalog() -> None:
 
 
 def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
-    names = cat.parse((CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")).names
+    names = cat.catalog_to_tools(
+        (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
+    ).names
 
     assert adapter.catalog_fingerprint(names) == adapter.catalog_fingerprint(
         list(names)
@@ -181,8 +185,10 @@ def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
 
 
 def test_a_different_catalog_gets_a_different_fingerprint() -> None:
-    eight = cat.parse((CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")).names
-    twenty = cat.parse(
+    eight = cat.catalog_to_tools(
+        (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
+    ).names
+    twenty = cat.catalog_to_tools(
         (CATALOGS / "twenty_tools.txt").read_text(encoding="utf-8")
     ).names
 
@@ -191,7 +197,9 @@ def test_a_different_catalog_gets_a_different_fingerprint() -> None:
 
 def test_the_fingerprint_is_order_sensitive() -> None:
     """Two orderings of one tool set are two prompts, so they are two scenarios."""
-    names = cat.parse((CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")).names
+    names = cat.catalog_to_tools(
+        (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
+    ).names
 
     assert adapter.catalog_fingerprint(names) != adapter.catalog_fingerprint(
         names[::-1]

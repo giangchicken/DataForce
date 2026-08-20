@@ -56,7 +56,7 @@ def parsed(source: Path) -> list[tuple[str, cat.Catalog, list[str]]]:
         rows.append(
             (
                 turns[instruction],
-                cat.parse(turns[instruction]),
+                cat.catalog_to_tools(turns[instruction]),
                 TOOL_DECISION.contract.read_label(raw) or [],
             )
         )
@@ -119,7 +119,9 @@ def test_every_catalog_re_renders_byte_identically(
     header = f"{cat.CATALOG_HEADER}\n"
     for system, catalog, _ in parsed:
         original = system.split(header, 1)[1]
-        assert cat.render(catalog.tools) == original.rstrip("\n"), catalog.names[:2]
+        assert cat.tools_to_catalog(catalog.tools) == original.rstrip("\n"), (
+            catalog.names[:2]
+        )
 
 
 def test_every_marker_token_survives_every_record(
@@ -149,7 +151,7 @@ def test_the_reader_reports_every_gap_it_could_not_close(source: Path) -> None:
     gaps: list[cat.Gap] = []
     for raw in iter_json_array_file(source):
         turns = {turn["role"]: turn["content"] for turn in raw["messages"]}
-        cat.parse(turns[instruction], gaps=gaps)
+        cat.catalog_to_tools(turns[instruction], gaps=gaps)
 
     assert Counter(gap.kind for gap in gaps) == {
         "nothing_required": 3901,
@@ -238,5 +240,5 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
     assert exported["meta"]["label"] == raw["meta"]["label"]
     assert record.rid and record.answer_space is not None
     assert TOOL_DECISION.group_key(record) == adapter.catalog_fingerprint(
-        cat.parse(raw["messages"][0]["content"]).names
+        cat.catalog_to_tools(raw["messages"][0]["content"]).names
     )

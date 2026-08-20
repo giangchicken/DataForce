@@ -76,7 +76,7 @@ class ToolDecisionProfile:
         declared = record.meta.get(TOOLS_KEY)
         if not declared:
             return ""
-        return catalog_format.render(
+        return catalog_format.tools_to_catalog(
             catalog_format.Tool(
                 name=entry["function"]["name"],
                 description=entry["function"].get("description", ""),

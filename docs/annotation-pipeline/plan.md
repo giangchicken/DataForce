@@ -12,7 +12,7 @@
 |---|---|---:|---|
 | 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 | **built** |
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
-| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **next** |
+| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **in progress** — R1's four catalog conversions are renamed |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
@@ -133,10 +133,10 @@ Inside the profile:
 
 | Was | Is | Lands in |
 |---|---|---|
-| `catalog.render` | `tools_to_catalog` | `tool_schema.py` |
-| `catalog.parse` | `catalog_to_tools` | `tool_schema.py` |
-| `catalog.render_system_prompt` | `build_system_prompt` | `tool_schema.py` |
-| `catalog.as_function` | `to_strict_openai` | `tool_schema.py` |
+| `catalog.render` | `tools_to_catalog` | `tool_schema.py` — **done** |
+| `catalog.parse` | `catalog_to_tools` | `tool_schema.py` — **done** |
+| `catalog.render_system_prompt` | `build_system_prompt` | `tool_schema.py` — **done** |
+| `catalog.as_function` | `to_strict_openai` | `tool_schema.py` — **done** |
 | `adapter.catalog_names` | `catalog_names` | `tool_schema.py` |
 | `adapter.catalog_fingerprint` | `catalog_fingerprint` | `tool_schema.py` |
 | `adapter.answer_space_for` | `answer_space` | `answer.py` |
@@ -151,7 +151,7 @@ Inside the profile:
 | `profiler.measure` | `corpus_measurements` | `measure_corpus.py` |
 | `profiler.drift` | `moved_measurements` | `measure_corpus.py` |
 
-The four marked **done** were renamed early, when the manifest was simplified and every one of their call sites was being rewritten anyway. The first four in this table are the generator's own names, so the two codebases stop disagreeing about what one conversion is called. `catalog_to_tools` is deliberately the exact inverse of `tools_to_catalog`, which is what a round-trip test reads as.
+Two groups are marked **done**. The `source_contract.py` rows were renamed early, when the manifest was simplified and every one of their call sites was being rewritten anyway. The four `tool_schema.py` conversions came next and alone, because they are the generator's own names and the two codebases were disagreeing about what one conversion is called: `catalog.py` is now diffable against `openai_to_catalog.py` and `catalog_to_openai.py` one conversion at a time. Nothing in the conformance suite touches those four, so they did not have to wait for R3. `catalog_to_tools` is deliberately the exact inverse of `tools_to_catalog`, which is what a round-trip test reads as. The functions still live in `catalog.py` — moving them into `tool_schema.py` is R2's.
 
 **Acceptance criteria.**
 - `Modality.__protocol_attrs__` and `Profile.__protocol_attrs__` contain none of the ten old names, and `tests/unit/test_protocols.py` pins the new sets as literals.
@@ -179,7 +179,7 @@ The resolution is to say which kind each module is, because the two kinds have o
 
 | Module | Kind | Holds | Lines |
 |---|---|---|---|
-| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (447) and the catalog half of `adapter.py` | ~505 |
+| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (449) and the catalog half of `adapter.py` | ~505 |
 | `answer.py` | definition | what an answer is — `answer_schema`, `answer_space`, `answer_distance`, `vote_consensus`, `training_example`. Absorbs `answers.py` (61) and `export.py` (37) | ~110 |
 | `source_contract.py` | definition | what this corpus calls things, read from the manifest. Was `source.py` | ~120 |
 | `build_record.py` | step | stages 0–1 — `build_record`, `read_catalog`, `validity_checks`, `max_answer_cardinality`, `group_key`. Absorbs the rest of `adapter.py` and `checks.py` (121) | ~330 |

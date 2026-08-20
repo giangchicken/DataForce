@@ -72,7 +72,7 @@ def catalog_of(
         ),
         "",
     )
-    return catalog_format.parse(rendered)
+    return catalog_format.catalog_to_tools(rendered)
 
 
 def catalog_fingerprint(names: Sequence[str]) -> str:

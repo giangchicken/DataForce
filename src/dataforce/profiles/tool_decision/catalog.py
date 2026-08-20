@@ -13,7 +13,9 @@ one definition and assert the round trip. Which is what `tests/unit/test_catalog
 does, over the real corpus: 21,172 catalogs, read then re-rendered, byte-identical.
 
 Ported from the corpus generator's `openai_to_catalog.py` and `catalog_to_openai.py`,
-which own the same contract on the producing side.
+which own the same contract on the producing side, and carrying their names --
+`tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai` -- so
+the two codebases can be diffed one conversion at a time.
 
 The description is never split. `Mục đích:` / `Khi nào gọi:` / `Khi nào KHÔNG gọi:` are
 text *inside* it, not structure around it, so the marker DSL survives because nothing
@@ -33,10 +35,10 @@ __all__ = [
     "Catalog",
     "Gap",
     "Tool",
-    "as_function",
-    "parse",
-    "render",
-    "render_system_prompt",
+    "build_system_prompt",
+    "catalog_to_tools",
+    "to_strict_openai",
+    "tools_to_catalog",
 ]
 
 # The instruction the source puts above the catalog. Not part of the catalog: under the
@@ -143,7 +145,7 @@ class Catalog:
         return not self.tools
 
 
-def as_function(tool: Tool) -> dict[str, Any]:
+def to_strict_openai(tool: Tool) -> dict[str, Any]:
     """The strict OpenAI shape: standard keys only."""
     function: dict[str, Any] = {"name": tool.name}
     if tool.description:
@@ -229,7 +231,7 @@ def _parameter_lines(
     return lines
 
 
-def render(tools: Iterable[Tool]) -> str:
+def tools_to_catalog(tools: Iterable[Tool]) -> str:
     """The catalog as a person reads it. One block per tool, blank line between."""
     return "\n\n".join(_render_tool(tool) for tool in tools)
 
@@ -254,9 +256,9 @@ def _render_tool(tool: Tool) -> str:
     return "\n".join(block)
 
 
-def render_system_prompt(tools: Iterable[Tool]) -> str:
+def build_system_prompt(tools: Iterable[Tool]) -> str:
     """The legacy system message: the instruction, then the catalog under its header."""
-    return f"{INSTRUCTION}\n\n{CATALOG_HEADER}\n{render(tools)}"
+    return f"{INSTRUCTION}\n\n{CATALOG_HEADER}\n{tools_to_catalog(tools)}"
 
 
 # --- parsing: the text a person reads -> tools --------------------------------
@@ -423,7 +425,7 @@ def _note(
         )
 
 
-def parse(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
+def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
     """The catalog a rendered text offers, with or without the instruction above it.
 
     Text with no catalog header, and text whose header is followed by no entry, both
