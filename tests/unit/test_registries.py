@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from conftest import FakeTextModality, FreeTextProfile, SetProfile
+from conftest import CONFIG, PARAMS, FakeTextModality, FreeTextProfile, SetProfile
 
-from dataforce.cli import _register_implementations
+from dataforce import api
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import stamp
 from dataforce.shared.registry import Registry
@@ -110,9 +110,12 @@ def test_every_profile_the_composition_root_registers_has_its_modality() -> None
     """A profile declaring a modality nobody registered is a run that cannot start.
 
     Folded in from `tests/conformance/test_registered_profiles.py`: the composition
-    root is what a run resolves through, so that is what this registers from.
+    root is what a run resolves through, so that is what this registers from -- and
+    since E6 that root is `api.open_engine`, which is what every caller enters by.
     """
-    registry = _register_implementations()
+    registry = api.open_engine(
+        profile="tool_decision", config_root=CONFIG, params=PARAMS
+    ).registry
 
     assert registry.profile_names(), "the composition root registered no profile"
     for name in registry.profile_names():

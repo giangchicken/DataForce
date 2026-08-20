@@ -24,12 +24,14 @@ from agent_toolkit.string_utils import compute_hash
 
 from dataforce.shared.errors import ConfigError
 
-__all__ = ["SUFFIX", "digest", "read_prompt", "versions"]
+__all__ = ["SUFFIX", "digest", "prompt_path", "read_prompt", "versions"]
 
 SUFFIX = ".txt"
 
 
-def _path(version: str, root: Path) -> Path:
+def prompt_path(version: str, *, root: Path) -> Path:
+    """Where one template is, by its `prompt_version`. Public for the same reason
+    `manifest_path` is: a run records the digest of every policy file it read."""
     path = root / f"{version}{SUFFIX}"
     if not path.is_file():
         raise ConfigError(
@@ -40,7 +42,7 @@ def _path(version: str, root: Path) -> Path:
 
 def read_prompt(version: str, *, root: Path) -> str:
     """One prompt template, verbatim, by its `prompt_version`."""
-    return read_txt(_path(version, root))
+    return read_txt(prompt_path(version, root=root))
 
 
 def digest(version: str, *, root: Path) -> str:

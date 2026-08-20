@@ -1,8 +1,8 @@
 """The gate engine: what it raises, and what the caller does with the verdict.
 
 The engine writes nothing -- `assert_gates` raises with every result attached. Writing
-`metrics.json` and `GATE_FAILED.json` is the caller's, which is `cli.record_gates`
-until `api/artifacts.py` takes it over, so the persistence assertions point there.
+`metrics.json` and `GATE_FAILED.json` is the caller's -- `api/artifacts.py`, the one
+place an artifact is read or written -- so the persistence assertions point there.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from agent_toolkit.file_utils import read_json
 
-from dataforce.cli import (
+from dataforce.api import (
     GATE_FAILED_FILENAME,
     record_gates,
     require_upstream_ok,
@@ -107,7 +107,7 @@ def test_a_failing_gate_exits_non_zero_which_is_what_halts_the_run(
 ) -> None:
     script = f"""
 from pathlib import Path
-from dataforce.cli import record_gates
+from dataforce.api import record_gates
 from dataforce.shared.gates.runner import conservation
 record_gates("load", [conservation(input_count=2, output_count=1)], out_dir=Path({str(tmp_path)!r}))
 """

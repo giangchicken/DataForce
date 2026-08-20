@@ -16,7 +16,7 @@ import pytest
 from agent_toolkit.file_utils import read_yaml
 from conftest import CONFIG, TEXT, TOOL_DECISION
 
-from dataforce.cli import tool_decision_profile
+from dataforce.api import tool_decision_profile
 from dataforce.declared.thresholds import max_answer_cardinality
 from dataforce.profiles.tool_decision import build_record
 from dataforce.shared.errors import ConfigError

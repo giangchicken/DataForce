@@ -19,7 +19,7 @@ import pytest
 from agent_toolkit.file_utils import iter_json_array_file, read_yaml
 from conftest import REPO_ROOT, TEXT, TOOL_DECISION
 
-from dataforce.cli import source_digest
+from dataforce.api import file_digest
 from dataforce.profiles.tool_decision import measure_corpus
 
 pytestmark = pytest.mark.integration
@@ -60,7 +60,7 @@ def measurements_of(path: Path) -> dict[str, Any]:
         iter_json_array_file(path),
         TEXT,
         TOOL_DECISION,
-        digest=source_digest(path),
+        digest=file_digest(path),
         size=path.stat().st_size,
     )
 
@@ -91,7 +91,7 @@ def test_every_figure_is_stamped_with_the_digest_of_the_file_read(
     declared = read_yaml(REPO_ROOT / "params.yaml")["source"]
 
     assert measured["source"]["sha256"] == declared["sha256"]
-    assert measured["source"]["sha256"] == source_digest(source_path())
+    assert measured["source"]["sha256"] == file_digest(source_path())
 
 
 def test_the_profiler_reproduces_the_counts_the_profile_spec_quotes(
@@ -233,11 +233,11 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
             "-c",
             "import sys;"
             "from pathlib import Path;"
-            "from dataforce.cli import "
-            "profile_corpus, text_modality, tool_decision_profile;"
-            "_, moved = profile_corpus("
-            "text_modality(), tool_decision_profile(), "
-            f"baseline=Path({str(baseline)!r}));"
+            "from dataforce import api;"
+            "engine = api.open_engine(profile='tool_decision',"
+            " config_root=Path('config'), params=Path('params.yaml'));"
+            "_, moved = api.profile_corpus(engine,"
+            f" baseline=Path({str(baseline)!r}), params=Path('params.yaml'));"
             "print(moved);"
             "sys.exit(1 if moved else 0)",
         ],
