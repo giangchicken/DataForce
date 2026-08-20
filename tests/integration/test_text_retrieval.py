@@ -5,7 +5,7 @@ asserted. The pairs are not hand-made: 491 records in the first corpus share a u
 turn with exactly one other record, which is a near-duplicate the corpus itself
 supplies -- same conversation, different tool catalog.
 
-This test is also the reason `embed` leaves the system turn out. With it in, every
+This test is also the reason `embedding` leaves the system turn out. With it in, every
 one of these retrievals fails.
 """
 
@@ -51,7 +51,7 @@ def test_a_near_duplicate_is_retrieved_before_any_unrelated_record(
     by_user: dict[str, list[list[TextPart]]] = defaultdict(list)
     everything: list[list[TextPart]] = []
     for raw in iter_json_array_file(corpus):
-        parts = [part for part in TEXT.load(raw) if isinstance(part, TextPart)]
+        parts = [part for part in TEXT.content_parts(raw) if isinstance(part, TextPart)]
         user = next(part.text for part in parts if part.role == "user")
         by_user[compute_hash(user, "sha256")].append(parts)
         everything.append(parts)
@@ -61,7 +61,7 @@ def test_a_near_duplicate_is_retrieved_before_any_unrelated_record(
 
     paired = [parts for pair in pairs for parts in pair]
     unrelated = random.Random(20260819).sample(everything, DISTRACTORS)
-    vectors = [list(TEXT.embed(list(parts))) for parts in paired + unrelated]
+    vectors = [list(TEXT.embedding(list(parts))) for parts in paired + unrelated]
 
     hits = 0
     for index in range(len(paired)):
@@ -95,4 +95,4 @@ def test_two_records_differing_only_in_their_catalog_embed_identically(
         *conversation,
     ]
 
-    assert list(TEXT.embed(list(one))) == list(TEXT.embed(list(other)))
+    assert list(TEXT.embedding(list(one))) == list(TEXT.embedding(list(other)))

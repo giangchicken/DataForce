@@ -189,7 +189,7 @@ def test_the_four_checks_reproduce_the_counts_declared_in_params(source: Path) -
     counted = Counter({name: 0 for name in check_by_name})
 
     for offset, raw in enumerate(iter_json_array_file(source)):
-        record = TOOL_DECISION.adapt(
+        record = TOOL_DECISION.build_record(
             {
                 **raw,
                 adapter.PROVENANCE_KEY: {
@@ -201,7 +201,7 @@ def test_the_four_checks_reproduce_the_counts_declared_in_params(source: Path) -
                     "producer": {"modality": "text@1", "profile": "tool_decision@1"},
                 },
             },
-            TEXT.load(raw),
+            TEXT.content_parts(raw),
         )
         for name, check in check_by_name.items():
             if check(record):
@@ -218,7 +218,7 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
     """
     raw = next(iter(iter_json_array_file(source)))
 
-    record = TOOL_DECISION.adapt(
+    record = TOOL_DECISION.build_record(
         {
             **raw,
             adapter.PROVENANCE_KEY: {
@@ -232,9 +232,9 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
                 "producer": {"modality": "text@1", "profile": "tool_decision@1"},
             },
         },
-        TEXT.load(raw),
+        TEXT.content_parts(raw),
     )
-    exported = TOOL_DECISION.export(record)
+    exported = TOOL_DECISION.training_example(record)
 
     assert exported["messages"] == raw["messages"]
     assert exported["meta"]["label"] == raw["meta"]["label"]

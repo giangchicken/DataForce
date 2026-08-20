@@ -1,8 +1,9 @@
-"""`tool_decision`'s four validity checks, its export, its group key, its controls.
+"""`tool_decision`'s validity checks, training example, group key and controls.
 
-Rules 4 and 5 of § *Rules a profile must satisfy* are proved here -- `adapt`
-preserving what it does not own is in `test_tool_decision_adapter.py`, and `export`
-reproducing the record's answer is below. Rules 1 to 3 are in `test_answers.py`.
+Rules 4 and 5 of § *Rules a profile must satisfy* are proved here -- `build_record`
+preserving what it does not own is in `test_tool_decision_adapter.py`, and
+`training_example` reproducing the record's answer is below. Rules 1 to 3 are
+in `test_answers.py`.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ def raw_item(
 
 def record_for(**kwargs: Any) -> Record:
     raw = raw_item(**kwargs)
-    return TOOL_DECISION.adapt(raw, TEXT.load(raw))
+    return TOOL_DECISION.build_record(raw, TEXT.content_parts(raw))
 
 
 PARAMS = FIXTURES.parents[2] / "params.yaml"
@@ -170,11 +171,13 @@ def test_an_undeclared_ceiling_fails_when_the_checks_are_built(tmp_path: Path) -
         checks.validity_checks(TOOL_DECISION.contract, params=tmp_path / "params.yaml")
 
 
-# --- export, group key, controls ---------------------------------------------
+# --- training example, group key, controls ------------------------------------
 
 
 def test_export_states_the_label_in_both_places() -> None:
-    exported = TOOL_DECISION.export(record_for(label=["Lookup00_0a", "Lookup01_1a"]))
+    exported = TOOL_DECISION.training_example(
+        record_for(label=["Lookup00_0a", "Lookup01_1a"])
+    )
 
     assistant = next(m for m in exported["messages"] if m["role"] == "assistant")
     assert json.loads(assistant["content"]) == exported["meta"]["label"]
@@ -182,7 +185,7 @@ def test_export_states_the_label_in_both_places() -> None:
 
 
 def test_export_keeps_the_source_messages_shape() -> None:
-    exported = TOOL_DECISION.export(record_for(label=[]))
+    exported = TOOL_DECISION.training_example(record_for(label=[]))
 
     assert [m["role"] for m in exported["messages"]] == ["system", "user", "assistant"]
     assert (
@@ -194,7 +197,7 @@ def test_export_keeps_the_source_messages_shape() -> None:
 
 
 def test_export_preserves_the_marker_dsl_in_the_system_message() -> None:
-    exported = TOOL_DECISION.export(record_for(label=[]))
+    exported = TOOL_DECISION.training_example(record_for(label=[]))
 
     system = next(m for m in exported["messages"] if m["role"] == "system")["content"]
     for marker in (
@@ -219,7 +222,7 @@ def test_the_group_key_is_the_catalog_and_not_the_source_index() -> None:
 
 
 def test_the_answer_control_offers_exactly_this_record_s_catalog() -> None:
-    control = TOOL_DECISION.answer_control(record_for(catalog="one_tool.txt", label=[]))
+    control = TOOL_DECISION.answer_config(record_for(catalog="one_tool.txt", label=[]))
 
     assert control.count("<Choice ") == 1
     assert 'value="Lookup00_0a"' in control
@@ -227,9 +230,7 @@ def test_the_answer_control_offers_exactly_this_record_s_catalog() -> None:
 
 def test_a_tab_in_a_tool_name_survives_the_answer_control() -> None:
     """An XML parser folds a literal tab in an attribute to a space; a reference is kept."""
-    control = TOOL_DECISION.answer_control(
-        record_for(catalog="odd_names.txt", label=[])
-    )
+    control = TOOL_DECISION.answer_config(record_for(catalog="odd_names.txt", label=[]))
 
     assert "&#9;" in control
     assert "calculate_triangl\te_area" not in control
@@ -237,7 +238,7 @@ def test_a_tab_in_a_tool_name_survives_the_answer_control() -> None:
 
 def test_the_question_leaves_the_marker_dsl_alone() -> None:
     """Single braces are the DSL's; `slot_filling` only fills doubled ones."""
-    asked = TOOL_DECISION.question(record_for(label=[]), "{trigger} ở lượt cuối")
+    asked = TOOL_DECISION.question_text(record_for(label=[]), "{trigger} ở lượt cuối")
 
     assert "{trigger} ở lượt cuối" in asked
     assert "{{focus}}" not in asked

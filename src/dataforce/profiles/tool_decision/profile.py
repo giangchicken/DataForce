@@ -13,9 +13,8 @@ from collections.abc import Callable
 from typing import Any
 
 from dataforce.profiles.base import Answer
-from dataforce.profiles.tool_decision import adapter, answers, checks
+from dataforce.profiles.tool_decision import adapter, answers, checks, export
 from dataforce.profiles.tool_decision import catalog as catalog_format
-from dataforce.profiles.tool_decision.export import export as export_example
 from dataforce.profiles.tool_decision.source import TOOLS_KEY, read_source_contract
 from dataforce.shared import manifest, prompts
 from dataforce.shared.record import Part, Record, UIControl
@@ -49,19 +48,19 @@ class ToolDecisionProfile:
         self.contract = read_source_contract(declared)
         self.answer_schema = answers.ANSWER_SCHEMA
 
-    def adapt(self, raw: Any, parts: list[Part]) -> Record:
-        return adapter.adapt(raw, parts, self.contract)
+    def build_record(self, raw: Any, parts: list[Part]) -> Record:
+        return adapter.build_record(raw, parts, self.contract)
 
-    def delta(self, a: Answer, b: Answer) -> float:
-        return answers.delta(a, b)
+    def answer_distance(self, a: Answer, b: Answer) -> float:
+        return answers.answer_distance(a, b)
 
-    def consensus(self, votes: list[Answer]) -> Answer | None:
-        return answers.consensus(votes)
+    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
+        return answers.vote_consensus(votes)
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
         return checks.validity_checks(self.contract)
 
-    def question(self, record: Record, focus: str) -> str:
+    def question_text(self, record: Record, focus: str) -> str:
         """One focused question. Choosing the focus is `generate_questions`'s job."""
         return prompts.render(self.question_prompt, {"focus": focus})
 
@@ -85,7 +84,7 @@ class ToolDecisionProfile:
             for entry in declared
         )
 
-    def answer_control(self, record: Record) -> UIControl:
+    def answer_config(self, record: Record) -> UIControl:
         """The capture half of the config, constrained to this record's catalog."""
         readable = self.readable_catalog(record)
         shown = (
@@ -107,8 +106,8 @@ class ToolDecisionProfile:
         """The catalog fingerprint. Never `source_index`, which is unique per record."""
         return adapter.catalog_fingerprint(adapter.catalog_names(record))
 
-    def export(self, record: Record) -> dict[str, Any]:
-        return export_example(record)
+    def training_example(self, record: Record) -> dict[str, Any]:
+        return export.training_example(record)
 
 
 TOOL_DECISION = ToolDecisionProfile(manifest.load("profiles", MANIFEST_NAME))

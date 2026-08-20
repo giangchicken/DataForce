@@ -13,7 +13,14 @@ from dataforce.modalities.base import Modality
 from dataforce.profiles.base import Profile
 
 MODALITY_MEMBERS = frozenset(
-    {"name", "version", "load", "embed", "privacy_detectors", "display_control"}
+    {
+        "name",
+        "version",
+        "content_parts",
+        "embedding",
+        "personal_data_detectors",
+        "display_config",
+    }
 )
 
 PROFILE_MEMBERS = frozenset(
@@ -22,14 +29,14 @@ PROFILE_MEMBERS = frozenset(
         "version",
         "modality",
         "answer_schema",
-        "adapt",
-        "delta",
-        "consensus",
+        "build_record",
+        "answer_distance",
+        "vote_consensus",
         "validity_checks",
-        "question",
-        "answer_control",
+        "question_text",
+        "answer_config",
         "group_key",
-        "export",
+        "training_example",
     }
 )
 

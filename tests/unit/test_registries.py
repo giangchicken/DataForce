@@ -42,7 +42,7 @@ def test_something_that_is_not_a_modality_is_refused_with_the_member_list() -> N
         name = "not_one"
         version = "1"
 
-    with pytest.raises(ConfigError, match="privacy_detectors"):
+    with pytest.raises(ConfigError, match="personal_data_detectors"):
         modalities.register(NotOne())  # type: ignore[arg-type]
 
 
@@ -72,7 +72,7 @@ def test_registering_a_second_implementation_of_one_profile_name_is_refused() ->
 
 
 def test_a_profile_with_no_defensible_consensus_is_still_selectable() -> None:
-    """Returning None from `consensus` bars the optional tier, not the profile."""
+    """Returning None from `vote_consensus` bars the optional tier, not the profile."""
     profiles.register(FreeTextProfile())
 
     assert profiles.get("fake_free_text").name == "fake_free_text"

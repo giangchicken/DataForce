@@ -1,6 +1,7 @@
 """One raw item into one canonical record, from either shape.
 
-The format itself is tested in `test_catalog.py`. What is here is what `adapt` decides:
+The format itself is tested in `test_catalog.py`. What is here is what
+`build_record` decides:
 identity, provenance, the answer space, what it keeps, and that a record read from a
 `tools` array and one read from a rendered prompt come out the same.
 """
@@ -78,7 +79,7 @@ def sourced(raw: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 def adapt_legacy(raw: dict[str, Any], **extra: Any) -> Any:
     item = sourced(raw, **extra)
-    return adapter.adapt(item, TEXT.load(item), LEGACY)
+    return adapter.build_record(item, TEXT.content_parts(item), LEGACY)
 
 
 # --- the two shapes agree ------------------------------------------------------
@@ -88,7 +89,9 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = adapter.adapt(item, TEXT.load(item), contract_for(OPENAI_TOOLS))
+    record = adapter.build_record(
+        item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
+    )
 
     assert adapter.catalog_names(record) == [
         t["function"]["name"] for t in raw["tools"]
@@ -116,12 +119,14 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     }
     as_legacy.pop("tools")
 
-    from_canonical = adapter.adapt(
-        sourced(canonical), TEXT.load(sourced(canonical)), contract_for(OPENAI_TOOLS)
+    from_canonical = adapter.build_record(
+        sourced(canonical),
+        TEXT.content_parts(sourced(canonical)),
+        contract_for(OPENAI_TOOLS),
     )
-    from_legacy = adapter.adapt(
+    from_legacy = adapter.build_record(
         sourced(as_legacy),
-        TEXT.load(sourced(as_legacy)),
+        TEXT.content_parts(sourced(as_legacy)),
         contract_for(LEGACY_SYSTEM_PROMPT),
     )
 
@@ -135,7 +140,9 @@ def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
     raw = canonical_records()[0]
     item = sourced({**raw, "tools": []})
 
-    record = adapter.adapt(item, TEXT.load(item), contract_for(OPENAI_TOOLS))
+    record = adapter.build_record(
+        item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
+    )
 
     assert adapter.catalog_names(record) == []
 
@@ -152,11 +159,12 @@ def test_rid_does_not_depend_on_position_in_the_file() -> None:
 def test_rid_changes_when_a_turn_changes() -> None:
     raw = legacy_records()[0]
     item = sourced(raw)
-    parts = TEXT.load(item)
+    parts = TEXT.content_parts(item)
     other = [*parts[:1], TextPart(role="user", text="một câu khác"), *parts[2:]]
 
     assert (
-        adapter.adapt(item, parts, LEGACY).rid != adapter.adapt(item, other, LEGACY).rid
+        adapter.build_record(item, parts, LEGACY).rid
+        != adapter.build_record(item, other, LEGACY).rid
     )
 
 
@@ -239,7 +247,9 @@ def test_the_canonical_shape_keeps_its_tools_so_they_can_be_read() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = adapter.adapt(item, TEXT.load(item), contract_for(OPENAI_TOOLS))
+    record = adapter.build_record(
+        item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
+    )
 
     assert record.meta["tools"] == raw["tools"]
     assert TOOL_DECISION.readable_catalog(record).startswith("[Lookup00_0a]")
@@ -257,7 +267,7 @@ def test_provenance_is_required_so_an_unsourced_record_cannot_be_built() -> None
     raw = legacy_records()[0]
 
     with pytest.raises(ConfigError, match="load stage"):
-        adapter.adapt(raw, TEXT.load(sourced(raw)), LEGACY)
+        adapter.build_record(raw, TEXT.content_parts(sourced(raw)), LEGACY)
 
 
 def test_the_provenance_key_is_not_itself_kept_as_metadata() -> None:

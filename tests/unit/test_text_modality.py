@@ -56,7 +56,7 @@ def record_from(parts: list[TextPart]) -> Record:
 
 
 def test_three_turns_become_three_text_parts_with_roles_preserved() -> None:
-    parts = TEXT.load(RAW)
+    parts = TEXT.content_parts(RAW)
 
     assert [part.type for part in parts] == ["text", "text", "text"]
     assert [part.role for part in parts] == ["system", "user", "assistant"]
@@ -64,7 +64,7 @@ def test_three_turns_become_three_text_parts_with_roles_preserved() -> None:
 
 def test_loaded_text_is_byte_identical_to_the_source() -> None:
     """Normalising here would change what `rid` covers and what an annotator reads."""
-    parts = TEXT.load(RAW)
+    parts = TEXT.content_parts(RAW)
 
     for part, turn in zip(parts, RAW["messages"], strict=True):
         assert isinstance(part, TextPart)
@@ -79,12 +79,12 @@ def test_the_modality_is_registrable_through_the_real_gate() -> None:
 
 def test_privacy_detectors_are_empty_until_they_land() -> None:
     """Declared, so the stage that refuses an undetected corpus has something to read."""
-    assert TEXT.privacy_detectors() == []
+    assert TEXT.personal_data_detectors() == []
 
 
 def test_a_tag_in_the_corpus_is_shown_as_text_not_rendered() -> None:
     hostile = "<script>alert('x')</script> và <img src=x onerror=1>"
-    control = TEXT.display_control(record_from([TextPart(role="user", text=hostile)]))
+    control = TEXT.display_config(record_from([TextPart(role="user", text=hostile)]))
 
     assert "<script>" not in control
     assert "<img" not in control
@@ -94,7 +94,7 @@ def test_a_tag_in_the_corpus_is_shown_as_text_not_rendered() -> None:
 def test_marker_tokens_survive_the_display_control_byte_identically() -> None:
     """Invariant 1: the DSL is the annotator's only evidence, on every surface."""
     system = " ".join(MARKERS)
-    control = TEXT.display_control(record_from([TextPart(role="system", text=system)]))
+    control = TEXT.display_config(record_from([TextPart(role="system", text=system)]))
 
     for marker in MARKERS:
         assert marker in control
@@ -102,7 +102,7 @@ def test_marker_tokens_survive_the_display_control_byte_identically() -> None:
 
 def test_a_role_cannot_smuggle_an_attribute_into_the_control() -> None:
     """Roles come from the source too, so they are escaped on the same terms."""
-    control = TEXT.display_control(
+    control = TEXT.display_config(
         record_from([TextPart(role='user" onclick="steal()', text="ok")])
     )
 
@@ -115,16 +115,16 @@ def test_a_media_part_is_a_configuration_error_not_a_silent_skip() -> None:
     )
 
     with pytest.raises(ConfigError, match="audio"):
-        TEXT.embed([media])
+        TEXT.embedding([media])
 
 
 @pytest.mark.integration
 def test_embeddings_are_deterministic_across_two_runs() -> None:
     """Static embeddings, so dedup gives the same clusters on a re-run."""
-    parts = TEXT.load(RAW)
+    parts = TEXT.content_parts(RAW)
 
-    first = TEXT.embed(parts)
-    second = TEXT.embed(parts)
+    first = TEXT.embedding(parts)
+    second = TEXT.embedding(parts)
 
     assert list(first) == list(second)
     assert len(first) == 256  # potion-multilingual-128M

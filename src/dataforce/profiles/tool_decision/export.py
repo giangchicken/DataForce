@@ -13,10 +13,10 @@ from typing import Any
 from dataforce.shared.errors import InvariantError
 from dataforce.shared.record import Record, TextPart
 
-__all__ = ["export"]
+__all__ = ["training_example"]
 
 
-def export(record: Record) -> dict[str, Any]:
+def training_example(record: Record) -> dict[str, Any]:
     """The record as a training example. Invariant 4 is asserted here, not downstream."""
     label = record.label or []
     assistant = json.dumps(label, ensure_ascii=False)

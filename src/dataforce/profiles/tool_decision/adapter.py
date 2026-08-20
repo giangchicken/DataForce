@@ -27,11 +27,11 @@ from dataforce.shared.record import (
 
 __all__ = [
     "PROVENANCE_KEY",
-    "adapt",
-    "answer_space_for",
+    "answer_space",
+    "build_record",
     "catalog_fingerprint",
     "catalog_names",
-    "catalog_of",
+    "read_catalog",
 ]
 
 # Where the load stage puts the two things only it knows: which file this item came from
@@ -44,7 +44,7 @@ PROVENANCE_KEY = "__provenance__"
 _FINGERPRINT_LENGTH = 16
 
 
-def catalog_of(
+def read_catalog(
     raw: Mapping[str, Any], parts: Sequence[Part], contract: SourceContract
 ) -> catalog_format.Catalog:
     """This item's catalog, from wherever its shape keeps it.
@@ -85,7 +85,7 @@ def catalog_fingerprint(names: Sequence[str]) -> str:
     return compute_hash("|".join(names), "sha256")[:_FINGERPRINT_LENGTH]
 
 
-def answer_space_for(catalog: catalog_format.Catalog) -> dict[str, Any]:
+def answer_space(catalog: catalog_format.Catalog) -> dict[str, Any]:
     """This record's answer space: an array of names drawn from its own catalog.
 
     The `enum` is requirement 5's catalog constraint, and the jury hands this straight to
@@ -112,13 +112,14 @@ def _provenance(raw: Mapping[str, Any]) -> tuple[Source, Producer]:
         return Source(**given["source"]), Producer(**given["producer"])
     except KeyError as missing:
         raise ConfigError(
-            f"a raw item reached adapt() without {PROVENANCE_KEY}[{missing}]; the load "
+            f"a raw item reached build_record() without "
+            f"{PROVENANCE_KEY}[{missing}]; the load "
             "stage supplies the source file's digest, this item's offset, the read time, "
             "and the modality and profile it resolved"
         ) from None
 
 
-def adapt(
+def build_record(
     raw: Mapping[str, Any], parts: list[Part], contract: SourceContract
 ) -> Record:
     """One canonical record, keeping every field this profile does not own.
@@ -126,10 +127,10 @@ def adapt(
     `meta` is the source's own `meta` plus whatever else the item carried, because what
     looks like noise now is what a later question turns out to need. The label is kept in
     source order: it means a set, and δ reads it as one, but rewriting it here would put
-    export's `meta.label` out of step with the assistant message that invariant 4
-    asserts it equals.
+    `training_example`'s `meta.label` out of step with the assistant message that
+    invariant 4 asserts it equals.
     """
-    catalog = catalog_of(raw, parts, contract)
+    catalog = read_catalog(raw, parts, contract)
     source, producer = _provenance(raw)
     # `tools` is kept rather than consumed: the answer space takes the names, and the
     # descriptions are what an annotator reads. Under the legacy shape there is no such
@@ -144,7 +145,7 @@ def adapt(
         source=source,
         producer=producer,
         content=list(parts),
-        answer_space=answer_space_for(catalog),
+        answer_space=answer_space(catalog),
         label=contract.read_label(raw),
         meta={**unowned, **(raw.get("meta") or {})},
     )

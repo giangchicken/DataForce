@@ -72,23 +72,23 @@ class FakeTextModality:
     name = "fake_text"
     version = "1"
 
-    def load(self, raw: Any) -> list[Part]:
+    def content_parts(self, raw: Any) -> list[Part]:
         return [TextPart(role="user", text=str(raw))]
 
-    def embed(self, parts: list[Part]) -> Sequence[float]:
+    def embedding(self, parts: list[Part]) -> Sequence[float]:
         return [float(len(parts))]
 
-    def privacy_detectors(self) -> list[Callable[[list[Part]], list[Span]]]:
+    def personal_data_detectors(self) -> list[Callable[[list[Part]], list[Span]]]:
         return []
 
-    def display_control(self, record: Record) -> UIControl:
+    def display_config(self, record: Record) -> UIControl:
         return UIControl(f"<Text name='content' value='${record.rid}'/>")
 
 
 class SetProfile:
     """A set-valued answer: Jaccard distance, strict-majority consensus.
 
-    `delta` returns 0 for two empty answers rather than dividing 0 by 0, which is
+    `answer_distance` returns 0 for two empty answers rather than dividing 0 by 0, which is
     the case that matters -- for the first real profile a third of the corpus is
     the empty set.
     """
@@ -102,7 +102,7 @@ class SetProfile:
         "uniqueItems": True,
     }
 
-    def adapt(self, raw: Any, parts: list[Part]) -> Record:
+    def build_record(self, raw: Any, parts: list[Part]) -> Record:
         return Record(
             rid=compute_rid(parts),
             source=Source(
@@ -115,33 +115,33 @@ class SetProfile:
             meta=dict(raw),
         )
 
-    def delta(self, a: Answer, b: Answer) -> float:
+    def answer_distance(self, a: Answer, b: Answer) -> float:
         left, right = set(a), set(b)
         union = left | right
         if not union:
             return 0.0
         return 1.0 - len(left & right) / len(union)
 
-    def consensus(self, answers: list[Answer]) -> Answer | None:
-        if not answers:
+    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
+        if not votes:
             return None
-        threshold = len(answers) / 2
-        counts = {tool: sum(tool in answer for answer in answers) for tool in TOOLS}
+        threshold = len(votes) / 2
+        counts = {tool: sum(tool in vote for vote in votes) for tool in TOOLS}
         return sorted(tool for tool, count in counts.items() if count > threshold)
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
         return {"answer_in_space": lambda r: set(r.label) <= set(TOOLS)}
 
-    def question(self, record: Record, focus: str) -> str:
+    def question_text(self, record: Record, focus: str) -> str:
         return f"Is {focus} right for record {record.rid}?"
 
-    def answer_control(self, record: Record) -> UIControl:
+    def answer_config(self, record: Record) -> UIControl:
         return UIControl("<Choices name='answer' toName='content'/>")
 
     def group_key(self, record: Record) -> str:
         return f"g_{record.rid[:8]}"
 
-    def export(self, record: Record) -> dict[str, Any]:
+    def training_example(self, record: Record) -> dict[str, Any]:
         return {
             "content": [part.model_dump() for part in record.content],
             "tools": record.label,
@@ -156,7 +156,7 @@ class FreeTextProfile:
     modality = "fake_text"
     answer_schema: dict[str, Any] = {"type": "string"}
 
-    def adapt(self, raw: Any, parts: list[Part]) -> Record:
+    def build_record(self, raw: Any, parts: list[Part]) -> Record:
         return Record(
             rid=compute_rid(parts),
             source=Source(
@@ -168,25 +168,25 @@ class FreeTextProfile:
             meta=dict(raw),
         )
 
-    def delta(self, a: Answer, b: Answer) -> float:
+    def answer_distance(self, a: Answer, b: Answer) -> float:
         return 0.0 if a == b else 1.0
 
-    def consensus(self, answers: list[Answer]) -> Answer | None:
+    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
         return None
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
         return {}
 
-    def question(self, record: Record, focus: str) -> str:
+    def question_text(self, record: Record, focus: str) -> str:
         return f"Is this answer right for {record.rid}?"
 
-    def answer_control(self, record: Record) -> UIControl:
+    def answer_config(self, record: Record) -> UIControl:
         return UIControl("<TextArea name='answer' toName='content'/>")
 
     def group_key(self, record: Record) -> str:
         return record.rid
 
-    def export(self, record: Record) -> dict[str, Any]:
+    def training_example(self, record: Record) -> dict[str, Any]:
         return {"answer": record.label}
 
 

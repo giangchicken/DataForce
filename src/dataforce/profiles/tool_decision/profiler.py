@@ -26,7 +26,13 @@ from dataforce.profiles.tool_decision.adapter import PROVENANCE_KEY, catalog_nam
 from dataforce.profiles.tool_decision.profile import ToolDecisionProfile
 from dataforce.shared.record import Record, TextPart
 
-__all__ = ["BASELINE", "drift", "measure", "profile_corpus", "source_digest"]
+__all__ = [
+    "BASELINE",
+    "corpus_measurements",
+    "moved_measurements",
+    "profile_corpus",
+    "source_digest",
+]
 
 BASELINE = Path("metrics/corpus_profile.json")
 PARAMS = Path("params.yaml")
@@ -52,10 +58,10 @@ def _records(
 ) -> Iterator[tuple[Any, Record]]:
     """Every raw item with the record it adapts to, one at a time."""
     for offset, raw in enumerate(iter_json_array_file(path)):
-        parts = modality.load(raw)
+        parts = modality.content_parts(raw)
         yield (
             raw,
-            profile.adapt(
+            profile.build_record(
                 {
                     **raw,
                     PROVENANCE_KEY: {
@@ -85,7 +91,7 @@ def _turn(record: Record, role: str) -> str:
     )
 
 
-def measure(
+def corpus_measurements(
     path: Path, modality: Modality, profile: ToolDecisionProfile
 ) -> dict[str, Any]:
     """Every property this corpus is described by, measured over every record.
@@ -97,7 +103,7 @@ def measure(
     digest = source_digest(path)
     contract = profile.contract
     checks = profile.validity_checks()
-    detectors = modality.privacy_detectors()
+    detectors = modality.personal_data_detectors()
 
     instruction_role = contract.role_name("instruction")
     conversation_role = contract.role_name("conversation")
@@ -135,7 +141,7 @@ def measure(
         tool_names.update(label)
         catalog_sizes[len(catalog_names(record))] += 1
         fingerprints[profile.group_key(record)] += 1
-        # The source's own `meta`, not the record's: `adapt` adds the fields the
+        # The source's own `meta`, not the record's: `build_record` adds the fields the
         # item carried outside `meta`, and what drifted is what the file contains.
         key_sets[tuple(sorted(raw.get("meta") or {}))] += 1
         # `.keys()`, not the mapping: Counter.update over a dict adds its *values*.
@@ -237,7 +243,9 @@ def _leaves(value: Any, path: str = "") -> Iterator[tuple[str, Any]]:
         yield path, value
 
 
-def drift(baseline: Mapping[str, Any], measured: Mapping[str, Any]) -> list[str]:
+def moved_measurements(
+    baseline: Mapping[str, Any], measured: Mapping[str, Any]
+) -> list[str]:
     """Which counts moved, named one per line, in the baseline's own order."""
     now = dict(_leaves(measured))
     moved = [
@@ -268,11 +276,11 @@ def profile_corpus(
     commit, which is what `accept` stands for.
     """
     declared = read_yaml(params)["source"]
-    measured = measure(Path(declared["path"]), modality, profile)
+    measured = corpus_measurements(Path(declared["path"]), modality, profile)
     if not baseline.exists() or accept:
         write_json(baseline, measured)
         return measured, []
-    moved = drift(read_yaml(baseline), measured)
+    moved = moved_measurements(read_yaml(baseline), measured)
     if not moved:
         write_json(baseline, measured)
     return measured, moved

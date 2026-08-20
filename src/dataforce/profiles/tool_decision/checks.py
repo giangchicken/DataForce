@@ -25,7 +25,7 @@ from typing import Any
 from agent_toolkit.file_utils import read_yaml
 
 from dataforce.profiles.tool_decision.adapter import catalog_names
-from dataforce.profiles.tool_decision.answers import delta
+from dataforce.profiles.tool_decision.answers import answer_distance
 from dataforce.profiles.tool_decision.source import SourceContract
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record, TextPart
@@ -94,7 +94,7 @@ def validity_checks(
         if stated is None:
             return True
         try:
-            return delta(stated, record.label) != 0.0
+            return answer_distance(stated, record.label) != 0.0
         except TypeError:
             return True
 

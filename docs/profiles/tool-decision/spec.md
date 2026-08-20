@@ -98,7 +98,7 @@ The four validity checks below are all provable by counting — no person decide
 ### The answer, δ, and consensus
 
 5. The answer is a **set of tool names drawn from that record's own catalog**, and the empty set is a first-class answer, not a missing value. No stage may substitute a per-tool binary, a coarse proxy class, or a cardinality bucket.
-6. `delta(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`delta(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
+6. `answer_distance(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`answer_distance(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
 7. `vote_consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
 8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the validity checks of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
 
@@ -163,7 +163,7 @@ The `enum` enforces requirement 5's catalog constraint inside the library. `info
 ### δ, in full
 
 ```python
-def delta(a: set[str], b: set[str]) -> float:
+def answer_distance(a: set[str], b: set[str]) -> float:
     if not a and not b: return 0.0          # two abstentions agree perfectly
     return 1.0 - len(a & b) / len(a | b)
 ```

@@ -13,7 +13,7 @@ from typing import Any
 
 from dataforce.profiles.base import Answer
 
-__all__ = ["ANSWER_SCHEMA", "consensus", "delta"]
+__all__ = ["ANSWER_SCHEMA", "answer_distance", "vote_consensus"]
 
 # The profile-level shape. The per-record shape adds the catalog as an `enum`, which
 # is where requirement 5's constraint is enforced -- inside the library, not here.
@@ -33,10 +33,10 @@ def _tools(answer: Answer) -> frozenset[str]:
     return frozenset(answer)
 
 
-def delta(a: Answer, b: Answer) -> float:
+def answer_distance(a: Answer, b: Answer) -> float:
     """Jaccard distance, with two empty answers agreeing perfectly.
 
-    `delta(∅, ∅) = 0` is returned before the division, and it is load-bearing:
+    `answer_distance(∅, ∅) = 0` is returned before the division, and it is load-bearing:
     35.4% of this corpus is the empty set, so a `0/0` would make the population
     carrying the corpus's real difficulty look like the one with least agreement.
     """
@@ -46,7 +46,7 @@ def delta(a: Answer, b: Answer) -> float:
     return 1.0 - len(left & right) / len(left | right)
 
 
-def consensus(answers: list[Answer]) -> Answer | None:
+def vote_consensus(votes: list[Answer]) -> Answer | None:
     """The tools a strict majority of votes included, sorted.
 
     May be a set no individual juror proposed -- three jurors voting AB, BC, AC
@@ -54,8 +54,8 @@ def consensus(answers: list[Answer]) -> Answer | None:
     core forbids it from becoming a label on its own. No votes means no consensus,
     which is not the same answer as the empty set.
     """
-    if not answers:
+    if not votes:
         return None
-    counted = Counter(name for answer in answers for name in _tools(answer))
-    majority = len(answers) / 2
+    counted = Counter(name for vote in votes for name in _tools(vote))
+    majority = len(votes) / 2
     return sorted(name for name, count in counted.items() if count > majority)

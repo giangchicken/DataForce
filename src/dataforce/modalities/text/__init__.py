@@ -1,7 +1,7 @@
 """The `text` modality: turns, static embeddings, and an escaped display control.
 
 Three of the four members are here. Privacy detectors are the fourth and are
-substantial enough to be their own task, so `privacy_detectors` returns an empty
+substantial enough to be their own task, so `personal_data_detectors` returns an empty
 list until they land -- which the seam test tolerates and `pii_check` does not.
 """
 
@@ -72,7 +72,7 @@ class TextModality:
         # instruction block swamps a 780-character conversation.
         self.not_embedded = frozenset(embedding["exclude_roles"])
 
-    def load(self, raw: Any) -> list[Part]:
+    def content_parts(self, raw: Any) -> list[Part]:
         """One source item's turns, in order, each carrying its role.
 
         The text is copied out byte-for-byte. Normalising here would silently
@@ -83,7 +83,7 @@ class TextModality:
             for turn in raw["messages"]
         ]
 
-    def embed(self, parts: list[Part]) -> Sequence[float]:
+    def embedding(self, parts: list[Part]) -> Sequence[float]:
         """One vector over the conversation, for near-duplicate detection only."""
         document = _TURN_SEPARATOR.join(
             part.text
@@ -95,11 +95,11 @@ class TextModality:
         )
         return vector
 
-    def privacy_detectors(self) -> list[Detector]:
+    def personal_data_detectors(self) -> list[Detector]:
         """Empty until the Vietnamese detectors land. `pii_check` refuses this."""
         return []
 
-    def display_control(self, record: Record) -> UIControl:
+    def display_config(self, record: Record) -> UIControl:
         """The turns as escaped markup.
 
         Corpus text is call-centre transcript that reached us through ASR and is

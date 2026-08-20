@@ -23,19 +23,19 @@ Detector = Callable[[list[Part]], list[Span]]
 
 @runtime_checkable
 class Modality(Versioned, Protocol):
-    def load(self, raw: Any) -> list[Part]:
+    def content_parts(self, raw: Any) -> list[Part]:
         """Turn one raw source item into ordered, typed content parts."""
         ...
 
-    def embed(self, parts: list[Part]) -> Sequence[float]:
+    def embedding(self, parts: list[Part]) -> Sequence[float]:
         """Turn content into a vector, for near-duplicate detection only."""
         ...
 
-    def privacy_detectors(self) -> list[Detector]:
+    def personal_data_detectors(self) -> list[Detector]:
         """The high-recall detectors this kind of content needs."""
         ...
 
-    def display_control(self, record: Record) -> UIControl:
+    def display_config(self, record: Record) -> UIControl:
         """The annotation-UI control that *displays* a record.
 
         Half of a composed config. A modality never emits the control that

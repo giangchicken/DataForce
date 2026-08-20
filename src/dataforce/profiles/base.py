@@ -2,8 +2,8 @@
 
 Everything the pipeline does with disagreement -- cohesion, corpus conflict, the
 four triage buckets, Krippendorff's alpha, adjudication, juror calibration -- is
-expressible in three of the members below: the answer type, `delta`, and
-`consensus`. That is why the core can be generic without being a framework.
+expressible in three of the members below: the answer type, `answer_distance`, and
+`vote_consensus`. That is why the core can be generic without being a framework.
 
 `answer_schema` may be built per record: a profile whose answer space depends on
 the record returns a schema closed over it. The jury passes it straight to
@@ -29,7 +29,7 @@ class Profile(Versioned, Protocol):
     modality: str
     answer_schema: dict[str, Any]
 
-    def adapt(self, raw: Any, parts: list[Part]) -> Record:
+    def build_record(self, raw: Any, parts: list[Part]) -> Record:
         """Turn a raw source item and its parts into a canonical record.
 
         Preserves every field it does not own: what looks like noise now is what
@@ -37,24 +37,24 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def delta(self, a: Answer, b: Answer) -> float:
+    def answer_distance(self, a: Answer, b: Answer) -> float:
         """Distance between two answers. A metric -- rule 1, proved by the profile.
 
-        `delta(a, a) == 0`, symmetric, in `[0, 1]`, never NaN -- including on the
+        `answer_distance(a, a) == 0`, symmetric, in `[0, 1]`, never NaN -- including on the
         empty answer, which for some corpora is a third of the records. Nothing
         here checks it: see the core spec's § *Rules a profile must satisfy* for
         why, and for what a profile that breaks it costs.
         """
         ...
 
-    def consensus(self, answers: list[Answer]) -> Answer | None:
+    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
         """One answer from several, deterministically.
 
         A profile with no defensible consensus -- free-text generation is the
         honest example -- returns None for every input, including unanimous input.
         That is a declaration rather than a failure of rule 2: it bars the profile
         from the optional consensus tier and nothing else. Triage still works on
-        such a profile, because triage needs only `delta`.
+        such a profile, because triage needs only `answer_distance`.
         """
         ...
 
@@ -66,11 +66,11 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def question(self, record: Record, focus: str) -> str:
+    def question_text(self, record: Record, focus: str) -> str:
         """One focused, answerable question about this record."""
         ...
 
-    def answer_control(self, record: Record) -> UIControl:
+    def answer_config(self, record: Record) -> UIControl:
         """The annotation-UI control that *captures* an answer.
 
         The other half of a composed config. Constrained to this record's answer
@@ -86,6 +86,6 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def export(self, record: Record) -> dict[str, Any]:
+    def training_example(self, record: Record) -> dict[str, Any]:
         """One training example, in the shape this profile's trainer expects."""
         ...

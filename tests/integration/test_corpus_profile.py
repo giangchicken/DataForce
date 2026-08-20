@@ -52,7 +52,7 @@ def source_path() -> Path:
 
 @pytest.fixture(scope="module")
 def measured() -> dict[str, Any]:
-    return profiler.measure(source_path(), TEXT, TOOL_DECISION)
+    return profiler.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
 
 
 def test_the_committed_baseline_matches_a_fresh_measurement(
@@ -63,7 +63,10 @@ def test_the_committed_baseline_matches_a_fresh_measurement(
         pytest.skip("no baseline committed yet; run `dataforce profile`")
 
     assert (
-        profiler.drift(json.loads(BASELINE.read_text(encoding="utf-8")), measured) == []
+        profiler.moved_measurements(
+            json.loads(BASELINE.read_text(encoding="utf-8")), measured
+        )
+        == []
     )
 
 
@@ -168,10 +171,10 @@ def test_every_meta_key_is_counted_not_just_the_documented_ones(
 def test_privacy_signals_are_empty_until_the_modality_declares_detectors(
     measured: dict[str, Any],
 ) -> None:
-    """Counted through `privacy_detectors()`, so the five appear without a second
+    """Counted through `personal_data_detectors()`, so the five appear without a second
     implementation of what a Vietnamese phone number looks like."""
     assert measured["privacy_signals"] == {}
-    assert TEXT.privacy_detectors() == []
+    assert TEXT.personal_data_detectors() == []
 
 
 # --- the point of the command -------------------------------------------------
@@ -184,16 +187,16 @@ def test_an_older_source_drifts_and_the_moved_count_is_named(
     if not BACKUP.exists():
         pytest.skip(f"{BACKUP.name} is not present in data/raw/")
 
-    before = profiler.measure(BACKUP, TEXT, TOOL_DECISION)
+    before = profiler.corpus_measurements(BACKUP, TEXT, TOOL_DECISION)
 
     assert before["invalid_counts"]["label_assistant_mismatch"] == 48
-    moved = profiler.drift(measured, before)
+    moved = profiler.moved_measurements(measured, before)
     assert any("invalid_counts.label_assistant_mismatch" in line for line in moved)
     assert any("was 0, now 48" in line for line in moved)
 
 
 def test_drift_names_a_count_that_appeared_and_one_that_vanished() -> None:
-    moved = profiler.drift({"a": 1, "gone": 2}, {"a": 1, "new": 3})
+    moved = profiler.moved_measurements({"a": 1, "gone": 2}, {"a": 1, "new": 3})
 
     assert moved == ["gone: was 2, now '<absent>'", "new: absent before, now 3"]
 
@@ -237,7 +240,7 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
 def test_the_profiler_never_holds_the_file(measured: dict[str, Any]) -> None:
     """126 MiB on disk. Traced allocation stays a fraction of it, so it streams."""
     tracemalloc.start()
-    profiler.measure(source_path(), TEXT, TOOL_DECISION)
+    profiler.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
