@@ -11,13 +11,22 @@ import json
 import logging
 import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 from dataforce import __version__
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION
+from dataforce.declared.manifest import read_manifest
+from dataforce.declared.prompts import read_prompt
+from dataforce.modalities.text import MANIFEST_NAME as TEXT_MANIFEST
+from dataforce.modalities.text import TextModality
+from dataforce.profiles.tool_decision import MANIFEST_NAME as TOOL_DECISION_MANIFEST
+from dataforce.profiles.tool_decision import ToolDecisionProfile
 from dataforce.profiles.tool_decision.measure_corpus import profile_corpus
 from dataforce.shared.registry import Registry
+
+# Where the committed policy is, relative to the directory the command is run from.
+# The engine never sees these: it is handed what they parse to.
+CONFIG = Path("config")
 
 # Which profile knows how to measure its own corpus. A profile is not required to:
 # the four validity counts and the group sizes are generic, everything else here is
@@ -61,15 +70,33 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _register_implementations() -> Registry:
+def text_modality(*, config_root: Path = CONFIG) -> TextModality:
+    """The `text` modality, from the manifest that declares what it is."""
+    return TextModality(read_manifest("modalities", TEXT_MANIFEST, root=config_root))
+
+
+def tool_decision_profile(*, config_root: Path = CONFIG) -> ToolDecisionProfile:
+    """The `tool_decision` profile, with the question template its manifest names."""
+    declared = read_manifest("profiles", TOOL_DECISION_MANIFEST, root=config_root)
+    return ToolDecisionProfile(
+        declared,
+        question_template=read_prompt(
+            declared.require("prompts")["question"], root=config_root / "prompts"
+        ),
+    )
+
+
+def _register_implementations(*, config_root: Path = CONFIG) -> Registry:
     """The composition root: the one place a concrete modality or profile is named.
 
-    No module under `pipeline/` or `shared/` may import one, so this is where both
-    axes arrive. Registration resolves a name and checks nothing else.
+    No module under `pipeline/` or `shared/` may import one, and neither axis is
+    built at import time, so this is where both arrive -- and the only place that
+    turns a committed file into an object. Registration resolves a name and checks
+    nothing else.
     """
     registry = Registry()
-    registry.register_modality(TEXT)
-    registry.register_profile(TOOL_DECISION)
+    registry.register_modality(text_modality(config_root=config_root))
+    registry.register_profile(tool_decision_profile(config_root=config_root))
     return registry
 
 

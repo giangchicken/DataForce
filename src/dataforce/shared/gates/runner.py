@@ -3,10 +3,10 @@
 92% of ML teams hit a data cascade -- an upstream data problem amplifying
 through everything after it -- and the response this pipeline makes is that every
 stage has a gate that fails the run. A gate is a named predicate over a stage's
-inputs and outputs, with any number it compares against read from
-`config/gates.yaml` or `params.yaml`. This module holds the engine and no
-thresholds, so changing a threshold is a committed change to a declared DVC
-dependency rather than an edit to code.
+inputs and outputs, with any number it compares against handed in by the caller
+that read it -- `declared/thresholds.py`. This module holds the engine, no
+thresholds, and no filesystem: it raises its verdict, and persisting one is what
+`api/` does with it.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from agent_toolkit.file_utils import read_yaml, write_json
+from agent_toolkit.file_utils import write_json
 from agent_toolkit.logging import get_logger
 
 from dataforce.shared.errors import DataForceError
@@ -27,17 +27,14 @@ __all__ = [
     "METRICS_FILENAME",
     "GateFailed",
     "GateResult",
-    "check",
     "conservation",
     "require_upstream_ok",
-    "thresholds",
 ]
 
 log = get_logger(__name__)
 
 GATE_FAILED_FILENAME = "GATE_FAILED.json"
 METRICS_FILENAME = "metrics.json"
-GATES_CONFIG = Path("config/gates.yaml")
 
 # Enough offending ids to find the pattern, few enough to read. A gate failing on
 # every record would otherwise write the corpus into its own failure report.
@@ -79,17 +76,6 @@ class GateFailed(DataForceError):
         self.failures = tuple(failures)
         named = ", ".join(f.name for f in failures)
         super().__init__(f"gate failed in stage {stage!r}: {named}")
-
-
-def thresholds(gate: str, *, path: Path = GATES_CONFIG) -> dict[str, Any]:
-    """What one gate compares against, by gate name. Absent means nothing declared."""
-    config = read_yaml(path) or {}
-    declared = config.get(gate) or {}
-    if not isinstance(declared, dict):
-        raise DataForceError(
-            f"{path}: gate {gate!r} must be a mapping, got {declared!r}"
-        )
-    return declared
 
 
 def conservation(

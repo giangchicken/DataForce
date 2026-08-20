@@ -18,9 +18,8 @@ from pathlib import Path
 import pytest
 from agent_toolkit.file_utils import iter_json_array_file, read_yaml
 from agent_toolkit.string_utils import compute_hash
-from conftest import REPO_ROOT
+from conftest import REPO_ROOT, TEXT
 
-from dataforce.modalities.text import TEXT
 from dataforce.shared.record import TextPart
 
 pytestmark = pytest.mark.integration

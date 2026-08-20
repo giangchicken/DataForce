@@ -17,10 +17,9 @@ from typing import Any
 
 import pytest
 from agent_toolkit.file_utils import read_yaml
-from conftest import REPO_ROOT
+from conftest import REPO_ROOT, TEXT, TOOL_DECISION
 
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION, measure_corpus
+from dataforce.profiles.tool_decision import measure_corpus
 
 pytestmark = pytest.mark.integration
 
@@ -218,10 +217,11 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
             "-c",
             "import sys;"
             "from pathlib import Path;"
-            "from dataforce.modalities.text import TEXT;"
-            "from dataforce.profiles.tool_decision import TOOL_DECISION;"
+            "from dataforce.cli import text_modality, tool_decision_profile;"
             "from dataforce.profiles.tool_decision.measure_corpus import profile_corpus;"
-            f"_, moved = profile_corpus(TEXT, TOOL_DECISION, baseline=Path({str(baseline)!r}));"
+            "_, moved = profile_corpus("
+            "text_modality(), tool_decision_profile(), "
+            f"baseline=Path({str(baseline)!r}));"
             "print(moved);"
             "sys.exit(1 if moved else 0)",
         ],

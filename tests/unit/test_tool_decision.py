@@ -14,9 +14,9 @@ from typing import Any
 
 import pytest
 from agent_toolkit.file_utils import read_yaml
+from conftest import TEXT, TOOL_DECISION
 
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION, build_record
+from dataforce.profiles.tool_decision import build_record
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record
 from dataforce.shared.registry import Registry

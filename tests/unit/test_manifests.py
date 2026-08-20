@@ -12,14 +12,11 @@ import ast
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, SOURCE_ROOT
+from conftest import CONFIG, SOURCE_ROOT, TEXT, TOOL_DECISION
 
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION
-from dataforce.shared import manifest
+from dataforce.declared import manifest
 from dataforce.shared.errors import ConfigError
 
-CONFIG = REPO_ROOT / manifest.CONFIG
 DECLARED = ("name", "version", "modality")
 GENERIC = frozenset({"__init__", "base", "registry"})
 
@@ -69,7 +66,7 @@ def test_no_implementation_hardcodes_its_own_identity() -> None:
         found = class_level_identity(tree)
         assert not found, (
             f"{path.relative_to(SOURCE_ROOT)} assigns {found} in a class body; "
-            f"identity belongs in {manifest.CONFIG}/<axis>/<name>.yaml"
+            f"identity belongs in {CONFIG.name}/<axis>/<name>.yaml"
         )
 
 
@@ -90,8 +87,8 @@ def test_the_check_catches_the_assignment_it_exists_to_catch() -> None:
 
 
 def test_both_implementations_are_what_their_manifests_say() -> None:
-    profile = manifest.load("profiles", "tool_decision", root=CONFIG)
-    modality = manifest.load("modalities", "text", root=CONFIG)
+    profile = manifest.read_manifest("profiles", "tool_decision", root=CONFIG)
+    modality = manifest.read_manifest("modalities", "text", root=CONFIG)
 
     assert (TOOL_DECISION.name, TOOL_DECISION.version) == (
         profile.name,
@@ -109,7 +106,7 @@ def test_a_version_must_be_a_string_because_it_is_not_a_number(tmp_path: Path) -
     )
 
     with pytest.raises(ConfigError, match="not a number"):
-        manifest.load("modalities", "probe", root=tmp_path)
+        manifest.read_manifest("modalities", "probe", root=tmp_path)
 
 
 def test_a_manifest_cannot_be_copied_and_left_claiming_the_old_name(
@@ -121,16 +118,16 @@ def test_a_manifest_cannot_be_copied_and_left_claiming_the_old_name(
     )
 
     with pytest.raises(ConfigError, match="filename is its identity"):
-        manifest.load("profiles", "copied", root=tmp_path)
+        manifest.read_manifest("profiles", "copied", root=tmp_path)
 
 
 def test_a_missing_manifest_names_the_ones_that_exist() -> None:
     with pytest.raises(ConfigError, match="tool_decision"):
-        manifest.load("profiles", "nonexistent", root=CONFIG)
+        manifest.read_manifest("profiles", "nonexistent", root=CONFIG)
 
 
 def test_a_missing_declaration_names_what_the_manifest_does_hold() -> None:
-    declared = manifest.load("profiles", "tool_decision", root=CONFIG)
+    declared = manifest.read_manifest("profiles", "tool_decision", root=CONFIG)
 
     with pytest.raises(ConfigError, match="modality"):
         declared.require("nothing_declares_this")
@@ -138,4 +135,4 @@ def test_a_missing_declaration_names_what_the_manifest_does_hold() -> None:
 
 def test_there_are_exactly_two_axes() -> None:
     with pytest.raises(ConfigError, match="there are two"):
-        manifest.load("stages", "load", root=CONFIG)
+        manifest.read_manifest("stages", "load", root=CONFIG)

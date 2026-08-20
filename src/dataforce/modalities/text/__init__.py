@@ -15,15 +15,16 @@ from typing import Any
 from model2vec import StaticModel
 
 from dataforce.modalities.base import Detector
-from dataforce.shared import manifest
 from dataforce.shared.errors import ConfigError
+from dataforce.shared.manifest import Manifest
 from dataforce.shared.record import Part, Record, TextPart, UIControl
 
-__all__ = ["MANIFEST_NAME", "TEXT", "TextModality"]
+__all__ = ["MANIFEST_NAME", "TextModality"]
 
 # The manifest this modality is: `config/modalities/text.yaml`. It declares the name and
 # version stamped into `producer.modality`, the embedding model, and which roles stay
-# out of a vector.
+# out of a vector. Reading it is the composition root's job -- importing this module
+# opens no file, so it works from any working directory.
 MANIFEST_NAME = "text"
 
 # What separates one turn from the next when parts are embedded as one document.
@@ -60,7 +61,7 @@ class TextModality:
     role exclusion is a measured choice rather than an implementation detail.
     """
 
-    def __init__(self, declared: manifest.Manifest) -> None:
+    def __init__(self, declared: Manifest) -> None:
         self.manifest = declared
         self.name = declared.name
         self.version = declared.version
@@ -116,6 +117,3 @@ class TextModality:
         return UIControl(
             f'<HyperText name="content" clickableLinks="false">\n{turns}\n</HyperText>'
         )
-
-
-TEXT = TextModality(manifest.load("modalities", MANIFEST_NAME))

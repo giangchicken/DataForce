@@ -15,14 +15,9 @@ from pathlib import Path
 import pytest
 from agent_toolkit.file_utils import iter_json_array_file, read_yaml
 from agent_toolkit.string_utils import compute_hash
-from conftest import REPO_ROOT
+from conftest import REPO_ROOT, TEXT, TOOL_DECISION
 
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import (
-    TOOL_DECISION,
-    build_record,
-    tool_schema,
-)
+from dataforce.profiles.tool_decision import build_record, tool_schema
 
 pytestmark = pytest.mark.integration
 

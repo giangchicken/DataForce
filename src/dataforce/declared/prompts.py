@@ -10,23 +10,22 @@ anything if the text lives inside a function nobody diffs.
 that owns a prompt owns the folder it sits in, and a version bump is a new file rather
 than an edit that silently invalidates a cache.
 
-`slot_filling` takes `{{double brace}}` placeholders, which is why the marker DSL's
-single braces pass through untouched: `{trigger}` is not a placeholder to it.
+Reading a template is here; filling one is not. `slot_filling` takes `{{double brace}}`
+placeholders and touches no file, so whoever holds the template fills it -- which is how
+a stage renders a prompt per record without the engine reading `config/prompts`.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from agent_toolkit.file_utils import read_txt
-from agent_toolkit.string_utils import compute_hash, slot_filling
+from agent_toolkit.string_utils import compute_hash
 
 from dataforce.shared.errors import ConfigError
 
-__all__ = ["PROMPTS", "SUFFIX", "digest", "load", "render", "versions"]
+__all__ = ["SUFFIX", "digest", "read_prompt", "versions"]
 
-PROMPTS = Path("config/prompts")
 SUFFIX = ".txt"
 
 
@@ -39,23 +38,18 @@ def _path(version: str, root: Path) -> Path:
     return path
 
 
-def load(version: str, *, root: Path = PROMPTS) -> str:
+def read_prompt(version: str, *, root: Path) -> str:
     """One prompt template, verbatim, by its `prompt_version`."""
     return read_txt(_path(version, root))
 
 
-def render(version: str, values: dict[str, Any], *, root: Path = PROMPTS) -> str:
-    """One prompt, filled. An unknown placeholder is left in place, not blanked."""
-    return slot_filling(load(version, root=root), values)
-
-
-def digest(version: str, *, root: Path = PROMPTS) -> str:
+def digest(version: str, *, root: Path) -> str:
     """The template's content hash, so a recorded `prompt_version` cannot drift from
     the file it names without the drift being visible."""
-    return compute_hash(load(version, root=root), "sha256")[:12]
+    return compute_hash(read_prompt(version, root=root), "sha256")[:12]
 
 
-def versions(*, root: Path = PROMPTS) -> list[str]:
+def versions(*, root: Path) -> list[str]:
     """Every prompt that exists, as the `prompt_version` strings that name them."""
     return sorted(
         str(path.relative_to(root).with_suffix("")).replace("\\", "/")

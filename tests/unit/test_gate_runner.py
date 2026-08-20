@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from agent_toolkit.file_utils import read_json
 
+from dataforce.declared.thresholds import thresholds
 from dataforce.shared.errors import DataForceError
 from dataforce.shared.gates.runner import (
     GATE_FAILED_FILENAME,
@@ -19,7 +20,6 @@ from dataforce.shared.gates.runner import (
     check,
     conservation,
     require_upstream_ok,
-    thresholds,
 )
 
 

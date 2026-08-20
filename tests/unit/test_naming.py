@@ -8,8 +8,10 @@ was stage 0 and a modality member at once, and most of its ten mentions in the
 core spec were the stage. A bare operation names no object, so read alone it says
 nothing -- *parse what, into what?*
 
-`shared/` and `pipeline/` are out of scope, which is a scope and not a clean bill:
-`manifest.load`, `prompts.load` and `prompts.render` break both halves today.
+`declared/` is in scope too, since it is the surface both axes are configured
+through. `shared/` and `pipeline/` are out of scope, which is a scope and not a clean
+bill -- though the three names that broke both halves, `manifest.load`, `prompts.load`
+and `prompts.render`, are now `read_manifest`, `read_prompt` and gone respectively.
 """
 
 from __future__ import annotations
@@ -20,7 +22,8 @@ from pathlib import Path
 
 from conftest import REPO_ROOT, SOURCE_ROOT
 
-AXES = ("modalities", "profiles")
+# Both axes, plus the package that reads their configuration.
+GUARDED_PACKAGES = ("modalities", "profiles", "declared")
 
 SPEC = REPO_ROOT / "docs" / "annotation-pipeline" / "spec.md"
 
@@ -47,11 +50,11 @@ def stage_names(spec: Path = SPEC) -> set[str]:
     return found
 
 
-def axis_functions() -> dict[str, Path]:
-    """Every public function and method under either axis, by name."""
+def guarded_functions() -> dict[str, Path]:
+    """Every public function and method under a guarded package, by name."""
     found: dict[str, Path] = {}
-    for axis in AXES:
-        for path in sorted((SOURCE_ROOT / axis).rglob("*.py")):
+    for package in GUARDED_PACKAGES:
+        for path in sorted((SOURCE_ROOT / package).rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
@@ -59,8 +62,8 @@ def axis_functions() -> dict[str, Path]:
     return found
 
 
-def test_no_function_in_either_axis_is_named_after_a_stage() -> None:
-    functions = axis_functions()
+def test_no_guarded_function_is_named_after_a_stage() -> None:
+    functions = guarded_functions()
     assert len(functions) > 20, "no function was scanned -- this would pass vacuously"
     shared = {
         name: str(path.relative_to(SOURCE_ROOT))
@@ -72,10 +75,10 @@ def test_no_function_in_either_axis_is_named_after_a_stage() -> None:
     )
 
 
-def test_no_function_in_either_axis_is_a_bare_operation() -> None:
+def test_no_guarded_function_is_a_bare_operation() -> None:
     offenders = {
         name: str(path.relative_to(SOURCE_ROOT))
-        for name, path in axis_functions().items()
+        for name, path in guarded_functions().items()
         if name in BARE_OPERATIONS
     }
     assert not offenders, f"these name an operation with no object: {offenders}"

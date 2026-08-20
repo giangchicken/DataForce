@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from dataforce.cli import text_modality, tool_decision_profile
 from dataforce.profiles.base import Answer
 from dataforce.shared.record import (
     Part,
@@ -30,6 +31,15 @@ from dataforce.shared.record import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = REPO_ROOT / "src" / "dataforce"
+CONFIG = REPO_ROOT / "config"
+PARAMS = REPO_ROOT / "params.yaml"
+
+# Both axes, built once from the repository's own committed policy, through the same
+# composition root the CLI uses. Neither is constructed at import time by the library
+# itself, so this is where a test gets one -- as a module constant rather than a
+# fixture, because the helpers that build records are module-level too.
+TEXT = text_modality(config_root=CONFIG)
+TOOL_DECISION = tool_decision_profile(config_root=CONFIG)
 
 TOOLS = ["Calendar", "SendMail", "Search"]
 

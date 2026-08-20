@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import html
 
+from agent_toolkit.string_utils import slot_filling
+
 from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY
 from dataforce.profiles.tool_decision.tool_schema import (
     Tool,
     catalog_names,
     tools_to_catalog,
 )
-from dataforce.shared import prompts
 from dataforce.shared.record import Record, UIControl
 
 __all__ = ["answer_config", "question_text", "readable_catalog"]
@@ -36,9 +37,14 @@ def _attribute(value: str) -> str:
     return escaped.replace("\t", "&#9;").replace("\n", "&#10;").replace("\r", "&#13;")
 
 
-def question_text(prompt: str, focus: str) -> str:
-    """One focused question. Choosing the focus is `generate_questions`'s job."""
-    return prompts.render(prompt, {"focus": focus})
+def question_text(template: str, focus: str) -> str:
+    """One focused question. Choosing the focus is `generate_questions`'s job.
+
+    Handed the template rather than the `prompt_version` that names it: reading
+    `config/prompts` is `declared/`'s job, and `slot_filling` only fills doubled
+    braces, so the marker DSL's single ones pass through untouched.
+    """
+    return slot_filling(template, {"focus": focus})
 
 
 def readable_catalog(record: Record) -> str:

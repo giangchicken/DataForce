@@ -13,13 +13,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import TEXT, TOOL_DECISION
 
-from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import (
-    TOOL_DECISION,
-    build_record,
-    tool_schema,
-)
+from dataforce.profiles.tool_decision import build_record, tool_schema
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,

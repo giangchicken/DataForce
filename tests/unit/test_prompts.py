@@ -13,13 +13,13 @@ import ast
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, SOURCE_ROOT, parsed_sources
+from agent_toolkit.string_utils import slot_filling
+from conftest import CONFIG, SOURCE_ROOT, TOOL_DECISION, parsed_sources
 
-from dataforce.profiles.tool_decision import TOOL_DECISION
-from dataforce.shared import prompts
+from dataforce.declared import prompts
 from dataforce.shared.errors import ConfigError
 
-ROOT = REPO_ROOT / prompts.PROMPTS
+ROOT = CONFIG / "prompts"
 
 MARKERS = (
     "{trigger}",
@@ -69,7 +69,7 @@ def test_no_module_holds_a_prompt_template() -> None:
         found = templates(tree)
         assert not found, (
             f"{path.relative_to(SOURCE_ROOT)} holds a template: {found!r} -- "
-            f"prompts belong under {prompts.PROMPTS}"
+            f"prompts belong under {ROOT}"
         )
     assert scanned, "no module was scanned -- this test would pass vacuously"
 
@@ -96,7 +96,7 @@ def test_every_prompt_on_disk_loads_by_its_version() -> None:
 
     assert found, f"no prompt files under {ROOT}"
     for version in found:
-        assert prompts.load(version, root=ROOT).strip()
+        assert prompts.read_prompt(version, root=ROOT).strip()
 
 
 def test_the_prompt_folder_mirrors_the_two_axes() -> None:
@@ -107,7 +107,7 @@ def test_the_prompt_folder_mirrors_the_two_axes() -> None:
 
 def test_a_version_names_a_file_and_a_missing_one_says_what_exists() -> None:
     with pytest.raises(ConfigError, match="profiles/tool_decision/question.v1"):
-        prompts.load("profiles/tool_decision/question.v99", root=ROOT)
+        prompts.read_prompt("profiles/tool_decision/question.v99", root=ROOT)
 
 
 def test_the_profile_asks_with_a_prompt_that_exists() -> None:
@@ -115,17 +115,22 @@ def test_the_profile_asks_with_a_prompt_that_exists() -> None:
     assert TOOL_DECISION.question_prompt in prompts.versions(root=ROOT)
 
 
-def test_rendering_leaves_the_marker_dsl_alone() -> None:
-    """Single braces are the DSL's; `slot_filling` only fills doubled ones."""
+def test_filling_the_declared_template_leaves_the_marker_dsl_alone() -> None:
+    """Single braces are the DSL's; `slot_filling` only fills doubled ones.
+
+    Read here and filled here, because that is now the split: `declared/` reads the
+    template and whoever holds it fills it. The same property through the profile's
+    own member is `test_tool_decision.py`.
+    """
     focus = " ".join(MARKERS)
 
-    rendered = prompts.render(
-        TOOL_DECISION.question_prompt, {"focus": focus}, root=ROOT
+    filled = slot_filling(
+        prompts.read_prompt(TOOL_DECISION.question_prompt, root=ROOT), {"focus": focus}
     )
 
     for marker in MARKERS:
-        assert marker in rendered
-    assert "{{focus}}" not in rendered
+        assert marker in filled
+    assert "{{focus}}" not in filled
 
 
 def test_an_unknown_placeholder_is_left_in_place_rather_than_blanked(
@@ -137,7 +142,9 @@ def test_an_unknown_placeholder_is_left_in_place_rather_than_blanked(
     )
 
     assert (
-        prompts.render("profiles/probe.v1", {"known": "a"}, root=tmp_path)
+        slot_filling(
+            prompts.read_prompt("profiles/probe.v1", root=tmp_path), {"known": "a"}
+        )
         == "a và {{unknown}}"
     )
 

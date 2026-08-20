@@ -14,7 +14,9 @@ not from here.
 Identity, the modality it composes with, the prompt it asks and the source's shape and
 vocabulary are all in `config/profiles/tool_decision.yaml`, because each of those is
 stamped into an artifact or decides how a file is read, and neither is something a
-class attribute should be able to change without review.
+class attribute should be able to change without review. Reading that file, and the
+question template it names, is the composition root's job: importing this module opens
+nothing, so it works from any working directory.
 """
 
 from __future__ import annotations
@@ -26,10 +28,10 @@ from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import answer, ask_annotator, build_record
 from dataforce.profiles.tool_decision.build_record import PROVENANCE_KEY
 from dataforce.profiles.tool_decision.source_contract import read_source_contract
-from dataforce.shared import manifest
+from dataforce.shared.manifest import Manifest
 from dataforce.shared.record import Part, Record, UIControl
 
-__all__ = ["MANIFEST_NAME", "PROVENANCE_KEY", "TOOL_DECISION", "ToolDecisionProfile"]
+__all__ = ["MANIFEST_NAME", "PROVENANCE_KEY", "ToolDecisionProfile"]
 
 MANIFEST_NAME = "tool_decision"
 
@@ -37,12 +39,17 @@ MANIFEST_NAME = "tool_decision"
 class ToolDecisionProfile:
     """Tool selection over Vietnamese call-centre text, composed with `text`."""
 
-    def __init__(self, declared: manifest.Manifest) -> None:
+    def __init__(self, declared: Manifest, *, question_template: str) -> None:
         self.manifest = declared
         self.name = declared.name
         self.version = declared.version
         self.modality: str = declared.require("modality")
+        # The version names the file and is stamped into `questions.jsonl`; the
+        # template is its text, read by whoever built this object. Both are kept:
+        # an artifact records which prompt asked a question, and rendering it here
+        # is what keeps `config/prompts` out of the engine.
         self.question_prompt: str = declared.require("prompts")["question"]
+        self.question_template = question_template
         self.contract = read_source_contract(declared)
         self.answer_schema = answer.ANSWER_SCHEMA
 
@@ -59,7 +66,7 @@ class ToolDecisionProfile:
         return build_record.validity_checks(self.contract)
 
     def question_text(self, record: Record, focus: str) -> str:
-        return ask_annotator.question_text(self.question_prompt, focus)
+        return ask_annotator.question_text(self.question_template, focus)
 
     def readable_catalog(self, record: Record) -> str:
         return ask_annotator.readable_catalog(record)
@@ -72,6 +79,3 @@ class ToolDecisionProfile:
 
     def training_example(self, record: Record) -> dict[str, Any]:
         return answer.training_example(record)
-
-
-TOOL_DECISION = ToolDecisionProfile(manifest.load("profiles", MANIFEST_NAME))

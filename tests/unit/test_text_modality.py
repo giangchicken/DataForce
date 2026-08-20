@@ -8,9 +8,9 @@ ordinary input, and the annotator has to see the text that was said.
 from __future__ import annotations
 
 import pytest
+from conftest import TEXT
 
 from dataforce.modalities.base import Modality
-from dataforce.modalities.text import TEXT
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import (
     MediaPart,
