@@ -20,6 +20,7 @@ from dataforce.profiles.tool_decision.source import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,
     SourceContract,
+    read_source_contract,
 )
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.manifest import Manifest
@@ -42,17 +43,14 @@ LEGACY = TOOL_DECISION.contract
 
 def contract_for(shape: str) -> SourceContract:
     """The same declarations the manifest carries, with one shape swapped."""
-    return SourceContract.of(
+    return read_source_contract(
         Manifest(
             name="probe",
             version="1",
             declared={
                 "shape": shape,
                 "roles": dict(LEGACY.roles),
-                "label": {
-                    "at": ".".join(LEGACY.label_at),
-                    "restated_in": LEGACY.label_restated_in,
-                },
+                "label": {"at": LEGACY.label_key},
                 "meta": dict(LEGACY.meta),
                 "gold": {"from": LEGACY.gold_from},
             },
@@ -274,14 +272,14 @@ def test_a_record_with_no_answer_space_is_named_rather_than_read_blindly() -> No
 
 def test_an_undeclared_shape_is_refused_by_name() -> None:
     with pytest.raises(ConfigError, match="is not one of"):
-        SourceContract.of(
+        read_source_contract(
             Manifest(
                 name="probe",
                 version="1",
                 declared={
                     "shape": "guess",
-                    "roles": {},
-                    "label": {"at": "meta.label", "restated_in": "target"},
+                    "roles": {"target": "assistant"},
+                    "label": {"at": "label"},
                     "meta": {},
                 },
             )
@@ -290,13 +288,52 @@ def test_an_undeclared_shape_is_refused_by_name() -> None:
 
 def test_an_undeclared_role_or_field_says_what_is_declared() -> None:
     with pytest.raises(ConfigError, match="no role declared"):
-        LEGACY.role("narrator")
+        LEGACY.role_name("narrator")
     with pytest.raises(ConfigError, match="no source field declared"):
-        LEGACY.field("vibe")
+        LEGACY.field_name("vibe")
 
 
-def test_the_label_is_read_from_the_declared_path() -> None:
-    assert LEGACY.label_at == ("meta", "label")
-    assert LEGACY.label_of({"meta": {"label": ["a"]}}) == ["a"]
-    assert LEGACY.label_of({"meta": {}}) is None
-    assert LEGACY.label_of({}) is None
+def test_a_missing_label_key_names_the_manifest_and_the_key() -> None:
+    """A hand-edited manifest gets an error naming both, not a bare KeyError."""
+    with pytest.raises(ConfigError, match=r"probe: label.at is not declared"):
+        read_source_contract(
+            Manifest(
+                name="probe",
+                version="1",
+                declared={
+                    "shape": "legacy_system_prompt",
+                    "roles": {"target": "assistant"},
+                    "label": {},
+                    "meta": {},
+                },
+            )
+        )
+
+
+def test_an_undeclared_target_role_fails_when_the_contract_is_read() -> None:
+    """Not once per record: the restating turn is resolved up front."""
+    with pytest.raises(ConfigError, match="no role declared for 'target'"):
+        read_source_contract(
+            Manifest(
+                name="probe",
+                version="1",
+                declared={
+                    "shape": "legacy_system_prompt",
+                    "roles": {"instruction": "system"},
+                    "label": {"at": "label"},
+                    "meta": {},
+                },
+            )
+        )
+
+
+def test_the_label_is_read_from_the_declared_meta_field() -> None:
+    assert LEGACY.label_key == "label"
+    assert LEGACY.read_label({"meta": {"label": ["a"]}}) == ["a"]
+    assert LEGACY.read_label({"meta": {}}) is None
+    assert LEGACY.read_label({}) is None
+
+
+def test_the_restating_turn_is_the_target_and_is_not_declared_twice() -> None:
+    """`roles.target` already names the turn the answer is restated in."""
+    assert LEGACY.restating_role == LEGACY.role_name("target") == "assistant"

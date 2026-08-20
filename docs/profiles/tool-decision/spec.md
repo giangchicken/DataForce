@@ -118,6 +118,8 @@ The four validity checks below are all provable by counting — no person decide
 
 ### Thresholds and the ladder
 
+**What the pre-existing gold pool is, and is not.** 951 records carry `human_checked`, and two measured facts about them belong in the datasheet rather than in a config file that no code reads. The flag is **one-sided** — it is only ever `true`, so it records that a record was *looked at*, not that it was found correct. And `human_check_src` names a targeted generation pass rather than a sample, so the pool is **not a random sample** of the corpus: 917 from `debait`, 34 from `confuse_b1`, with the label changed on 94 of them. Treating these as gold is defensible; reporting an accuracy against them without both caveats is not.
+
 17. The release's primary metric is **exact-set-match accuracy** against the gold set on the human-validated test split only. Secondary: abstention (zero-label) precision and recall, and macro set-F1. All three are declared in `params.yaml` before the first stage runs and do not change without a new release version.
 18. The pipeline emits deterministic 25% / 50% / 100% subsamples of the training split, group-disjoint and recorded in the manifest, as the inputs to a learning curve. Running the training is out of scope.
 19. Rung sizes and quotas:

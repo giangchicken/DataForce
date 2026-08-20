@@ -99,13 +99,13 @@ def measure(
     checks = profile.validity_checks()
     detectors = modality.privacy_detectors()
 
-    instruction_role = contract.role("instruction")
-    conversation_role = contract.role("conversation")
-    labelling_model = contract.field("labelling_model")
-    prior_label = contract.field("prior_label")
-    label_provenance = contract.field("label_provenance")
-    human_checked = contract.field("human_checked")
-    human_checked_by = contract.field("human_checked_by")
+    instruction_role = contract.role_name("instruction")
+    conversation_role = contract.role_name("conversation")
+    labelling_model = contract.field_name("labelling_model")
+    prior_label = contract.field_name("prior_label")
+    label_provenance = contract.field_name("label_provenance")
+    human_checked = contract.field_name("human_checked")
+    human_checked_by = contract.field_name("human_checked_by")
 
     records = 0
     cardinality: Counter[int] = Counter()

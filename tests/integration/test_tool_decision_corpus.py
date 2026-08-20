@@ -49,7 +49,7 @@ def source() -> Path:
 
 @pytest.fixture(scope="module")
 def parsed(source: Path) -> list[tuple[str, cat.Catalog, list[str]]]:
-    instruction = TOOL_DECISION.contract.role("instruction")
+    instruction = TOOL_DECISION.contract.role_name("instruction")
     rows = []
     for raw in iter_json_array_file(source):
         turns = {turn["role"]: turn["content"] for turn in raw["messages"]}
@@ -57,7 +57,7 @@ def parsed(source: Path) -> list[tuple[str, cat.Catalog, list[str]]]:
             (
                 turns[instruction],
                 cat.parse(turns[instruction]),
-                TOOL_DECISION.contract.label_of(raw) or [],
+                TOOL_DECISION.contract.read_label(raw) or [],
             )
         )
     return rows
@@ -145,7 +145,7 @@ def test_the_reader_reports_every_gap_it_could_not_close(source: Path) -> None:
     optional, 188 object parameters whose subfields the compact inline form cannot carry,
     and 20 whose allowed values are stated in prose where the schema has no enum.
     """
-    instruction = TOOL_DECISION.contract.role("instruction")
+    instruction = TOOL_DECISION.contract.role_name("instruction")
     gaps: list[cat.Gap] = []
     for raw in iter_json_array_file(source):
         turns = {turn["role"]: turn["content"] for turn in raw["messages"]}

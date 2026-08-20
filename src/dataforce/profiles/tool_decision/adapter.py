@@ -63,7 +63,7 @@ def catalog_of(
                 for entry in raw.get(TOOLS_KEY) or []
             )
         )
-    instruction = contract.role("instruction")
+    instruction = contract.role_name("instruction")
     rendered = next(
         (
             part.text
@@ -145,6 +145,6 @@ def adapt(
         producer=producer,
         content=list(parts),
         answer_space=answer_space_for(catalog),
-        label=contract.label_of(raw),
+        label=contract.read_label(raw),
         meta={**unowned, **(raw.get("meta") or {})},
     )

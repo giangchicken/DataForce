@@ -20,7 +20,7 @@ from dataforce.profiles.tool_decision.catalog import Catalog, Gap, Tool
 from dataforce.profiles.tool_decision.checks import validity_checks
 from dataforce.profiles.tool_decision.export import export
 from dataforce.profiles.tool_decision.profile import TOOL_DECISION, ToolDecisionProfile
-from dataforce.profiles.tool_decision.source import SourceContract
+from dataforce.profiles.tool_decision.source import SourceContract, read_source_contract
 
 __all__ = [
     "ANSWER_SCHEMA",
@@ -32,6 +32,7 @@ __all__ = [
     "Tool",
     "ToolDecisionProfile",
     "adapt",
+    "read_source_contract",
     "answer_space_for",
     "catalog_fingerprint",
     "catalog_names",

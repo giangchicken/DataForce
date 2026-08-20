@@ -80,7 +80,7 @@ def validity_checks(
     The ceiling is read once here rather than once per record, so an undeclared threshold
     fails when a stage builds its checks and not on the first row of 21,172.
     """
-    restating_role = contract.role(contract.label_restated_in)
+    restating_role = contract.restating_role
     ceiling = max_answer_cardinality(params=params)
 
     def label_assistant_mismatch(record: Record) -> bool:

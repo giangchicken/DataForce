@@ -15,11 +15,8 @@ from typing import Any
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import adapter, answers, checks
 from dataforce.profiles.tool_decision import catalog as catalog_format
-
-# By its module path, not through the package: `__init__` re-exports the function under
-# the same name as its module, so `export` here would be the function.
 from dataforce.profiles.tool_decision.export import export as export_example
-from dataforce.profiles.tool_decision.source import TOOLS_KEY, SourceContract
+from dataforce.profiles.tool_decision.source import TOOLS_KEY, read_source_contract
 from dataforce.shared import manifest, prompts
 from dataforce.shared.record import Part, Record, UIControl
 
@@ -49,7 +46,7 @@ class ToolDecisionProfile:
         self.version = declared.version
         self.modality: str = declared.require("modality")
         self.question_prompt: str = declared.require("prompts")["question"]
-        self.contract = SourceContract.of(declared)
+        self.contract = read_source_contract(declared)
         self.answer_schema = answers.ANSWER_SCHEMA
 
     def adapt(self, raw: Any, parts: list[Part]) -> Record:
