@@ -12,7 +12,7 @@ from pathlib import Path
 
 from conftest import SOURCE_ROOT, parsed_sources
 
-GENERIC_MODULES = frozenset({"__init__", "base", "registry", "conformance"})
+GENERIC_MODULES = frozenset({"__init__", "base", "registry"})
 GUARDED_PACKAGES = ("pipeline", "shared")
 
 

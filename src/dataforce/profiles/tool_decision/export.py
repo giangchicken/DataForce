@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from dataforce.shared.errors import ConformanceError
+from dataforce.shared.errors import InvariantError
 from dataforce.shared.record import Record, TextPart
 
 __all__ = ["export"]
@@ -30,7 +30,7 @@ def export(record: Record) -> dict[str, Any]:
     ]
     meta = {**record.meta, "label": label}
     if json.loads(assistant) != meta["label"]:
-        raise ConformanceError(
+        raise InvariantError(
             f"record {record.rid}: the assistant message and meta.label disagree "
             f"on export -- {assistant} against {meta['label']!r}"
         )

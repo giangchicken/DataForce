@@ -21,7 +21,7 @@ from dataforce.shared.errors import ConfigError
 
 CONFIG = REPO_ROOT / manifest.CONFIG
 DECLARED = ("name", "version", "modality")
-GENERIC = frozenset({"__init__", "base", "registry", "conformance"})
+GENERIC = frozenset({"__init__", "base", "registry"})
 
 
 def concrete_modules() -> list[Path]:

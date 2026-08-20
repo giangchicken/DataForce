@@ -66,7 +66,7 @@ def _register_implementations() -> None:
     """The composition root: the one place a concrete modality or profile is named.
 
     No module under `pipeline/` or `shared/` may import one, so this is where both
-    axes arrive -- and registering the profile is what runs the conformance suite.
+    axes arrive. Registration resolves a name and checks nothing else.
     """
     modality_registry.register(TEXT)
     profile_registry.register(TOOL_DECISION)

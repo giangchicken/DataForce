@@ -1,5 +1,10 @@
 """δ and consensus: the two pieces every disagreement statistic is written on.
 
+This is where `tool_decision` proves rules 1, 2 and 3 of the core spec's § *Rules a
+profile must satisfy*, which no shared code checks: δ is a metric, `consensus` is
+deterministic and honours unanimity, and an answer survives a JSON round trip.
+Rules 4 and 5 are in `test_tool_decision_adapter.py` and `test_tool_decision.py`.
+
 `delta(∅, ∅) = 0` gets its own tests because it is load-bearing on 35.4% of this
 corpus, and because the two natural wrong answers -- raising on `0/0`, or calling
 two empty answers maximally distant -- both fail silently as a plausible number.
@@ -7,6 +12,7 @@ two empty answers maximally distant -- both fail silently as a plausible number.
 
 from __future__ import annotations
 
+import json
 import math
 import random
 
@@ -104,3 +110,24 @@ def test_consensus_drops_a_tool_only_one_juror_saw() -> None:
 
 def test_consensus_is_sorted_so_two_runs_agree() -> None:
     assert consensus([["c", "a", "b"]] * 3) == ["a", "b", "c"]
+
+
+def test_an_answer_survives_a_json_round_trip() -> None:
+    """Rule 3. Every artifact is JSONL, so an answer that comes back as something
+    else -- a set, a tuple -- makes every distance computed after it wrong, and
+    wrong one stage later rather than here."""
+    for answer in random_answers(seed=20260820, count=50):
+        restored = json.loads(json.dumps(answer))
+
+        assert restored == answer
+        assert delta(restored, answer) == 0.0
+
+
+def test_consensus_returns_the_unanimous_answer_for_every_sampled_answer() -> None:
+    """Rule 2's unanimity clause, over sampled answers rather than two chosen ones:
+    three identical votes come back δ-0 from the vote, the empty answer included."""
+    for answer in random_answers(seed=20260820, count=50):
+        agreed = consensus([answer] * 3)
+
+        assert agreed is not None
+        assert delta(agreed, answer) == 0.0

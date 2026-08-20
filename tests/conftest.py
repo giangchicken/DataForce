@@ -1,8 +1,10 @@
 """Fixtures every test directory shares: where the repo is, and stand-in contracts.
 
-The fakes here are deliberately small but honest -- the set-valued profile is a
-real Jaccard distance with a real strict-majority consensus, because a fake that
-cheats the conformance suite proves nothing about the suite.
+The fakes here are shape-complete rather than clever: every member does the least it
+can honestly do, because what the tests using them assert is that they satisfy the
+protocol and resolve by name. `SetProfile`'s Jaccard distance and strict-majority
+consensus are real but nothing calls either now -- they were what the deleted
+conformance suite exercised.
 """
 
 from __future__ import annotations
@@ -144,32 +146,6 @@ class SetProfile:
             "content": [part.model_dump() for part in record.content],
             "tools": record.label,
         }
-
-
-class NaNProfile(SetProfile):
-    """The failure the suite exists for: 0/0 on the empty answer."""
-
-    name = "fake_nan"
-
-    def delta(self, a: Answer, b: Answer) -> float:
-        left, right = set(a), set(b)
-        union = left | right
-        if not union:
-            return float("nan")
-        return 1.0 - len(left & right) / len(union)
-
-
-class WobblyConsensusProfile(SetProfile):
-    """Same input, different answer. Cohesion computed from this means nothing."""
-
-    name = "fake_wobbly"
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def consensus(self, answers: list[Answer]) -> Answer | None:
-        self.calls += 1
-        return ["SendMail"] if self.calls % 2 else ["Search"]
 
 
 class FreeTextProfile:

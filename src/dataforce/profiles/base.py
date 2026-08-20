@@ -38,10 +38,12 @@ class Profile(Versioned, Protocol):
         ...
 
     def delta(self, a: Answer, b: Answer) -> float:
-        """Distance between two answers. A metric, checked at registration.
+        """Distance between two answers. A metric -- rule 1, proved by the profile.
 
         `delta(a, a) == 0`, symmetric, in `[0, 1]`, never NaN -- including on the
-        empty answer, which for some corpora is a third of the records.
+        empty answer, which for some corpora is a third of the records. Nothing
+        here checks it: see the core spec's § *Rules a profile must satisfy* for
+        why, and for what a profile that breaks it costs.
         """
         ...
 
@@ -50,9 +52,9 @@ class Profile(Versioned, Protocol):
 
         A profile with no defensible consensus -- free-text generation is the
         honest example -- returns None for every input, including unanimous input.
-        The conformance suite reads that as the declaration it is, and the profile
-        is recorded as barred from the optional consensus tier. Triage still works
-        on such a profile: only proposing an answer is unavailable.
+        That is a declaration rather than a failure of rule 2: it bars the profile
+        from the optional consensus tier and nothing else. Triage still works on
+        such a profile, because triage needs only `delta`.
         """
         ...
 

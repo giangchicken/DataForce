@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from conftest import FreeTextProfile, NaNProfile, SetProfile, WobblyConsensusProfile
+from conftest import FreeTextProfile, SetProfile
 
+from dataforce.cli import _register_implementations
 from dataforce.modalities import registry as modalities
 from dataforce.profiles import registry as profiles
-from dataforce.shared.errors import ConfigError, ConformanceError
+from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import stamp
 
 
@@ -45,29 +46,50 @@ def test_something_that_is_not_a_modality_is_refused_with_the_member_list() -> N
         modalities.register(NotOne())  # type: ignore[arg-type]
 
 
-def test_a_profile_is_conformance_checked_at_registration() -> None:
-    report = profiles.register(SetProfile())
-    assert report.ok
-    assert not report.barred_from_consensus_tier
-    assert profiles.report_for("fake_tools") is report
+def test_a_registered_profile_resolves_by_name() -> None:
+    profile = SetProfile()
+    profiles.register(profile)
+
+    assert profiles.get("fake_tools") is profile
+    assert "fake_tools" in profiles.names()
 
 
-def test_a_profile_whose_delta_is_not_a_metric_never_becomes_selectable() -> None:
-    with pytest.raises(ConformanceError, match="delta_is_a_metric"):
-        profiles.register(NaNProfile())
-    assert "fake_nan" not in profiles.names()
+def test_something_that_is_not_a_profile_is_refused_with_the_member_list() -> None:
+    """The only thing registration checks. The five profile rules are the author's."""
+
+    class NotOne:
+        name = "not_one"
+        version = "1"
+
+    with pytest.raises(ConfigError, match="answer_schema"):
+        profiles.register(NotOne())  # type: ignore[arg-type]
 
 
-def test_a_profile_whose_consensus_wobbles_is_rejected() -> None:
-    with pytest.raises(ConformanceError, match="not deterministic"):
-        profiles.register(WobblyConsensusProfile())
+def test_registering_a_second_implementation_of_one_profile_name_is_refused() -> None:
+    profiles.register(SetProfile())
+    with pytest.raises(ConfigError, match="already registered"):
+        profiles.register(SetProfile())
 
 
-def test_a_profile_with_no_defensible_consensus_is_supported_and_recorded() -> None:
-    report = profiles.register(FreeTextProfile())
-    assert report.ok
-    assert report.barred_from_consensus_tier
+def test_a_profile_with_no_defensible_consensus_is_still_selectable() -> None:
+    """Returning None from `consensus` bars the optional tier, not the profile."""
+    profiles.register(FreeTextProfile())
+
     assert profiles.get("fake_free_text").name == "fake_free_text"
+
+
+def test_every_profile_the_composition_root_registers_has_its_modality() -> None:
+    """A profile declaring a modality nobody registered is a run that cannot start.
+
+    Folded in from `tests/conformance/test_registered_profiles.py`: the composition
+    root is what a run resolves through, so that is what this registers from.
+    """
+    _register_implementations()
+
+    assert profiles.names(), "the composition root registered no profile"
+    for name in profiles.names():
+        declared = profiles.get(name).modality
+        assert modalities.get(declared).name == declared
 
 
 def test_a_profile_and_modality_that_disagree_hard_stop() -> None:

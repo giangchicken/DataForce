@@ -1,6 +1,6 @@
 """Every error DataForce raises, so a caller can catch ours without catching bugs."""
 
-__all__ = ["ConfigError", "ConformanceError", "DataForceError"]
+__all__ = ["ConfigError", "DataForceError", "InvariantError"]
 
 
 class DataForceError(Exception):
@@ -16,9 +16,11 @@ class ConfigError(DataForceError):
     """
 
 
-class ConformanceError(DataForceError):
-    """A profile does not satisfy the conformance suite, and so cannot be selected.
+class InvariantError(DataForceError):
+    """Something the pipeline asserts about its own output does not hold.
 
-    Raised at registration rather than at the jury stage, which is the difference
-    between a failing test and a hundred-million-token run that means nothing.
+    Raised where the pipeline can still notice, rather than reported downstream:
+    `training_example` raises it when the exported example states a different
+    answer from the one the record carries, which is invariant 4. The alternative
+    is a release that trains on the wrong labels and says nothing.
     """

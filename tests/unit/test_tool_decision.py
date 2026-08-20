@@ -1,8 +1,8 @@
-"""`tool_decision` against the conformance suite, and its four validity checks.
+"""`tool_decision`'s four validity checks, its export, its group key, its controls.
 
-The suite is the gate this profile has to pass before any stage will accept it, so
-it is run here through the real registry rather than called directly: a profile that
-only passes when invoked by its own test is not registered.
+Rules 4 and 5 of § *Rules a profile must satisfy* are proved here -- `adapt`
+preserving what it does not own is in `test_tool_decision_adapter.py`, and `export`
+reproducing the record's answer is below. Rules 1 to 3 are in `test_answers.py`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from agent_toolkit.file_utils import read_yaml
 
 from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
-from dataforce.profiles import conformance
 from dataforce.profiles import registry as profile_registry
 from dataforce.profiles.tool_decision import TOOL_DECISION, adapter, checks
 from dataforce.shared.errors import ConfigError
@@ -72,36 +71,7 @@ def check() -> dict[str, Any]:
     return checks.validity_checks(TOOL_DECISION.contract, params=PARAMS)
 
 
-# --- the suite ---------------------------------------------------------------
-
-
-def test_the_profile_registers_and_the_suite_passes() -> None:
-    report = profile_registry.register(TOOL_DECISION)
-
-    assert report.ok, report.failures
-    assert not report.barred_from_consensus_tier
-    assert {check.name for check in report.checks} == {
-        "delta_is_a_metric",
-        "answers_survive_an_artifact",
-        "consensus_is_deterministic_and_agrees_on_unanimity",
-    }
-
-
-def test_all_five_checks_pass_against_a_real_sample() -> None:
-    """Including the two that need a raw item: adapt preserves, export reproduces."""
-    raw = raw_item(label=["Lookup00_0a", "Lookup01_1a"])
-
-    report = conformance.run_with_sample(TOOL_DECISION, raw, TEXT.load(raw))
-
-    assert report.ok, report.failures
-    assert len(report.checks) == 5
-
-
-def test_the_empty_answer_is_among_the_answers_the_suite_tries() -> None:
-    """The case that inverts the signal on a third of this corpus if δ gets it wrong."""
-    has_empty, empty = conformance.empty_answer(TOOL_DECISION.answer_schema)
-
-    assert (has_empty, empty) == (True, [])
+# --- registration ------------------------------------------------------------
 
 
 def test_the_profile_composes_with_the_text_modality() -> None:
@@ -109,14 +79,6 @@ def test_the_profile_composes_with_the_text_modality() -> None:
     profile_registry.register(TOOL_DECISION)
 
     assert profile_registry.get("tool_decision", modality="text") is TOOL_DECISION
-
-
-def test_a_zero_label_record_passes_the_suite_too() -> None:
-    raw = raw_item(label=[])
-
-    report = conformance.run_with_sample(TOOL_DECISION, raw, TEXT.load(raw))
-
-    assert report.ok, report.failures
 
 
 # --- the four validity checks ------------------------------------------------

@@ -12,19 +12,19 @@
 |---|---|---:|---|
 | 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 | **built** |
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
-| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **in progress** — R1's four catalog conversions are renamed |
+| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **in progress** — R3 done, R1's four catalog conversions renamed |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **273 tests** (240 under `make check`, 33 marked `integration`), **49 source modules**, and `dvc.yaml` declaring **zero stages**. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, and the measurements every later gate is declared against. The first stage arrives in Phase 3.
+Today: **251 tests** (218 under `make check`, 33 marked `integration`), **48 source modules**, and `dvc.yaml` declaring **zero stages**. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, and the measurements every later gate is declared against. The first stage arrives in Phase 3.
 
 **Checking the built half, in five commands.** Each proves something a later phase depends on; none needs a network or a service except the third.
 
 | Command | What it proves |
 |---|---|
-| `make check` | ruff, `mypy --strict` on `src/`, and 240 tests |
+| `make check` | ruff, `mypy --strict` on `src/`, and 218 tests |
 | `uv run dataforce profile --profile tool_decision` | the profiler reads all 21,172 records, streaming, and reproduces every committed count |
 | `uv run pytest -q -m integration` | the corpus-wide claims: byte-identical catalog round trip, the four validity counts, the drift check |
 | `uv run pytest tests/unit/test_import_graph.py tests/unit/test_no_reimplementation.py` | invariants 16 and 17 — no concrete axis reaches `shared/` or `pipeline/`, and no toolkit function is re-implemented |
@@ -66,7 +66,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T6 | Guard tests | Import graph (no concrete axis reaches `shared/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
 | T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog.py`, `test_tool_decision_adapter.py`, `tests/integration/test_tool_decision_corpus.py` |
-| T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `delta` with `δ(∅,∅)=0` returned before the division, `consensus` as the strict-majority set, the four named validity checks, and an SFT export that states the answer twice and asserts the two equal | `test_delta.py`, `tests/conformance/test_tool_decision.py` — R3 moves it to `tests/unit/` |
+| T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `delta` with `δ(∅,∅)=0` returned before the division, `consensus` as the strict-majority set, the four named validity checks, and an SFT export that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
 | — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py`, `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
 
@@ -193,7 +193,7 @@ The resolution is to say which kind each module is, because the two kinds have o
 Outside the profile: `shared/schemas/` stays a package split by pipeline phase (14 modules → `base.py` plus five phase modules), so a stage imports its own phase and nothing else, and `schema_for(name)` still resolves all of them by name for the round-trip test that must iterate every artifact. `shared/manifest.py` and `shared/prompts.py` stay apart — a stage that wants a prompt has no business importing manifest loading. The eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
 
 **Acceptance criteria.**
-- `find src -name '*.py' | wc -l` reports 30, down from 49.
+- `find src -name '*.py' | wc -l` reports 30, down from 48.
 - Exactly three modules in the profile are imported by more than one step, and each is marked `DEFINITION` in its opening comment with the noun it defines.
 - Every step module names the stages it serves in its opening comment, and is imported by nothing but the profile object.
 - No module is named for a topic. A reader can predict the contents from the filename.
@@ -207,9 +207,11 @@ Outside the profile: `shared/schemas/` stays a package split by pipeline phase (
 
 ## R3 · Delete the conformance suite
 
+**Done.** 392 lines of `conformance.py` and 198 of `test_suite.py` are gone; `register()` is an isinstance check and a dict write. **273 tests → 251.** The 28 that went were all tests of the suite: 19 in `test_suite.py`, one running it over every registered profile, four in the profile's own module, four asserting it ran at registration. Six arrived: four for what registration still does, and two for the rules the suite was the only cover for — an answer surviving a JSON round trip, and `consensus` returning the unanimous answer over sampled answers rather than two chosen ones. No test of the profile itself was lost.
+
 **Goal.** `profiles/conformance.py` is gone, `register()` resolves a name and nothing else, and the five rules live in the spec.
 
-**Context.** The suite was built to make "generic" a checked claim, and 95 of its 392 lines were machinery for inventing sample answers out of an arbitrary JSON Schema — written for profiles that do not exist. The review decision is that a rule the author is told to follow is the author's responsibility. **What this costs, stated once:** nothing now fails when `answer_distance` stops being a metric, and the symptom is cohesion numbers that look fine and mean nothing. `tool_decision` keeps that guarantee because `tests/unit/test_delta.py` already proves the metric axioms over random pairs directly — what is lost is the guarantee for the *next* profile, which is why T32 names its absence as the trigger to rebuild the suite.
+**Context.** The suite was built to make "generic" a checked claim, and 95 of its 392 lines were machinery for inventing sample answers out of an arbitrary JSON Schema — written for profiles that do not exist. The review decision is that a rule the author is told to follow is the author's responsibility. **What this costs, stated once:** nothing now fails when `answer_distance` stops being a metric, and the symptom is cohesion numbers that look fine and mean nothing. `tool_decision` keeps that guarantee because `tests/unit/test_answers.py` already proves the metric axioms over random pairs directly — what is lost is the guarantee for the *next* profile, which is why T32 names its absence as the trigger to rebuild the suite.
 
 **Relevant files.** `src/dataforce/profiles/conformance.py`, `src/dataforce/profiles/registry.py`, `src/dataforce/profiles/base.py`, `src/dataforce/shared/errors.py`, `tests/conformance/`, `cli.py`.
 
@@ -225,7 +227,7 @@ Outside the profile: `shared/schemas/` stays a package split by pipeline phase (
 
 **Verify.** `make check && uv run pytest -q --collect-only | tail -1`
 
-**Out of scope.** Removing `tests/unit/test_delta.py`. It is now the only thing proving rule 1 for this profile, so it grows rather than shrinks: the metric axioms move into it from the deleted suite.
+**Out of scope.** Removing the profile's own answer tests. `tests/unit/test_answers.py` — `test_delta.py` until this task, renamed to the name the core spec already gave it — is now the only thing proving rules 1 to 3 for this profile, so it grew rather than shrank.
 
 ---
 
