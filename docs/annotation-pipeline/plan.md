@@ -13,19 +13,19 @@
 | 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 | **built** |
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
 | 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
-| 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | |
+| 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **253 tests** (220 under `make check`, 33 marked `integration`), **30 source modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, and the measurements every later gate is declared against. Phase 2E fixes the layering the first stage would otherwise be written against; the first stage arrives in Phase 3.
+Today: **264 tests** (231 under `make check`, 33 marked `integration`), **35 source modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; the first stage arrives in Phase 3.
 
 **Checking the built half, in four commands.** Each proves something a later phase depends on; none needs a network or a service except the third. A fifth, `uv run dvc repro`, is gone: with DVC no longer orchestrating there is no DAG to report on.
 
 | Command | What it proves |
 |---|---|
-| `make check` | ruff, `mypy --strict` on `src/`, and 220 tests |
+| `make check` | ruff, `mypy --strict` on `src/`, and 231 tests |
 | `uv run dataforce profile --profile tool_decision` | the profiler reads all 21,172 records, streaming, and reproduces every committed count |
 | `uv run pytest -q -m integration` | the corpus-wide claims: byte-identical catalog round trip, the four validity counts, the drift check |
 | `uv run pytest tests/unit/test_import_graph.py tests/unit/test_no_reimplementation.py` | invariants 16 and 17 — no concrete axis reaches `shared/` or `pipeline/`, and no toolkit function is re-implemented |
@@ -60,7 +60,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 
 | # | Task | What exists now | Proved by |
 |---|---|---|---|
-| T1 | Repo skeleton and toolchain | `make check` = ruff + `mypy --strict` + 220 tests. `uv`, `src/` layout, `dvc init`, `params.yaml`, `.gitignore` covering `data/raw/`. `cli.py` is the only module that configures a logging handler; everything else takes `get_logger(__name__)` | `tests/unit/test_repo_hygiene.py` |
+| T1 | Repo skeleton and toolchain | `make check` = ruff + `mypy --strict` + 231 tests. `uv`, `src/` layout, `dvc init`, `params.yaml`, `.gitignore` covering `data/raw/`. `cli.py` is the only module that configures a logging handler; everything else takes `get_logger(__name__)` | `tests/unit/test_repo_hygiene.py` |
 | T2 | Canonical record and artifact schemas | Typed `Part` (`text \| image \| audio \| video`), `Record`, and `rid` from the content parts' digests — each part contributing `type:role:digest`, so identity is order-independent and modality-independent. One pandera schema per artifact. **R2 reduced 14 schema modules to 6: `base.py` plus one per pipeline phase** | `test_record.py`, `test_artifact_schemas.py` |
 | T3 | Gate runner | A gate is a named predicate over a stage's inputs and outputs with thresholds from `config/gates.yaml`. A failure writes `GATE_FAILED.json` carrying the assertion, observed, expected and up to 100 offending `rid`s, then exits non-zero. No numeric threshold in `runner.py` | `test_gate_runner.py` |
 | T4 | The two protocols and their registries | `Modality` with four members; `Profile` with twelve protocol attributes — the nine of requirement 2 plus `name`, `version`, `modality`. Both member sets are pinned as literals, so adding a member fails a test. A profile whose declared modality differs from `--modality` is a hard stop. **R1 renamed ten of them** | `test_protocols.py`, `test_registries.py` |
@@ -70,7 +70,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_tool_schema.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
 | T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `answer_distance` with `δ(∅,∅)=0` returned before the division, `vote_consensus` as the strict-majority set, the four named validity checks, and a `training_example` that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
-| — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py` — both move to `declared/` in E2 — `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
+| — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py` — **E2 moved both to `declared/`, leaving the `Manifest` type behind in `shared/`** — `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
 
 ## The measurements later tasks are declared against
 
@@ -196,7 +196,7 @@ The resolution is to say which kind each module is, because the two kinds have o
 
 `validity_checks` gets no module of its own: it serves stage 1 and nothing else, so it sits beside the stage-0 code that produces what it checks. That is the review instruction — *"the checks.py if only use for 2, do not split to file"* — as a general rule rather than one exception.
 
-Outside the profile: `shared/schemas/` stays a package split by pipeline phase (14 modules → `base.py` plus one module per pipeline phase, of which there are four), so a stage imports its own phase and nothing else, and `schema_for(name)` still resolves all of them by name for the round-trip test that must iterate every artifact. `shared/manifest.py` and `shared/prompts.py` stay apart — a caller that wants a prompt has no business importing manifest loading. (E2 moves both into `declared/`; the reason they stay two modules is unchanged.) The eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
+Outside the profile: `shared/schemas/` stays a package split by pipeline phase (14 modules → `base.py` plus one module per pipeline phase, of which there are four), so a stage imports its own phase and nothing else, and `schema_for(name)` still resolves all of them by name for the round-trip test that must iterate every artifact. `shared/manifest.py` and `shared/prompts.py` stay apart — a caller that wants a prompt has no business importing manifest loading. (E2 moved both into `declared/`; the reason they stay two modules is unchanged.) The eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
 
 **Done.** **48 modules → 30.** The profile's nine became seven, `shared/schemas/`'s fourteen became six, and the eight empty `pipeline/**/__init__.py` are gone until a stage needs them.
 
@@ -259,7 +259,11 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 
 **What is actually wrong, in five places.** `shared/manifest.py:27` `Path("config")`; `shared/prompts.py:29` `Path("config/prompts")`; `shared/gates/runner.py:40` `Path("config/gates.yaml")` plus two files written by `check()`; `build_record.py:57` `Path("params.yaml")`; `measure_corpus.py:39` reads the corpus and reads and writes `metrics/corpus_profile.json`.
 
-**E1–E4 change no behaviour.** Each is a move or an injection and the same assertions pass. E5 adds two guards, E6 adds a surface. Counts to hold: **253 tests** and **30 source modules** through E5.
+**E1–E4 change no behaviour.** Each is a move or an injection and the same assertions pass. E5 adds two guards, E6 adds a surface.
+
+**Done, in five commits rather than six.** E2 and E3 landed together: making `root` a required parameter is what breaks `TEXT = TextModality(read_manifest(...))`, because the import-time call has no root to pass, so splitting them would have meant writing `Path("config")` inline at both singleton sites and deleting it one commit later. **253 tests → 264**, all of them added rather than changed: one in E1, one in E4, three in E5, six in E6. **30 source modules → 35** — one `Registry` replacing two, three in `declared/`, three in `api/`. `metrics/corpus_profile.json` is byte-identical after every one of the five, with zero measurements moved.
+
+Two things the source documents did not account for, both found in the code and recorded in the commits that fixed them. `Manifest` had to stay in `shared/` while only its reader moved, because invariant 4 forbids the engine importing `declared/` and three engine modules need the type; this is the one place R2's "a definition owns every conversion of its noun" and the layering rule disagree, and the layering won. And `ask_annotator.question_text` was a **sixth** I/O site, missed by the spec's table of five because it was indirect — `prompts.render(version, ...)` read `config/prompts` from inside the engine — which is why `prompts.render` is deleted rather than renamed to `fill_prompt`: once a profile is handed its template, nothing reads a prompt by version and then fills it.
 
 | # | Task | Blocked by |
 |---|---|---|
@@ -271,6 +275,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 | E6 | `api/` — the published surface, and `cli.py` becomes a shell | E5 |
 
 ## E1 · One `Registry`, no module-level registry state
+
+**Done.** `0ff3735`. Both 40-line axis registries collapse into one `Registry` class holding instance state for both, and `tests/conftest.py` loses the autouse `_isolated_registries` fixture — a deletion rather than a rewrite, since there is no longer global state to leak. Two explicit methods rather than one `register(impl)`: dispatching on isinstance would have to guess which axis a bad object *meant* to be, and a class missing `display_config` would get "neither a Modality nor a Profile" instead of the member list it lacks. **253 tests → 254**, the one being two registries in one process holding different implementations on both axes.
 
 **Goal.** Two `Registry` objects can hold different profiles in one process, and no registration leaks between tests without a fixture to contain it.
 
@@ -295,6 +301,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 
 ## E2 · `declared/` — the only package that reads `config/`
 
+**Done, with E3, as `8a0d87a`.** See E3 below — the two are one change.
+
 **Goal.** One package reads the `config/` directory and turns it into objects, and every path it takes is a required parameter.
 
 **Context.** `manifest.py` and `prompts.py` sit in `shared/`, which is the engine, and both default to a relative path. `thresholds()` lives inside the gate engine for the same reason. Moving all three into `declared/` is what lets the no-I/O guard in E5 be written without an exemption list. This also closes a debt R1 recorded and deliberately left: `prompts.load` shared a name with stage 0 and `prompts.render` was a bare operation, both exempted because they sat in `shared/` where no contract was involved. They are moving anyway.
@@ -318,6 +326,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 
 ## E3 · No import-time singleton; the CLI is the composition root
 
+**Done, with E2, as `8a0d87a`.** The criterion the pair exists for: `cd /tmp && python -c "import dataforce.profiles.tool_decision"` succeeds, where the deleted default gave `ConfigError - no manifest at config/modalities/text.yaml; modalities declared here: []` from the same directory. `declared/` holds `manifest.py`, `prompts.py` and `thresholds.py`, every path a required keyword argument, and `CONFIG`, `PROMPTS` and `GATES_CONFIG` are deleted rather than defaulted. Eight test modules moved one import each to `conftest`, which builds both axes once through the same composition root every caller uses. **254 tests, unchanged.**
+
 **Goal.** Importing a concrete modality or profile reads no file, and works from any working directory.
 
 **Context.** `TEXT = TextModality(manifest.load("modalities", MANIFEST_NAME))` and `TOOL_DECISION = ToolDecisionProfile(manifest.load("profiles", MANIFEST_NAME))` run at import. This is the single fact that makes `api/` impossible today: a web handler importing `dataforce` fails on a relative path. Eight test files import a singleton, and they are the whole blast radius.
@@ -339,6 +349,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 **Out of scope.** Removing `MANIFEST_NAME`, and any change to what a manifest contains.
 
 ## E4 · The last three I/O sites, and gates that write nothing
+
+**Done.** `11ecaf8`. No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` imports `agent_toolkit.file_utils`, calls `open()`, or holds a `Path(...)` literal; the four surviving mentions of `params.yaml` there are `#` comments. `corpus_measurements` also needed `size`, because the measurement carries `source.bytes` and that cannot be recovered from the records. The ceiling became a `ToolDecisionProfile` constructor argument, since `Profile.validity_checks()` takes no parameters — so an undeclared ceiling now fails while the profile is being built, earlier than the property claimed. **254 tests → 255.**
 
 **Goal.** No engine module opens a file, and a gate raises with its verdict instead of writing one.
 
@@ -363,6 +375,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 
 ## E5 · The two guards that keep the engine shut
 
+**Done.** `ade6857`. Both were run against `0ff3735` — after E1, before any of this phase's moves — and both failed there. The AST guard scanned 27 engine modules and named exactly the five sites the spec's table listed, with lines; the subprocess guard raised `ConfigError` on `config/modalities/text.yaml`. Docstrings are exempt, which is a decision and not an oversight: three engine docstrings name where the policy lives, and the alternative was rewriting good prose to dodge a guard. The exemption is itself proved on a synthetic docstring, and `conftest.docstring_ids` is now shared with `test_prompts.py` rather than written twice. **255 tests → 258**, no source file changed.
+
 **Goal.** The layering is asserted by a test rather than remembered, and both guards are shown failing on the tree they were written against.
 
 **Context.** R1 proved its two naming guards against `HEAD` before trusting them, and this is the same move: a guard that has never failed is a guard nobody has checked. There were five I/O sites and one import-time construction to fail on.
@@ -383,6 +397,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 **Out of scope.** Guarding `cli.py`, `api/` or `declared/` — all three are supposed to do I/O.
 
 ## E6 · `api/` — the published surface, and `cli.py` becomes a shell
+
+**Done.** `246296d`. `cli.py` is 108 lines importing `argparse`, `json`, `logging`, `sys`, `Path`, `api` and `DataForceError` — no `read_yaml`, no `write_json`, no `open`, and no call into either axis except through `api/`. **258 tests → 264.** Three deviations, each for a reason found in the code. `registry=None` is dropped from `open_engine`: as specified it could not work, since a second call with the same registry builds new axis objects with the same names and registration correctly refuses them; `Engine.registry` exposes the registry instead. `api.profile_corpus`, not `api.measure_corpus`, because the profile package already has a module of that name and `api/artifacts.py` imports it. And `Engine.policy` holds paths that `run_manifest` digests, because recording digests at read time puts `file_digest` in `engine.py` and `Engine` in `artifacts.py` — a circular import for a difference that shows only if a policy file is edited mid-run. `open_engine`'s `modality=` is optional: a profile declares which one it composes with, so naming a different one is the hard stop and naming none takes the profile at its word, which is what `dataforce profile` needs.
 
 **Goal.** Every caller enters through `api/`, and `cli.py` holds argument parsing, logging setup and exit codes and nothing else.
 

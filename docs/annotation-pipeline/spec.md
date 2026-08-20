@@ -262,16 +262,21 @@ dataforce/
 │   ├── api/                     ← the published surface. Every caller enters here,
 │   │   │                          cli.py included. Sequences the stages in-process,
 │   │   │                          persists artifacts, writes a gate's verdict
-│   │   ├── engine.py            a resolved (modality, profile, policy) triple
-│   │   └── artifacts.py         the only place an artifact is read or written
+│   │   ├── __init__.py          open_engine · build_records · profile_corpus
+│   │   ├── engine.py            Engine — a resolved (modality, profile, policy)
+│   │   └── artifacts.py         the only place an artifact is read or written,
+│   │                            and where a run manifest is built
 │   │
 │   ├── declared/                ← the only package that reads config/
-│   │   ├── manifest.py          what an implementation is, from config/<axis>/
+│   │   ├── manifest.py          reads one from config/<axis>/<name>.yaml
 │   │   ├── prompts.py           prompt templates, by prompt_version
-│   │   └── thresholds.py        what a gate compares against, from gates.yaml
+│   │   └── thresholds.py        what a gate compares against, and what one
+│   │                            source is declared to hold: gates.yaml, params
 │   │
 │   ├── shared/                  engine — no I/O, no working-directory assumption
 │   │   ├── record.py            canonical record + typed content parts
+│   │   ├── manifest.py          what an implementation *is*, once read. The type
+│   │   │                        both axes are handed, so it cannot live above them
 │   │   ├── schemas/             one module per pipeline phase, so a stage imports
 │   │   │   ├── base.py          the columns every artifact carries
 │   │   │   ├── data_quality.py  loaded · usable · pii_findings · deduped
@@ -574,7 +579,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 *And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become six, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
 
-The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
+The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `shared/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
 
 *The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 
