@@ -1,4 +1,4 @@
-"""What the source is shaped like and what its own field names mean, read from the manifest.
+"""DEFINITION · a source contract: what this corpus calls things, from its manifest.
 
 Every corpus-specific name the profile reads arrives through here, so no module spells
 one. That is the difference between reading a second source and adding a branch: a

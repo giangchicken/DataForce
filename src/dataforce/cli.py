@@ -18,7 +18,7 @@ from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
 from dataforce.profiles import registry as profile_registry
 from dataforce.profiles.tool_decision import TOOL_DECISION
-from dataforce.profiles.tool_decision.profiler import profile_corpus
+from dataforce.profiles.tool_decision.measure_corpus import profile_corpus
 
 # Which profile knows how to measure its own corpus. A profile is not required to:
 # the four validity counts and the group sizes are generic, everything else here is

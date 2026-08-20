@@ -1,4 +1,4 @@
-"""The catalog format, both directions, defined once.
+"""DEFINITION · a tool, and every conversion of one. Both directions, defined once.
 
 A tool is an OpenAI function object: a name, one verbatim `description` carrying all
 usage guidance, and a JSON Schema of parameters. That is the source of truth. The
@@ -9,7 +9,7 @@ knows how the two correspond.
 Both directions live here on purpose. The strings below are the format: putting them in
 a config file while a parser also needed them would be two sources of truth for one
 grammar, and the way to know a grammar is self-consistent is to render and read with
-one definition and assert the round trip. Which is what `tests/unit/test_catalog.py`
+one definition and assert the round trip. Which is what `tests/unit/test_tool_schema.py`
 does, over the real corpus: 21,172 catalogs, read then re-rendered, byte-identical.
 
 Ported from the corpus generator's `openai_to_catalog.py` and `catalog_to_openai.py`,
@@ -29,6 +29,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent_toolkit.string_utils import compute_hash
+
+from dataforce.shared.errors import ConfigError
+from dataforce.shared.record import Record
+
 __all__ = [
     "CATALOG_HEADER",
     "INSTRUCTION",
@@ -36,6 +41,8 @@ __all__ = [
     "Gap",
     "Tool",
     "build_system_prompt",
+    "catalog_fingerprint",
+    "catalog_names",
     "catalog_to_tools",
     "to_strict_openai",
     "tools_to_catalog",
@@ -447,3 +454,29 @@ def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
             for i, match in enumerate(found)
         )
     )
+
+
+# A catalog fingerprint, in hex characters. Long enough that two different catalogs
+# colliding is not a thing that happens to 21,172 records.
+_FINGERPRINT_LENGTH = 16
+
+
+def catalog_names(record: Record) -> list[str]:
+    """The catalog a record was built with, read back off its answer space."""
+    if record.answer_space is None:
+        raise ConfigError(
+            f"record {record.rid} carries no answer space; "
+            "it was not built by the tool_decision profile"
+        )
+    names: list[str] = record.answer_space["items"]["enum"]
+    return names
+
+
+def catalog_fingerprint(names: Sequence[str]) -> str:
+    """What makes two records the same scenario: the tools they were offered.
+
+    Order-sensitive, because the catalog is presented in order and two orderings are two
+    prompts. `source_index` is not this: it is unique per record, measured, and so gives
+    no leakage protection at all.
+    """
+    return compute_hash("|".join(names), "sha256")[:_FINGERPRINT_LENGTH]

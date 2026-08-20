@@ -1,4 +1,6 @@
-"""Measure the source file, and say which measurement moved since the last one.
+"""TOOL · `dataforce profile` -- measure the source file, and say what moved.
+
+Not a step: it is not in the flow at all, it reuses stage 0 to count things.
 
 The source changed four times in five weeks, and `label_assistant_mismatch` going
 from 48 to 0 was discovered by accident. Every count the profile spec quotes
@@ -22,8 +24,8 @@ from agent_toolkit.file_utils import iter_json_array_file, read_yaml, write_json
 from agent_toolkit.string_utils import compute_hash
 
 from dataforce.modalities.base import Modality
-from dataforce.profiles.tool_decision.adapter import PROVENANCE_KEY, catalog_names
-from dataforce.profiles.tool_decision.profile import ToolDecisionProfile
+from dataforce.profiles.tool_decision import PROVENANCE_KEY, ToolDecisionProfile
+from dataforce.profiles.tool_decision.tool_schema import catalog_names
 from dataforce.shared.record import Record, TextPart
 
 __all__ = [

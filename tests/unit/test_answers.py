@@ -3,7 +3,7 @@
 This is where `tool_decision` proves rules 1, 2 and 3 of the core spec's § *Rules a
 profile must satisfy*, which no shared code checks: δ is a metric, `vote_consensus` is
 deterministic and honours unanimity, and an answer survives a JSON round trip.
-Rules 4 and 5 are in `test_tool_decision_adapter.py` and `test_tool_decision.py`.
+Rules 4 and 5 are in `test_build_record.py` and `test_tool_decision.py`.
 
 `answer_distance(∅, ∅) = 0` gets its own tests because it is load-bearing on 35.4% of this
 corpus, and because the two natural wrong answers -- raising on `0/0`, or calling
@@ -18,7 +18,7 @@ import random
 
 import pytest
 
-from dataforce.profiles.tool_decision.answers import answer_distance, vote_consensus
+from dataforce.profiles.tool_decision.answer import answer_distance, vote_consensus
 
 TOOLS = [f"Lookup{i:02d}_{i:x}a" for i in range(8)]
 

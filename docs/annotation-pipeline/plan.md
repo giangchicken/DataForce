@@ -12,7 +12,7 @@
 |---|---|---:|---|
 | 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 | **built** |
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
-| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **in progress** — R3 and R1 done, R2 next |
+| 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
@@ -59,13 +59,13 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | # | Task | What exists now | Proved by |
 |---|---|---|---|
 | T1 | Repo skeleton and toolchain | `make check` = ruff + `mypy --strict` + 240 tests. `uv`, `src/` layout, `dvc init`, `params.yaml`, `.gitignore` covering `data/raw/`. `cli.py` is the only module that configures a logging handler; everything else takes `get_logger(__name__)` | `tests/unit/test_repo_hygiene.py` |
-| T2 | Canonical record and artifact schemas | Typed `Part` (`text \| image \| audio \| video`), `Record`, and `rid` from the content parts' digests — each part contributing `type:role:digest`, so identity is order-independent and modality-independent. One pandera schema per artifact. **14 schema modules today; R2 reduces them to 6 split by pipeline phase** | `test_record.py`, `test_artifact_schemas.py` |
+| T2 | Canonical record and artifact schemas | Typed `Part` (`text \| image \| audio \| video`), `Record`, and `rid` from the content parts' digests — each part contributing `type:role:digest`, so identity is order-independent and modality-independent. One pandera schema per artifact. **R2 reduced 14 schema modules to 6: `base.py` plus one per pipeline phase** | `test_record.py`, `test_artifact_schemas.py` |
 | T3 | Gate runner | A gate is a named predicate over a stage's inputs and outputs with thresholds from `config/gates.yaml`. A failure writes `GATE_FAILED.json` carrying the assertion, observed, expected and up to 100 offending `rid`s, then exits non-zero. No numeric threshold in `runner.py` | `test_gate_runner.py` |
 | T4 | The two protocols and their registries | `Modality` with four members; `Profile` with twelve protocol attributes — the nine of requirement 2 plus `name`, `version`, `modality`. Both member sets are pinned as literals, so adding a member fails a test. A profile whose declared modality differs from `--modality` is a hard stop. **R1 renamed ten of them** | `test_protocols.py`, `test_registries.py` |
 | T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that T9 and **T32** each carry rule tests for their own profile | the spec section; T9's and T32's *Verify* lines |
 | T6 | Guard tests | Import graph (no concrete axis reaches `shared/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
-| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog.py`, `test_tool_decision_adapter.py`, `tests/integration/test_tool_decision_corpus.py` |
+| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_tool_schema.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
 | T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `answer_distance` with `δ(∅,∅)=0` returned before the division, `vote_consensus` as the strict-majority set, the four named validity checks, and a `training_example` that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
 | — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py`, `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
@@ -194,7 +194,19 @@ The resolution is to say which kind each module is, because the two kinds have o
 
 `validity_checks` gets no module of its own: it serves stage 1 and nothing else, so it sits beside the stage-0 code that produces what it checks. That is the review instruction — *"the checks.py if only use for 2, do not split to file"* — as a general rule rather than one exception.
 
-Outside the profile: `shared/schemas/` stays a package split by pipeline phase (14 modules → `base.py` plus five phase modules), so a stage imports its own phase and nothing else, and `schema_for(name)` still resolves all of them by name for the round-trip test that must iterate every artifact. `shared/manifest.py` and `shared/prompts.py` stay apart — a stage that wants a prompt has no business importing manifest loading. The eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
+Outside the profile: `shared/schemas/` stays a package split by pipeline phase (14 modules → `base.py` plus one module per pipeline phase, of which there are four), so a stage imports its own phase and nothing else, and `schema_for(name)` still resolves all of them by name for the round-trip test that must iterate every artifact. `shared/manifest.py` and `shared/prompts.py` stay apart — a stage that wants a prompt has no business importing manifest loading. The eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
+
+**Done.** **48 modules → 30.** The profile's nine became seven, `shared/schemas/`'s fourteen became six, and the eight empty `pipeline/**/__init__.py` are gone until a stage needs them.
+
+The three definitions are the three modules with more than one importer, and that is checked rather than claimed: `tool_schema` has four, `source_contract` three, `answer` two, and every other module in the package has one or none. Both step modules are imported by `__init__.py` and by nothing else. `measure_corpus` reads the front door the way `cli.py` does — which is the one thing this task added that the table above did not name: `PROVENANCE_KEY` is re-exported from `__init__.py`, because it is what the load stage stamps and a tool that fakes stage 0 has to spell it without importing a step.
+
+`profile.py` became `__init__.py` (77 lines), so the object *is* the index: every member is one line naming the module that does the work. The cost is one delegation per member — `question_text` and `answer_config` were 20 lines of behaviour on the class and are now two lines there and one file for stages 7–8. Actual sizes against the estimates: `tool_schema.py` 482 (~505), `build_record.py` 247 (~330), `measure_corpus.py` 288 (~280), `source_contract.py` 120, `answer.py` 110, `ask_annotator.py` 80.
+
+One split that reads oddly and is deliberate: `answer.py` writes the answer space and `tool_schema.catalog_names` reads it back, because what is read back out of it is a catalog. `answer_space` is about the answer; its inverse is about the tools.
+
+**No behavioural change, four ways.** 220 passing and 33 deselected under `make check`, 253 collected — every count identical to before. `mypy --strict` clean on 30 files. Integration 32 passed, 1 skipped. `dvc repro` up to date, and `metrics/corpus_profile.json` byte-identical after `dataforce profile` over all 21,172 records, with zero measurements moved.
+
+Two test modules were renamed with the source modules they test: `test_catalog.py` → `test_tool_schema.py` and `test_tool_decision_adapter.py` → `test_build_record.py`. `tests/unit/test_answers.py` keeps its name, because the core spec names that file. One error in the table above is corrected in place: `shared/schemas/` becomes `base.py` plus **four** phase modules, not five — there are four pipeline phases.
 
 **Acceptance criteria.**
 - `find src -name '*.py' | wc -l` reports 30, down from 48.
@@ -247,7 +259,7 @@ Outside the profile: `shared/schemas/` stays a package split by pipeline phase (
 
 **Context.** This is the first task that has to resolve a `modality × profile` pair and stamp it, so it is where `dataforce run --modality text --profile tool_decision` stops being a stub. No earlier task owned that command, which is why it lands here rather than in Phase 1: an entry point with nothing to run is not testable.
 
-**Blocked by.** R2 — no stage is written against the old names.
+**Blocked by.** Nothing — R2 is done, so the names and modules a stage would be written against are final.
 
 **Relevant files.** `src/dataforce/pipeline/data_quality/load.py`, `src/dataforce/cli.py`, `dvc.yaml`.
 

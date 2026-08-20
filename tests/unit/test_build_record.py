@@ -1,6 +1,6 @@
 """One raw item into one canonical record, from either shape.
 
-The format itself is tested in `test_catalog.py`. What is here is what
+The format itself is tested in `test_tool_schema.py`. What is here is what
 `build_record` decides:
 identity, provenance, the answer space, what it keeps, and that a record read from a
 `tools` array and one read from a rendered prompt come out the same.
@@ -15,9 +15,12 @@ from typing import Any
 import pytest
 
 from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION, adapter
-from dataforce.profiles.tool_decision import catalog as cat
-from dataforce.profiles.tool_decision.source import (
+from dataforce.profiles.tool_decision import (
+    TOOL_DECISION,
+    build_record,
+    tool_schema,
+)
+from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,
     SourceContract,
@@ -74,12 +77,12 @@ def canonical_records() -> list[dict[str, Any]]:
 
 
 def sourced(raw: dict[str, Any], **extra: Any) -> dict[str, Any]:
-    return {**raw, **extra, adapter.PROVENANCE_KEY: PROVENANCE}
+    return {**raw, **extra, build_record.PROVENANCE_KEY: PROVENANCE}
 
 
-def adapt_legacy(raw: dict[str, Any], **extra: Any) -> Any:
+def build_legacy(raw: dict[str, Any], **extra: Any) -> Any:
     item = sourced(raw, **extra)
-    return adapter.build_record(item, TEXT.content_parts(item), LEGACY)
+    return build_record.build_record(item, TEXT.content_parts(item), LEGACY)
 
 
 # --- the two shapes agree ------------------------------------------------------
@@ -89,21 +92,21 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = adapter.build_record(
+    record = build_record.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert adapter.catalog_names(record) == [
+    assert tool_schema.catalog_names(record) == [
         t["function"]["name"] for t in raw["tools"]
     ]
-    assert cat.CATALOG_HEADER not in raw["messages"][0]["content"]
+    assert tool_schema.CATALOG_HEADER not in raw["messages"][0]["content"]
 
 
 def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     """The conversion is lossless, which is what makes the legacy shape a way in."""
     canonical = canonical_records()[0]
     tools = [
-        cat.Tool(
+        tool_schema.Tool(
             name=entry["function"]["name"],
             description=entry["function"].get("description", ""),
             parameters=entry["function"].get("parameters", {}),
@@ -113,18 +116,18 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     as_legacy = {
         **canonical,
         "messages": [
-            {"role": "system", "content": cat.build_system_prompt(tools)},
+            {"role": "system", "content": tool_schema.build_system_prompt(tools)},
             *canonical["messages"][1:],
         ],
     }
     as_legacy.pop("tools")
 
-    from_canonical = adapter.build_record(
+    from_canonical = build_record.build_record(
         sourced(canonical),
         TEXT.content_parts(sourced(canonical)),
         contract_for(OPENAI_TOOLS),
     )
-    from_legacy = adapter.build_record(
+    from_legacy = build_record.build_record(
         sourced(as_legacy),
         TEXT.content_parts(sourced(as_legacy)),
         contract_for(LEGACY_SYSTEM_PROMPT),
@@ -140,11 +143,11 @@ def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
     raw = canonical_records()[0]
     item = sourced({**raw, "tools": []})
 
-    record = adapter.build_record(
+    record = build_record.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert adapter.catalog_names(record) == []
+    assert tool_schema.catalog_names(record) == []
 
 
 # --- identity -----------------------------------------------------------------
@@ -153,7 +156,7 @@ def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
 def test_rid_does_not_depend_on_position_in_the_file() -> None:
     raw = legacy_records()[0]
 
-    assert adapt_legacy(raw).rid == adapt_legacy(raw, idx=9999).rid
+    assert build_legacy(raw).rid == build_legacy(raw, idx=9999).rid
 
 
 def test_rid_changes_when_a_turn_changes() -> None:
@@ -163,8 +166,8 @@ def test_rid_changes_when_a_turn_changes() -> None:
     other = [*parts[:1], TextPart(role="user", text="một câu khác"), *parts[2:]]
 
     assert (
-        adapter.build_record(item, parts, LEGACY).rid
-        != adapter.build_record(item, other, LEGACY).rid
+        build_record.build_record(item, parts, LEGACY).rid
+        != build_record.build_record(item, other, LEGACY).rid
     )
 
 
@@ -172,44 +175,46 @@ def test_rid_changes_when_a_turn_changes() -> None:
 
 
 def test_the_answer_space_is_this_record_s_own_catalog() -> None:
-    record = adapt_legacy(legacy_records()[0])
-    expected = cat.catalog_to_tools(
+    record = build_legacy(legacy_records()[0])
+    expected = tool_schema.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     )
 
     assert record.answer_space is not None
     assert record.answer_space["items"]["enum"] == list(expected.names)
-    assert adapter.catalog_names(record) == record.answer_space["items"]["enum"]
+    assert tool_schema.catalog_names(record) == record.answer_space["items"]["enum"]
 
 
 def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
-    names = cat.catalog_to_tools(
+    names = tool_schema.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert adapter.catalog_fingerprint(names) == adapter.catalog_fingerprint(
+    assert tool_schema.catalog_fingerprint(names) == tool_schema.catalog_fingerprint(
         list(names)
     )
 
 
 def test_a_different_catalog_gets_a_different_fingerprint() -> None:
-    eight = cat.catalog_to_tools(
+    eight = tool_schema.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
-    twenty = cat.catalog_to_tools(
+    twenty = tool_schema.catalog_to_tools(
         (CATALOGS / "twenty_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert adapter.catalog_fingerprint(eight) != adapter.catalog_fingerprint(twenty)
+    assert tool_schema.catalog_fingerprint(eight) != tool_schema.catalog_fingerprint(
+        twenty
+    )
 
 
 def test_the_fingerprint_is_order_sensitive() -> None:
     """Two orderings of one tool set are two prompts, so they are two scenarios."""
-    names = cat.catalog_to_tools(
+    names = tool_schema.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert adapter.catalog_fingerprint(names) != adapter.catalog_fingerprint(
+    assert tool_schema.catalog_fingerprint(names) != tool_schema.catalog_fingerprint(
         names[::-1]
     )
 
@@ -220,7 +225,7 @@ def test_the_fingerprint_is_order_sensitive() -> None:
 @pytest.mark.parametrize("raw", legacy_records(), ids=lambda raw: str(raw["idx"]))
 def test_adapt_preserves_meta_verbatim(raw: dict[str, Any]) -> None:
     """All 22 observed key-sets, and every value in them, unchanged."""
-    record = adapt_legacy(raw)
+    record = build_legacy(raw)
 
     for key, value in raw["meta"].items():
         assert record.meta[key] == value
@@ -235,8 +240,8 @@ def test_the_fixtures_cover_every_observed_key_set_and_cardinality() -> None:
     assert {len(raw["meta"]["label"]) for raw in records} == {0, 1, 2, 3}
 
 
-def test_a_field_the_adapter_does_not_understand_survives_it() -> None:
-    record = adapt_legacy(legacy_records()[0], some_future_field="keep me")
+def test_a_field_the_builder_does_not_understand_survives_it() -> None:
+    record = build_legacy(legacy_records()[0], some_future_field="keep me")
 
     assert record.meta["some_future_field"] == "keep me"
     assert record.meta["idx"] == legacy_records()[0]["idx"]
@@ -247,7 +252,7 @@ def test_the_canonical_shape_keeps_its_tools_so_they_can_be_read() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = adapter.build_record(
+    record = build_record.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
@@ -257,7 +262,7 @@ def test_the_canonical_shape_keeps_its_tools_so_they_can_be_read() -> None:
 
 def test_a_legacy_record_has_no_catalog_to_re_render() -> None:
     """Its turns already carry one, so rendering a second would show it twice."""
-    assert TOOL_DECISION.readable_catalog(adapt_legacy(legacy_records()[0])) == ""
+    assert TOOL_DECISION.readable_catalog(build_legacy(legacy_records()[0])) == ""
 
 
 # --- provenance ---------------------------------------------------------------
@@ -267,22 +272,22 @@ def test_provenance_is_required_so_an_unsourced_record_cannot_be_built() -> None
     raw = legacy_records()[0]
 
     with pytest.raises(ConfigError, match="load stage"):
-        adapter.build_record(raw, TEXT.content_parts(sourced(raw)), LEGACY)
+        build_record.build_record(raw, TEXT.content_parts(sourced(raw)), LEGACY)
 
 
 def test_the_provenance_key_is_not_itself_kept_as_metadata() -> None:
-    record = adapt_legacy(legacy_records()[0])
+    record = build_legacy(legacy_records()[0])
 
-    assert adapter.PROVENANCE_KEY not in record.meta
+    assert build_record.PROVENANCE_KEY not in record.meta
     assert record.source == Source(**PROVENANCE["source"])
     assert record.producer == Producer(**PROVENANCE["producer"])
 
 
 def test_a_record_with_no_answer_space_is_named_rather_than_read_blindly() -> None:
-    record = adapt_legacy(legacy_records()[0])
+    record = build_legacy(legacy_records()[0])
 
-    with pytest.raises(ConfigError, match="not adapted"):
-        adapter.catalog_names(record.model_copy(update={"answer_space": None}))
+    with pytest.raises(ConfigError, match="not built"):
+        tool_schema.catalog_names(record.model_copy(update={"answer_space": None}))
 
 
 # --- the contract itself ------------------------------------------------------

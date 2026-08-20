@@ -1,7 +1,7 @@
 """`tool_decision`'s validity checks, training example, group key and controls.
 
 Rules 4 and 5 of § *Rules a profile must satisfy* are proved here -- `build_record`
-preserving what it does not own is in `test_tool_decision_adapter.py`, and
+preserving what it does not own is in `test_build_record.py`, and
 `training_example` reproducing the record's answer is below. Rules 1 to 3 are
 in `test_answers.py`.
 """
@@ -18,7 +18,7 @@ from agent_toolkit.file_utils import read_yaml
 from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
 from dataforce.profiles import registry as profile_registry
-from dataforce.profiles.tool_decision import TOOL_DECISION, adapter, checks
+from dataforce.profiles.tool_decision import TOOL_DECISION, build_record
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record
 
@@ -54,7 +54,7 @@ def raw_item(
             },
         ],
         "meta": {"label": label, "llm_model": "gemma-4-31B-it", "source_index": 1},
-        adapter.PROVENANCE_KEY: PROVENANCE,
+        build_record.PROVENANCE_KEY: PROVENANCE,
     }
 
 
@@ -69,7 +69,7 @@ PARAMS = FIXTURES.parents[2] / "params.yaml"
 @pytest.fixture
 def check() -> dict[str, Any]:
     """The four checks, bound to the profile's contract and the committed ceiling."""
-    return checks.validity_checks(TOOL_DECISION.contract, params=PARAMS)
+    return build_record.validity_checks(TOOL_DECISION.contract, params=PARAMS)
 
 
 # --- registration ------------------------------------------------------------
@@ -95,7 +95,7 @@ def test_validity_checks_are_the_four_names_params_declares_counts_for() -> None
     """The names are identifiers `params.yaml` keys on, so they are not free to drift."""
     built = TOOL_DECISION.validity_checks()
 
-    assert tuple(built) == checks.CHECK_NAMES
+    assert tuple(built) == build_record.CHECK_NAMES
     assert set(built) == set(read_yaml(PARAMS)["invalid_counts"])
 
 
@@ -168,7 +168,9 @@ def test_an_undeclared_ceiling_fails_when_the_checks_are_built(tmp_path: Path) -
     (tmp_path / "params.yaml").write_text("source: {}\n", encoding="utf-8")
 
     with pytest.raises(ConfigError, match="max_answer_cardinality"):
-        checks.validity_checks(TOOL_DECISION.contract, params=tmp_path / "params.yaml")
+        build_record.validity_checks(
+            TOOL_DECISION.contract, params=tmp_path / "params.yaml"
+        )
 
 
 # --- training example, group key, controls ------------------------------------

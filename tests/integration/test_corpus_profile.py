@@ -20,7 +20,7 @@ from agent_toolkit.file_utils import read_yaml
 from conftest import REPO_ROOT
 
 from dataforce.modalities.text import TEXT
-from dataforce.profiles.tool_decision import TOOL_DECISION, profiler
+from dataforce.profiles.tool_decision import TOOL_DECISION, measure_corpus
 
 pytestmark = pytest.mark.integration
 
@@ -52,7 +52,7 @@ def source_path() -> Path:
 
 @pytest.fixture(scope="module")
 def measured() -> dict[str, Any]:
-    return profiler.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
+    return measure_corpus.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
 
 
 def test_the_committed_baseline_matches_a_fresh_measurement(
@@ -63,7 +63,7 @@ def test_the_committed_baseline_matches_a_fresh_measurement(
         pytest.skip("no baseline committed yet; run `dataforce profile`")
 
     assert (
-        profiler.moved_measurements(
+        measure_corpus.moved_measurements(
             json.loads(BASELINE.read_text(encoding="utf-8")), measured
         )
         == []
@@ -76,7 +76,7 @@ def test_every_figure_is_stamped_with_the_digest_of_the_file_read(
     declared = read_yaml(REPO_ROOT / "params.yaml")["source"]
 
     assert measured["source"]["sha256"] == declared["sha256"]
-    assert measured["source"]["sha256"] == profiler.source_digest(source_path())
+    assert measured["source"]["sha256"] == measure_corpus.source_digest(source_path())
 
 
 def test_the_profiler_reproduces_the_counts_the_profile_spec_quotes(
@@ -187,16 +187,16 @@ def test_an_older_source_drifts_and_the_moved_count_is_named(
     if not BACKUP.exists():
         pytest.skip(f"{BACKUP.name} is not present in data/raw/")
 
-    before = profiler.corpus_measurements(BACKUP, TEXT, TOOL_DECISION)
+    before = measure_corpus.corpus_measurements(BACKUP, TEXT, TOOL_DECISION)
 
     assert before["invalid_counts"]["label_assistant_mismatch"] == 48
-    moved = profiler.moved_measurements(measured, before)
+    moved = measure_corpus.moved_measurements(measured, before)
     assert any("invalid_counts.label_assistant_mismatch" in line for line in moved)
     assert any("was 0, now 48" in line for line in moved)
 
 
 def test_drift_names_a_count_that_appeared_and_one_that_vanished() -> None:
-    moved = profiler.moved_measurements({"a": 1, "gone": 2}, {"a": 1, "new": 3})
+    moved = measure_corpus.moved_measurements({"a": 1, "gone": 2}, {"a": 1, "new": 3})
 
     assert moved == ["gone: was 2, now '<absent>'", "new: absent before, now 3"]
 
@@ -220,7 +220,7 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
             "from pathlib import Path;"
             "from dataforce.modalities.text import TEXT;"
             "from dataforce.profiles.tool_decision import TOOL_DECISION;"
-            "from dataforce.profiles.tool_decision.profiler import profile_corpus;"
+            "from dataforce.profiles.tool_decision.measure_corpus import profile_corpus;"
             f"_, moved = profile_corpus(TEXT, TOOL_DECISION, baseline=Path({str(baseline)!r}));"
             "print(moved);"
             "sys.exit(1 if moved else 0)",
@@ -240,7 +240,7 @@ def test_the_command_exits_non_zero_when_a_count_moved(tmp_path: Path) -> None:
 def test_the_profiler_never_holds_the_file(measured: dict[str, Any]) -> None:
     """126 MiB on disk. Traced allocation stays a fraction of it, so it streams."""
     tracemalloc.start()
-    profiler.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
+    measure_corpus.corpus_measurements(source_path(), TEXT, TOOL_DECISION)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
