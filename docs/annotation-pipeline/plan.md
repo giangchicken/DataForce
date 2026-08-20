@@ -210,11 +210,12 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Relevant files.** `src/dataforce/profiles/tool_decision/adapter.py`, `tests/fixtures/tool_decision/`.
 
-**Proposed approach.** Parse each catalog entry into name, purpose, `call_when`, `hold_when`, required parameters and per-parameter constraints. `rid = compute_hash(system ‖ user ‖ assistant)[:16]`, so identity is position-independent. `group_key` is the catalog fingerprint, **never** `source_index` — which is unique per record and therefore gives no leakage protection, a measurement not an assumption. `answer_space` is the list of catalog tool names. Preserve `meta` verbatim.
+**Proposed approach.** Read each catalog entry into a tool name, **one verbatim `description`**, and a JSON Schema of parameters — the OpenAI function shape, because that is what the source generator emits and what the annotation UI must render back. The description is not split on `Mục đích:` / `Khi nào gọi:` / `Khi nào KHÔNG gọi:`: those are text inside it, and splitting on them returns three empty clauses for a tool documented in prose. `rid` is `compute_hash` over the content parts in order, each contributing `type:role:digest`, so identity is position-independent. `group_key` is the catalog fingerprint, **never** `source_index` — which is unique per record and therefore gives no leakage protection, a measurement not an assumption. `answer_space` is the list of catalog tool names. Preserve `meta` verbatim.
 
 **Acceptance criteria.**
 - Every `{trigger}`, `{hold_other}`, `{hold_missing}`, `{constraint}`, `{turn_trigger}` token in a source system message is present byte-identically in the adapter's output. — profile invariant 1
-- Fixtures cover all 13 observed `meta` key-sets, answer cardinalities 0/1/2/3, catalog sizes 0/1/8/20, and malformed `TOOLS:` blocks.
+- Fixtures cover all **22** observed `meta` key-sets — 13 was an undercount — answer cardinalities 0/1/2/3, catalog sizes 0/1/8/20, and malformed `TOOLS:` blocks. Invented, never extracted from the corpus: it is call-centre transcript and this repository is public.
+- Every corpus catalog read and re-rendered by the same module comes back byte-identical. That assertion is what makes one definition of the format trustworthy in both directions.
 - A malformed block produces `empty_catalog`, not an exception and not a partial catalog.
 - `group_key` collides for records sharing a catalog; the largest such group is 112 records and is a named fixture.
 - Running the adapter over the full file reproduces a count for each validity check, and those counts are written into `params.yaml` as the declared numbers.
@@ -268,7 +269,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Source.** profile § What the corpus contains; profile § Testing Strategy (Corpus profile); core requirement 13.
 
-**Verify.** `uv run dataforce profile && uv run pytest tests/integration/test_corpus_profile.py`
+**Verify.** `uv run dataforce profile --profile tool_decision && uv run pytest tests/integration/test_corpus_profile.py`
 
 ---
 
@@ -321,15 +322,15 @@ Inside the profile:
 | `answers.delta` | `answer_distance` | `answer.py` |
 | `answers.consensus` | `vote_consensus` | `answer.py` |
 | `export.export` | `training_example` | `answer.py` |
-| `SourceContract.of` | `read_source_contract(manifest)` | `source_contract.py` |
-| `contract.label_of` | `contract.read_label` | `source_contract.py` |
-| `contract.role` / `contract.field` | `role_name` / `field_name` | `source_contract.py` |
+| `SourceContract.of` | `read_source_contract(manifest)` | `source_contract.py` — **done** |
+| `contract.label_of` | `contract.read_label` | `source_contract.py` — **done** |
+| `contract.role` / `contract.field` | `role_name` / `field_name` | `source_contract.py` — **done** |
 | `adapter.adapt` | `build_record` | `build_record.py` |
 | `adapter.catalog_of` | `read_catalog` | `build_record.py` |
 | `profiler.measure` | `corpus_measurements` | `measure_corpus.py` |
 | `profiler.drift` | `moved_measurements` | `measure_corpus.py` |
 
-The first four are the generator's own names, so the two codebases stop disagreeing about what one conversion is called. `catalog_to_tools` is deliberately the exact inverse of `tools_to_catalog`, which is what a round-trip test reads as.
+The four marked **done** were renamed early, when the manifest was simplified and every one of their call sites was being rewritten anyway. The first four in this table are the generator's own names, so the two codebases stop disagreeing about what one conversion is called. `catalog_to_tools` is deliberately the exact inverse of `tools_to_catalog`, which is what a round-trip test reads as.
 
 **Acceptance criteria.**
 - `Modality.__protocol_attrs__` and `Profile.__protocol_attrs__` contain none of the ten old names, and `tests/unit/test_protocols.py` pins the new sets as literals.
@@ -405,7 +406,9 @@ Outside the profile, unchanged from the previous revision: `shared/schemas/` sta
 
 # Phase 3 — `data_quality` over the real corpus
 
-**Goal:** 21,172 records become a usable corpus. 1,563 quarantined with reasons, personal data found and reported, near-duplicates grouped, and nothing downstream matching a personal-data pattern. Five DVC stages, five gates.
+**Goal:** 21,172 records become a usable corpus — personal data found and reported, near-duplicates grouped, and nothing downstream matching a personal-data pattern. Five DVC stages, five gates.
+
+**Re-sized since the first plan.** This phase was written expecting ~1,563 quarantined records, 7.4%. The adapter settled that: all four validity counts read **0**, because the 841 and 722 in the profile spec were artifacts of a stricter tool-name pattern than the reader ships with. `remove_invalid` therefore moves roughly nothing, and the phase's value moves with it — from *filtering* to *privacy and duplicates*. The checks stay as gates: one reading 0 is what tells you when it stops.
 
 ## T11 · `load` stage
 
@@ -431,7 +434,7 @@ Outside the profile, unchanged from the previous revision: `shared/schemas/` sta
 
 **Goal.** Stage 1: records that fail a provable check leave the main path into `quarantine/invalid/<check>.jsonl`, and can be re-admitted by an explicit command.
 
-**Context.** This is what makes the rest affordable — 1,563 of 21,172 records, 7.4%, found by arithmetic in seconds. Left in, they would consume 7.4% of the jury's ~121M estimated tokens, take annotator hours, and then teach the model something false. Nothing is deleted: "remove" is scoped to the main path.
+**Context.** Written expecting 1,563 records, 7.4%, found by arithmetic in seconds; the measured answer is **0**, and that changes what this stage is for. It is no longer a saving — it is the tripwire that tells you the source or the reader moved, and it has to exist before the expensive stages so that a future non-zero count stops the run instead of costing 7.4% of the jury's ~121M estimated tokens and then teaching the model something false. Nothing is deleted: "remove" is scoped to the main path.
 
 **Blocked by.** T9, T11.
 

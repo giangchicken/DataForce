@@ -50,13 +50,13 @@ Three kinds of invalid record are detectable without a single human judgment, an
 | Validity check | Count | Why a failure is fatal for SFT |
 |---|---:|---|
 | `label_assistant_mismatch` | **0** — was 48 (0.227%) | Fixed upstream. The gate stays, expecting 0: the assistant message *is* the training target, and a regression trains the model on the losing side of two disagreeing sources. |
-| `label_not_in_catalog` | **722** (3.41%) | The target names a tool the record never offered. Unlearnable, and it teaches hallucination. |
-| `empty_catalog` | **841** (3.97%) | Either genuinely toolless prompts or a parser miss. The two must be told apart by hand before either is trusted, so this is a quarantine for triage, not a verdict. |
+| `label_not_in_catalog` | **0** — was reported as 722 (3.41%) | The target names a tool the record never offered. Unlearnable, and it teaches hallucination. Reads 0 under the shipped reader; see below. |
+| `empty_catalog` | **0** — was reported as 841 (3.97%) | The record offers no tools at all. Reads 0 under the shipped reader; see below. A quarantine for triage, not a verdict, if it ever stops reading 0. |
 | `label_cardinality_anomaly` | declared in `params.yaml` | Guards against a catalog or parser change inflating answer size. |
 
 **The source file changed three times in four weeks, and that is the load-bearing observation.** Measured with one parser across the versions on disk, `label_assistant_mismatch` was 48 in the 2026-08-17 backup and is 0 in the current file. Every count here therefore describes one SHA-256, not "the corpus" — which is exactly why the core pins expected counts in `params.yaml` and hard-stops when they move.
 
-The 722 and 841 figures are **parser-dependent** and are the numbers to reproduce with the adapter of requirement 1, not before it. An independent regex over `^\s*\[Name\]` reads 588 and 680 on both the current file and the 2026-07-24 backup, so the difference is a catalog-parsing convention rather than a corpus change. The adapter settles the convention, and `params.yaml` is populated from the adapter's own count on first run.
+**The 722 and 841 were parser artifacts, and the adapter of requirement 1 settled it: both read 0.** They reproduce exactly — 841 and 722, to the record — under a tool-name pattern of `[A-Za-z0-9_]+`, and read 0 under the permissive `^\[…\]$` the reader ships with. The 7,114-entry gap between the two patterns is real tools whose names carry a dot, a hyphen, a space, or in one case a literal tab. Corroborated three ways: all 105,880 bracket lines in the corpus are followed by `Mục đích`, all 14,411 distinct label names resolve against their own catalog, and the corpus generator's own `catalog_to_openai.py` uses the same permissive pattern and disagrees with this reader on 0 of 3,000 records. **The consequence for planning is that `remove_invalid` moves roughly 0 records, not 1,563.** Both checks stay as gates, for the reason `label_assistant_mismatch` stayed after it was fixed upstream: a check that reads 0 is what tells you when it stops reading 0. An earlier independent regex over `^\s*\[Name\]` read 588 and 680 on both the current file and the 2026-07-24 backup, so the difference is a catalog-parsing convention rather than a corpus change. The adapter settles the convention, and `params.yaml` is populated from the adapter's own count on first run.
 
 `source_index` is unique per record — 13,366 distinct over 13,366 records. It looks like a grouping key and is not one; splitting on it gives no leakage protection. Measured, not assumed.
 
@@ -90,10 +90,10 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 
 The four validity checks below are all provable by counting — no person decides any of them — which is why `remove_invalid` runs first. Together they move 1,563 records (7.4%) out of the main path before the jury spends a token on them.
 
-1. The adapter parses the `TOOLS:` block into a structured catalog — name, purpose, `call_when`, `hold_when`, required parameters, per-parameter constraints — and **preserves every marker token byte-identically**. A parser that strips them would pass every other test while destroying the annotator's evidence.
+1. The adapter reads the `TOOLS:` block into a structured catalog — a tool name, **one verbatim `description`**, and a JSON Schema of parameters — and **preserves every marker token byte-identically**. The description is never split. `Mục đích:` / `Khi nào gọi:` / `Khi nào KHÔNG gọi:` are text *inside* it, not structure around it: splitting on those three labels was specified first and rejected on measurement, because a tool documented in freeform prose came back with three empty clauses and no error, and 3,901 tools in this corpus have no `require:` line for a clause parser to key on. Keeping the description whole is also what makes the round trip assertable — all 21,172 corpus catalogs read and re-rendered byte-identically — which a three-clause split cannot be. A parser that strips them would pass every other test while destroying the annotator's evidence.
 2. `answer_space` per record is the list of catalog tool names. `validity_checks()` returns the four checks above. `group_key` is the catalog fingerprint, and never `source_index`.
-3. `rid = compute_hash(system ‖ user ‖ assistant)[:16]`, so the identity is independent of position.
-4. Fixtures cover all 13 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, and malformed `TOOLS:` blocks.
+3. `rid` is `compute_hash` over the content parts in order, each contributing `type:role:digest` — text contributes its text, media its checksum — truncated to 16 hex characters. So identity is independent of position in the file but *not* of order within the record: a system turn and a user turn saying the same thing are not the same record.
+4. Fixtures cover all **22** observed `meta` key-sets — 13 was an undercount, measured before the profiler read the whole file — each answer cardinality, catalog sizes 0 / 1 / 8 / 20, and malformed `TOOLS:` blocks. Fixtures are invented, never extracted: the corpus is call-centre transcript and the repository is public.
 
 ### The answer, δ, and consensus
 
@@ -264,7 +264,7 @@ Beyond the core's table:
 
 | Situation | Behavior |
 |---|---|
-| Adapter finds no `[ToolName]` block | `empty_catalog` quarantine. **Not** a verdict — 841 records is large enough that a parser miss and a genuinely toolless prompt must be told apart by hand before either is trusted. |
+| Adapter finds no `[ToolName]` block | `empty_catalog` quarantine. **Not** a verdict — if this count ever leaves 0, a parser miss and a genuinely toolless prompt must be told apart by hand before either is trusted. |
 | A label names a tool outside the catalog | `label_not_in_catalog` quarantine. Never truncated to the catalog: that would be a guess about which of two disagreeing sources is right, applied at scale, invisibly. |
 | `label_assistant_mismatch` count rises above 0 | Hard stop. Upstream drove this class to zero; a return means a curation step wrote one field and not the other. |
 | Marker token altered by the adapter | Hard stop at the adapter's own test, before any run. |
@@ -275,7 +275,7 @@ Beyond the core's table:
 
 Beyond the core's own tests, and beyond the five profile rules this profile proves for itself:
 
-- **Adapter.** All 13 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, malformed `TOOLS:` blocks. One test asserts marker tokens survive **verbatim**.
+- **Adapter.** All 22 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, malformed `TOOLS:` blocks. One test asserts marker tokens survive **verbatim**, and one asserts every corpus catalog re-renders byte-identically.
 - **Validity gate.** A fixture with one record failing each check, asserting each lands in the right quarantine file with the right label and that the main path count drops by exactly the expected number.
 - **δ and consensus.** Property tests for the metric axioms including the empty case. Consensus against hand-worked vote sets, including where consensus differs from every individual vote.
 - **Set-valued α.** Against a hand-computed example, plus the degenerate check that α with an identity distance equals the `krippendorff` package's nominal α on the same data.
