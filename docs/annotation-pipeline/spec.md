@@ -2,7 +2,7 @@
 
 ## What
 
-A reproducible pipeline that turns a raw corpus into a versioned, documented, training-ready dataset. It is fifteen DVC stages, each producing a checksummed artifact and each guarded by a machine-checked **gate** that fails the run rather than passing bad data downstream. Several models answer the dataset's own task first, and their disagreement decides which records a human looks at.
+A reproducible pipeline that turns a raw corpus into a versioned, documented, training-ready dataset. It is fifteen stages, each producing a checksummed artifact and each guarded by a machine-checked **gate** that fails the run rather than passing bad data downstream. The stages are sequenced in-process by `api/`, which is the surface every caller enters through; DVC versions the data at milestones and does not orchestrate. Several models answer the dataset's own task first, and their disagreement decides which records a human looks at.
 
 Nothing in this document is specific to one dataset, one task, or one modality. A run is **one modality × one profile**:
 
@@ -51,7 +51,7 @@ Free-text generation is the honest exception. There is no defensible consensus o
 | Annotator verdict aggregation (Dawid-Skene, MACE) | **crowd-kit** | 1.4.2 (2025-10-13) |
 | Krippendorff's α, nominal | **krippendorff** | 0.8.2 (2025-11-03) |
 | Artifact schema validation | **pandera** | 0.32.1 (2026-06-29) |
-| Data versioning and the stage DAG | **DVC** | 3.67.1 (2026-03-31) |
+| Data versioning at milestones (`dvc add`) | **DVC** | 3.67.1 (2026-03-31) |
 | Dataset metadata | **mlcroissant** | 1.1.0 (2026-04-16) |
 | Streaming JSON, atomic I/O, hashing, templating, all LLM access | **[`agent-toolkit`](../agent-toolkit/spec.md)** 0.1.0 | released, `giangchicken/agent-toolkit` |
 
@@ -139,8 +139,8 @@ Running it first is what makes the rest affordable. In the first profile it move
 
 18. `pii_check` detects in two layers with separate jobs: the modality's detectors maximise recall and are allowed to be noisy, and an LLM pass over a bounded window, via `llm.complete_structured` against a fixed classification schema, sets precision. It **always** writes a findings artifact — every candidate span with its class, its surrounding window, and the verifier's verdict — which is what a person reads before deciding anything. A verification response that fails its schema leaves the span **unverified, not negative**.
 19. Rewriting content is controlled by one parameter, `enable_redact`, **false by default**. False: the stage reports and leaves content untouched. True: verified spans are replaced with **stable typed placeholders** scoped per record (`<PHONE_1>`, `<EMAIL_1>`), so a value referenced twice stays co-referent — and never deleted, because deleting a value can change the ground truth of the very judgment the record encodes.
-20. The gate is what makes the default safe. With redaction off, release-tier artifacts still match literal personal-data patterns, so the scan below fails and nothing ships. Turning it on is a change to `params.yaml`, which is committed and a declared DVC dependency — so the decision is attributable and `dvc repro` stays reproducible, without a bespoke approval format.
-21. The placeholder-to-original mapping is written to `data/raw/pii_vault.jsonl`. `data/raw/` is **not DVC-tracked and not committed**: the source file's identity is a SHA-256 in `params.yaml`, and the vault appears in `.gitignore`, in no `.dvc` file, and in no `dvc.yaml` output list. Every other directory under `data/` is DVC-tracked. The findings and redaction reports record, per class, the counts and a sample of 20 *placeholders in context* — never original values — and the gate fails if any release-tier artifact matches a literal personal-data pattern.
+20. The gate is what makes the default safe. With redaction off, release-tier artifacts still match literal personal-data patterns, so the scan below fails and nothing ships. Turning it on is a change to `params.yaml`, which is committed and whose digest every run records in its run manifest — so the decision is attributable, without a bespoke approval format.
+21. The placeholder-to-original mapping is written to `data/raw/pii_vault.jsonl`. `data/raw/` is **not DVC-tracked and not committed**: the source file's identity is a SHA-256 in `params.yaml`, and the vault appears in `.gitignore` and in no `.dvc` file. Every other directory under `data/` may be versioned with `dvc add`. The findings and redaction reports record, per class, the counts and a sample of 20 *placeholders in context* — never original values — and the gate fails if any release-tier artifact matches a literal personal-data pattern.
 
 ### Duplicates and grouping
 
@@ -204,7 +204,7 @@ Running it first is what makes the rest affordable. In the first profile it move
 58. The test split is **100% human-validated**. A record that has not been annotated cannot enter test at any budget, and `jury_consensus` records are barred permanently.
 59. Decontamination verifies zero n-gram overlap between test and train, and zero shared `group_key`. Either fails the gate.
 60. Export emits the profile's training format. Every exported record carries provenance: source SHA-256, pipeline version, modality and profile versions, `agent-toolkit` version, validation status, validator, dedup cluster, split, stratum, and the panel version where the jury touched it.
-61. The release is a DVC-tracked directory with a manifest listing every file's SHA-256, reproducible from one git commit plus `dvc repro`.
+61. The release is a DVC-tracked directory with a manifest listing every file's SHA-256, reproducible from one git commit plus one `dataforce run`.
 62. Each release ships a **datasheet** (Gebru et al.), a **data statement** (Bender & Friedman), and a **Croissant** file validated by `mlcroissant`. The datasheet states the machine-labelled share explicitly and names the jury panel with each juror's family and gold-calibrated weight, because which records humans looked at is part of how the dataset was made. Documentation is a gated stage; a missing required field fails the release.
 
 ### Proving it works before scaling
@@ -213,11 +213,20 @@ Running it first is what makes the rest affordable. In the first profile it move
 64. The pilot gate requires all of: α on verdict ≥ 0.667 (below it the guideline is broken, not the annotators); α ≤ 0.95 or an investigation (near-perfect agreement on a subtle task means the questions dodge the hard cases); question flag rate ≤ 10%; per-annotator gold accuracy ≥ 0.85; and `likely_label_error` bucket precision above a declared floor — if the jury's flags are mostly wrong it is sending humans on a walk, and the panel changes before the full corpus depends on it.
 65. Scale deliberately annotates a **designed subset** rather than everything: the full test split, the audit sample, and the jury-flagged strata. The remainder ships as `unvalidated` with a measured error bar, which is an honest artifact — full manual validation ships the same corpus much later with no error bar at all, because nothing was sampled to estimate one from.
 
+### Layers and the published surface
+
+66. **The engine computes and never touches the filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`. Neither axis is constructed at import time, so importing a profile reads nothing and works from any working directory.
+67. **`declared/` is the only package that reads `config/`.** It turns files into the objects the engine accepts. Every path it takes is a required parameter with no module-level default, so nothing infers a location from the process's cwd.
+68. **`api/` is the published surface.** Every caller enters through it, `cli.py` included — the CLI holds argument parsing, logging setup and exit codes, and no behaviour of its own. `api/` sequences the fifteen stages in-process, persists artifacts, and is the only place a gate's verdict is written to disk.
+69. **Every run writes a run manifest** recording the SHA-256 of every policy file it read, the `name@version` of both axes, and the SHA-256 of every artifact it wrote. This is the lineage record that DVC's declared dependencies used to be, and diffing two of them is how reproducibility is checked.
+
+The layer diagram, the import rule and the order the split lands in are in [`../engine-api-split/spec.md`](../engine-api-split/spec.md).
+
 ## Design
 
 ### Stage graph
 
-Fifteen DVC stages: declared inputs, declared outputs, a gate. `dvc repro` runs only what changed.
+Fifteen stages: declared inputs, declared outputs, a gate. `api/` sequences them in-process: `dataforce run [stage ...]` runs the stages it is named, or all fifteen.
 
 | # | Phase | Stage | What it is for | Output | Gate |
 |---|---|---|---|---|---|
@@ -246,10 +255,22 @@ A stage name is a promise about what the stage does to the data, and the table a
 ```
 dataforce/
 ├── pyproject.toml   uv.lock   Makefile   README.md   .gitignore
-├── dvc.yaml   dvc.lock   params.yaml
+├── dvc.yaml   dvc.lock   params.yaml    dvc.yaml declares no stages: DVC
+│                                          versions data, it does not orchestrate
 │
 ├── src/dataforce/
-│   ├── shared/                  used by everything dataforce ever does
+│   ├── api/                     ← the published surface. Every caller enters here,
+│   │   │                          cli.py included. Sequences the stages in-process,
+│   │   │                          persists artifacts, writes a gate's verdict
+│   │   ├── engine.py            a resolved (modality, profile, policy) triple
+│   │   └── artifacts.py         the only place an artifact is read or written
+│   │
+│   ├── declared/                ← the only package that reads config/
+│   │   ├── manifest.py          what an implementation is, from config/<axis>/
+│   │   ├── prompts.py           prompt templates, by prompt_version
+│   │   └── thresholds.py        what a gate compares against, from gates.yaml
+│   │
+│   ├── shared/                  engine — no I/O, no working-directory assumption
 │   │   ├── record.py            canonical record + typed content parts
 │   │   ├── schemas/             one module per pipeline phase, so a stage imports
 │   │   │   ├── base.py          the columns every artifact carries
@@ -258,20 +279,17 @@ dataforce/
 │   │   │   ├── human_review.py  questions · published · responses · aggregated
 │   │   │   │                    · curated
 │   │   │   └── release.py       split
-│   │   ├── manifest.py          what an implementation is, from config/<axis>/
-│   │   ├── prompts.py           prompt templates, by prompt_version
+│   │   ├── registry.py          both axes by name; instance state, no global
 │   │   ├── agreement.py         α over any δ, cohesion, plurality
-│   │   ├── gates/runner.py      engine only — no thresholds live here
+│   │   ├── gates/runner.py      engine only — raises, and writes nothing
 │   │   └── errors.py
 │   │
 │   ├── modalities/              ← axis 1: how content is read
 │   │   ├── base.py              Modality protocol: 4 methods, nothing more
-│   │   ├── registry.py
 │   │   └── text/                content_parts · embedding · detectors · display
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
 │   │   ├── base.py              Profile protocol: 9 members, nothing more
-│   │   ├── registry.py          resolve by name; no conformance check
 │   │   └── tool_decision/       three definitions, two steps, one tool:
 │   │       ├── __init__.py      the profile object — the index to the rest
 │   │       │
@@ -293,7 +311,8 @@ dataforce/
 │   │       └── schemas/         JSON Schema per input shape: what a record and a
 │   │                            tool are allowed to look like
 │   │
-│   ├── pipeline/                ← the fifteen stages, written once. A stage's package
+│   ├── pipeline/                ← the fifteen stages as pure functions over records,
+│   │                            called by api/. A stage's package
 │   │                            is created by the task that implements it, not before
 │   │   ├── data_quality/        load.py  remove_invalid.py  pii_check.py  embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
@@ -304,8 +323,9 @@ dataforce/
 │   │   └── release/             split.py  export.py  document.py
 │   │       └── lib/{decontaminate,datasheet,croissant,manifest}.py
 │   │
-│   └── cli.py                   dataforce run --modality M --profile P
-│                                the only place logging handlers are configured
+│   └── cli.py                   dataforce run --modality M --profile P [stage ...]
+│                                a shell over api/: argparse, exit codes, and the
+│                                only place logging handlers are configured
 │
 ├── config/                      policy humans edit; never imported as Python
 │   ├── gates.yaml   panel.yaml
@@ -452,7 +472,7 @@ Twelve methods across the two contracts, and thirteen of the fifteen stages call
 | A quality score | `answer_distance` | one distance expresses every agreement statistic; a score expresses one |
 | The prompt text | `config/prompts/<axis>/<name>/<slug>.vN.txt` | a prompt is the measuring instrument, so it has to be diffable and nameable in an artifact — requirement 45 |
 | Reading or writing artifacts | `file_utils` via the stage | stages own I/O; an implementation that opened a file would be a stage |
-| Any threshold | `params.yaml`, `config/gates.yaml` | a number in code is neither reviewable nor a declared DVC dependency |
+| Any threshold | `params.yaml`, `config/gates.yaml` | a number in code is not reviewable, and every run records the digest of each policy file it read |
 | Its own identity | `config/<axis>/<name>.yaml` | `version` is a claim about how a dataset was made; edited as a class attribute it is a claim no review saw |
 
 ### Canonical record
@@ -464,7 +484,7 @@ One shape flows through every stage; each stage adds fields and removes none.
 - **Invariant 1 is a count, and a join is where rows go missing.** `output + quarantined + deduped_out == input` is only checkable when a stage's output rows *are* its input rows plus fields. Under a join, a dropped row and a failed match are the same observation.
 - **Several stages read across earlier ones.** A triage bucket is a function of the jury block, the validity list and the duplicate cluster at once; the pilot gate reads gold, validation and jury together. Every one of those would be a join written by hand, in a stage whose subject is something else.
 - **A record that leaves the main path has to stay self-describing.** `quarantine/invalid/<check>.jsonl` is read by a person with nothing to join against, and the same is true of `quarantine/pii/` and a failed gate's offending ids.
-- **Adds-and-never-removes makes the schemas additive.** `loaded.jsonl` and `curated.jsonl` are the same type at two points in one record's life, so artifact schemas stay non-strict and a later stage cannot invalidate an earlier stage's validation. It is also what lets `dvc repro` re-run one stage without rewriting another's output.
+- **Adds-and-never-removes makes the schemas additive.** `loaded.jsonl` and `curated.jsonl` are the same type at two points in one record's life, so artifact schemas stay non-strict and a later stage cannot invalidate an earlier stage's validation. It is also what lets one named stage be re-run without rewriting another's output.
 
 Every block below has exactly one owning stage, named in the comments. The one shared block is `validation`, opened by `aggregate` and completed by `curate` — two stages of one loop, never two writers racing.
 
@@ -554,7 +574,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 *And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become six, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
 
-The same test keeps `manifest.py` and `prompts.py` apart despite both being "things read from `config/`": a stage that wants a prompt has no business importing manifest loading. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
+The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
 
 *The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 
@@ -578,7 +598,11 @@ The same test keeps `manifest.py` and `prompts.py` apart despite both being "thi
 
 **The test split is 100% human-validated, at any budget.** *Alternatives:* validate a sample of test; let jury consensus fill it. *Why:* every number a release reports is computed on test, so a machine-labelled test split measures agreement with a model rather than correctness, and nothing downstream recovers from that. *Reversible:* no.
 
-**The pipeline is DVC stages, not a service.** *Alternatives:* Airflow/Prefect; Celery jobs; a shell script. *Why:* every stage is a pure function from artifact to artifact, which is what DVC models natively, and lineage plus reproducibility from a commit hash is the requirement, not scheduling. *Reversible:* yes; each stage is a CLI command an orchestrator could call unchanged.
+**DVC versions data; it does not orchestrate.** *Choice:* no `dvc.yaml` stage DAG and no `dvc repro`. `api/` sequences the stages in-process, and a dataset is versioned when a person decides it is worth versioning, with `dvc add`. *Alternatives:* DVC keeps both jobs with `pipeline/` stages as thin shells over `api/`; DVC orchestrates and `api/` is a second path; Airflow/Prefect; Celery; a shell script. *Why:* a DVC stage is a process invocation, so if DVC orchestrates then `api/` is permanently a *second* path that has to be kept in step with the one the tests exercise — one behaviour with two implementations. Decided when `dvc.yaml` declared zero stages, which is the only moment it is free. *What it costs, stated once:* stage-level caching. `dvc repro` skipping an unchanged stage was free and now nothing is. The expensive case is partly covered because stage 5's vote cache on `(rid, model, prompt_version)` was always planned independently of DVC, and naming stages lets a person re-do one without re-doing the corpus; if a stage becomes slow enough to need real caching the fix is a content-addressed cache inside that stage, not a DAG above it. *Reversible:* yes — every stage stays a pure function from records to records, so a `dvc.yaml` calling `dataforce run <stage>` could be added later without touching one of them.
+
+**The engine receives parsed data, never a path.** *Alternatives:* the engine keeps reading YAML but every path is an injected parameter; leave it as it was, with `Path("config")` at module level. *Why:* injected paths still put the filesystem inside the engine, so an `api/` caller must materialise config on disk and no engine module can be tested without a tmpdir. It is also what made the library only work from the repo root: both axes were constructed at import time off a relative path. *Reversible:* yes, but going back re-introduces the working-directory dependency that made `api/` impossible.
+
+**`api/` is a Python surface; HTTP is a later task over it.** *Alternatives:* FastAPI now. *Why:* an HTTP layer over a surface that does not exist yet fixes its request shapes before the surface is known, and forces an auth decision this spec has no input for. *Reversible:* n/a — it is additive, and the engine does not change when it arrives.
 
 **Label Studio, not Argilla, and not our own UI yet.** *Why:* Argilla has shipped no functional change in seventeen months. Building our own UI first inverts the order of risk — it spends a quarter before anyone has answered whether the questions are answerable. *Reversible:* yes; Label Studio is touched only by `human_review/labelstudio/`.
 
@@ -593,7 +617,7 @@ Five properties the pipeline assumes of every profile. They are not checked by a
 | # | Rule | Why the pipeline needs it | Symptom when it is broken |
 |---|---|---|---|
 | 1 | **`answer_distance` is a metric.** `d(a,a) = 0`, symmetric, in `[0,1]`, never `NaN` — including on the empty answer, which for some corpora is a third of the corpus. | Cohesion, corpus conflict, the four triage buckets and α are all mean distances. A distance that is not a metric makes each of them a number with no meaning. | Nothing fails. Cohesion looks plausible, the review queue is ranked wrongly, and α is reported to three decimal places. This is the expensive one. |
-| 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs is not reproducible — invariant 14. | Two `dvc repro` runs produce different datasets from one commit. |
+| 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs is not reproducible — invariant 14. | Two runs produce different datasets from one commit. |
 | 3 | **An answer survives a JSON round trip.** `json.loads(json.dumps(a)) == a`, and `answer_distance` treats the result as equal to the original. | Every artifact is JSONL. An answer that is a `set` or a tuple comes back as something else, and every distance computed after the round trip is wrong. | Distances become non-zero between a vote and itself, one stage later. |
 | 4 | **`build_record` preserves every field it does not own.** Anything in the raw item that is not `content`, the answer, or the answer space lands in `meta` verbatim. | What looks like noise now is what a later question turns out to need; the corpus profiler counts fields nothing yet reads. | A field is silently gone, and only a re-ingest from the source recovers it. |
 | 5 | **`training_example` reproduces the answer the record carries.** The exported example states the same answer as `record.label`, in whatever place that profile's trainer expects it. | It is the last point at which the pipeline can notice it is shipping a different answer from the one people agreed on. | A release trains on the wrong labels. For `tool_decision` this fired on 48 records before the source was fixed. |
@@ -604,7 +628,7 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 
 1. **Nothing is lost between stages.** `output + quarantined + deduped_out == input`, asserted on every stage and written to `metrics.json`.
 2. **`rid` is stable.** Re-ingesting the same source yields byte-identical `rid` values regardless of order. *Check:* shuffle a fixture, re-ingest, compare.
-3. **No personal data downstream of `pii_check`, and the vault is untracked.** *Check:* a gate scanning every release-tier file, plus a repo test asserting the vault is in `.gitignore`, in no `.dvc` file, in no `dvc.yaml` output, and that `data/raw/` is absent from DVC entirely.
+3. **No personal data downstream of `pii_check`, and the vault is untracked.** *Check:* a gate scanning every release-tier file, plus a repo test asserting the vault is in `.gitignore`, in no `.dvc` file, and that `data/raw/` is absent from DVC entirely.
 4. **No media is inlined.** No artifact under `interim/`, `processed/`, or `release/` contains a base64 blob or a non-text part without a `uri` and `sha256`. *Check:* a schema assertion on every artifact carrying content.
 5. **Every answer is inside the profile's answer space.** Every vote, correction, and exported label validates against `profile.answer_schema`. *Check:* pandera on every artifact carrying an answer — a second line of defence behind the schema the jury already passed to the library.
 6. **Every juror vote is valid or an abstention.** No stored vote is a truncation of a malformed response. *Check:* structurally guaranteed by `complete_structured` returning `None`, plus a test feeding malformed, prose-wrapped, over-long, and out-of-space responses through a stubbed endpoint.
@@ -615,14 +639,16 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 11. **Corrections stay in the answer space.** *Check:* structurally where the UI can express it, and asserted again at pull time.
 12. **No group spans splits.** No `group_key` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
 13. **Test is fully human-validated.** Every test record has `validation.status ∈ {original, corrected}`. *Check:* export gate.
-14. **Releases are reproducible.** `dvc repro` from a clean checkout reproduces every artifact's SHA-256. *Check:* CI on the smoke fixture, diffing `MANIFEST.sha256`.
+14. **Releases are reproducible.** Two `dataforce run` invocations from a clean checkout produce byte-identical artifacts. *Check:* CI on the smoke fixture, diffing the run manifest and `MANIFEST.sha256`.
 15. **The sampling design is reconstructible.** Every annotated record records its stratum and selection probability. *Check:* the residual-error estimator refuses to run when any lacks one.
 16. **The core is task-agnostic and modality-agnostic.** No module under `pipeline/` or `shared/` imports a concrete profile or modality. *Check:* an import-graph test over the source tree.
 17. **The library is not re-implemented.** No module defines a hash helper, a JSONL reader or writer, an atomic-write context manager, a JSON-from-text extractor, a template filler, or a retry wrapper; `openai`, `tenacity`, `tiktoken`, and `jsonschema` appear in no pipeline import. *Check:* a lint test over the source tree.
+18. **The engine touches no filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`; and none of them imports `api/` or `declared/`. *Check:* an AST guard over the source tree, asserting the guarded set is non-empty so it cannot pass vacuously.
+19. **Importing the engine reads nothing.** *Check:* a subprocess importing a concrete profile with a working directory that is not the repo root, and succeeding — the one assertion that cannot be written in-process.
 
 ## Error Behavior
 
-A failed gate writes `data/<stage>/GATE_FAILED.json` with the assertion, the observed and expected values, and up to 100 offending record ids, then exits non-zero so `dvc repro` halts. No stage consumes an input whose gate did not pass. Every provider failure arrives as an `LLMError` subclass, so each dispatching stage wraps one `except LLMError`; nothing catches bare `Exception` around an LLM call.
+A failed gate raises `GateFailed` carrying every gate's verdict; the gate engine writes nothing. `api/` catches it, writes `data/<stage>/GATE_FAILED.json` with the assertion, the observed and expected values, and up to 100 offending record ids, and re-raises, so the CLI exits non-zero and an in-process caller gets the results attached to the exception. No stage consumes an input whose gate did not pass. Every provider failure arrives as an `LLMError` subclass, so each dispatching stage wraps one `except LLMError`; nothing catches bare `Exception` around an LLM call.
 
 | Situation | Behavior |
 |---|---|
@@ -658,16 +684,18 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 - **Profile rules.** Not a shared suite — requirement 6 and *Decisions* say why, and what it costs. Each profile proves the five rules of § *Rules a profile must satisfy* in its own test module, over its own answer type: `answer_distance` a metric including on the empty answer, `vote_consensus` deterministic and honouring unanimity, an answer surviving a JSON round trip, `build_record` preserving every field it does not own, and `training_example` reproducing the record's answer. A profile arriving without them is the signal to build the suite after all.
 - **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
 - **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `remove_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
-- **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17.
+- **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17. No engine module opens a file or imports `api/` or `declared/` — invariant 18, shown failing on the five I/O sites it was written against.
+- **Import purity, as a subprocess.** `python -c "import dataforce.profiles.tool_decision"` from a working directory that is not the repo root — invariant 19. This is the test that would have caught the problem the engine/api split exists to fix.
+- **Two registries in one process,** holding different profiles, neither seeing the other's.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.
 - **Agreement.** α over an arbitrary δ against a hand-computed example, plus the degenerate check that α with an identity distance equals `krippendorff`'s nominal α on the same data. Consensus against hand-worked vote sets, including where consensus differs from every individual answer.
-- **Privacy.** Per modality: a fixture asserting recall on real personal data and *no* replacement on look-alikes; placeholder stability across two mentions of one value; the vault absent from `dvc.yaml` and every `.dvc` file and present in `.gitignore`.
+- **Privacy.** Per modality: a fixture asserting recall on real personal data and *no* replacement on look-alikes; placeholder stability across two mentions of one value; the vault absent from every `.dvc` file and present in `.gitignore`.
 - **Jury.** A stubbed OpenAI-compatible endpoint returning a clean answer, a fenced answer, prose-wrapped JSON, an out-of-space answer, a wrong type, and empty — each becoming a valid answer or a clean abstention, with `repaired` true for exactly the fenced and prose-wrapped cases. Panel diversity against one-family and unrecognised-name configs. Cache determinism. Key-pool failover with a 429 on one key and a quota error on another, asserting identical votes to a single-key run and that an auth error stops the run instead.
 - **Triage.** Bucket assignment over hand-built (cohesion, conflict) grids including boundaries; audit sizing against worked values (`p=0.05, e=0.02 → 457`); records below the vote minimum excluded rather than bucketed.
 - **Toolkit boundary.** One integration test running `agent-toolkit`'s own `tests/consumer_smoke.py` against the installed environment. The file is **not in the wheel** — the library builds `packages = ["src/agent_toolkit"]` — so CI fetches it with `git clone --depth 1 -b v0.1.0`. A bad git-dependency resolution is then caught here rather than at the first jury run.
 - **Label Studio.** The generated config validated against a live instance in CI via testcontainers — create project, push three tasks, pull back a submitted annotation. The allowlist test runs on the built payload without a server.
 - **Split.** A planted group spanning what would be a random split, and a planted n-gram overlap, each asserted caught.
-- **End to end.** The smoke rung *is* the integration test: `dvc repro` from raw to release against stubbed jurors, a stubbed generator, and a containerized Label Studio, asserting a byte-identical `MANIFEST.sha256` on a second run. This passing is the definition of the pipeline being done.
+- **End to end.** The smoke rung *is* the integration test: `dataforce run` from raw to release against stubbed jurors, a stubbed generator, and a containerized Label Studio, asserting a byte-identical run manifest and `MANIFEST.sha256` on a second run. This passing is the definition of the pipeline being done. Nothing asserts a second run is *fast* — there is no stage cache to assert about.
 
 ## Out of Scope
 
