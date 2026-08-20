@@ -12,7 +12,7 @@ Phases 1 and 2 are **built**. The revision pass between 2 and 3 exists because b
 |---|---|---:|
 | 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 |
 | 2 | One raw record becomes a canonical record and returns through `training_example` | 4 |
-| 2R | The names say what they return, a file is a workflow step, and 49 files become 21 | 3 |
+| 2R | The names say what they return, a module is a workflow step, and 49 files become 30 | 3 |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 |
 | 5 | Two annotators answer 500 questions and the pilot gate passes | 7 |
@@ -34,7 +34,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 8. **Python 3.12.14**; `agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0`. `git` must exist on the installing machine. CI sets `TIKTOKEN_CACHE_DIR` against a populated cache.
 9. **`data/raw/` is outside DVC entirely.** Not tracked, not committed, in `.gitignore`.
 10. **Every contract member is named for what it returns**, and no member shares a name with a stage. `content_parts`, `embedding`, `personal_data_detectors`, `display_config`; `canonical_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, `training_example`. — core § The two contracts, core Decisions
-11. **A module holds one step of the workflow, not one concern.** Everything a step does lives in one file, so following one record's path does not cross ten files. A *format* used by several steps is the one exception. — core Decisions
+11. **A module holds one step of the workflow — and merging stops where the consumers differ.** Everything a step does lives in one module, so following one record's path does not cross ten files. Two limits: a module may not force a consumer to depend on what it does not use, which is why `shared/schemas/` stays a package divided by pipeline phase rather than becoming one file every stage imports; and a *format* used by several steps stays its own module. — core Decisions
 12. **There is no conformance suite.** The five profile rules are stated in core § *Rules a profile must satisfy* and each profile proves them in its own tests. Nothing checks them at registration, and the cost of that is stated with the rules. — core requirement 6, core Decisions
 
 **Not code, and blocking.** Two prerequisites are human work that gates specific phases; they are tasks 21 and 27 rather than footnotes, because skipping them silently is the failure mode.
@@ -184,7 +184,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Blocked by.** T4.
 
-**Relevant files.** `src/dataforce/modalities/text.py`.
+**Relevant files.** `src/dataforce/modalities/text/`.
 
 **Proposed approach.** `content_parts` turns system / user / assistant turns into text parts carrying `role`. `embedding` uses `model2vec` `potion-multilingual-128M` over the concatenated text parts. `display_control` emits an escaped `HyperText` control — corpus text is never interpolated into markup unescaped. `privacy_detectors()` returns an empty list until T13, which the seam test in T16 tolerates and `pii_check` does not.
 
@@ -274,7 +274,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 # Phase 2R — Revision: names, file grouping, and one deletion
 
-**Goal:** the code that exists becomes readable by someone who did not write it — every member named for what it returns, every file a step of the workflow, and 392 lines of generic checking replaced by a table in the spec.
+**Goal:** the code that exists becomes readable by someone who did not write it — every member named for what it returns, every module a step of the workflow, and 392 lines of generic checking replaced by a table in the spec.
 
 **Why here and not later.** All three changes get more expensive with every stage added. Today two implementations and no stages call these names; after Phase 3 there are five stages, after Phase 4 seven. The rename is a mechanical diff now and a coordinated one later. Nothing in this phase changes behaviour: every test that passed before must pass after, which is what makes it safe to do in one pass.
 
@@ -317,39 +317,41 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Out of scope.** Record field names. `group_key`, `label`, `answer_space` and `meta` stay as they are — renaming a field means rewriting artifacts, and no artifact exists yet to make it free.
 
-## R2 · Group files by workflow step
+## R2 · Group modules by workflow step, within the consumer boundary
 
-**Goal.** Following one record from the source file to a training example crosses four files, not ten. `src/` goes from 49 files to 21.
+**Goal.** Following one record from the source file to a training example crosses four modules, not ten. `src/` goes from 49 files to 30 — and no module gains a consumer that does not use all of it.
 
-**Context.** The first layout put one concern per file, which produced a profile of ten modules where four were under ninety lines and fourteen schema files where eleven describe stages that do not exist. The reader of this code follows a path, not a concern, so a file per concern charges ten navigations for one step. This is the review complaint that started the phase: *"the file [with the] same group of part in workflow must be in the same file."*
+**Context.** Two complaints, and the second corrects the first. A file per concern produced a profile of nine modules where four are under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist; following one step costs ten navigations. But the flat fix — one `shared/artifacts.py` holding all twelve artifact schemas — is worse architecture, not better: fifteen stages import from `shared/`, so a single module means `data_quality/load.py` and `release/document.py` depend on the same file and editing the release schema puts every stage in the blast radius. The rule is therefore **group what changes together, and stop where the consumers differ.**
 
-**Relevant files.** `src/dataforce/shared/`, `src/dataforce/profiles/tool_decision/`, `src/dataforce/modalities/text/`, `src/dataforce/pipeline/`.
+**Relevant files.** `src/dataforce/shared/schemas/`, `src/dataforce/profiles/tool_decision/`, `src/dataforce/pipeline/`.
 
-**Proposed approach.** Merge, delete nothing but empty packages, move no logic between functions:
+**Proposed approach.** Merge only where one consumer uses the whole module. Move no logic between functions; delete nothing but empty packages.
 
-| From | To | Lines |
+| From | To | Why this boundary |
 |---|---|---|
-| `shared/schemas/` — 14 files | `shared/artifacts.py`, carrying only the artifacts whose stage exists; each later stage adds its own | 431 → ~150 |
-| `shared/manifest.py` + `shared/prompts.py` | `shared/declared.py` — everything read from `config/` | 155 → 155 |
-| `shared/gates/runner.py` | `shared/gates.py`; the package had one module | 163 |
-| `modalities/text/__init__.py` | `modalities/text.py`; the package had one module | 121 |
-| `tool_decision/{source,adapter,checks}.py` | `tool_decision/ingest.py` — stages 0–1: the source contract, `canonical_record`, `validity_checks`, `group_key` | 360 |
-| `tool_decision/{answers,export}.py` + the answer half of `profile.py` | `tool_decision/answers.py` — stages 5–13: `answer_schema`, `answer_distance`, `vote_consensus`, `question_text`, `answer_config`, `training_example` | ~200 |
-| `tool_decision/profile.py` | `tool_decision/__init__.py` — the profile object and nothing else, so the front door is the index | ~110 |
-| `pipeline/**/__init__.py` — 8 empty files | deleted; each stage task creates its own package | 0 |
+| `shared/schemas/` — 14 modules | **stays a package**, 6 modules: `base.py` plus one per pipeline phase — `data_quality.py` (loaded, usable, pii_findings, deduped), `ai_review.py` (votes, queue), `human_review.py` (questions, published, responses, aggregated, curated), `release.py` (split) | a stage imports its own phase and nothing else. Phase is also the boundary along which these schemas actually change |
+| `tool_decision/{source,adapter,checks}.py` | `tool_decision/ingest.py` — stages 0–1: the source contract, `canonical_record`, `validity_checks`, `group_key` | all three read the source, all three changed together every time the source shape changed, and the profile object is their only consumer |
+| `tool_decision/profile.py` | split by step: the profile object into `__init__.py`, `question_text` + `answer_config` into `annotate.py`, the answer delegations into `answers.py` | the front door becomes the index and nothing else |
+| `pipeline/**/__init__.py` — 8 empty modules | deleted; each stage task creates its own package | an empty package is a promise, not a boundary |
 
-`catalog.py` and `profiler.py` stay as they are. `catalog.py` is a *format*, used by both ingest and annotation, and copying it into either would be two sources of truth for one grammar — the one admitted exception to grouping by step. `profiler.py` is the `dataforce profile` command, not part of either contract.
+**Not merged, deliberately:**
+
+- `shared/manifest.py` and `shared/prompts.py` stay apart. Both read `config/`, but a stage that wants a prompt has no business importing manifest loading.
+- `tool_decision/catalog.py` stays its own module. A *format* is used by `ingest.py` and `annotate.py`, and copying it into either would be two sources of truth for one grammar — the byte-identical round trip over 21,172 corpus catalogs is the proof they agree, and it only reads as one proof while the format is one module.
+- `tool_decision/export.py` stays its own module at 37 lines. It changes when a trainer's format changes, which is not when anything else in the profile changes.
+- `tool_decision/schemas/` stays a folder of JSON Schema files. They are the input contract, versioned per input shape, and read by tests rather than imported.
+- `shared/gates/runner.py` keeps its package, and `modalities/text/` keeps its package: `text` gains the Vietnamese personal-data detectors at T13, and flattening a package that is about to grow is churn for one fewer directory.
 
 **Acceptance criteria.**
-- `find src -name '*.py' | wc -l` reports 21, down from 49.
-- No file exceeds 450 lines; `catalog.py` at 447 is the largest and is unchanged by this task.
-- Every merged file opens with a comment naming the workflow step it holds and the stages that call it.
-- The full suite passes unchanged, and `tests/unit/test_import_graph.py` still finds no concrete axis imported from `shared/` or `pipeline/`.
-- `dvc repro` still reports up to date; no artifact changed.
+- `find src -name '*.py' | wc -l` reports 30, down from 49.
+- No stage-facing module in `shared/` is imported by a stage that uses less than all of it. Checked by reading, not by a test — but the phase split is what makes it checkable at a glance.
+- `schema_for(name)` still resolves all twelve artifacts by name, and `tests/unit/test_artifact_schemas.py` still iterates every one.
+- Every merged module opens with a comment naming the workflow step it holds and the stages that call it.
+- The full suite passes unchanged, `tests/unit/test_import_graph.py` still finds no concrete axis imported from `shared/` or `pipeline/`, and `dvc repro` still reports up to date.
 
-**Source.** core § Repository layout; core Decisions (*A module holds one step of the workflow, not one concern*); shared decision 11.
+**Source.** core § Repository layout; core Decisions (*A module holds one step of the workflow — and merging stops where the consumers differ*); shared decision 11.
 
-**Out of scope.** Splitting `catalog.py`. Its 447 lines are one grammar in two directions, and the byte-identical round trip over 21,172 corpus catalogs is the proof they agree — a split would put the two halves where that proof no longer reads as one thing.
+**Out of scope.** Deleting the eleven artifact schemas whose stages do not exist yet. They are written and tested; grouping them by phase is enough, and each becomes live when its stage arrives.
 
 ## R3 · Delete the conformance suite
 

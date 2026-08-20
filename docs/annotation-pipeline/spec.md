@@ -251,29 +251,39 @@ dataforce/
 ├── src/dataforce/
 │   ├── shared/                  used by everything dataforce ever does
 │   │   ├── record.py            canonical record + typed content parts
-│   │   ├── artifacts.py         one pandera schema per artifact, all in one file
-│   │   ├── declared.py          manifests and prompts — everything read from config/
+│   │   ├── schemas/             one module per pipeline phase, so a stage imports
+│   │   │   ├── base.py          the columns every artifact carries
+│   │   │   ├── data_quality.py  loaded · usable · pii_findings · deduped
+│   │   │   ├── ai_review.py     votes · queue
+│   │   │   ├── human_review.py  questions · published · responses · aggregated
+│   │   │   │                    · curated
+│   │   │   └── release.py       split
+│   │   ├── manifest.py          what an implementation is, from config/<axis>/
+│   │   ├── prompts.py           prompt templates, by prompt_version
 │   │   ├── agreement.py         α over any δ, cohesion, plurality
-│   │   ├── gates.py             engine only — no thresholds live here
+│   │   ├── gates/runner.py      engine only — no thresholds live here
 │   │   └── errors.py
 │   │
 │   ├── modalities/              ← axis 1: how content is read
 │   │   ├── base.py              Modality protocol: 4 methods, nothing more
 │   │   ├── registry.py
-│   │   └── text.py              content_parts · embedding · detectors · display
+│   │   └── text/                content_parts · embedding · detectors · display
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
 │   │   ├── base.py              Profile protocol: 9 members, nothing more
 │   │   ├── registry.py          resolve by name; no conformance check
-│   │   └── tool_decision/       one file per step of the workflow:
+│   │   └── tool_decision/       one module per step of the workflow:
 │   │       ├── __init__.py      the profile object — the index to the rest
 │   │       ├── catalog.py       the tool-list format, rendered and read
 │   │       ├── ingest.py        stages 0–1 · source contract · canonical_record
 │   │       │                    · validity_checks · group_key
-│   │       ├── answers.py       stages 5–13 · answer_schema · answer_distance
-│   │       │                    · vote_consensus · question_text · answer_config
-│   │       │                    · training_example
-│   │       └── profiler.py      `dataforce profile` — measure the corpus, report drift
+│   │       ├── answers.py       stages 5–10 · answer_schema · answer_distance
+│   │       │                    · vote_consensus
+│   │       ├── annotate.py      stages 7–8 · question_text · answer_config
+│   │       ├── export.py        stage 13 · training_example
+│   │       ├── profiler.py      `dataforce profile` — measure the corpus, report drift
+│   │       └── schemas/         JSON Schema per input shape: what a record and a
+│   │                            tool are allowed to look like
 │   │
 │   ├── pipeline/                ← the fifteen stages, written once. A stage's package
 │   │                            is created by the task that implements it, not before
@@ -523,7 +533,15 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **A profile may declare `vote_consensus = None`.** *Why:* free-text generation has no defensible consensus, and inventing one would produce a plausible machine-written label that the optional tier could ship. Declaring the gap keeps such profiles fully supported for triage — where they are genuinely useful — while making the one thing they cannot do explicit. *Reversible:* a profile can gain a consensus later; nothing depends on its absence.
 
-**A module holds one step of the workflow, not one concern.** *Alternatives:* one file per concern, which is what was built first — a profile of ten files where four were under ninety lines; one file per protocol member. *Why:* the reader of this codebase follows a *path* — how does one record get from the source file to a training example — and a file per concern makes that path cross ten files, so the cost of understanding one step is ten navigations. Grouping by workflow step means the file boundary and the reader's question coincide: everything ingest does is in `ingest.py`, everything that happens once an answer exists is in `answers.py`. The one file that is not a step is `catalog.py`, because a *format* is used by several steps and copying it into each would be two sources of truth for one grammar. *The cost:* files are larger, and a step with genuinely unrelated halves would hide that. *Reversible:* yes, and splitting later is cheaper than merging, because the merge is what proves the halves belong together.
+**A module holds one step of the workflow — and merging stops where the consumers differ.** *Alternatives:* one file per concern, which is what was built first: a profile of nine modules where four were under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist. The opposite extreme — one module per package, `shared/artifacts.py` holding all twelve artifact schemas — was drafted and rejected. *Why:* two rules pull against each other and both are load-bearing.
+
+*Group what changes together.* The reader of this codebase follows a **path** — how does one record get from the source file to a training example — so a file per concern charges ten navigations for one step. Everything ingest does belongs in `ingest.py`, and the three modules that read the source changed together every time the source changed.
+
+*But never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become five, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
+
+The same test keeps `manifest.py` and `prompts.py` apart despite both being "things read from `config/`": a stage that wants a prompt has no business importing manifest loading. And it keeps `catalog.py` separate from both modules that use it, because a *format* copied into each of its consumers is two sources of truth for one grammar.
+
+*The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 
 **Every contract member is named for what it returns.** *Alternatives:* verb names (`load`, `adapt`, `export`); the mathematical symbol (`delta`). *Why:* a contract member is read far more often than written, and the reader has only the name and the signature. `adapt` names an activity so general it excludes nothing, and `load`/`export` were also stage names — one word meaning two things in one system, which is how a reviewer ends up unable to tell whether a sentence is about a stage or a method. Naming for the return value gives every member a falsifiable name: `content_parts` returning something that is not content parts is visibly wrong. *The cost:* `answer_distance` is longer than `δ`, and the symbol survives only in the α formulas where it is standard. *Reversible:* yes, and this is the cheapest moment it will ever be — after Phase 3 there are fifteen stages calling these names.
 
