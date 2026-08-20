@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from agent_toolkit.string_utils import slot_filling
-from conftest import CONFIG, SOURCE_ROOT, TOOL_DECISION, parsed_sources
+from conftest import CONFIG, SOURCE_ROOT, TOOL_DECISION, docstring_ids, parsed_sources
 
 from dataforce.declared import prompts
 from dataforce.shared.errors import ConfigError
@@ -30,27 +30,9 @@ MARKERS = (
 )
 
 
-def _docstrings(tree: ast.Module) -> set[int]:
-    """Which string constants are documentation. Prose about placeholders is prose."""
-    found: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-        ):
-            continue
-        first = node.body[0] if node.body else None
-        if (
-            isinstance(first, ast.Expr)
-            and isinstance(first.value, ast.Constant)
-            and isinstance(first.value.value, str)
-        ):
-            found.add(id(first.value))
-    return found
-
-
 def templates(tree: ast.Module) -> list[str]:
     """String constants that carry a `slot_filling` placeholder -- i.e. templates."""
-    documentation = _docstrings(tree)
+    documentation = docstring_ids(tree)
     return [
         node.value
         for node in ast.walk(tree)

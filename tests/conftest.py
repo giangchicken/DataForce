@@ -57,9 +57,35 @@ def source_files() -> list[Path]:
     return files
 
 
-def parsed_sources() -> Iterator[tuple[Path, ast.Module]]:
-    for path in sorted(SOURCE_ROOT.rglob("*.py")):
+def parsed_sources(
+    source_root: Path = SOURCE_ROOT,
+) -> Iterator[tuple[Path, ast.Module]]:
+    """Every module under one source tree, parsed. Any tree, so a guard written here
+    can be run against an older checkout of it and shown to fail."""
+    for path in sorted(source_root.rglob("*.py")):
         yield path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def docstring_ids(tree: ast.Module) -> set[int]:
+    """Which string constants in one module are documentation.
+
+    Prose that mentions a placeholder, or names where `config/` is, is prose. Two
+    guards need this distinction, so it is here rather than in either of them.
+    """
+    found: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            continue
+        first = node.body[0] if node.body else None
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            found.add(id(first.value))
+    return found
 
 
 class FakeTextModality:
