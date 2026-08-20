@@ -26,7 +26,7 @@ The prediction task is **never reformulated**. Every juror, every question, and 
 
 ### What the corpus contains
 
-Measured over the whole file rather than sampled, most recently 2026-08-18:
+Measured over the whole file rather than sampled, by `dataforce profile`. Every figure below is quoted from `metrics/corpus_profile.json`, which CI pins and fails on drift — that file wins over this table, and five figures here had silently diverged from it before this was written down.
 
 | Property | Value |
 |---|---:|
@@ -35,15 +35,15 @@ Measured over the whole file rather than sampled, most recently 2026-08-18:
 | Answer cardinality 0 / 1 / 2 / 3 | 7,498 (35.4%) / 10,596 (50.0%) / 2,757 (13.0%) / 321 (1.5%) |
 | Distinct tool names in labels | 14,411 |
 | Most frequent single tool | 35 occurrences |
-| Catalog size per record | 0–20 tools |
-| Distinct catalog fingerprints | 17,596 (16,293 singletons; largest non-empty group 112) |
-| Distinct `meta` key-sets | 13 |
+| Catalog size per record | 1–20 tools — none empty, which is why `empty_catalog` reads 0 |
+| Distinct catalog fingerprints | 17,583 (16,276 singletons; largest non-empty group 112) |
+| Distinct `meta` key-sets | 22 |
 | Labelled by `gemma-4-31B-it` | 14,241 (67.3%) |
 | Carrying `orig_label` — already relabelled once | 1,358, of which 1,346 changed |
-| Duplicate user turns | 491 records (2.32%) |
+| Duplicate user turns | 491 groups covering 982 records (4.64%) |
 | Duplicate (system, user) pairs | 1 |
 | Prompt size, system + user | mean 4,750 chars · p50 4,446 · p90 6,310 · p99 17,044 |
-| Total prompt characters | 100,557,307 |
+| Total prompt characters | 100,557,297 |
 
 Three kinds of invalid record are detectable without a single human judgment, and a fourth was fixed in the source on 2026-08-17:
 
@@ -190,7 +190,7 @@ Chỉ được dùng tên tool xuất hiện trong danh sách trên.
 
 ### Cost, estimated
 
-100,557,307 prompt characters. At 3 characters per token — an assumption, since Vietnamese diacritics tokenize unevenly — one pass is ~34M input tokens:
+100,557,297 prompt characters. At 3 characters per token — an assumption, since Vietnamese diacritics tokenize unevenly — one pass is ~34M input tokens:
 
 | Pass | Records | Input tokens |
 |---|---:|---:|

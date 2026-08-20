@@ -25,8 +25,8 @@ invalid_counts:
   empty_catalog: 0
   label_cardinality_anomaly: 0
 
-# The gold set, declared as a count so it drifts loudly. `config/source/` says which
-# field identifies it; this says how many records that field is expected to select.
+# The gold set, declared as a count so it drifts loudly. The profile manifest's
+# `gold.from` says which field identifies it; this says how many records it selects.
 gold:
   records: 951
 
