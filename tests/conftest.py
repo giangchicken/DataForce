@@ -16,8 +16,6 @@ from typing import Any
 
 import pytest
 
-from dataforce.modalities import registry as modality_registry
-from dataforce.profiles import registry as profile_registry
 from dataforce.profiles.base import Answer
 from dataforce.shared.record import (
     Part,
@@ -52,18 +50,6 @@ def source_files() -> list[Path]:
 def parsed_sources() -> Iterator[tuple[Path, ast.Module]]:
     for path in sorted(SOURCE_ROOT.rglob("*.py")):
         yield path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
-
-@pytest.fixture(autouse=True)
-def _isolated_registries() -> Iterator[None]:
-    """Registration is process-global; a test that registers must not leak."""
-    modalities = dict(modality_registry._REGISTRY)
-    profiles = dict(profile_registry._REGISTRY)
-    yield
-    modality_registry._REGISTRY.clear()
-    modality_registry._REGISTRY.update(modalities)
-    profile_registry._REGISTRY.clear()
-    profile_registry._REGISTRY.update(profiles)
 
 
 class FakeTextModality:

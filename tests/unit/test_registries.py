@@ -3,38 +3,43 @@
 from __future__ import annotations
 
 import pytest
-from conftest import FreeTextProfile, SetProfile
+from conftest import FakeTextModality, FreeTextProfile, SetProfile
 
 from dataforce.cli import _register_implementations
-from dataforce.modalities import registry as modalities
-from dataforce.profiles import registry as profiles
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import stamp
+from dataforce.shared.registry import Registry
 
 
 def test_a_registered_modality_resolves_by_name(modality: object) -> None:
-    modalities.register(modality)
-    assert modalities.get("fake_text") is modality
-    assert "fake_text" in modalities.names()
+    registry = Registry()
+    registry.register_modality(modality)
+
+    assert registry.modality("fake_text") is modality
+    assert "fake_text" in registry.modality_names()
 
 
 def test_an_unregistered_modality_names_what_is_registered(modality: object) -> None:
-    modalities.register(modality)
+    registry = Registry()
+    registry.register_modality(modality)
+
     with pytest.raises(ConfigError, match="fake_text"):
-        modalities.get("audio")
+        registry.modality("audio")
 
 
 def test_an_empty_registry_says_so() -> None:
     with pytest.raises(ConfigError, match="none"):
-        profiles.get("tool_decision")
+        Registry().profile("tool_decision")
 
 
 def test_registering_a_second_implementation_of_one_name_is_refused(
     modality: object,
 ) -> None:
-    modalities.register(modality)
+    registry = Registry()
+    registry.register_modality(modality)
+
     with pytest.raises(ConfigError, match="already registered"):
-        modalities.register(type(modality)())
+        registry.register_modality(type(modality)())
 
 
 def test_something_that_is_not_a_modality_is_refused_with_the_member_list() -> None:
@@ -43,15 +48,16 @@ def test_something_that_is_not_a_modality_is_refused_with_the_member_list() -> N
         version = "1"
 
     with pytest.raises(ConfigError, match="personal_data_detectors"):
-        modalities.register(NotOne())  # type: ignore[arg-type]
+        Registry().register_modality(NotOne())  # type: ignore[arg-type]
 
 
 def test_a_registered_profile_resolves_by_name() -> None:
+    registry = Registry()
     profile = SetProfile()
-    profiles.register(profile)
+    registry.register_profile(profile)
 
-    assert profiles.get("fake_tools") is profile
-    assert "fake_tools" in profiles.names()
+    assert registry.profile("fake_tools") is profile
+    assert "fake_tools" in registry.profile_names()
 
 
 def test_something_that_is_not_a_profile_is_refused_with_the_member_list() -> None:
@@ -62,20 +68,42 @@ def test_something_that_is_not_a_profile_is_refused_with_the_member_list() -> No
         version = "1"
 
     with pytest.raises(ConfigError, match="answer_schema"):
-        profiles.register(NotOne())  # type: ignore[arg-type]
+        Registry().register_profile(NotOne())  # type: ignore[arg-type]
 
 
 def test_registering_a_second_implementation_of_one_profile_name_is_refused() -> None:
-    profiles.register(SetProfile())
+    registry = Registry()
+    registry.register_profile(SetProfile())
+
     with pytest.raises(ConfigError, match="already registered"):
-        profiles.register(SetProfile())
+        registry.register_profile(SetProfile())
 
 
 def test_a_profile_with_no_defensible_consensus_is_still_selectable() -> None:
     """Returning None from `vote_consensus` bars the optional tier, not the profile."""
-    profiles.register(FreeTextProfile())
+    registry = Registry()
+    registry.register_profile(FreeTextProfile())
 
-    assert profiles.get("fake_free_text").name == "fake_free_text"
+    assert registry.profile("fake_free_text").name == "fake_free_text"
+
+
+def test_two_registries_in_one_process_hold_different_implementations() -> None:
+    """Why registration is instance state, on both axes at once.
+
+    One process may serve two configurations, and neither registry may resolve a
+    name the other registered. This is what the deleted autouse fixture had to
+    guarantee by snapshotting and restoring two module-level dicts.
+    """
+    one, other = Registry(), Registry()
+    one.register_profile(SetProfile())
+    one.register_modality(FakeTextModality())
+    other.register_profile(FreeTextProfile())
+
+    assert one.profile_names() == ["fake_tools"]
+    assert other.profile_names() == ["fake_free_text"]
+    assert other.modality_names() == []
+    with pytest.raises(ConfigError, match="fake_tools"):
+        other.profile("fake_tools")
 
 
 def test_every_profile_the_composition_root_registers_has_its_modality() -> None:
@@ -84,24 +112,28 @@ def test_every_profile_the_composition_root_registers_has_its_modality() -> None
     Folded in from `tests/conformance/test_registered_profiles.py`: the composition
     root is what a run resolves through, so that is what this registers from.
     """
-    _register_implementations()
+    registry = _register_implementations()
 
-    assert profiles.names(), "the composition root registered no profile"
-    for name in profiles.names():
-        declared = profiles.get(name).modality
-        assert modalities.get(declared).name == declared
+    assert registry.profile_names(), "the composition root registered no profile"
+    for name in registry.profile_names():
+        declared = registry.profile(name).modality
+        assert registry.modality(declared).name == declared
 
 
 def test_a_profile_and_modality_that_disagree_hard_stop() -> None:
-    profiles.register(SetProfile())
-    assert profiles.get("fake_tools", modality="fake_text").name == "fake_tools"
+    registry = Registry()
+    registry.register_profile(SetProfile())
+
+    assert registry.profile("fake_tools", modality="fake_text").name == "fake_tools"
     with pytest.raises(ConfigError, match="composes with modality 'fake_text'"):
-        profiles.get("fake_tools", modality="audio")
+        registry.profile("fake_tools", modality="audio")
 
 
 def test_the_resolved_pair_is_stamped_with_both_versions(modality: object) -> None:
-    modalities.register(modality)
-    profiles.register(SetProfile())
-    producer = stamp(modalities.get("fake_text"), profiles.get("fake_tools"))
+    registry = Registry()
+    registry.register_modality(modality)
+    registry.register_profile(SetProfile())
+
+    producer = stamp(registry.modality("fake_text"), registry.profile("fake_tools"))
     assert producer.modality == "fake_text@1"
     assert producer.profile == "fake_tools@1"

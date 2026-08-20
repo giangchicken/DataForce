@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 
-from dataforce.modalities import registry
 from dataforce.modalities.base import Modality
 from dataforce.modalities.text import TEXT
 from dataforce.shared.errors import ConfigError
@@ -21,6 +20,7 @@ from dataforce.shared.record import (
     TextPart,
     compute_rid,
 )
+from dataforce.shared.registry import Registry
 
 MARKERS = (
     "{trigger}",
@@ -73,8 +73,9 @@ def test_loaded_text_is_byte_identical_to_the_source() -> None:
 
 def test_the_modality_is_registrable_through_the_real_gate() -> None:
     assert isinstance(TEXT, Modality)
-    registry.register(TEXT)
-    assert registry.get("text") is TEXT
+    registry = Registry()
+    registry.register_modality(TEXT)
+    assert registry.modality("text") is TEXT
 
 
 def test_privacy_detectors_are_empty_until_they_land() -> None:

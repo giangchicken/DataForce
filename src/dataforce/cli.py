@@ -14,11 +14,10 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from dataforce import __version__
-from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
-from dataforce.profiles import registry as profile_registry
 from dataforce.profiles.tool_decision import TOOL_DECISION
 from dataforce.profiles.tool_decision.measure_corpus import profile_corpus
+from dataforce.shared.registry import Registry
 
 # Which profile knows how to measure its own corpus. A profile is not required to:
 # the four validity counts and the group sizes are generic, everything else here is
@@ -62,19 +61,21 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _register_implementations() -> None:
+def _register_implementations() -> Registry:
     """The composition root: the one place a concrete modality or profile is named.
 
     No module under `pipeline/` or `shared/` may import one, so this is where both
     axes arrive. Registration resolves a name and checks nothing else.
     """
-    modality_registry.register(TEXT)
-    profile_registry.register(TOOL_DECISION)
+    registry = Registry()
+    registry.register_modality(TEXT)
+    registry.register_profile(TOOL_DECISION)
+    return registry
 
 
 def _profile(args: argparse.Namespace) -> int:
-    _register_implementations()
-    profile = profile_registry.get(args.profile)
+    registry = _register_implementations()
+    profile = registry.profile(args.profile)
     measurer = _PROFILERS.get(profile.name)
     if measurer is None:
         print(
@@ -85,7 +86,7 @@ def _profile(args: argparse.Namespace) -> int:
         return 2
 
     measured, moved = measurer(
-        modality_registry.get(profile.modality), profile, accept=args.accept
+        registry.modality(profile.modality), profile, accept=args.accept
     )
     print(json.dumps({**measured["source"], "records": measured["records"]}, indent=2))
     if not moved:

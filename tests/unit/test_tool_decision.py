@@ -15,12 +15,11 @@ from typing import Any
 import pytest
 from agent_toolkit.file_utils import read_yaml
 
-from dataforce.modalities import registry as modality_registry
 from dataforce.modalities.text import TEXT
-from dataforce.profiles import registry as profile_registry
 from dataforce.profiles.tool_decision import TOOL_DECISION, build_record
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record
+from dataforce.shared.registry import Registry
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"
@@ -76,10 +75,11 @@ def check() -> dict[str, Any]:
 
 
 def test_the_profile_composes_with_the_text_modality() -> None:
-    modality_registry.register(TEXT)
-    profile_registry.register(TOOL_DECISION)
+    registry = Registry()
+    registry.register_modality(TEXT)
+    registry.register_profile(TOOL_DECISION)
 
-    assert profile_registry.get("tool_decision", modality="text") is TOOL_DECISION
+    assert registry.profile("tool_decision", modality="text") is TOOL_DECISION
 
 
 # --- the four validity checks ------------------------------------------------
