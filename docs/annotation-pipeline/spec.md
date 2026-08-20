@@ -108,7 +108,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 ### The profile and modality contracts
 
 1. A **modality** supplies exactly four things, each named for what it returns: `content_parts` (raw → typed parts), `embedding` (parts → vector) for duplicate detection, `personal_data_detectors`, and `display_config`, the annotation-UI half that *displays* a record. Nothing else.
-2. A **profile** supplies exactly nine things, each named for what it returns: `canonical_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
+2. A **profile** supplies exactly nine things, each named for what it returns: `build_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
 4. `answer_distance` must be a metric on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53.
 5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated with per-annotator reliability weighting in stage 10.
@@ -272,16 +272,24 @@ dataforce/
 │   ├── profiles/                ← axis 2: what an answer is
 │   │   ├── base.py              Profile protocol: 9 members, nothing more
 │   │   ├── registry.py          resolve by name; no conformance check
-│   │   └── tool_decision/       one module per step of the workflow:
+│   │   └── tool_decision/       three definitions, two steps, one tool:
 │   │       ├── __init__.py      the profile object — the index to the rest
-│   │       ├── catalog.py       the tool-list format, rendered and read
-│   │       ├── ingest.py        stages 0–1 · source contract · canonical_record
+│   │       │
+│   │       ├── tool_schema.py   DEFINITION · what a tool is, and every conversion
+│   │       │                    of it: tools_to_catalog · catalog_to_tools
+│   │       │                    · build_system_prompt · to_strict_openai
+│   │       │                    · catalog_names · catalog_fingerprint
+│   │       ├── answer.py        DEFINITION · what an answer is: answer_schema
+│   │       │                    · answer_space · answer_distance · vote_consensus
+│   │       │                    · training_example
+│   │       ├── source_contract.py  DEFINITION · what this corpus calls things
+│   │       │
+│   │       ├── build_record.py  STEP · stages 0–1 · build_record · read_catalog
 │   │       │                    · validity_checks · group_key
-│   │       ├── answers.py       stages 5–10 · answer_schema · answer_distance
-│   │       │                    · vote_consensus
-│   │       ├── annotate.py      stages 7–8 · question_text · answer_config
-│   │       ├── export.py        stage 13 · training_example
-│   │       ├── profiler.py      `dataforce profile` — measure the corpus, report drift
+│   │       ├── ask_annotator.py STEP · stages 7–8 · question_text · answer_config
+│   │       │                    · readable_catalog
+│   │       │
+│   │       ├── measure_corpus.py  TOOL · `dataforce profile`, not in the flow
 │   │       └── schemas/         JSON Schema per input shape: what a record and a
 │   │                            tool are allowed to look like
 │   │
@@ -325,7 +333,11 @@ Nothing under `pipeline/` imports a concrete modality or profile — both arrive
 
 Read the two together as one sentence: a modality answers *how is this content read*, a profile answers *what is an answer about it*. Neither may answer the other's question, and that is the whole reason a new modality does not multiply the profiles that already exist.
 
-**Every member is named for what it returns.** `content_parts` returns content parts; `embedding` returns an embedding; `answer_distance` returns a distance between answers. This is a rule and not a preference, because a contract member is read far more often than it is written and the reader has only the name: `load` and `adapt` said nothing about their output, and worse, `load` and `export` were also the names of stages 0 and 13 — the same word meaning two things in one system. No member shares a name with a stage.
+**Every name contains its result.** Not a preference — a rule, and it applies to every function in the codebase, not only to contract members. `content_parts` returns content parts, `embedding` returns an embedding, `tools_to_catalog` returns a catalog, `build_record` returns a record. A verb goes in front only when the bare noun would be ambiguous.
+
+What the rule rejects, and these were all real names here: `adapt`, `parse`, `of`, `label_of`. A single word that names an operation without its object means nothing read alone — `parse` parses what, into what? — and `label_of` reads backwards. Two more were worse than vague: `load` and `export` were also the names of stages 0 and 13, so a sentence mentioning either was ambiguous. **No function shares a name with a stage.**
+
+The convention comes from the corpus generator, which already had it right: `tools_to_catalog`, `tool_to_block`, `build_system_prompt`, `to_strict_openai`, `render_params`. `X_to_Y` for a conversion, `build_X` for something assembled, `read_X` for something pulled out of a larger structure.
 
 ```python
 class Modality(Protocol):
@@ -376,8 +388,9 @@ class Profile(Protocol):
 
     # Stage 0 `load`. Raw item + parts -> the canonical record. Keeps every field it
     # does not own, because what looks like noise now is what a later question turns
-    # out to need -- profile rule 4.
-    def canonical_record(self, raw: Any, parts: list[Part]) -> Record: ...
+    # out to need -- profile rule 4. `build_` and not a bare noun: `record` alone is
+    # the name of the thing every function here already takes as an argument.
+    def build_record(self, raw: Any, parts: list[Part]) -> Record: ...
 
     # Stages 5 `jury`, 6 `rank_for_review`, 10 `aggregate`. The distance between two
     # answers -- and the *only* thing the core knows about disagreement. Cohesion,
@@ -475,7 +488,7 @@ Every block below has exactly one owning stage, named in the comments. The one s
     // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
   ],
-  // stage 0, from the profile's `canonical_record`. The three fields it owns: what an
+  // stage 0, from the profile's `build_record`. The three fields it owns: what an
   // answer may be for *this* record, the answer itself, and everything the profile
   // does not own -- kept verbatim, because what looks like noise now is what a later
   // question turns out to need.
@@ -535,11 +548,13 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **A module holds one step of the workflow — and merging stops where the consumers differ.** *Alternatives:* one file per concern, which is what was built first: a profile of nine modules where four were under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist. The opposite extreme — one module per package, `shared/artifacts.py` holding all twelve artifact schemas — was drafted and rejected. *Why:* two rules pull against each other and both are load-bearing.
 
-*Group what changes together.* The reader of this codebase follows a **path** — how does one record get from the source file to a training example — so a file per concern charges ten navigations for one step. Everything ingest does belongs in `ingest.py`, and the three modules that read the source changed together every time the source changed.
+*Group what changes together.* The reader of this codebase follows a **path** — how does one record get from the source file to a training example — so a file per concern charges ten navigations for one step. Everything stage 0 and stage 1 do belongs in `build_record.py`, and the three modules that read the source changed together every time the source changed.
 
-*But never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become five, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
+*And a module is a definition or a step, never both.* A **definition** module defines one noun and every conversion of it — `tool_schema.py` is a tool and the six ways one is written or read; `answer.py` is an answer, the distance between two, and the row a trainer wants. A definition is *supposed* to be used by many steps: one used in a single place is not a definition, it is that step. A **step** module is used by exactly one step of the flow and by nothing else, which is why `validity_checks` has no file of its own — it serves stage 1 alone, so it lives beside the stage-0 code that produces what it checks. This is what answers "why does one file turn up in four different states": only definitions do, there are three of them, and each is named for the noun it defines.
 
-The same test keeps `manifest.py` and `prompts.py` apart despite both being "things read from `config/`": a stage that wants a prompt has no business importing manifest loading. And it keeps `catalog.py` separate from both modules that use it, because a *format* copied into each of its consumers is two sources of truth for one grammar.
+*And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become five, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
+
+The same test keeps `manifest.py` and `prompts.py` apart despite both being "things read from `config/`": a stage that wants a prompt has no business importing manifest loading. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
 
 *The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 
@@ -578,7 +593,7 @@ Five properties the pipeline assumes of every profile. They are not checked by a
 | 1 | **`answer_distance` is a metric.** `d(a,a) = 0`, symmetric, in `[0,1]`, never `NaN` — including on the empty answer, which for some corpora is a third of the corpus. | Cohesion, corpus conflict, the four triage buckets and α are all mean distances. A distance that is not a metric makes each of them a number with no meaning. | Nothing fails. Cohesion looks plausible, the review queue is ranked wrongly, and α is reported to three decimal places. This is the expensive one. |
 | 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs is not reproducible — invariant 14. | Two `dvc repro` runs produce different datasets from one commit. |
 | 3 | **An answer survives a JSON round trip.** `json.loads(json.dumps(a)) == a`, and `answer_distance` treats the result as equal to the original. | Every artifact is JSONL. An answer that is a `set` or a tuple comes back as something else, and every distance computed after the round trip is wrong. | Distances become non-zero between a vote and itself, one stage later. |
-| 4 | **`canonical_record` preserves every field it does not own.** Anything in the raw item that is not `content`, the answer, or the answer space lands in `meta` verbatim. | What looks like noise now is what a later question turns out to need; the corpus profiler counts fields nothing yet reads. | A field is silently gone, and only a re-ingest from the source recovers it. |
+| 4 | **`build_record` preserves every field it does not own.** Anything in the raw item that is not `content`, the answer, or the answer space lands in `meta` verbatim. | What looks like noise now is what a later question turns out to need; the corpus profiler counts fields nothing yet reads. | A field is silently gone, and only a re-ingest from the source recovers it. |
 | 5 | **`training_example` reproduces the answer the record carries.** The exported example states the same answer as `record.label`, in whatever place that profile's trainer expects it. | It is the last point at which the pipeline can notice it is shipping a different answer from the one people agreed on. | A release trains on the wrong labels. For `tool_decision` this fired on 48 records before the source was fixed. |
 
 A profile with no defensible consensus returns `None` from `vote_consensus` for every input, including unanimous input. That is a declaration rather than a failure of rule 2: it bars the profile from the optional consensus tier and nothing else, since triage needs only `answer_distance`.

@@ -33,8 +33,8 @@ These are settled by the specs. No task re-decides them, and a task that violate
 7. **Content parts use `type`, not `kind`**, with closed values `text | image | audio | video` and the payload flat on the part. — core Decisions
 8. **Python 3.12.14**; `agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0`. `git` must exist on the installing machine. CI sets `TIKTOKEN_CACHE_DIR` against a populated cache.
 9. **`data/raw/` is outside DVC entirely.** Not tracked, not committed, in `.gitignore`.
-10. **Every contract member is named for what it returns**, and no member shares a name with a stage. `content_parts`, `embedding`, `personal_data_detectors`, `display_config`; `canonical_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, `training_example`. — core § The two contracts, core Decisions
-11. **A module holds one step of the workflow — and merging stops where the consumers differ.** Everything a step does lives in one module, so following one record's path does not cross ten files. Two limits: a module may not force a consumer to depend on what it does not use, which is why `shared/schemas/` stays a package divided by pipeline phase rather than becoming one file every stage imports; and a *format* used by several steps stays its own module. — core Decisions
+10. **Every name contains its result**, everywhere — not only on the contracts. `X_to_Y` for a conversion, `build_X` for something assembled, `read_X` for something pulled out of a larger structure; the convention is the corpus generator's own. Rejected: a single word naming an operation without its object (`adapt`, `parse`, `of`), a name that reads backwards (`label_of`), and any name that is also a stage name (`load`, `export`). — core § The two contracts, core Decisions
+11. **A module is a definition or a step, never both.** A definition module defines one noun and every conversion of it, and is expected to serve many steps. A step module serves exactly one step and nothing else — so a helper used by one step gets no file of its own. Two further limits: a module may not force a consumer to depend on what it does not use, which is why `shared/schemas/` stays a package divided by pipeline phase rather than becoming one file every stage imports; and a module's name says what is inside it. — core Decisions
 12. **There is no conformance suite.** The five profile rules are stated in core § *Rules a profile must satisfy* and each profile proves them in its own tests. Nothing checks them at registration, and the cost of that is stated with the rules. — core requirement 6, core Decisions
 
 **Not code, and blocking.** Two prerequisites are human work that gates specific phases; they are tasks 21 and 27 rather than footnotes, because skipping them silently is the failure mode.
@@ -140,7 +140,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Relevant files.** `docs/annotation-pipeline/spec.md` § *Rules a profile must satisfy*. No source file.
 
-**Proposed approach.** A table of five rules — `answer_distance` is a metric; `vote_consensus` is deterministic and honours unanimity; an answer survives a JSON round trip; `canonical_record` preserves every field it does not own; `training_example` reproduces the record's answer — each with what the pipeline needs it for and what a reader would see if it were broken. A profile returning `None` from `vote_consensus` for every input declares it has no defensible consensus, which is a declaration rather than a broken rule 2.
+**Proposed approach.** A table of five rules — `answer_distance` is a metric; `vote_consensus` is deterministic and honours unanimity; an answer survives a JSON round trip; `build_record` preserves every field it does not own; `training_example` reproduces the record's answer — each with what the pipeline needs it for and what a reader would see if it were broken. A profile returning `None` from `vote_consensus` for every input declares it has no defensible consensus, which is a declaration rather than a broken rule 2.
 
 **Acceptance criteria.**
 - Each of the five rules names the pipeline behaviour that depends on it and the symptom when it is broken.
@@ -280,15 +280,17 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Blocked by.** T10. **Blocks.** T11 — no stage should be written against the old names.
 
-## R1 · Rename every contract member
+## R1 · Rename every function so its name contains its result
 
-**Goal.** No member of either contract is named for an activity, and no member shares a name with a stage.
+**Goal.** No function in the profile or either contract is named for an operation without its object, and no function shares a name with a stage.
 
-**Context.** Two defects, one of them objective. `load` and `export` were also the names of stages 0 and 13, so a sentence mentioning either was ambiguous — and `load` appears ten times in the core spec, most of them the stage. The rest named activities so general they excluded nothing: a reviewer reading `adapt(raw, parts)` learns only that something is adapted. The replacement is a rule rather than a list of preferences: **a member is named for what it returns**, which makes a wrong name visible — `content_parts` returning something that is not content parts is a legible defect.
+**Context.** Three defects, one of them objective. `load` and `export` were also the names of stages 0 and 13, so a sentence mentioning either was ambiguous — `load` appears ten times in the core spec and most of them are the stage. `adapt`, `parse`, `of` and `label_of` name an operation with no object, so they mean nothing read alone: *parse what, into what?* And the file names had the same problem — `catalog.py`, `adapter.py`, `source.py`, `checks.py` name a topic rather than contents.
+
+The convention is not invented for this task. The corpus generator already had it: `tools_to_catalog`, `tool_to_block`, `build_system_prompt`, `to_strict_openai`, `render_params`. **Every name contains its result**, with a verb in front only when the bare noun would be ambiguous.
 
 **Relevant files.** `src/dataforce/modalities/base.py`, `src/dataforce/profiles/base.py`, both registries, `modalities/text/`, `profiles/tool_decision/`, `cli.py`, every test module, `docs/profiles/tool-decision/spec.md`, `README.md`.
 
-**Proposed approach.** One rename per member, with no signature change:
+**Proposed approach.** No signature changes. The contracts:
 
 | Contract | Was | Is | Returns |
 |---|---|---|---|
@@ -296,62 +298,88 @@ These are settled by the specs. No task re-decides them, and a task that violate
 | Modality | `embed` | `embedding` | `Sequence[float]` |
 | Modality | `privacy_detectors` | `personal_data_detectors` | `list[Detector]` |
 | Modality | `display_control` | `display_config` | `UIControl` |
-| Profile | `adapt` | `canonical_record` | `Record` |
+| Profile | `adapt` | `build_record` | `Record` |
 | Profile | `delta` | `answer_distance` | `float` |
-| Profile | `consensus` | `vote_consensus` | `Answer \| None` |
+| Profile | `consensus` | `vote_consensus(votes)` | `Answer \| None` |
 | Profile | `question` | `question_text` | `str` |
 | Profile | `answer_control` | `answer_config` | `UIControl` |
 | Profile | `export` | `training_example` | `dict[str, Any]` |
 
-`validity_checks`, `group_key`, `answer_schema`, `name`, `version` and `modality` are unchanged: each already names what it returns. `δ` survives as the symbol in the α formulas of core requirements 52–53, where it is standard notation; the *member* is `answer_distance`. The parameter of `vote_consensus` is `votes`, not `answers`, because that is what answers "whose consensus".
+`validity_checks`, `group_key`, `answer_schema`, `name`, `version` and `modality` are unchanged; each already contains its result. `build_record` takes the verb because `record` alone is the name of the argument nearly every other function here already receives.
+
+Inside the profile:
+
+| Was | Is | Lands in |
+|---|---|---|
+| `catalog.render` | `tools_to_catalog` | `tool_schema.py` |
+| `catalog.parse` | `catalog_to_tools` | `tool_schema.py` |
+| `catalog.render_system_prompt` | `build_system_prompt` | `tool_schema.py` |
+| `catalog.as_function` | `to_strict_openai` | `tool_schema.py` |
+| `adapter.catalog_names` | `catalog_names` | `tool_schema.py` |
+| `adapter.catalog_fingerprint` | `catalog_fingerprint` | `tool_schema.py` |
+| `adapter.answer_space_for` | `answer_space` | `answer.py` |
+| `answers.delta` | `answer_distance` | `answer.py` |
+| `answers.consensus` | `vote_consensus` | `answer.py` |
+| `export.export` | `training_example` | `answer.py` |
+| `SourceContract.of` | `read_source_contract(manifest)` | `source_contract.py` |
+| `contract.label_of` | `contract.read_label` | `source_contract.py` |
+| `contract.role` / `contract.field` | `role_name` / `field_name` | `source_contract.py` |
+| `adapter.adapt` | `build_record` | `build_record.py` |
+| `adapter.catalog_of` | `read_catalog` | `build_record.py` |
+| `profiler.measure` | `corpus_measurements` | `measure_corpus.py` |
+| `profiler.drift` | `moved_measurements` | `measure_corpus.py` |
+
+The first four are the generator's own names, so the two codebases stop disagreeing about what one conversion is called. `catalog_to_tools` is deliberately the exact inverse of `tools_to_catalog`, which is what a round-trip test reads as.
 
 **Acceptance criteria.**
 - `Modality.__protocol_attrs__` and `Profile.__protocol_attrs__` contain none of the ten old names, and `tests/unit/test_protocols.py` pins the new sets as literals.
-- No member name equals a stage name. A test asserts the two sets are disjoint, reading the stage names from `dvc.yaml` and the spec's stage table.
+- No function name equals a stage name. A test asserts the two sets are disjoint, reading the stage names from `dvc.yaml` and the spec's stage table.
+- No single-word function name that is a bare operation survives in `src/`: `adapt`, `parse`, `of`, `render`, `export`, `load`, `embed`, `measure`, `drift`.
 - The full suite passes with no behavioural change: same test count, same assertions, same corpus counts in `metrics/corpus_profile.json`.
-- No old name survives anywhere in `src/`, `tests/`, or the three spec documents.
 
-**Source.** core requirements 1, 2; core § The two contracts; core Decisions (*Every contract member is named for what it returns*); shared decision 10.
+**Source.** core requirements 1, 2; core § The two contracts; core Decisions (*Every name contains its result*); shared decision 10.
 
-**Verify.** `make check && uv run dataforce profile --profile tool_decision && grep -rE '\b(load|adapt|delta|consensus|export|embed|question|answer_control|display_control|privacy_detectors)\s*\(' src/dataforce/profiles src/dataforce/modalities`
+**Verify.** `make check && uv run dataforce profile --profile tool_decision`
 
 **Out of scope.** Record field names. `group_key`, `label`, `answer_space` and `meta` stay as they are — renaming a field means rewriting artifacts, and no artifact exists yet to make it free.
 
-## R2 · Group modules by workflow step, within the consumer boundary
+## R2 · A module is a definition or a step, and its name says which
 
-**Goal.** Following one record from the source file to a training example crosses four modules, not ten. `src/` goes from 49 files to 30 — and no module gains a consumer that does not use all of it.
+**Goal.** Nine modules in the profile become seven, each named for its contents, and only three of them are used by more than one step of the flow — the three that define a noun.
 
-**Context.** Two complaints, and the second corrects the first. A file per concern produced a profile of nine modules where four are under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist; following one step costs ten navigations. But the flat fix — one `shared/artifacts.py` holding all twelve artifact schemas — is worse architecture, not better: fifteen stages import from `shared/`, so a single module means `data_quality/load.py` and `release/document.py` depend on the same file and editing the release schema puts every stage in the blast radius. The rule is therefore **group what changes together, and stop where the consumers differ.**
+**Context.** Two review findings. First, the file names name topics rather than contents: `catalog.py`, `adapter.py`, `source.py`, `checks.py`. Second, and the real one: *"why the files attend in many state? i dont want it."* Today `adapter.py` is used by four parts of the flow, `answers.py` by four, `catalog.py` by two — so following one step means opening files that also belong to three other steps.
 
-**Relevant files.** `src/dataforce/shared/schemas/`, `src/dataforce/profiles/tool_decision/`, `src/dataforce/pipeline/`.
+The resolution is to say which kind each module is, because the two kinds have opposite rules. A **definition** defines one noun and every conversion of it, and is *supposed* to serve many steps: a definition used in one place is not a definition, it is that step. A **step** serves exactly one step of the flow and nothing else. Once that line is drawn, the answer to "why does this file turn up in four states" is: only definitions do, there are three, and each is named for the noun it defines.
 
-**Proposed approach.** Merge only where one consumer uses the whole module. Move no logic between functions; delete nothing but empty packages.
+**Relevant files.** `src/dataforce/profiles/tool_decision/`, `src/dataforce/shared/schemas/`, `src/dataforce/pipeline/`.
 
-| From | To | Why this boundary |
-|---|---|---|
-| `shared/schemas/` — 14 modules | **stays a package**, 6 modules: `base.py` plus one per pipeline phase — `data_quality.py` (loaded, usable, pii_findings, deduped), `ai_review.py` (votes, queue), `human_review.py` (questions, published, responses, aggregated, curated), `release.py` (split) | a stage imports its own phase and nothing else. Phase is also the boundary along which these schemas actually change |
-| `tool_decision/{source,adapter,checks}.py` | `tool_decision/ingest.py` — stages 0–1: the source contract, `canonical_record`, `validity_checks`, `group_key` | all three read the source, all three changed together every time the source shape changed, and the profile object is their only consumer |
-| `tool_decision/profile.py` | split by step: the profile object into `__init__.py`, `question_text` + `answer_config` into `annotate.py`, the answer delegations into `answers.py` | the front door becomes the index and nothing else |
-| `pipeline/**/__init__.py` — 8 empty modules | deleted; each stage task creates its own package | an empty package is a promise, not a boundary |
+**Proposed approach.**
 
-**Not merged, deliberately:**
+| Module | Kind | Holds | Lines |
+|---|---|---|---|
+| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` and the catalog half of `adapter.py` | ~505 |
+| `answer.py` | definition | what an answer is — `answer_schema`, `answer_space`, `answer_distance`, `vote_consensus`, `training_example`. Absorbs `answers.py` and `export.py` | ~110 |
+| `source_contract.py` | definition | what this corpus calls things, read from the manifest. Was `source.py` | ~90 |
+| `build_record.py` | step | stages 0–1 — `build_record`, `read_catalog`, `validity_checks`, `max_answer_cardinality`, `group_key`. Absorbs `adapter.py` and `checks.py` | ~330 |
+| `ask_annotator.py` | step | stages 7–8 — `question_text`, `answer_config`, `readable_catalog`. From `profile.py` | ~85 |
+| `measure_corpus.py` | tool | `dataforce profile`. Not in the flow at all: it reuses stage 0 to count things. Was `profiler.py` | ~280 |
+| `__init__.py` | — | the profile object, and nothing else. The front door is the index | ~120 |
+| `schemas/` | — | **kept as a folder.** JSON Schema per input shape, read by tests rather than imported | 3 files |
 
-- `shared/manifest.py` and `shared/prompts.py` stay apart. Both read `config/`, but a stage that wants a prompt has no business importing manifest loading.
-- `tool_decision/catalog.py` stays its own module. A *format* is used by `ingest.py` and `annotate.py`, and copying it into either would be two sources of truth for one grammar — the byte-identical round trip over 21,172 corpus catalogs is the proof they agree, and it only reads as one proof while the format is one module.
-- `tool_decision/export.py` stays its own module at 37 lines. It changes when a trainer's format changes, which is not when anything else in the profile changes.
-- `tool_decision/schemas/` stays a folder of JSON Schema files. They are the input contract, versioned per input shape, and read by tests rather than imported.
-- `shared/gates/runner.py` keeps its package, and `modalities/text/` keeps its package: `text` gains the Vietnamese personal-data detectors at T13, and flattening a package that is about to grow is churn for one fewer directory.
+`validity_checks` gets no module of its own: it serves stage 1 and nothing else, so it sits beside the stage-0 code that produces what it checks. That is the review instruction — *"the checks.py if only use for 2, do not split to file"* — as a general rule rather than one exception.
+
+Outside the profile, unchanged from the previous revision: `shared/schemas/` stays a package split by pipeline phase (14 modules → 5 plus `base.py`), so a stage imports its own phase and nothing else; `shared/manifest.py` and `shared/prompts.py` stay apart; the eight empty `pipeline/**/__init__.py` are deleted until a stage needs them.
 
 **Acceptance criteria.**
 - `find src -name '*.py' | wc -l` reports 30, down from 49.
-- No stage-facing module in `shared/` is imported by a stage that uses less than all of it. Checked by reading, not by a test — but the phase split is what makes it checkable at a glance.
-- `schema_for(name)` still resolves all twelve artifacts by name, and `tests/unit/test_artifact_schemas.py` still iterates every one.
-- Every merged module opens with a comment naming the workflow step it holds and the stages that call it.
+- Exactly three modules in the profile are imported by more than one step, and each is marked `DEFINITION` in its opening comment with the noun it defines.
+- Every step module names the stages it serves in its opening comment, and is imported by nothing but the profile object.
+- No module is named for a topic. A reader can predict the contents from the filename.
 - The full suite passes unchanged, `tests/unit/test_import_graph.py` still finds no concrete axis imported from `shared/` or `pipeline/`, and `dvc repro` still reports up to date.
 
 **Source.** core § Repository layout; core Decisions (*A module holds one step of the workflow — and merging stops where the consumers differ*); shared decision 11.
 
-**Out of scope.** Deleting the eleven artifact schemas whose stages do not exist yet. They are written and tested; grouping them by phase is enough, and each becomes live when its stage arrives.
+**Out of scope.** Splitting `tool_schema.py`. Its ~505 lines are one grammar in two directions, and the byte-identical round trip over 21,172 corpus catalogs is the proof the directions agree — a split puts the two halves where that proof no longer reads as one thing. It is also the module the corpus generator's `openai_to_catalog.py` and `catalog_to_openai.py` correspond to, and keeping the correspondence one-to-one is what lets the two codebases be diffed.
 
 ## R3 · Delete the conformance suite
 
