@@ -4,12 +4,15 @@
 
 **One plan, two specs.** They are not independently buildable. Fourteen of the fifteen stages are written against two protocols, and `tool_decision` is the only implementation of one of them — a plan for the core alone would produce tasks whose acceptance criteria cannot be verified, because you cannot test `jury` without an answer type, a δ, and a corpus. [`guided-validation`](../guided-validation/spec.md) gets no separate plan: the pipeline consumes its question model inside `generate_questions`, so its requirements appear as acceptance criteria on that stage. [`dataforce-platform`](../dataforce-platform/spec.md) gets a plan only if the Phase 5 pilot gate says Label Studio is the constraint.
 
-**Six phases, 33 tasks.** Phases are ordered by risk and learning value, not by layer. Every phase ends in something runnable.
+**Six phases and one revision pass, 36 tasks.** Phases are ordered by risk and learning value, not by layer. Every phase ends in something runnable.
+
+Phases 1 and 2 are **built**. The revision pass between 2 and 3 exists because building them taught three things the first plan had wrong, and all three get more expensive with every stage added: the contract members were named for activities rather than results, a file per concern made following one record's path cross ten files, and a 392-line generic conformance suite was checking five properties that fit in a table. Revision tasks are numbered R so the tasks after them keep the numbers they were planned under.
 
 | Phase | Outcome | Tasks |
 |---|---|---:|
-| 1 | The repo builds and a non-conforming profile is rejected before any stage runs | 6 |
-| 2 | One raw record becomes a canonical record and returns through `export` | 4 |
+| 1 | The repo builds, both contracts exist, and the rules a profile must satisfy are written down | 6 |
+| 2 | One raw record becomes a canonical record and returns through `training_example` | 4 |
+| 2R | The names say what they return, a file is a workflow step, and 49 files become 21 | 3 |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 |
 | 5 | Two annotators answer 500 questions and the pilot gate passes | 7 |
@@ -30,6 +33,9 @@ These are settled by the specs. No task re-decides them, and a task that violate
 7. **Content parts use `type`, not `kind`**, with closed values `text | image | audio | video` and the payload flat on the part. — core Decisions
 8. **Python 3.12.14**; `agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0`. `git` must exist on the installing machine. CI sets `TIKTOKEN_CACHE_DIR` against a populated cache.
 9. **`data/raw/` is outside DVC entirely.** Not tracked, not committed, in `.gitignore`.
+10. **Every contract member is named for what it returns**, and no member shares a name with a stage. `content_parts`, `embedding`, `personal_data_detectors`, `display_config`; `canonical_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, `training_example`. — core § The two contracts, core Decisions
+11. **A module holds one step of the workflow, not one concern.** Everything a step does lives in one file, so following one record's path does not cross ten files. A *format* used by several steps is the one exception. — core Decisions
+12. **There is no conformance suite.** The five profile rules are stated in core § *Rules a profile must satisfy* and each profile proves them in its own tests. Nothing checks them at registration, and the cost of that is stated with the rules. — core requirement 6, core Decisions
 
 **Not code, and blocking.** Two prerequisites are human work that gates specific phases; they are tasks 21 and 27 rather than footnotes, because skipping them silently is the failure mode.
 
@@ -37,7 +43,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 # Phase 1 — Foundation and contracts
 
-**Goal:** the repo builds under one command, the two contracts exist as protocols, and a profile whose `delta` is not a metric is rejected at registration rather than at the jury stage.
+**Goal:** the repo builds under one command, the two contracts exist as protocols, and the rules a profile must satisfy are written down where its author will read them.
 
 ## T1 · Repo skeleton and toolchain
 
@@ -45,7 +51,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Context.** This repository currently holds only `docs/` and `README.md`. Every later task adds to a structure this one establishes. The layout is fixed by the spec and is not a design question.
 
-**Relevant files.** `pyproject.toml`, `uv.lock`, `Makefile`, `.gitignore`, `dvc.yaml`, `params.yaml`, `src/dataforce/`, `tests/{unit,integration,e2e,conformance,fixtures}/`, `deploy/`.
+**Relevant files.** `pyproject.toml`, `uv.lock`, `Makefile`, `.gitignore`, `dvc.yaml`, `params.yaml`, `src/dataforce/`, `tests/{unit,integration,e2e,fixtures}/`, `deploy/`.
 
 **Proposed approach.** `uv` for dependency management, `src/` layout. Create the full directory tree from spec § *Repository layout* with `__init__.py` files only. `dvc init`. `params.yaml` holds the source file path and its SHA-256, `enable_redact: false`, and empty threshold blocks. `.gitignore` covers `data/raw/`, `.env`, and `*.jsonl` outside `tests/fixtures/`. Ruff, mypy strict, pytest. `src/dataforce/cli.py` exposes `dataforce` with `run`, `profile`, `requeue` as stubs that exit non-zero with "not implemented".
 
@@ -106,7 +112,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 ## T4 · The two protocols and their registries
 
-**Goal.** `Modality` with four methods and `Profile` with seven members, resolved by name, with versions stamped onto every artifact.
+**Goal.** `Modality` with four methods and `Profile` with nine members — each named for what it returns — resolved by name, with versions stamped onto every artifact.
 
 **Context.** These two protocols are the whole thesis: everything else in the pipeline is written once against them. The member lists are closed — "exactly four" and "exactly seven" are requirements, not descriptions.
 
@@ -126,25 +132,24 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Out of scope.** The UI-control composition of requirement 3 — that lands with `publish` in T22.
 
-## T5 · Conformance suite
+## T5 · The five profile rules, written down
 
-**Goal.** A shared suite every profile passes before it can be named on a run, checked at registration.
+**Goal.** The properties every profile must have, stated once in the spec, with the symptom of breaking each one named beside it.
 
-**Context.** The types cannot express "δ is a metric" or "consensus is deterministic", and a profile violating either produces cohesion numbers that look fine and mean nothing. Failing here moves that error from a ~101M-token run to a test. This suite is what makes "generic" a checked claim.
+**Context.** A generic suite that checked these was built and removed — 392 lines to check five properties, 95 of them machinery for inventing sample answers out of an arbitrary JSON Schema, written for profiles that do not exist. The rules are short enough to state; each profile proves them over its own answer type, where the assertions read in that type's own terms. **What this costs is real and is the reason the symptom column exists:** nothing fails when a rule is broken, and rule 1 in particular fails silently into plausible-looking numbers.
 
-**Relevant files.** `src/dataforce/profiles/conformance.py`, `tests/conformance/`.
+**Relevant files.** `docs/annotation-pipeline/spec.md` § *Rules a profile must satisfy*. No source file.
 
-**Proposed approach.** Five checks: `delta` as a metric over generated answer pairs — `δ(a,a)=0`, symmetry, range `[0,1]`, no `NaN`, **including the profile's empty or null answer**; `consensus` for determinism and for agreeing with `delta` on unanimous input; the answer schema for round-tripping; the adapter for preserving every field it does not own; the exporter for reproducing the adapter's answer. Answer-pair generation is driven by the profile's own schema so the suite needs no per-profile fixtures. A profile returning `consensus = None` skips the consensus checks and is marked barred from the tier of requirement 34.
+**Proposed approach.** A table of five rules — `answer_distance` is a metric; `vote_consensus` is deterministic and honours unanimity; an answer survives a JSON round trip; `canonical_record` preserves every field it does not own; `training_example` reproduces the record's answer — each with what the pipeline needs it for and what a reader would see if it were broken. A profile returning `None` from `vote_consensus` for every input declares it has no defensible consensus, which is a declaration rather than a broken rule 2.
 
 **Acceptance criteria.**
-- A profile whose `delta` returns `NaN` on two empty answers is rejected at registration with the failing axiom named.
-- A profile whose `consensus` is non-deterministic is rejected.
-- `consensus = None` passes the suite and is recorded as barred from the consensus tier.
-- The suite runs in CI against every registered profile.
+- Each of the five rules names the pipeline behaviour that depends on it and the symptom when it is broken.
+- The cost of not enforcing them is stated in the spec's Decisions, not implied.
+- Every profile task in this plan lists its own rule tests under *Verify*.
 
-**Source.** core requirements 4, 5, 6; core invariant 9; core § Testing Strategy.
+**Source.** core requirement 6; core invariant 9; core § Rules a profile must satisfy; core Decisions.
 
-**Verify.** `uv run pytest tests/conformance/ -v`
+**Verify.** Not a code task. The check is that T9 and T31 each carry rule tests for their own profile.
 
 ## T6 · Guard tests: toolkit boundary, import graph, no re-implementation
 
@@ -169,7 +174,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 # Phase 2 — First modality and profile
 
-**Goal:** one raw record from `fc_train_final.json` becomes a canonical record and comes back out through `export`, with δ and consensus passing conformance. No LLM, no Label Studio, no DVC stage yet.
+**Goal:** one raw record from `fc_train_final.json` becomes a canonical record and comes back out through `training_example`, with `answer_distance` and `vote_consensus` proved against profile rules 1 and 2. No LLM, no Label Studio, no DVC stage yet.
 
 ## T7 · `text` modality: loader, embedder, display control
 
@@ -179,9 +184,9 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Blocked by.** T4.
 
-**Relevant files.** `src/dataforce/modalities/text/`.
+**Relevant files.** `src/dataforce/modalities/text.py`.
 
-**Proposed approach.** `load` turns system / user / assistant turns into text parts carrying `role`. `embed` uses `model2vec` `potion-multilingual-128M` over the concatenated text parts. `display_control` emits an escaped `HyperText` control — corpus text is never interpolated into markup unescaped. `privacy_detectors()` returns an empty list until T13, which the seam test in T16 tolerates and `pii_check` does not.
+**Proposed approach.** `content_parts` turns system / user / assistant turns into text parts carrying `role`. `embedding` uses `model2vec` `potion-multilingual-128M` over the concatenated text parts. `display_control` emits an escaped `HyperText` control — corpus text is never interpolated into markup unescaped. `privacy_detectors()` returns an empty list until T13, which the seam test in T16 tolerates and `pii_check` does not.
 
 **Acceptance criteria.**
 - A record with three turns loads into three text parts, roles preserved, text byte-identical.
@@ -220,20 +225,20 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Out of scope.** Running the checks as a pipeline stage (T12). Question templates (T23).
 
-## T9 · `tool_decision` answer contract: schema, δ, consensus, validity checks, export
+## T9 · `tool_decision` answer contract: schema, distance, consensus, validity checks, training example
 
-**Goal.** The remaining profile members, passing the conformance suite.
+**Goal.** The remaining profile members, with the five profile rules proved in this profile's own tests.
 
 **Context.** `δ(∅,∅) = 0` is load-bearing on 35.4% of this corpus. A Jaccard returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
 
 **Blocked by.** T5, T8.
 
-**Relevant files.** `src/dataforce/profiles/tool_decision/{schema,delta,consensus,checks,export}.py`.
+**Relevant files.** `src/dataforce/profiles/tool_decision/answers.py`, `tests/unit/test_tool_decision_answers.py`.
 
 **Proposed approach.** `answer_schema` per record is `{"type":"array","items":{"type":"string","enum":[t.name for t in record.catalog]}}` — the `enum` is the catalog constraint, enforced inside the library, which is why there is no answer-validation code in the jury. `delta(a,b) = 1 − |a∩b|/|a∪b|` with `delta(∅,∅) = 0.0` returned before the division. `consensus` is the set a strict majority of valid votes included, and may be a set no individual juror proposed. `validity_checks()` returns four named predicates: `label_assistant_mismatch`, `label_not_in_catalog`, `empty_catalog`, `label_cardinality_anomaly`. `export` emits SFT JSONL in the source `messages` shape with the curated label in both the assistant message and `meta.label`, asserted equal.
 
 **Acceptance criteria.**
-- The conformance suite passes, including the empty-answer case of the metric axioms.
+- This profile's own tests prove all five rules, including the empty-answer case of the metric axioms — rule 1.
 - A property test over random set pairs asserts symmetry, identity including `δ(∅,∅)=0`, range `[0,1]`, no `NaN`. — profile invariant 2
 - Consensus matches hand-worked vote sets, including a case where consensus differs from every individual vote.
 - The four checks, run over the full corpus, reproduce the counts T8 wrote to `params.yaml`.
@@ -241,7 +246,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Source.** profile requirements 2, 5, 6, 7, 8, 26; profile invariants 2, 3, 4; core requirement 25.
 
-**Verify.** `uv run pytest tests/conformance/test_tool_decision.py tests/unit/test_delta.py -v`
+**Verify.** `uv run pytest tests/unit/test_tool_decision_answers.py tests/unit/test_delta.py -v`
 
 ## T10 · `dataforce profile` — corpus profiler with CI drift detection
 
@@ -264,6 +269,107 @@ These are settled by the specs. No task re-decides them, and a task that violate
 **Source.** profile § What the corpus contains; profile § Testing Strategy (Corpus profile); core requirement 13.
 
 **Verify.** `uv run dataforce profile && uv run pytest tests/integration/test_corpus_profile.py`
+
+---
+
+# Phase 2R — Revision: names, file grouping, and one deletion
+
+**Goal:** the code that exists becomes readable by someone who did not write it — every member named for what it returns, every file a step of the workflow, and 392 lines of generic checking replaced by a table in the spec.
+
+**Why here and not later.** All three changes get more expensive with every stage added. Today two implementations and no stages call these names; after Phase 3 there are five stages, after Phase 4 seven. The rename is a mechanical diff now and a coordinated one later. Nothing in this phase changes behaviour: every test that passed before must pass after, which is what makes it safe to do in one pass.
+
+**Blocked by.** T10. **Blocks.** T11 — no stage should be written against the old names.
+
+## R1 · Rename every contract member
+
+**Goal.** No member of either contract is named for an activity, and no member shares a name with a stage.
+
+**Context.** Two defects, one of them objective. `load` and `export` were also the names of stages 0 and 13, so a sentence mentioning either was ambiguous — and `load` appears ten times in the core spec, most of them the stage. The rest named activities so general they excluded nothing: a reviewer reading `adapt(raw, parts)` learns only that something is adapted. The replacement is a rule rather than a list of preferences: **a member is named for what it returns**, which makes a wrong name visible — `content_parts` returning something that is not content parts is a legible defect.
+
+**Relevant files.** `src/dataforce/modalities/base.py`, `src/dataforce/profiles/base.py`, both registries, `modalities/text/`, `profiles/tool_decision/`, `cli.py`, every test module, `docs/profiles/tool-decision/spec.md`, `README.md`.
+
+**Proposed approach.** One rename per member, with no signature change:
+
+| Contract | Was | Is | Returns |
+|---|---|---|---|
+| Modality | `load` | `content_parts` | `list[Part]` |
+| Modality | `embed` | `embedding` | `Sequence[float]` |
+| Modality | `privacy_detectors` | `personal_data_detectors` | `list[Detector]` |
+| Modality | `display_control` | `display_config` | `UIControl` |
+| Profile | `adapt` | `canonical_record` | `Record` |
+| Profile | `delta` | `answer_distance` | `float` |
+| Profile | `consensus` | `vote_consensus` | `Answer \| None` |
+| Profile | `question` | `question_text` | `str` |
+| Profile | `answer_control` | `answer_config` | `UIControl` |
+| Profile | `export` | `training_example` | `dict[str, Any]` |
+
+`validity_checks`, `group_key`, `answer_schema`, `name`, `version` and `modality` are unchanged: each already names what it returns. `δ` survives as the symbol in the α formulas of core requirements 52–53, where it is standard notation; the *member* is `answer_distance`. The parameter of `vote_consensus` is `votes`, not `answers`, because that is what answers "whose consensus".
+
+**Acceptance criteria.**
+- `Modality.__protocol_attrs__` and `Profile.__protocol_attrs__` contain none of the ten old names, and `tests/unit/test_protocols.py` pins the new sets as literals.
+- No member name equals a stage name. A test asserts the two sets are disjoint, reading the stage names from `dvc.yaml` and the spec's stage table.
+- The full suite passes with no behavioural change: same test count, same assertions, same corpus counts in `metrics/corpus_profile.json`.
+- No old name survives anywhere in `src/`, `tests/`, or the three spec documents.
+
+**Source.** core requirements 1, 2; core § The two contracts; core Decisions (*Every contract member is named for what it returns*); shared decision 10.
+
+**Verify.** `make check && uv run dataforce profile --profile tool_decision && grep -rE '\b(load|adapt|delta|consensus|export|embed|question|answer_control|display_control|privacy_detectors)\s*\(' src/dataforce/profiles src/dataforce/modalities`
+
+**Out of scope.** Record field names. `group_key`, `label`, `answer_space` and `meta` stay as they are — renaming a field means rewriting artifacts, and no artifact exists yet to make it free.
+
+## R2 · Group files by workflow step
+
+**Goal.** Following one record from the source file to a training example crosses four files, not ten. `src/` goes from 49 files to 21.
+
+**Context.** The first layout put one concern per file, which produced a profile of ten modules where four were under ninety lines and fourteen schema files where eleven describe stages that do not exist. The reader of this code follows a path, not a concern, so a file per concern charges ten navigations for one step. This is the review complaint that started the phase: *"the file [with the] same group of part in workflow must be in the same file."*
+
+**Relevant files.** `src/dataforce/shared/`, `src/dataforce/profiles/tool_decision/`, `src/dataforce/modalities/text/`, `src/dataforce/pipeline/`.
+
+**Proposed approach.** Merge, delete nothing but empty packages, move no logic between functions:
+
+| From | To | Lines |
+|---|---|---|
+| `shared/schemas/` — 14 files | `shared/artifacts.py`, carrying only the artifacts whose stage exists; each later stage adds its own | 431 → ~150 |
+| `shared/manifest.py` + `shared/prompts.py` | `shared/declared.py` — everything read from `config/` | 155 → 155 |
+| `shared/gates/runner.py` | `shared/gates.py`; the package had one module | 163 |
+| `modalities/text/__init__.py` | `modalities/text.py`; the package had one module | 121 |
+| `tool_decision/{source,adapter,checks}.py` | `tool_decision/ingest.py` — stages 0–1: the source contract, `canonical_record`, `validity_checks`, `group_key` | 360 |
+| `tool_decision/{answers,export}.py` + the answer half of `profile.py` | `tool_decision/answers.py` — stages 5–13: `answer_schema`, `answer_distance`, `vote_consensus`, `question_text`, `answer_config`, `training_example` | ~200 |
+| `tool_decision/profile.py` | `tool_decision/__init__.py` — the profile object and nothing else, so the front door is the index | ~110 |
+| `pipeline/**/__init__.py` — 8 empty files | deleted; each stage task creates its own package | 0 |
+
+`catalog.py` and `profiler.py` stay as they are. `catalog.py` is a *format*, used by both ingest and annotation, and copying it into either would be two sources of truth for one grammar — the one admitted exception to grouping by step. `profiler.py` is the `dataforce profile` command, not part of either contract.
+
+**Acceptance criteria.**
+- `find src -name '*.py' | wc -l` reports 21, down from 49.
+- No file exceeds 450 lines; `catalog.py` at 447 is the largest and is unchanged by this task.
+- Every merged file opens with a comment naming the workflow step it holds and the stages that call it.
+- The full suite passes unchanged, and `tests/unit/test_import_graph.py` still finds no concrete axis imported from `shared/` or `pipeline/`.
+- `dvc repro` still reports up to date; no artifact changed.
+
+**Source.** core § Repository layout; core Decisions (*A module holds one step of the workflow, not one concern*); shared decision 11.
+
+**Out of scope.** Splitting `catalog.py`. Its 447 lines are one grammar in two directions, and the byte-identical round trip over 21,172 corpus catalogs is the proof they agree — a split would put the two halves where that proof no longer reads as one thing.
+
+## R3 · Delete the conformance suite
+
+**Goal.** `profiles/conformance.py` is gone, `register()` resolves a name and nothing else, and the five rules live in the spec.
+
+**Context.** The suite was built to make "generic" a checked claim, and 95 of its 392 lines were machinery for inventing sample answers out of an arbitrary JSON Schema — written for profiles that do not exist. The review decision is that a rule the author is told to follow is the author's responsibility. **What this costs, stated once:** nothing now fails when `answer_distance` stops being a metric, and the symptom is cohesion numbers that look fine and mean nothing. `tool_decision` keeps that guarantee because `tests/unit/test_delta.py` already proves the metric axioms over random pairs directly — what is lost is the guarantee for the *next* profile, which is why T32 names its absence as the trigger to rebuild the suite.
+
+**Relevant files.** `src/dataforce/profiles/conformance.py`, `src/dataforce/profiles/registry.py`, `src/dataforce/profiles/base.py`, `src/dataforce/shared/errors.py`, `tests/conformance/`, `cli.py`.
+
+**Proposed approach.** Delete `conformance.py` (392) and `tests/conformance/test_suite.py` (198). `register(profile)` becomes an isinstance check and a dict write, returning nothing; `Registration` and `report_for` go with it, and importing a profile no longer runs anything — which also stops a hand-edited manifest from failing at import time. Move `tests/conformance/test_tool_decision.py` to `tests/unit/`, dropping its five suite-driven tests and keeping the 38 that test this profile directly. Rename `ConformanceError` to `InvariantError`: it survives because `training_example` raises it when the two statements of an answer disagree, which is invariant 4 and not conformance.
+
+**Acceptance criteria.**
+- No module imports `conformance`, and `tests/conformance/` no longer exists.
+- `register()` is under 20 lines and runs no check beyond `isinstance`.
+- The five rules are in the spec with their symptoms, and `tool_decision`'s own tests still prove all five.
+- The suite's test count drops by exactly the tests that tested the suite — 198 lines, 15 tests — and no test of the profile itself is lost.
+
+**Source.** core requirement 6; core Decisions (*Profile rules are stated for the author, not enforced by a shared suite*); shared decision 12.
+
+**Out of scope.** Removing `tests/unit/test_delta.py`. It is now the only thing proving rule 1 for this profile, so it grows rather than shrinks: the metric axioms move into it from the deleted suite.
 
 ---
 
@@ -472,7 +578,7 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Relevant files.** `src/dataforce/shared/agreement.py`.
 
-**Proposed approach.** α with a pluggable δ; cohesion as `1 − mean pairwise δ`; plurality. Nominal α delegates to the `krippendorff` package.
+**Proposed approach.** α with a pluggable distance — the profile's `answer_distance`, δ in the formulas; cohesion as `1 − mean pairwise δ`; plurality. Nominal α delegates to the `krippendorff` package.
 
 **Acceptance criteria.**
 - α over an arbitrary δ matches a hand-computed example.
@@ -761,11 +867,11 @@ These are settled by the specs. No task re-decides them, and a task that violate
 
 **Relevant files.** `src/dataforce/profiles/simple_classification/`, `tests/e2e/test_second_profile.py`.
 
-**Proposed approach.** Single-label classification over a 30-record text fixture: answer is one class, `delta` is `0` if equal else `1`, `consensus` is the mode. Run all fifteen stages with stubbed jurors, a stubbed generator and a containerized Label Studio.
+**Proposed approach.** Single-label classification over a 30-record text fixture: answer is one class, `answer_distance` is `0` if equal else `1`, `vote_consensus` is the mode. Run all fifteen stages with stubbed jurors, a stubbed generator and a containerized Label Studio.
 
 **Acceptance criteria.**
 - All fifteen stages complete for the second profile with no change to any module under `pipeline/` or `shared/`.
-- The conformance suite passes for it.
+- Its own tests prove the five profile rules for a single-label answer. **If this profile arrives without them, that is the signal to build the suite after all** — see core Decisions.
 - Any change required in `pipeline/` to make this pass is itself a defect report against the core, recorded before the change is made.
 
 **Source.** core § Testing Strategy (Genericity); core invariant 16.

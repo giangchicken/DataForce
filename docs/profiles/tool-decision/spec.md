@@ -10,8 +10,8 @@ This document specifies only what is specific to this dataset and this task. The
 |---|---|---|
 | source adapter | profile | parse the `TOOLS:` block, preserving the marker DSL verbatim |
 | answer schema | profile | `{"type":"array","items":{"type":"string","enum":<this record's catalog>}}` |
-| `delta` | profile | `1 − |A∩B| / |A∪B|`, with `δ(∅,∅) = 0` |
-| `consensus` | profile | tools included by a strict majority of valid votes |
+| `answer_distance` | profile | `1 − |A∩B| / |A∪B|`, with `δ(∅,∅) = 0` |
+| `vote_consensus` | profile | tools included by a strict majority of valid votes |
 | validity checks | profile | four checks, all provable without a human |
 | question templates | profile | per [`guided-validation`](../../guided-validation/spec.md), focus by marker rule |
 | exporter | profile | SFT JSONL in the source `messages` shape |
@@ -99,7 +99,7 @@ The four validity checks below are all provable by counting — no person decide
 
 5. The answer is a **set of tool names drawn from that record's own catalog**, and the empty set is a first-class answer, not a missing value. No stage may substitute a per-tool binary, a coarse proxy class, or a cardinality bucket.
 6. `delta(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`delta(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
-7. `consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
+7. `vote_consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
 8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the validity checks of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
 
 ### The text modality's privacy detectors
@@ -251,7 +251,7 @@ Dropped, and worth noting because it shrinks the dependency surface: **cleanlab*
 Beyond the core's seventeen:
 
 1. **Marker tokens survive templating and parsing.** Any `{trigger}`, `{hold_other}`, `{hold_missing}`, `{constraint}`, or `{turn_trigger}` token in the source system message is present byte-identically in the adapter's output and in the rendered juror prompt. *Check:* a test rendering a template whose fill values contain marker tokens and asserting `slot_filling` altered none, alongside the adapter's verbatim-marker test.
-2. **`δ(∅,∅) = 0` and δ is a metric.** *Check:* the core's conformance suite, plus a property test over random set pairs asserting symmetry, identity including the empty case, range, and no `NaN`.
+2. **`δ(∅,∅) = 0` and `answer_distance` is a metric.** *Check:* this profile's own property test over random set pairs asserting symmetry, identity including the empty case, range, and no `NaN`.
 3. **Every answer is a subset of that record's catalog.** *Check:* pandera on every artifact carrying a label — a second line behind the schema `enum`.
 4. **Label and assistant agree on the way out.** For every exported record, `meta.label` equals the parsed assistant message. *Check:* export gate, running the same assertion that counted 48 of these before the source was fixed.
 5. **The largest catalog group stays intact through splitting.** The 112-record group is wholly in one split. *Check:* the split gate's group assertion, with that group as a named fixture.
@@ -271,7 +271,7 @@ Beyond the core's table:
 
 ## Testing Strategy
 
-Beyond the core's suite, and beyond the conformance suite this profile must pass:
+Beyond the core's own tests, and beyond the five profile rules this profile proves for itself:
 
 - **Adapter.** All 13 observed `meta` key-sets, each answer cardinality, catalog sizes 0 / 1 / 8 / 20, malformed `TOOLS:` blocks. One test asserts marker tokens survive **verbatim**.
 - **Validity gate.** A fixture with one record failing each check, asserting each lands in the right quarantine file with the right label and that the main path count drops by exactly the expected number.

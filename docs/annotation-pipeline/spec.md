@@ -107,12 +107,12 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 ### The profile and modality contracts
 
-1. A **modality** supplies exactly four things: a content loader (raw → typed parts), an embedder (record → vector) for duplicate detection, a list of privacy detectors, and the annotation-UI control that *displays* a record. Nothing else.
-2. A **profile** supplies exactly seven things: a source adapter (raw → canonical record), an answer JSON Schema, `delta`, `consensus`, a map of validity checks, a question template set, and an exporter. It declares which modality it composes with.
+1. A **modality** supplies exactly four things, each named for what it returns: `content_parts` (raw → typed parts), `embedding` (parts → vector) for duplicate detection, `personal_data_detectors`, and `display_config`, the annotation-UI half that *displays* a record. Nothing else.
+2. A **profile** supplies exactly nine things, each named for what it returns: `canonical_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
-4. `delta` must be a metric on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. A profile whose `delta` fails any of these is rejected at registration, not at the jury stage.
-5. `consensus` is deterministic given a list of answers, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported.
-6. Every profile passes a shared **conformance suite** before it can be named on a run: `delta` is checked as a metric over generated answer pairs, `consensus` for determinism and for agreeing with `delta` on unanimous input, the answer schema for round-tripping, the adapter for preserving every field it does not own, and the exporter for reproducing the adapter's answer. A profile that does not pass cannot be selected. This suite is what makes "generic" a checked claim rather than a hope.
+4. `answer_distance` must be a metric on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53.
+5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated with per-annotator reliability weighting in stage 10.
+6. Every profile satisfies the five **profile rules** in § *Rules a profile must satisfy*, and **tests them itself**. The rules are stated once for every profile to follow; each profile's own test module proves them for its own answer type. There is no shared suite and no check at registration: a profile that breaks a rule is a profile whose author did not follow it, and the cost of that is stated with the rules rather than caught by machinery.
 7. Profiles and modalities are resolved from a registry by name, and the resolved pair, with each one's version, is recorded on every artifact and in the release manifest. A run cannot silently change which code produced a dataset.
 
 ### The modality seam
@@ -193,7 +193,7 @@ Running it first is what makes the rest affordable. In the first profile it move
 ### Aggregation, adjudication, curation
 
 52. Krippendorff's α on the **verdict** (nominal) is computed across all overlapped records, per question focus and overall, with the `krippendorff` package.
-53. Agreement on **corrections** is computed as α with the profile's `delta`, implemented here because the library covers only nominal, ordinal, interval, and ratio scales. Its nominal degenerate case is tested against the library's output.
+53. Agreement on **corrections** is computed as α with the profile's `answer_distance`, implemented here because the library covers only nominal, ordinal, interval, and ratio scales. Its nominal degenerate case is tested against the library's output.
 54. Where overlap ≥ 2, verdicts are aggregated with Dawid-Skene, which estimates per-annotator reliability, rather than majority vote. Corrections are aggregated with the profile's `consensus`.
 55. Disagreements, and records below an aggregated-confidence threshold, go to a second **adjudication** project showing both answers and both notes, resolved by a reviewer who produced neither. Label Studio Community has no review workflow; this is that workflow.
 56. Curation records for every record whether its label is `original`, `corrected`, `jury_consensus`, or `unvalidated`, with the validator and the decision date.
@@ -250,24 +250,33 @@ dataforce/
 │
 ├── src/dataforce/
 │   ├── shared/                  used by everything dataforce ever does
-│   │   ├── schemas/             pandera + pydantic, one file per artifact
 │   │   ├── record.py            canonical record + typed content parts
+│   │   ├── artifacts.py         one pandera schema per artifact, all in one file
+│   │   ├── declared.py          manifests and prompts — everything read from config/
 │   │   ├── agreement.py         α over any δ, cohesion, plurality
-│   │   └── gates/runner.py      engine only — no thresholds live here
+│   │   ├── gates.py             engine only — no thresholds live here
+│   │   └── errors.py
 │   │
 │   ├── modalities/              ← axis 1: how content is read
 │   │   ├── base.py              Modality protocol: 4 methods, nothing more
 │   │   ├── registry.py
-│   │   └── text/                loader · embedder · privacy · display control
+│   │   └── text.py              content_parts · embedding · detectors · display
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
-│   │   ├── base.py              Profile protocol: 12 members, nothing more
-│   │   ├── registry.py
-│   │   ├── conformance.py       the suite every profile must pass
-│   │   └── tool_decision/       adapter · schema · δ · consensus · checks
-│   │                            · questions · answer control · exporter
+│   │   ├── base.py              Profile protocol: 9 members, nothing more
+│   │   ├── registry.py          resolve by name; no conformance check
+│   │   └── tool_decision/       one file per step of the workflow:
+│   │       ├── __init__.py      the profile object — the index to the rest
+│   │       ├── catalog.py       the tool-list format, rendered and read
+│   │       ├── ingest.py        stages 0–1 · source contract · canonical_record
+│   │       │                    · validity_checks · group_key
+│   │       ├── answers.py       stages 5–13 · answer_schema · answer_distance
+│   │       │                    · vote_consensus · question_text · answer_config
+│   │       │                    · training_example
+│   │       └── profiler.py      `dataforce profile` — measure the corpus, report drift
 │   │
-│   ├── pipeline/                ← the fifteen stages, written once
+│   ├── pipeline/                ← the fifteen stages, written once. A stage's package
+│   │                            is created by the task that implements it, not before
 │   │   ├── data_quality/        load.py  remove_invalid.py  pii_check.py  embed.py  dedup.py
 │   │   ├── ai_review/           jury.py  rank_for_review.py
 │   │   │   └── lib/{panel,keypool,vote,consensus,escalate,buckets,strata,sampling}.py
@@ -282,7 +291,9 @@ dataforce/
 │
 ├── config/                      policy humans edit; never imported as Python
 │   ├── gates.yaml   panel.yaml
-│   └── prompts/  templates/
+│   ├── modalities/<name>.yaml   identity + what decides what its vectors mean
+│   ├── profiles/<name>.yaml     identity · modality · source shape and vocabulary
+│   └── prompts/  templates/     mirrors src/; the path is the prompt_version
 │
 ├── data/
 │   ├── raw/                     PRIVACY TIER — NOT DVC-tracked, never committed
@@ -291,18 +302,20 @@ dataforce/
 │   ├── interim/{1_data_quality,2_ai_review,3_human_review}/
 │   ├── processed/   release/v1/   quarantine/{invalid,pii,human_review}/
 │
-├── tests/{unit,integration,e2e,conformance,fixtures}/
+├── tests/{unit,integration,e2e,fixtures}/   a profile's rule tests live with it
 ├── deploy/                      docker-compose Label Studio, CI config
 └── docs/
 ```
 
-Nothing under `pipeline/` imports a concrete modality or profile — both arrive through their registries. That is the property the conformance suite and requirement 7 exist to keep true, and it is what a new modality has to satisfy rather than negotiate.
+Nothing under `pipeline/` imports a concrete modality or profile — both arrive through their registries. That is the property invariant 16 and requirement 7 exist to keep true, and it is what a new modality has to satisfy rather than negotiate.
 
 ### The two contracts
 
 *Decisions § Two composed axes* says why there are two protocols rather than one bundle per dataset kind. This section says what each member is **for**, and records the test every member had to pass to be here: **a member exists only because a named stage cannot run without it.** The comments name that stage, so a member no stage calls would be visible as the speculative abstraction it is.
 
 Read the two together as one sentence: a modality answers *how is this content read*, a profile answers *what is an answer about it*. Neither may answer the other's question, and that is the whole reason a new modality does not multiply the profiles that already exist.
+
+**Every member is named for what it returns.** `content_parts` returns content parts; `embedding` returns an embedding; `answer_distance` returns a distance between answers. This is a rule and not a preference, because a contract member is read far more often than it is written and the reader has only the name: `load` and `adapt` said nothing about their output, and worse, `load` and `export` were also the names of stages 0 and 13 — the same word meaning two things in one system. No member shares a name with a stage.
 
 ```python
 class Modality(Protocol):
@@ -311,27 +324,29 @@ class Modality(Protocol):
     name: str        # stamped onto every record it touches as
     version: str     #   producer.modality = "text@1" -- requirement 7
 
-    # Stage 0 `load`. One raw source item -> ordered typed parts. The only code in the
-    # system that knows the source's own layout, which is what stops fifteen stages
-    # each acquiring an opinion about how a file is shaped.
-    def load(self, raw: Any) -> list[Part]: ...
+    # Stage 0 `load`. One raw source item -> the ordered, typed pieces of content in
+    # it. The only code in the system that knows the source's own layout, which is
+    # what stops fifteen stages each acquiring an opinion about how a file is shaped.
+    # For a chat corpus that means one part per turn; for a call recording it would
+    # mean an audio part per channel and a transcript part beside it.
+    def content_parts(self, raw: Any) -> list[Part]: ...
 
-    # Stage 3 `embed`. Content -> vector, for near-duplicate detection only. Nobody
-    # reads the number: `dedup` consumes it and no other stage sees it. A static
-    # embedder is preferred so two runs over one corpus dedup identically.
-    def embed(self, parts: list[Part]) -> Sequence[float]: ...
+    # Stage 3 `embed`. Content -> one vector. Consumed by `dedup` and by no other
+    # stage: it exists to find near-duplicates, not to be reported. A static embedder
+    # is preferred so two runs over one corpus dedup identically.
+    def embedding(self, parts: list[Part]) -> Sequence[float]: ...
 
     # Stage 2 `pii_check`. The detectors this *kind of content* needs -- personal data
     # hides differently in a transcript than in a waveform. High recall is the
     # contract here; precision belongs to the verifier inside the stage. The uniform
     # Span shape is why the redaction stage, its report, its vault and its gate are
     # written once rather than once per modality.
-    def privacy_detectors(self) -> list[Detector]: ...     # → list[Span] per part
+    def personal_data_detectors(self) -> list[Detector]: ...   # → list[Span] per part
 
     # Stage 8 `publish`. The half of the annotation config that *displays* a record.
     # A modality never emits the control that captures an answer: that half is the
     # profile's, and composing them is what makes one screen out of two contracts.
-    def display_control(self, record: Record) -> UIControl: ...
+    def display_config(self, record: Record) -> UIControl: ...
 ```
 
 ```python
@@ -349,25 +364,28 @@ class Profile(Protocol):
                                     # constrain a model with it and pandera can check
                                     # an artifact against it -- invariant 5.
 
-    # Stage 0 `load`. Raw item + parts -> canonical record. Keeps every field it does
-    # not own, because what looks like noise now is what a later question turns out to
-    # need; the conformance suite asserts that preservation.
-    def adapt(self, raw: Any, parts: list[Part]) -> Record: ...
+    # Stage 0 `load`. Raw item + parts -> the canonical record. Keeps every field it
+    # does not own, because what looks like noise now is what a later question turns
+    # out to need -- profile rule 4.
+    def canonical_record(self, raw: Any, parts: list[Part]) -> Record: ...
 
     # Stages 5 `jury`, 6 `rank_for_review`, 10 `aggregate`. The distance between two
     # answers -- and the *only* thing the core knows about disagreement. Cohesion,
     # corpus conflict, the four triage buckets, Krippendorff's alpha over a set-valued
     # answer, adjudication and juror calibration are all written in terms of it, which
     # is what lets `shared/agreement.py` be generic without being a framework.
-    # Checked as a metric at registration, not trusted: invariant 9.
-    def delta(self, a: Answer, b: Answer) -> float: ...
+    # Must be a metric -- profile rule 1, the one nothing generic enforces.
+    def answer_distance(self, a: Answer, b: Answer) -> float: ...
 
-    # Stage 5 `jury`. Several answers -> one, deterministically. Returning None for
-    # every input is a legal declaration rather than a failure: free-text generation
-    # has no defensible consensus, and inventing one would ship a plausible
-    # machine-written label. It bars the optional consensus tier and nothing else --
-    # triage still works, because triage needs only `delta`.
-    def consensus(self, answers: list[Answer]) -> Answer | None: ...
+    # Stage 5 `jury`. The votes' consensus: several answers to one record -> one
+    # answer, deterministically. Named for whose consensus it is, because the pipeline
+    # also combines *people's* answers and that is a different operation -- annotators
+    # are aggregated with Dawid-Skene weighting in stage 10, never with this.
+    # Returning None for every input is a legal declaration rather than a failure:
+    # free-text generation has no defensible consensus, and inventing one would ship a
+    # plausible machine-written label. It bars the optional consensus tier and nothing
+    # else -- triage still works, because triage needs only `answer_distance`.
+    def vote_consensus(self, votes: list[Answer]) -> Answer | None: ...
 
     # Stage 1 `remove_invalid`. Named checks a record passes or *provably* fails.
     # Provably: no judgment. If telling right from wrong needs a person, it is an
@@ -375,15 +393,15 @@ class Profile(Protocol):
     # and the keys `params.yaml` declares expected counts against.
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]: ...
 
-    # Stage 7 `generate_questions`. One focused, answerable question about this record.
-    # The profile owns the wording because only it knows what the answer is; choosing
-    # *which* focus to ask about is the stage's job.
-    def question(self, record: Record, focus: str) -> str: ...
+    # Stage 7 `generate_questions`. The text of one focused, answerable question about
+    # this record. The profile owns the wording because only it knows what the answer
+    # is; choosing *which* focus to ask about is the stage's job.
+    def question_text(self, record: Record, focus: str) -> str: ...
 
     # Stage 8 `publish`. The half of the annotation config that *captures* an answer,
     # constrained to this record's answer space wherever the UI can express it -- and
     # asserted again at pull time, because a UI constraint is not a guarantee.
-    def answer_control(self, record: Record) -> UIControl: ...
+    def answer_config(self, record: Record) -> UIControl: ...
 
     # Stages 4 `dedup` and 12 `split`. What makes two records the same scenario, so no
     # group straddles a split and no metric is computed on leaked data. A field that is
@@ -395,8 +413,8 @@ class Profile(Protocol):
 
     # Stage 13 `export`. One training example, in the shape this profile's trainer
     # expects. The last place the pipeline can assert that the answer it is shipping is
-    # the answer it recorded.
-    def export(self, record: Record) -> dict[str, Any]: ...
+    # the answer it recorded -- profile rule 5.
+    def training_example(self, record: Record) -> dict[str, Any]: ...
 ```
 
 Twelve methods across the two contracts, and thirteen of the fifteen stages call at least one of them. The two that call neither are `pull`, which normalizes what annotators returned, and `document`, which reads what earlier stages already recorded — and that is the expected shape of the list, not a gap in it.
@@ -408,7 +426,7 @@ Twelve methods across the two contracts, and thirteen of the fifteen stages call
 | Not a member | Where it lives instead | Why |
 |---|---|---|
 | `validate(answer)` | `answer_schema`, handed to the library | a schema the provider enforces beats a predicate the pipeline runs after the fact |
-| A quality score | `delta` | one distance expresses every agreement statistic; a score expresses one |
+| A quality score | `answer_distance` | one distance expresses every agreement statistic; a score expresses one |
 | The prompt text | `config/prompts/<axis>/<name>/<slug>.vN.txt` | a prompt is the measuring instrument, so it has to be diffable and nameable in an artifact — requirement 45 |
 | Reading or writing artifacts | `file_utils` via the stage | stages own I/O; an implementation that opened a file would be a stage |
 | Any threshold | `params.yaml`, `config/gates.yaml` | a number in code is neither reviewable nor a declared DVC dependency |
@@ -437,9 +455,9 @@ Every block below has exactly one owning stage, named in the comments. The one s
   "source":   { "file_sha256": "…", "offset": 1043, "ingested_at": "2026-08-18T…" },
   "producer": { "modality": "text@1", "profile": "tool_decision@1" },
 
-  // stage 0, from the modality's `load`. An ordered list of typed parts rather than a
-  // string: this is one of the three things that could not be retrofitted without
-  // touching all fifteen stages, which is why it is settled before stage one exists.
+  // stage 0, from the modality's `content_parts`. An ordered list of typed parts
+  // rather than a string: one of the three things that could not be retrofitted
+  // without touching all fifteen stages, so it is settled before stage one exists.
   "content": [
     { "type": "text",  "role": "system", "text": "…" },
     { "type": "text",  "role": "user",   "text": "…" }
@@ -447,7 +465,7 @@ Every block below has exactly one owning stage, named in the comments. The one s
     // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
   ],
-  // stage 0, from the profile's `adapt`. The three fields the profile owns: what an
+  // stage 0, from the profile's `canonical_record`. The three fields it owns: what an
   // answer may be for *this* record, the answer itself, and everything the profile
   // does not own -- kept verbatim, because what looks like noise now is what a later
   // question turns out to need.
@@ -501,11 +519,15 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **Two composed axes, not one bundle per dataset kind.** *Alternatives:* one plugin supplying all eleven pieces; a full stage graph forked per modality. *Why:* a bundle makes a voice classification dataset and a voice tool-decision dataset each re-declare the same audio loader, embedder, and privacy detectors — the duplication lands exactly where correctness matters most. Forking the stage graph per modality copies fifteen gates, and gates that exist in two places drift. Composition means a new modality is one implementation that every existing profile can immediately use. *Reversible:* yes, and cheaply, since both are protocols resolved from a registry.
 
-**The generic core is `(answer, δ, consensus)`.** *Alternatives:* a per-task pipeline; a task-type enum branched on inside each stage. *Why:* this is what the machinery actually needs. Cohesion, conflict, the four buckets, α, adjudication, and juror calibration are all expressible in those three terms, so genericity here is an interface rather than a framework — which is the difference between a cheap abstraction and a speculative one. *Reversible:* no in practice, and it should not be: it is the whole thesis.
+**The generic core is `(answer, answer_distance, vote_consensus)`.** *Alternatives:* a per-task pipeline; a task-type enum branched on inside each stage. *Why:* this is what the machinery actually needs. Cohesion, conflict, the four buckets, α, adjudication, and juror calibration are all expressible in those three terms, so genericity here is an interface rather than a framework — which is the difference between a cheap abstraction and a speculative one. *Reversible:* no in practice, and it should not be: it is the whole thesis.
 
-**A profile may declare `consensus = None`.** *Why:* free-text generation has no defensible consensus, and inventing one would produce a plausible machine-written label that the optional tier could ship. Declaring the gap keeps such profiles fully supported for triage — where they are genuinely useful — while making the one thing they cannot do explicit. *Reversible:* a profile can gain a consensus later; nothing depends on its absence.
+**A profile may declare `vote_consensus = None`.** *Why:* free-text generation has no defensible consensus, and inventing one would produce a plausible machine-written label that the optional tier could ship. Declaring the gap keeps such profiles fully supported for triage — where they are genuinely useful — while making the one thing they cannot do explicit. *Reversible:* a profile can gain a consensus later; nothing depends on its absence.
 
-**Every profile passes a conformance suite before it can be selected.** *Alternatives:* trust the protocol's types; check at first use. *Why:* the types cannot express "δ is a metric" or "consensus is deterministic", and a profile violating either produces cohesion numbers that look fine and mean nothing. Failing at registration rather than at the jury stage moves the error from a 100M-token run to a test. *Reversible:* the suite grows; it does not go away.
+**A module holds one step of the workflow, not one concern.** *Alternatives:* one file per concern, which is what was built first — a profile of ten files where four were under ninety lines; one file per protocol member. *Why:* the reader of this codebase follows a *path* — how does one record get from the source file to a training example — and a file per concern makes that path cross ten files, so the cost of understanding one step is ten navigations. Grouping by workflow step means the file boundary and the reader's question coincide: everything ingest does is in `ingest.py`, everything that happens once an answer exists is in `answers.py`. The one file that is not a step is `catalog.py`, because a *format* is used by several steps and copying it into each would be two sources of truth for one grammar. *The cost:* files are larger, and a step with genuinely unrelated halves would hide that. *Reversible:* yes, and splitting later is cheaper than merging, because the merge is what proves the halves belong together.
+
+**Every contract member is named for what it returns.** *Alternatives:* verb names (`load`, `adapt`, `export`); the mathematical symbol (`delta`). *Why:* a contract member is read far more often than written, and the reader has only the name and the signature. `adapt` names an activity so general it excludes nothing, and `load`/`export` were also stage names — one word meaning two things in one system, which is how a reviewer ends up unable to tell whether a sentence is about a stage or a method. Naming for the return value gives every member a falsifiable name: `content_parts` returning something that is not content parts is visibly wrong. *The cost:* `answer_distance` is longer than `δ`, and the symbol survives only in the α formulas where it is standard. *Reversible:* yes, and this is the cheapest moment it will ever be — after Phase 3 there are fifteen stages calling these names.
+
+**Profile rules are stated for the author, not enforced by a shared suite.** *Alternatives:* a generic conformance suite run at registration — which is what was built first, and removed; checking at first use. *Why:* the suite was 392 lines to check five properties, and 95 of those were machinery for inventing sample answers out of an arbitrary JSON Schema — code written for profiles that do not exist, which is the definition of speculative. The five properties are short enough to state in prose and each profile can prove them over its own answer type in a test module it owns, where the assertions read in that type's own terms rather than through a generated sample. *The cost, stated plainly:* nothing now fails when a profile breaks a rule. A `answer_distance` that is not a metric produces cohesion numbers that look fine and mean nothing, and it surfaces as a bad ranking rather than a red build. That cost is accepted because a rule the author is told to follow is the author's responsibility, and because the alternative was paying 392 lines and an import-time exam to insure against a mistake in code nobody has written yet. *Reversible:* yes — the rules are written so a suite could be built from them later, and the first profile to arrive without its own tests is the signal to do it.
 
 **Content parts say `type`, the same word every provider uses.** *Alternatives:* `kind`, a name reserved for us so it could never be mistaken for a provider's field. *Why:* an ordered array of typed parts is how OpenAI, Anthropic and Gemini all model content, and all three call the discriminator `type` — so `type` is the field an engineer already recognises, which is worth more than avoiding a collision that cannot actually happen. The values disambiguate on their own: ours are closed and bare — `text | image | audio | video` — where OpenAI's are `input_text` / `input_image` / `input_audio` and Anthropic's differ again, so `"type": "audio"` is unambiguously a DataForce part. No provider's JSON is ever stored: a profile's `export` produces it, mapping both the value and its nesting to whatever that provider wants — ours keeps the payload flat on the part, where OpenAI nests it under a key repeating the type. The one real cost is that `type` shadows a Python builtin if a part is ever modelled as a dataclass attribute rather than a mapping key; that is a lint note, not a bug. *Reversible:* yes, but only before any artifact exists.
 
@@ -529,6 +551,20 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **Assumption:** every token figure is an estimate until `agent-toolkit` surfaces `usage` on `Completion`. Budgets carry declared headroom and runs label their figures "estimated".
 
+### Rules a profile must satisfy
+
+Five properties the pipeline assumes of every profile. They are not checked by any shared code — see *Decisions* for why, and for the cost. Each profile proves them in its own test module; `tests/unit/test_answers.py` under the profile's own tests is where `tool_decision` does it.
+
+| # | Rule | Why the pipeline needs it | Symptom when it is broken |
+|---|---|---|---|
+| 1 | **`answer_distance` is a metric.** `d(a,a) = 0`, symmetric, in `[0,1]`, never `NaN` — including on the empty answer, which for some corpora is a third of the corpus. | Cohesion, corpus conflict, the four triage buckets and α are all mean distances. A distance that is not a metric makes each of them a number with no meaning. | Nothing fails. Cohesion looks plausible, the review queue is ranked wrongly, and α is reported to three decimal places. This is the expensive one. |
+| 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs is not reproducible — invariant 14. | Two `dvc repro` runs produce different datasets from one commit. |
+| 3 | **An answer survives a JSON round trip.** `json.loads(json.dumps(a)) == a`, and `answer_distance` treats the result as equal to the original. | Every artifact is JSONL. An answer that is a `set` or a tuple comes back as something else, and every distance computed after the round trip is wrong. | Distances become non-zero between a vote and itself, one stage later. |
+| 4 | **`canonical_record` preserves every field it does not own.** Anything in the raw item that is not `content`, the answer, or the answer space lands in `meta` verbatim. | What looks like noise now is what a later question turns out to need; the corpus profiler counts fields nothing yet reads. | A field is silently gone, and only a re-ingest from the source recovers it. |
+| 5 | **`training_example` reproduces the answer the record carries.** The exported example states the same answer as `record.label`, in whatever place that profile's trainer expects it. | It is the last point at which the pipeline can notice it is shipping a different answer from the one people agreed on. | A release trains on the wrong labels. For `tool_decision` this fired on 48 records before the source was fixed. |
+
+A profile with no defensible consensus returns `None` from `vote_consensus` for every input, including unanimous input. That is a declaration rather than a failure of rule 2: it bars the profile from the optional consensus tier and nothing else, since triage needs only `answer_distance`.
+
 ## Invariants
 
 1. **Nothing is lost between stages.** `output + quarantined + deduped_out == input`, asserted on every stage and written to `metrics.json`.
@@ -539,7 +575,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 6. **Every juror vote is valid or an abstention.** No stored vote is a truncation of a malformed response. *Check:* structurally guaranteed by `complete_structured` returning `None`, plus a test feeding malformed, prose-wrapped, over-long, and out-of-space responses through a stubbed endpoint.
 7. **Votes are reproducible and key-independent.** *Check:* two cold runs over a fixture against a recording proxy, diffed; a test forcing key rotation mid-run and diffing the votes.
 8. **The panel is diverse, measured, and clean.** ≥3 jurors, ≥3 distinct families, no `"unknown"`, no corpus-family juror unless tagged `control`. *Check:* the jury gate reads the panel config and calls `model_family` on every juror.
-9. **δ is a metric.** For every registered profile: `δ(a,a) = 0`, symmetry, range `[0,1]`, no `NaN`, including on the profile's empty answer. *Check:* the conformance suite, over generated answer pairs.
+9. **`answer_distance` is a metric.** For every profile: `d(a,a) = 0`, symmetry, range `[0,1]`, no `NaN`, including on the profile's empty answer. *Check:* the profile's own test module, over random answer pairs drawn from its answer schema — profile rule 1. This is the one invariant in this list that nothing generic enforces, which is why it is rule 1 and why the cost of breaking it is written down.
 10. **No model output reaches an annotator.** *Check:* a contract test asserting the payload key set equals an explicit allowlist.
 11. **Corrections stay in the answer space.** *Check:* structurally where the UI can express it, and asserted again at pull time.
 12. **No group spans splits.** No `group_key` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
@@ -557,7 +593,7 @@ A failed gate writes `data/<stage>/GATE_FAILED.json` with the assertion, the obs
 |---|---|
 | Source SHA-256 differs from `params.yaml` | Hard stop. A changed source is a new dataset version, decided by a human. |
 | Problem count moves > ±10% from declared | Hard stop with the delta. |
-| Profile fails the conformance suite | Hard stop at registration, before any stage runs. |
+| Profile breaks a profile rule | Nothing stops the run. The rules are stated, not enforced; the symptom is in § *Rules a profile must satisfy*, per rule. |
 | Profile and modality names disagree | Hard stop. A profile declares its modality; a mismatched pair is a configuration error, not a coercion. |
 | A modality has no redactor for a part | Record quarantined to `quarantine/pii/`, never advanced. |
 | `enable_redact` is false | The stage reports and stops there. The downstream personal-data scan then fails, so nothing ships — the default cannot silently release personal data. |
