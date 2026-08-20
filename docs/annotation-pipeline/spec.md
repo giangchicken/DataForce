@@ -261,7 +261,7 @@ dataforce/
 │   │   └── text/                loader · embedder · privacy · display control
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
-│   │   ├── base.py              Profile protocol: 7 members, nothing more
+│   │   ├── base.py              Profile protocol: 12 members, nothing more
 │   │   ├── registry.py
 │   │   ├── conformance.py       the suite every profile must pass
 │   │   └── tool_decision/       adapter · schema · δ · consensus · checks
@@ -300,44 +300,146 @@ Nothing under `pipeline/` imports a concrete modality or profile — both arrive
 
 ### The two contracts
 
+*Decisions § Two composed axes* says why there are two protocols rather than one bundle per dataset kind. This section says what each member is **for**, and records the test every member had to pass to be here: **a member exists only because a named stage cannot run without it.** The comments name that stage, so a member no stage calls would be visible as the speculative abstraction it is.
+
+Read the two together as one sentence: a modality answers *how is this content read*, a profile answers *what is an answer about it*. Neither may answer the other's question, and that is the whole reason a new modality does not multiply the profiles that already exist.
+
 ```python
 class Modality(Protocol):
-    name: str
-    version: str
+    """How content is read. Knows nothing about what an answer is."""
+
+    name: str        # stamped onto every record it touches as
+    version: str     #   producer.modality = "text@1" -- requirement 7
+
+    # Stage 0 `load`. One raw source item -> ordered typed parts. The only code in the
+    # system that knows the source's own layout, which is what stops fifteen stages
+    # each acquiring an opinion about how a file is shaped.
     def load(self, raw: Any) -> list[Part]: ...
+
+    # Stage 3 `embed`. Content -> vector, for near-duplicate detection only. Nobody
+    # reads the number: `dedup` consumes it and no other stage sees it. A static
+    # embedder is preferred so two runs over one corpus dedup identically.
     def embed(self, parts: list[Part]) -> Sequence[float]: ...
+
+    # Stage 2 `pii_check`. The detectors this *kind of content* needs -- personal data
+    # hides differently in a transcript than in a waveform. High recall is the
+    # contract here; precision belongs to the verifier inside the stage. The uniform
+    # Span shape is why the redaction stage, its report, its vault and its gate are
+    # written once rather than once per modality.
     def privacy_detectors(self) -> list[Detector]: ...     # → list[Span] per part
+
+    # Stage 8 `publish`. The half of the annotation config that *displays* a record.
+    # A modality never emits the control that captures an answer: that half is the
+    # profile's, and composing them is what makes one screen out of two contracts.
     def display_control(self, record: Record) -> UIControl: ...
 ```
 
 ```python
 class Profile(Protocol):
-    name: str
-    version: str
-    modality: str
-    answer_schema: dict[str, Any]                          # JSON Schema for one answer
+    """What an answer is. Knows nothing about how content is read."""
+
+    name: str        # stamped onto every record it touches as
+    version: str     #   producer.profile = "tool_decision@1" -- requirement 7
+    modality: str    # the axis it composes with. A run naming a different pair is a
+                     # hard stop, never a coercion: coercing it would ship a dataset
+                     # whose provenance says something untrue.
+
+    answer_schema: dict[str, Any]   # JSON Schema for one answer. The answer's *type*,
+                                    # declared rather than described, so the jury can
+                                    # constrain a model with it and pandera can check
+                                    # an artifact against it -- invariant 5.
+
+    # Stage 0 `load`. Raw item + parts -> canonical record. Keeps every field it does
+    # not own, because what looks like noise now is what a later question turns out to
+    # need; the conformance suite asserts that preservation.
     def adapt(self, raw: Any, parts: list[Part]) -> Record: ...
+
+    # Stages 5 `jury`, 6 `rank_for_review`, 10 `aggregate`. The distance between two
+    # answers -- and the *only* thing the core knows about disagreement. Cohesion,
+    # corpus conflict, the four triage buckets, Krippendorff's alpha over a set-valued
+    # answer, adjudication and juror calibration are all written in terms of it, which
+    # is what lets `shared/agreement.py` be generic without being a framework.
+    # Checked as a metric at registration, not trusted: invariant 9.
     def delta(self, a: Answer, b: Answer) -> float: ...
+
+    # Stage 5 `jury`. Several answers -> one, deterministically. Returning None for
+    # every input is a legal declaration rather than a failure: free-text generation
+    # has no defensible consensus, and inventing one would ship a plausible
+    # machine-written label. It bars the optional consensus tier and nothing else --
+    # triage still works, because triage needs only `delta`.
     def consensus(self, answers: list[Answer]) -> Answer | None: ...
+
+    # Stage 1 `remove_invalid`. Named checks a record passes or *provably* fails.
+    # Provably: no judgment. If telling right from wrong needs a person, it is an
+    # annotation task, not a validity check. The names are the quarantine filenames
+    # and the keys `params.yaml` declares expected counts against.
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]: ...
+
+    # Stage 7 `generate_questions`. One focused, answerable question about this record.
+    # The profile owns the wording because only it knows what the answer is; choosing
+    # *which* focus to ask about is the stage's job.
     def question(self, record: Record, focus: str) -> str: ...
+
+    # Stage 8 `publish`. The half of the annotation config that *captures* an answer,
+    # constrained to this record's answer space wherever the UI can express it -- and
+    # asserted again at pull time, because a UI constraint is not a guarantee.
     def answer_control(self, record: Record) -> UIControl: ...
+
+    # Stages 4 `dedup` and 12 `split`. What makes two records the same scenario, so no
+    # group straddles a split and no metric is computed on leaked data. A field that is
+    # unique per record is not a group key, and saying which field is one is the
+    # profile's job -- with a measurement, not an assumption. Written at `dedup`,
+    # unioned with the duplicate cluster; enforced at `split`, where a straddling group
+    # fails the gate.
     def group_key(self, record: Record) -> str: ...
+
+    # Stage 13 `export`. One training example, in the shape this profile's trainer
+    # expects. The last place the pipeline can assert that the answer it is shipping is
+    # the answer it recorded.
     def export(self, record: Record) -> dict[str, Any]: ...
 ```
 
+Twelve methods across the two contracts, and thirteen of the fifteen stages call at least one of them. The two that call neither are `pull`, which normalizes what annotators returned, and `document`, which reads what earlier stages already recorded — and that is the expected shape of the list, not a gap in it.
+
 `answer_schema` may be built per record — a profile whose answer space depends on the record (a catalog, a candidate list) returns a schema closed over that record. The jury passes it straight to `complete_structured`, which is why answer-space validation is not pipeline code.
+
+**What the contracts deliberately do not own.** Each of these was a plausible member and each is somewhere better:
+
+| Not a member | Where it lives instead | Why |
+|---|---|---|
+| `validate(answer)` | `answer_schema`, handed to the library | a schema the provider enforces beats a predicate the pipeline runs after the fact |
+| A quality score | `delta` | one distance expresses every agreement statistic; a score expresses one |
+| The prompt text | `config/prompts/<axis>/<name>/<slug>.vN.txt` | a prompt is the measuring instrument, so it has to be diffable and nameable in an artifact — requirement 45 |
+| Reading or writing artifacts | `file_utils` via the stage | stages own I/O; an implementation that opened a file would be a stage |
+| Any threshold | `params.yaml`, `config/gates.yaml` | a number in code is neither reviewable nor a declared DVC dependency |
+| Its own identity | `config/<axis>/<name>.yaml` | `version` is a claim about how a dataset was made; edited as a class attribute it is a claim no review saw |
 
 ### Canonical record
 
 One shape flows through every stage; each stage adds fields and removes none.
 
+**Why one shape rather than one table per stage, joined on `rid`.** Four reasons, and the first is the one that decides it.
+
+- **Invariant 1 is a count, and a join is where rows go missing.** `output + quarantined + deduped_out == input` is only checkable when a stage's output rows *are* its input rows plus fields. Under a join, a dropped row and a failed match are the same observation.
+- **Several stages read across earlier ones.** A triage bucket is a function of the jury block, the validity list and the duplicate cluster at once; the pilot gate reads gold, validation and jury together. Every one of those would be a join written by hand, in a stage whose subject is something else.
+- **A record that leaves the main path has to stay self-describing.** `quarantine/invalid/<check>.jsonl` is read by a person with nothing to join against, and the same is true of `quarantine/pii/` and a failed gate's offending ids.
+- **Adds-and-never-removes makes the schemas additive.** `loaded.jsonl` and `curated.jsonl` are the same type at two points in one record's life, so artifact schemas stay non-strict and a later stage cannot invalidate an earlier stage's validation. It is also what lets `dvc repro` re-run one stage without rewriting another's output.
+
+Every block below has exactly one owning stage, named in the comments. The one shared block is `validation`, opened by `aggregate` and completed by `curate` — two stages of one loop, never two writers racing.
+
 ```jsonc
 {
+  // stage 0 `load` -- identity and provenance, written once and never rewritten.
+  // `rid` comes from the content parts' digests in order, so re-ingesting a shuffled
+  // source yields byte-identical ids (invariant 2); `producer` is the resolved pair,
+  // so a dataset cannot silently change the code that made it (requirement 7).
   "rid": "9f2c…",
   "source":   { "file_sha256": "…", "offset": 1043, "ingested_at": "2026-08-18T…" },
   "producer": { "modality": "text@1", "profile": "tool_decision@1" },
 
+  // stage 0, from the modality's `load`. An ordered list of typed parts rather than a
+  // string: this is one of the three things that could not be retrofitted without
+  // touching all fifteen stages, which is why it is settled before stage one exists.
   "content": [
     { "type": "text",  "role": "system", "text": "…" },
     { "type": "text",  "role": "user",   "text": "…" }
@@ -345,16 +447,31 @@ One shape flows through every stage; each stage adds fields and removes none.
     // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
   ],
+  // stage 0, from the profile's `adapt`. The three fields the profile owns: what an
+  // answer may be for *this* record, the answer itself, and everything the profile
+  // does not own -- kept verbatim, because what looks like noise now is what a later
+  // question turns out to need.
   "answer_space": { "…": "profile-defined; a catalog, a class list, or absent" },
   "label": "…",                        // the profile's answer type
   "meta": { "…": "verbatim from source" },
 
-  "parse_status": "ok",
-  "invalid": [],
+  "parse_status": "ok",   // stage 0: ingest drops nothing, so an unparsable record is
+                          // here too, flagged rather than absent
+  "invalid": [],          // stage 1 `remove_invalid`: the names of the checks that
+                          // fired. Non-empty means the record is in quarantine, with
+                          // the check name as its filename
+  // stage 2 `pii_check`: what was found and replaced -- counts and classes only. The
+  // placeholder-to-original mapping lives in the untracked vault, never here.
   "privacy": { "spans_replaced": 2, "classes": ["PHONE", "EMAIL"] },
+  // stage 4 `dedup`: cluster members are marked, never deleted, so the decision stays
+  // reversible and recorded. `group_key` is the profile's, unioned with the cluster, so
+  // variants of one scenario cannot straddle a split.
   "dup_cluster_id": "c_0331", "is_representative": true,
   "group_key": "g_7a1e…",
 
+  // stage 5 `jury`: every vote kept, including abstentions, because an abstention is
+  // evidence about a juror. `panel_version` and `prompt_version` are here so a number
+  // can be attributed to the panel and prompt that produced it.
   "jury": {
     "panel_version": 2, "prompt_version": "jury_vote.v1",
     "votes": [ { "juror": "j1", "family": "glm", "answer": "…", "ok": true,
@@ -365,11 +482,16 @@ One shape flows through every stage; each stage adds fields and removes none.
     "exact_unanimity": false, "cohesion": 0.67, "corpus_conflict": 0.0,
     "est_tokens": 5412
   },
+  // stage 6 `rank_for_review`: why a human is being asked about this record, and under
+  // which sampling stratum -- so the design stays reconstructible (invariant 15).
   "triage": { "bucket": "agreed", "strata": ["audit"] },
 
+  // stages 10 `aggregate` and 11 `curate`: what people decided, who decided it, and
+  // whether it counts toward alpha. `curated_label` is the only label a release ships
+  // from a human; `jury_consensus` records are barred from test permanently.
   "validation": { "status": "corrected", "verdict": "incorrect", "curated_label": "…",
                   "validators": ["u12","u07"], "alpha_contrib": true, "decided_at": "…" },
-  "split": "test"
+  "split": "test"   // stage 12: assigned by `group_key`, never at random
 }
 ```
 
