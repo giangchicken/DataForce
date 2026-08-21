@@ -1,13 +1,13 @@
-"""DEFINITION · an answer, and everything the pipeline computes from one.
+"""DEFINITION · everything the pipeline computes from an answer.
 
 An answer is a set of tool names drawn from the record's own catalog, carried as a
 JSON array because an artifact is JSONL and a set is not JSON. δ reads it as the set
 it means, so two votes listing the same tools in different orders agree exactly.
 
-Four things, because each is the answer in a different position: the profile-level
-schema, the distance between two answers, the consensus of several, and the answer as a
-training example states it. One record's answer space is this schema with the record's
-own catalog as an `enum`, and it is built where the record is -- `build_record.py`.
+Three things, because each is the answer in a different position: the distance between
+two answers, the consensus of several, and the answer as a training example states it.
+What an answer *looks like* -- the profile-level schema, and one record's answer space
+with its own catalog as an `enum` -- is `schema.py`.
 """
 
 from __future__ import annotations
@@ -21,16 +21,7 @@ from dataforce.profiles.base import Answer
 from dataforce.shared.errors import InvariantError
 from dataforce.shared.record import Record, TextPart
 
-__all__ = [
-    "ANSWER_SCHEMA",
-    "answer_distance",
-    "training_example",
-    "vote_consensus",
-]
-
-# The profile-level shape. The per-record shape adds the catalog as an `enum`, which
-# is where requirement 5's constraint is enforced -- inside the library, not here.
-ANSWER_SCHEMA: dict[str, Any] = {"type": "array", "items": {"type": "string"}}
+__all__ = ["answer_distance", "training_example", "vote_consensus"]
 
 
 def _tools(answer: Answer) -> frozenset[str]:

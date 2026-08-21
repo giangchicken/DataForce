@@ -17,6 +17,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from dataforce.profiles.tool_decision.answer import answer_distance
+from dataforce.profiles.tool_decision.schema import answer_space
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     TOOLS_KEY,
@@ -137,13 +138,7 @@ def build_record(
         source=source,
         producer=producer,
         content=list(parts),
-        # Requirement 5's catalog constraint, as this record's own answer space: the
-        # jury hands it straight to `complete_structured`, which is why no stage
-        # validates an answer against a catalog.
-        answer_space={
-            "type": "array",
-            "items": {"type": "string", "enum": list(catalog.names)},
-        },
+        answer_space=answer_space(catalog),
         label=contract.read_label(raw),
         meta={**unowned, **(raw.get("meta") or {})},
     )

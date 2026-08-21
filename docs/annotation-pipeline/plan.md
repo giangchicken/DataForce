@@ -141,7 +141,7 @@ Inside the profile:
 | `catalog.as_function` | `to_strict_openai` | `tool_schema.py` — **done** |
 | `adapter.catalog_names` | `catalog_names` | `tool_schema.py` |
 | `adapter.catalog_fingerprint` | `catalog_fingerprint` | `tool_schema.py` |
-| `adapter.answer_space_for` | `answer_space` | `answer.py` |
+| `adapter.answer_space_for` | `answer_space` | `schema.py` |
 | `answers.delta` | `answer_distance` | `answer.py` |
 | `answers.consensus` | `vote_consensus` | `answer.py` |
 | `export.export` | `training_example` | `answer.py` |
