@@ -1,6 +1,6 @@
 # Module layout — the tree mirrors the flow
 
-**Status:** built, in six commits, Phase 2L of the plan. Supersedes
+**Status:** built, in seven commits, Phase 2L of the plan — six from the order of work below, and one for what reviewing them found. Supersedes
 `docs/engine-api-split/spec.md`, whose one rule (§ *the engine never opens a file*) is
 restated here as requirement 3.
 
@@ -330,7 +330,7 @@ What must not break, and what proves it:
 
 | invariant | check |
 |---|---|
-| No behaviour change | 332 tests pass — 298 unit, 34 integration, 1 skipped — with only import lines and names changed in the test files |
+| No behaviour change | the suite passes with only import lines and names changed in the test files: 298 under `make check` before, 311 after, the 13 new ones being the guards this spec adds; 33 integration passing with 1 skipped throughout |
 | No output change | `metrics/corpus_profile.json` byte-identical before and after; `git diff --stat` on it empty |
 | Types still hold | `mypy --strict` clean |
 | The engine still opens no file | `test_layering.py` unchanged and passing with `core` substituted for `shared` |

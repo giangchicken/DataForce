@@ -21,7 +21,7 @@
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **344 tests** (310 under `make check`, 34 marked `integration`), **36 source modules**, **27 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; Phase 2L made the tree mirror the flow, so a stage author looks for a phase name rather than for a function; the first stage arrives in Phase 3.
+Today: **345 tests** (311 under `make check`, 34 marked `integration`), **36 source modules**, **27 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; Phase 2L made the tree mirror the flow, so a stage author looks for a phase name rather than for a function; the first stage arrives in Phase 3.
 
 **Checking the built half, in four commands.** Each proves something a later phase depends on; none needs a network or a service except the third. A fifth, `uv run dvc repro`, is gone: with DVC no longer orchestrating there is no DAG to report on.
 
@@ -587,12 +587,20 @@ the layout rather than against an exception to it.
 | L4 | The layout and layering guards | L3 |
 | L5 | The renames, public and private, and the guard that keeps them | L4 |
 | L6 | Both contracts ordered by phase, and the docs | L5 |
+| L7 | A review of L1–L6, and what it found | L6 |
 
-**Done, in six commits.** `beef239` `2e928de` `e034294` `90ee7a3` `9c093b2` and this one.
-344 tests (310 under `make check`, 34 integration with 1 skipped), `mypy --strict` clean
-over 36 modules, and `metrics/corpus_profile.json` byte-identical at `46a9280` across two
-full integration runs — which is the proof that nothing here changed behaviour, since
-that file is every number this profile measures about the corpus.
+**Done, in seven commits.** `beef239` `2e928de` `e034294` `90ee7a3` `26ad199` `4c71fbb`
+`5c17f90`. 345 tests (311 under `make check`, 34 integration with 1 skipped), `mypy
+--strict` clean over 36 modules, and `metrics/corpus_profile.json` byte-identical at
+`46a9280` across three full integration runs — which is the proof that nothing here
+changed behaviour, since that file is every number this profile measures about the corpus.
+
+L7 was not in the spec's order of work and is the most useful task in this phase. Three
+defects, all in code the six commits above had already declared done: a docstring still
+carrying the measurement Phase 2C superseded, an import guard that read the wrong axis and
+so returned the empty set for every modality package, and a vacuity assertion that would
+have failed on the arrival of the second profile it exists to keep uniform. None would
+have been caught by a passing suite, because two of them *were* the suite.
 
 **Four things the build found that the spec had not.** Each is recorded where the next
 reader hits it rather than only here.
