@@ -627,22 +627,33 @@ The item is invented. That is a rule rather than a convenience: this repository 
   "rid": "…",                         // sha256 over the content parts' digests, in order
   "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471, "ingested_at": "…" },
   "producer": { "modality": "text@1", "profile": "tool_decision@1" },
-  // one part per turn, in order, each carrying its role. Calls and tool results are
-  // turns like any other: they are what the conversation was.
+  // One part per turn, in order. `type` is the four-value closed set and nothing
+  // else: text | image | audio | video. A turn that arrived as a `tool_calls`
+  // array is a *text* part holding canonical JSON -- requirement 70 -- because a
+  // call is not a kind of content, and a `call` type would oblige the text
+  // modality to know what one is.
   "content": [ { "type": "text", "role": "system",    "text": "…" },
                { "type": "text", "role": "user",      "text": "…" },
                { "type": "text", "role": "assistant", "text": "…" },
                { "type": "text", "role": "user",      "text": "…" },
-               { "type": "call", "role": "assistant", "calls": [ { "name": "LookupBalance",
-                                   "arguments": { "ma_khach": "480215" } } ] },
+               // the call, canonically: keys sorted, no insignificant whitespace
+               { "type": "text", "role": "assistant",
+                 "text": "[{\"arguments\":{\"ma_khach\":\"480215\"},\"name\":\"LookupBalance\"}]" },
+               // the tool's own result, byte-for-byte as the source spelled it --
+               // it was already a string, so requirement 70 does not touch it, and
+               // normalising it would change what `rid` is computed over. A role the
+               // manifest declares no meaning for: embedded, displayed, not read
                { "type": "text", "role": "tool",      "text": "{\"so_du\": 1250000}" },
                { "type": "text", "role": "assistant", "text": "…" },
                { "type": "text", "role": "user",      "text": "…" },
-               { "type": "call", "role": "assistant", "calls": [ { "name": "SendStatement",
-                                   "arguments": { "ma_khach": "480215", "ky": "thang_nay" } } ] } ],
+               // the target turn: the last one carrying `roles.target`
+               { "type": "text", "role": "assistant",
+                 "text": "[{\"arguments\":{\"ky\":\"thang_nay\",\"ma_khach\":\"480215\"},\"name\":\"SendStatement\"}]" } ],
   // what an answer may be for *this* record: its own catalog as the name space, and
   // each name's own `parameters` as the argument space
   "answer_space": { "type": "array", "items": { "type": "object", "…": "per-tool" } },
+  // the same answer the target turn states, read from where the source states it.
+  // Twice on purpose -- see below
   "label": [ { "name": "SendStatement",
                "arguments": { "ma_khach": "480215", "ky": "thang_nay" } } ],
   "meta":  { "…": "verbatim from source" },
@@ -654,6 +665,12 @@ The item is invented. That is a rule rather than a convenience: this repository 
 ```
 
 Every block after `invalid` is `null` because the stage that owns it has not run. That is the shape of a record leaving stage 1, and no later stage removes a field.
+
+**Why the answer appears twice.** `label` and the target turn hold the same value, and that redundancy is load-bearing rather than sloppy: it is the *only* thing that makes a mismatch detectable. A source states its answer once as a field and once as the content the model is trained to produce, the two can disagree, and `label_assistant_mismatch` is the check that reads both and compares them through δ. On the reference source it found 48 records where they differed — records that would have trained a model on the losing side of two disagreeing sources. Collapse the two into one and the check has nothing to compare.
+
+They also stop being the same value later, which is the second reason both exist. `label` is the *source's* claim and is never rewritten; a human correction lands in `validation.curated_label` at stage 11; and `content` is never rewritten either, so `rid` — a digest over the content parts — stays stable across a relabelling. Three fields, three different claims about the answer, and `export` is where they are reconciled into the one line that ships.
+
+**`tool` is a role, not a part type.** The four-value closed set is about *kinds of content*; `role` is a free string the source chooses, and a `tool` turn is text like any other — it embeds, it displays, and `rid` covers it. What it does not have is a *declared meaning*: the profile manifest names three roles (`instruction`, `conversation`, `target`), so no check and no stage may read a `tool` turn by meaning. It is carried because it was in the conversation, and nothing more is claimed about it.
 
 **4 · The four validity checks, on this item.** The answer's calls name tools the record offered; each call's arguments satisfy that tool's `parameters`, `ky` inside its `enum`; the catalog is non-empty; one call is within the declared ceiling. Nothing fires, so the record stays on the main path. Any one of them failing writes it to `quarantine/invalid/<check>.jsonl` — named, not deleted, and re-admitted by `dataforce requeue --check <name>` once the cause is fixed.
 
