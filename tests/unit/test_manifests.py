@@ -87,8 +87,12 @@ def test_the_check_catches_the_assignment_it_exists_to_catch() -> None:
 
 
 def test_both_implementations_are_what_their_manifests_say() -> None:
-    profile = manifest.read_manifest("profiles", "tool_decision", root=CONFIG)
-    modality = manifest.read_manifest("modalities", "text", root=CONFIG)
+    profile = manifest.read_manifest(
+        manifest.manifest_path("profiles", "tool_decision", root=CONFIG)
+    )
+    modality = manifest.read_manifest(
+        manifest.manifest_path("modalities", "text", root=CONFIG)
+    )
 
     assert (TOOL_DECISION.name, TOOL_DECISION.version) == (
         profile.name,
@@ -101,33 +105,33 @@ def test_both_implementations_are_what_their_manifests_say() -> None:
 def test_a_version_must_be_a_string_because_it_is_not_a_number(tmp_path: Path) -> None:
     """`version: 1` unquoted is an int in YAML, and `text@1.0` is a different stamp."""
     (tmp_path / "modalities").mkdir()
-    (tmp_path / "modalities" / "probe.yaml").write_text(
-        "name: probe\nversion: 1\n", encoding="utf-8"
-    )
+    probe = tmp_path / "modalities" / "probe.yaml"
+    probe.write_text("name: probe\nversion: 1\n", encoding="utf-8")
 
     with pytest.raises(ConfigError, match="not a number"):
-        manifest.read_manifest("modalities", "probe", root=tmp_path)
+        manifest.read_manifest(probe)
 
 
 def test_a_manifest_cannot_be_copied_and_left_claiming_the_old_name(
     tmp_path: Path,
 ) -> None:
     (tmp_path / "profiles").mkdir()
-    (tmp_path / "profiles" / "copied.yaml").write_text(
-        'name: original\nversion: "1"\n', encoding="utf-8"
-    )
+    copied = tmp_path / "profiles" / "copied.yaml"
+    copied.write_text('name: original\nversion: "1"\n', encoding="utf-8")
 
     with pytest.raises(ConfigError, match="filename is its identity"):
-        manifest.read_manifest("profiles", "copied", root=tmp_path)
+        manifest.read_manifest(copied)
 
 
 def test_a_missing_manifest_names_the_ones_that_exist() -> None:
     with pytest.raises(ConfigError, match="tool_decision"):
-        manifest.read_manifest("profiles", "nonexistent", root=CONFIG)
+        manifest.manifest_path("profiles", "nonexistent", root=CONFIG)
 
 
 def test_a_missing_declaration_names_what_the_manifest_does_hold() -> None:
-    declared = manifest.read_manifest("profiles", "tool_decision", root=CONFIG)
+    declared = manifest.read_manifest(
+        manifest.manifest_path("profiles", "tool_decision", root=CONFIG)
+    )
 
     with pytest.raises(ConfigError, match="modality"):
         declared.require("nothing_declares_this")
@@ -135,4 +139,4 @@ def test_a_missing_declaration_names_what_the_manifest_does_hold() -> None:
 
 def test_there_are_exactly_two_axes() -> None:
     with pytest.raises(ConfigError, match="there are two"):
-        manifest.read_manifest("stages", "load", root=CONFIG)
+        manifest.manifest_path("stages", "load", root=CONFIG)

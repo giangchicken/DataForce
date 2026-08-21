@@ -88,7 +88,7 @@ src/dataforce/
 
 Six named changes to existing code:
 
-1. `manifest.load(axis, name, *, root=CONFIG)` → `declared.manifest.read_manifest(axis, name, *, root)` — `root` required.
+1. `manifest.load(axis, name, *, root=CONFIG)` → `declared.manifest.manifest_path(axis, name, *, root)`, then `read_manifest(path)` — `root` required, and locating a manifest is separate from parsing one, so the path a run digests is a value the caller already holds.
 2. `prompts.load` / `prompts.render` → `declared.prompts.read_prompt` / `fill_prompt`, `root` required. This also closes the naming exemption R1 recorded: `prompts.load` shared a name with stage 0 and `render` was a bare operation, and both were left alone because they sat in `shared/`.
 3. `validity_checks(contract, *, params=PARAMS)` → `validity_checks(contract, *, ceiling: int)`. `max_answer_cardinality` moves to `declared/`.
 4. `corpus_measurements(path, modality, profile)` → `corpus_measurements(raw_items: Iterable[Mapping], modality, profile, *, digest: str)`. The file reading and the baseline read/write move to `api/`; the measuring stays in the profile.

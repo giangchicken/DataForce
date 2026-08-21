@@ -65,12 +65,16 @@ class Engine:
 
 def text_modality(*, config_root: Path) -> TextModality:
     """The `text` modality, from the manifest that declares what it is."""
-    return TextModality(read_manifest("modalities", TEXT_MANIFEST, root=config_root))
+    return TextModality(
+        read_manifest(manifest_path("modalities", TEXT_MANIFEST, root=config_root))
+    )
 
 
 def tool_decision_profile(*, config_root: Path, params: Path) -> ToolDecisionProfile:
     """The `tool_decision` profile, with the question template and ceiling it declares."""
-    declared = read_manifest("profiles", TOOL_DECISION_MANIFEST, root=config_root)
+    declared = read_manifest(
+        manifest_path("profiles", TOOL_DECISION_MANIFEST, root=config_root)
+    )
     return ToolDecisionProfile(
         declared,
         question_template=read_prompt(
