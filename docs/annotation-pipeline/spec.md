@@ -123,7 +123,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"type": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all fifteen stages.
 10. `rid` is derived from the content parts' digests, not from raw bytes: text parts contribute their text, media parts contribute their `sha256`. So the identity of a record is modality-independent and stable across re-ingests and re-ordering. A part rendered from something that was not already a string — a tool call — must be rendered **canonically**, one form per value, or `rid` stops being reproducible and invariant 2 fails; requirement 70 says which form.
 11. Privacy detection is a modality concern with a **uniform result shape** — a list of typed spans over a named part — so the redaction stage, its report, its vault, and its gate are written once. What a "span" indexes is the modality's business: character offsets in text, a time range in audio, a box in a frame.
-12. A modality that cannot yet redact a part **fails closed**: the record is quarantined, never advanced. Failing open on personal data is the one failure this pipeline will not take, and a new modality inherits that rather than choosing it.
+12. A modality that cannot yet redact a part **fails closed**: the record is quarantined, never advanced, and it says so on itself — `unredactable_part` is appended to `failed_checks`, the same field stage 1 writes. Failing open on personal data is the one failure this pipeline will not take, and a new modality inherits that rather than choosing it. `privacy` stays what it is, the *evidence*: what was found and replaced. The verdict is never inferred from the evidence, because the success shape and the withheld shape are otherwise identical.
 
 ### Ingest and source integrity
 
@@ -724,7 +724,7 @@ One shape flows through every stage; each stage adds fields and removes none.
 
 - **Invariant 1 is a count, and a join is where rows go missing.** `output + quarantined + deduped_out == input` is only checkable when a stage's output rows *are* its input rows plus fields. Under a join, a dropped row and a failed match are the same observation.
 - **Several stages read across earlier ones.** A triage bucket is a function of the jury block, the validity list and the duplicate cluster at once; the pilot gate reads gold, validation and jury together. Every one of those would be a join written by hand, in a stage whose subject is something else.
-- **A record that leaves the main path has to stay self-describing.** `quarantine/invalid/<check>.jsonl` is read by a person with nothing to join against, and the same is true of `quarantine/pii/` and a failed gate's offending ids.
+- **A record that leaves the main path has to stay self-describing.** `quarantine/invalid/<check>.jsonl` is read by a person with nothing to join against, and the same is true of `quarantine/pii/` and a failed gate's offending ids. Which is why **one field answers "why is this record not on the main path"** — `failed_checks`, appended to by whichever stage withheld it, never one field per stage. Three stages ask that question and a reader who has to check three differently-shaped fields is a reader who will check two of them.
 - **Adds-and-never-removes makes the schemas additive.** `loaded.jsonl` and `curated.jsonl` are the same type at two points in one record's life, so artifact schemas stay non-strict and a later stage cannot invalidate an earlier stage's validation. It is also what lets one named stage be re-run without rewriting another's output.
 
 Every block below has exactly one owning stage, named in the comments. The one shared block is `validation`, opened by `aggregate` and completed by `curate` — two stages of one loop, never two writers racing.
@@ -768,12 +768,17 @@ Every block below has exactly one owning stage, named in the comments. The one s
   // one per kind of failure -- the check name already says which kind it is, and "is
   // this record on the main path" has to stay one condition no stage can half-remember
   "failed_checks": [],
-  // stage 2 `pii_check`: what was found and replaced -- counts and classes only. The
-  // placeholder-to-original mapping lives in the untracked vault, never here.
+  // stage 2 `pii_check`: the *evidence* -- what was found and replaced, counts and
+  // classes only; the placeholder-to-original mapping lives in the untracked vault,
+  // never here. Not the verdict: a record this stage withheld says so in
+  // `failed_checks`, because these counts look the same either way
   "privacy": { "spans_replaced": 2, "classes": ["PHONE", "EMAIL"] },
   // stage 4 `dedup`: cluster members are marked, never deleted, so the decision stays
   // reversible and recorded. `group_key` is the profile's, unioned with the cluster, so
-  // variants of one scenario cannot straddle a split.
+  // variants of one scenario cannot straddle a split. Deliberately *not* a
+  // `failed_checks` entry: a duplicate is not withheld, it stays on the main path and
+  // is filtered at export by an explicit choice -- which is why the conservation gate
+  // counts `deduped_out` as its own term rather than folding it into `quarantined`.
   "dup_cluster_id": "c_0331", "is_representative": true,
   "group_key": "g_7a1e…",
 
@@ -919,7 +924,7 @@ A failed gate raises `GateFailed` carrying every gate's verdict; the gate engine
 | Problem count moves > ±10% from declared | Hard stop with the delta. |
 | Profile breaks a profile rule | Nothing stops the run. The rules are stated, not enforced; the symptom is in § *Rules a profile must satisfy*, per rule. |
 | Profile and modality names disagree | Hard stop. A profile declares its modality; a mismatched pair is a configuration error, not a coercion. |
-| A modality has no redactor for a part | Record quarantined to `quarantine/pii/`, never advanced. |
+| A modality has no redactor for a part | Record quarantined to `quarantine/pii/`, never advanced, carrying `unredactable_part` in `failed_checks` so the file it is in is not the only record of why. |
 | An answer's shape is not the profile's answer type | Quarantined by the validity check that names it, run continues. Never coerced: a call object read as a name, or a name read as a call, would put a guess in a label. |
 | An answer names one tool twice | Quarantined — requirement 73. A person decides whether the source means parallel calls or is malformed. |
 | A consensus call is missing a required argument | No consensus for that call; it is dropped rather than completed. The record ranks by disagreement as usual. |

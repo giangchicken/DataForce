@@ -614,6 +614,8 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Blocked by.** T12, T13.
 
+**Also owns the withheld verdict.** A record this stage does not advance appends `unredactable_part` to `failed_checks` — the same field stage 1 writes, not a second one. `privacy` stays the evidence: `spans_replaced` and `classes` look identical whether the record was redacted successfully or withheld, so the verdict cannot be inferred from them, and requirement 12 and the *self-describing* rule both fail if the only record of the decision is which directory the row is in. `dedup` is deliberately not part of this: a duplicate is not withheld, which is why conservation counts `deduped_out` separately.
+
 **Relevant files.** `src/dataforce/pipeline/data_quality/pii_check.py`.
 
 **Proposed approach.** Layer 1 is the modality's detectors. Layer 2 verifies each candidate through `llm.complete_structured` over a ±80-character window against a fixed classification schema, deciding personal data versus price, date or reference code. **Always** write `pii_findings.jsonl` — every candidate span with its class, its window and the verifier's verdict. A verification response failing its schema leaves the span **unverified, not negative**, and the record is quarantined. With `enable_redact: true`, verified spans become stable typed placeholders scoped per record (`<PHONE_1>`, `<EMAIL_1>`), so a value referenced twice stays co-referent. The placeholder-to-original mapping goes to `data/raw/pii_vault.jsonl`, outside DVC. Reports record per-class counts and a sample of 20 *placeholders in context* — never original values. Checkpoint so an LLM outage resumes with verified spans kept.
