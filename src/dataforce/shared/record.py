@@ -31,7 +31,6 @@ __all__ = [
     "UIControl",
     "Versioned",
     "compute_rid",
-    "part_digest",
     "stamp",
 ]
 
@@ -122,24 +121,20 @@ def stamp(modality: Versioned, profile: Versioned) -> Producer:
     )
 
 
-def part_digest(part: Part) -> str:
-    """What a part contributes to its record's identity.
-
-    Text contributes its text; media contributes its checksum. The rule is the
-    same whatever the modality, so no stage needs to know which one it is reading
-    to know what a record's identity is made of.
-    """
-    return part.text if isinstance(part, TextPart) else part.sha256
-
-
 def compute_rid(parts: Sequence[Part]) -> str:
     """Derive a record id from its content parts, in order.
 
     Order within a record is content -- a system turn and a user turn saying the
     same thing are not the same record -- while order *between* records is not, so
     re-ingesting a shuffled source yields byte-identical ids.
+
+    Text contributes its text and media its checksum, so what an identity is made of
+    is one rule whatever the modality that read the parts.
     """
-    material = "\n".join(f"{p.type}:{p.role}:{part_digest(p)}" for p in parts)
+    material = "\n".join(
+        f"{p.type}:{p.role}:{p.text if isinstance(p, TextPart) else p.sha256}"
+        for p in parts
+    )
     return compute_hash(material, "sha256")[:RID_LENGTH]
 
 

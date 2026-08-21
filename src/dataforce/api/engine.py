@@ -26,7 +26,7 @@ from dataforce.modalities.text import TextModality
 from dataforce.profiles.base import Profile
 from dataforce.profiles.tool_decision import MANIFEST_NAME as TOOL_DECISION_MANIFEST
 from dataforce.profiles.tool_decision import ToolDecisionProfile
-from dataforce.shared.record import Record
+from dataforce.shared.record import Record, stamp
 from dataforce.shared.registry import Registry
 
 __all__ = [
@@ -57,10 +57,7 @@ class Engine:
     @property
     def producer(self) -> dict[str, str]:
         """Both axes as `name@version`, the way an artifact records them."""
-        return {
-            "modality": f"{self.modality.name}@{self.modality.version}",
-            "profile": f"{self.profile.name}@{self.profile.version}",
-        }
+        return stamp(self.modality, self.profile).model_dump()
 
 
 def text_modality(*, config_root: Path) -> TextModality:

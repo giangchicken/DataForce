@@ -4,9 +4,10 @@ An answer is a set of tool names drawn from the record's own catalog, carried as
 JSON array because an artifact is JSONL and a set is not JSON. δ reads it as the set
 it means, so two votes listing the same tools in different orders agree exactly.
 
-Five things, because each is the answer in a different position: the profile-level
-schema, one record's answer space, the distance between two answers, the consensus of
-several, and the answer as a training example states it.
+Four things, because each is the answer in a different position: the profile-level
+schema, the distance between two answers, the consensus of several, and the answer as a
+training example states it. One record's answer space is this schema with the record's
+own catalog as an `enum`, and it is built where the record is -- `build_record.py`.
 """
 
 from __future__ import annotations
@@ -17,14 +18,12 @@ from collections.abc import Iterable
 from typing import Any
 
 from dataforce.profiles.base import Answer
-from dataforce.profiles.tool_decision.tool_schema import Catalog
 from dataforce.shared.errors import InvariantError
 from dataforce.shared.record import Record, TextPart
 
 __all__ = [
     "ANSWER_SCHEMA",
     "answer_distance",
-    "answer_space",
     "training_example",
     "vote_consensus",
 ]
@@ -32,15 +31,6 @@ __all__ = [
 # The profile-level shape. The per-record shape adds the catalog as an `enum`, which
 # is where requirement 5's constraint is enforced -- inside the library, not here.
 ANSWER_SCHEMA: dict[str, Any] = {"type": "array", "items": {"type": "string"}}
-
-
-def answer_space(catalog: Catalog) -> dict[str, Any]:
-    """This record's answer space: an array of names drawn from its own catalog.
-
-    The `enum` is requirement 5's catalog constraint, and the jury hands this straight to
-    `complete_structured`, which is why no stage validates an answer against a catalog.
-    """
-    return {"type": "array", "items": {"type": "string", "enum": list(catalog.names)}}
 
 
 def _tools(answer: Answer) -> frozenset[str]:

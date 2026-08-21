@@ -25,7 +25,7 @@ from agent_toolkit.string_utils import compute_hash
 from dataforce.modalities.base import Modality
 from dataforce.profiles.tool_decision import PROVENANCE_KEY, ToolDecisionProfile
 from dataforce.profiles.tool_decision.tool_schema import catalog_names
-from dataforce.shared.record import Record, TextPart
+from dataforce.shared.record import Record, TextPart, stamp
 
 __all__ = ["corpus_measurements", "moved_measurements"]
 
@@ -58,10 +58,7 @@ def _records(
                             # has to be byte-comparable against the committed baseline.
                             "ingested_at": "",
                         },
-                        "producer": {
-                            "modality": f"{modality.name}@{modality.version}",
-                            "profile": f"{profile.name}@{profile.version}",
-                        },
+                        "producer": stamp(modality, profile).model_dump(),
                     },
                 },
                 parts,

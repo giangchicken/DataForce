@@ -16,8 +16,12 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from dataforce.profiles.tool_decision.answer import answer_distance, answer_space
-from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY, SourceContract
+from dataforce.profiles.tool_decision.answer import answer_distance
+from dataforce.profiles.tool_decision.source_contract import (
+    LEGACY_SYSTEM_PROMPT,
+    TOOLS_KEY,
+    SourceContract,
+)
 from dataforce.profiles.tool_decision.tool_schema import (
     Catalog,
     Tool,
@@ -70,7 +74,7 @@ def read_catalog(
     Under the canonical shape the tools are data and nothing is parsed. Under the legacy
     shape they were rendered into the instruction turn, so they are read back out of it.
     """
-    if not contract.renders_the_catalog_into_the_prompt:
+    if contract.shape != LEGACY_SYSTEM_PROMPT:
         return Catalog(
             tools=tuple(
                 Tool(
@@ -133,7 +137,13 @@ def build_record(
         source=source,
         producer=producer,
         content=list(parts),
-        answer_space=answer_space(catalog),
+        # Requirement 5's catalog constraint, as this record's own answer space: the
+        # jury hands it straight to `complete_structured`, which is why no stage
+        # validates an answer against a catalog.
+        answer_space={
+            "type": "array",
+            "items": {"type": "string", "enum": list(catalog.names)},
+        },
         label=contract.read_label(raw),
         meta={**unowned, **(raw.get("meta") or {})},
     )

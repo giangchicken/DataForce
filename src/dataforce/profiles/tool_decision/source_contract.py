@@ -82,10 +82,6 @@ class SourceContract:
         """The turn that restates the answer: the target, by definition."""
         return self.role_name(TARGET)
 
-    @property
-    def renders_the_catalog_into_the_prompt(self) -> bool:
-        return self.shape == LEGACY_SYSTEM_PROMPT
-
 
 def _declared(manifest: Manifest, key: str, inner: str) -> Any:
     """One value out of a mapping the manifest declares, or an error naming both keys."""
