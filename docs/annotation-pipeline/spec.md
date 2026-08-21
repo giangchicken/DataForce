@@ -33,12 +33,14 @@ The entire jury → triage → agreement → adjudication machinery depends on e
 
 | Task | Answer type | δ — distance between two answers | Consensus over several answers |
 |---|---|---|---|
-| Tool / function selection | set of names | `1 − |A∩B| / |A∪B|` | included by a strict majority |
+| Tool / function selection | a set of **calls**: a name, and the arguments it is called with | soft Jaccard: names matched first, then how far their arguments agree | each name a majority included, each argument the value a majority gave |
 | Single-label classification | one class | `0` if equal else `1` | the mode |
 | Multi-label classification | set of labels | `1 − |A∩B| / |A∪B|` | included by a strict majority |
 | Span extraction (NER) | list of spans | `1 − span-F1` | spans a majority marked |
 | Ranking / preference | an ordering | normalised Kendall τ distance | Borda count |
 | Free-text generation | a string | `1 − similarity` | **none — abstains** |
+
+Tool selection is the row that stretches the interface, and it is worth reading before the rest of this document: its answer is **compound**. Two jurors naming the same tool and differing on one argument value are neither in agreement nor in the same position as two jurors naming different tools, so δ cannot be a single set comparison — and whatever it is, every cohesion figure, every triage bucket and every α inherits it. That is specified once, in requirements 70–75 and in *Decisions*, rather than being decided inside a stage. The other five rows are single-valued answers and are the easy case.
 
 Free-text generation is the honest exception. There is no defensible consensus over generated strings, so a profile may declare `consensus = None`, and then the jury ranks records by disagreement but proposes no answer. Triage still works: cohesion is computable, `corpus_conflict` is computable, and the four buckets still sort. Only the optional `jury_consensus` tier is unavailable, which is correct — a tier that shipped machine-written prose as a label would be exactly the failure the model-collapse literature describes.
 
@@ -107,10 +109,10 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 ### The profile and modality contracts
 
-1. A **modality** supplies exactly four things, each named for what it returns: `content_parts` (raw → typed parts), `embedding` (parts → vector) for duplicate detection, `personal_data_detectors`, and `display_config`, the annotation-UI half that *displays* a record. Nothing else.
+1. A **modality** supplies exactly four things, each named for what it returns: `content_parts` (raw → typed parts), `embedding` (parts → vector) for duplicate detection, `personal_data_detectors`, and `display_config`, the annotation-UI half that *displays* a record. Nothing else. A turn that carries something other than a string — a tool call, an attachment reference — is still one part, and rendering it into one is `content_parts`' job by requirement 70: it is the source's own layout, and this is the only member that is allowed to know it.
 2. A **profile** supplies exactly nine things, each named for what it returns: `build_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
-4. `answer_distance` must be a metric on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53.
+4. `answer_distance` must satisfy four properties on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53. **The triangle inequality is deliberately not among the four**, because a compound answer's δ is a weighted average and weighted Jaccard does not satisfy it. Nothing in the pipeline needs it: cohesion, corpus conflict, the four buckets and α are all defined on pairwise distances, and no stage embeds an answer in a metric space or clusters answers by distance. A stage that ever wants to is the moment to revisit this, and it says so here so that moment is not a surprise.
 5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated with per-annotator reliability weighting in stage 10.
 6. Every profile satisfies the five **profile rules** in § *Rules a profile must satisfy*, and **tests them itself**. The rules are stated once for every profile to follow; each profile's own test module proves them for its own answer type. There is no shared suite and no check at registration: a profile that breaks a rule is a profile whose author did not follow it, and the cost of that is stated with the rules rather than caught by machinery.
 7. Profiles and modalities are resolved from a registry by name, and the resolved pair, with each one's version, is recorded on every artifact and in the release manifest. A run cannot silently change which code produced a dataset.
@@ -119,7 +121,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 8. A record's content is an **ordered list of typed parts**, never a bare string. Each part carries its `type`, its role, and either inline text or a reference. Text profiles see a list of text parts; nothing about the shape changes when a part becomes audio.
 9. **Non-text media is held by reference and checksum, never inlined in an artifact**: `{"type": "audio", "uri": "media/ab/abc123.wav", "sha256": "…", "duration_s": 12.4}`. Artifacts stay diffable and streamable at any corpus size, which is the difference between a 126 MiB text corpus and terabytes of video. This is the one modality decision that must be made before the first line of code, because retrofitting it would touch all fifteen stages.
-10. `rid` is derived from the content parts' digests, not from raw bytes: text parts contribute their text, media parts contribute their `sha256`. So the identity of a record is modality-independent and stable across re-ingests and re-ordering.
+10. `rid` is derived from the content parts' digests, not from raw bytes: text parts contribute their text, media parts contribute their `sha256`. So the identity of a record is modality-independent and stable across re-ingests and re-ordering. A part rendered from something that was not already a string — a tool call — must be rendered **canonically**, one form per value, or `rid` stops being reproducible and invariant 2 fails; requirement 70 says which form.
 11. Privacy detection is a modality concern with a **uniform result shape** — a list of typed spans over a named part — so the redaction stage, its report, its vault, and its gate are written once. What a "span" indexes is the modality's business: character offsets in text, a time range in audio, a box in a frame.
 12. A modality that cannot yet redact a part **fails closed**: the record is quarantined, never advanced. Failing open on personal data is the one failure this pipeline will not take, and a new modality inherits that rather than choosing it.
 
@@ -221,6 +223,17 @@ Running it first is what makes the rest affordable. Every record it moves is one
 69. **Every run writes a run manifest** recording the SHA-256 of every policy file it read, the `name@version` of both axes, and the SHA-256 of every artifact it wrote. This is the lineage record that DVC's declared dependencies used to be, and diffing two of them is how reproducibility is checked.
 
 The layer diagram, the import rule and the order the split lands in are in [`../engine-api-split/spec.md`](../engine-api-split/spec.md).
+
+### Compound answers
+
+An answer may be more than one value. Tool selection is the case that forces this: the answer is a set of calls, and a call is a name *and* the arguments it is called with. These six requirements are what the rest of the document assumes wherever it says "answer", and they are numbered from 70 so that every citation of requirements 1–69 in the plan stays true.
+
+70. **A turn that is not a string becomes a part canonically.** A source may carry a tool call as structure — an OpenAI `tool_calls` array, `content: null` beside it. `content_parts` renders it into one text part holding **canonical JSON**: object keys sorted, no insignificant whitespace, arguments parsed from any string form the source used and re-emitted in that one form. Two sources spelling the same call differently therefore produce the same part, the same digest and the same `rid`. This is the modality's job because it is the source's layout, and it is a *rendering* rather than an interpretation: nothing here decides what a call means.
+71. **The answer space closes over the catalog and over each tool's own parameters.** For tool selection: the names are the record's catalog, and each name's `arguments` must validate against *that tool's* `parameters` schema. So `answer_schema` for a compound answer is built per record, from data the record carries — which is what requirement 5 already allows and what the jury hands straight to `complete_structured`. A profile whose answer space cannot be expressed as one JSON Schema per record does not have a compound answer, it has a free-text one, and § *The three-piece interface* says what that costs.
+72. **δ over a compound answer is soft, and the softness is specified rather than chosen in a stage.** Answers are compared name-first: over the union of names in the two answers, a name in both contributes how far its arguments agree — the share of argument keys present in both and equal, counting a key present in only one as a disagreement, and counting two calls with no arguments as agreeing — and a name in only one contributes zero. δ is one minus the mean of those contributions. Two consequences are the point of it: naming a different tool is full disagreement, and naming the same tool with one differing argument is *partial*. And it degrades exactly: when every matched call has identical arguments, this **is** Jaccard over names, so a names-only profile is the special case rather than a different formula.
+73. **At most one call per tool name per answer.** Two calls to one tool with different arguments make the answer a multiset, and matching them pairwise before comparing arguments is a second decision that δ would have to make silently. It is declared out instead, with a validity check that fires — a record whose answer names one tool twice goes to quarantine, where a person decides whether the source means parallel calls or is malformed. *Reversible:* the check is the only thing that would be removed, and requirement 72 would gain a matching rule.
+74. **Consensus is per name, then per argument.** A name is in the consensus when a strict majority of votes included it; each of that name's argument keys takes the value a strict majority of the votes naming it gave; a key with no majority is absent, and if a key the tool declares `required` has no majority the call is dropped from the consensus entirely. Never a partially-invented call: a consensus call that would fail requirement 71's validation is not a consensus.
+75. **Capturing a compound answer is a form, and the fallback is declared now.** The profile's `answer_config` emits the name control plus, per name, the argument fields generated from that tool's `parameters`. Where the annotation tool cannot express per-name conditional fields, the fallback is one text control capturing JSON, **validated at pull time against requirement 71's schema** — never accepted unvalidated, and the pull gate rejects an answer outside the space rather than truncating it. Which of the two shipped is recorded per project, because it changes what an annotator could physically express and therefore what their agreement means.
 
 ## Design
 
@@ -377,6 +390,12 @@ class Modality(Protocol):
     # what stops fifteen stages each acquiring an opinion about how a file is shaped.
     # For a chat corpus that means one part per turn; for a call recording it would
     # mean an audio part per channel and a transcript part beside it.
+    #
+    # A turn carrying structure rather than a string -- a `tool_calls` array with
+    # `content: null` beside it -- is still one part, rendered canonically by
+    # requirement 70. Rendering, not interpreting: what a call *means* is the
+    # profile's, and a modality that started reading arguments would have acquired
+    # an opinion about what an answer is.
     def content_parts(self, raw: Any) -> list[Part]: ...
 
     # Stage 3 `embed`. Content -> one vector. Consumed by `dedup` and by no other
@@ -410,7 +429,12 @@ class Profile(Protocol):
     answer_schema: dict[str, Any]   # JSON Schema for one answer. The answer's *type*,
                                     # declared rather than described, so the jury can
                                     # constrain a model with it and pandera can check
-                                    # an artifact against it -- invariant 5.
+                                    # an artifact against it -- invariant 5. A compound
+                                    # answer's is built per record and closes over the
+                                    # record's own catalog *and* each tool's parameter
+                                    # schema -- requirement 71. One schema is the whole
+                                    # answer-space constraint, which is why no stage
+                                    # validates an answer by hand.
 
     # Stage 0 `load`. Raw item + parts -> the canonical record. Keeps every field it
     # does not own, because what looks like noise now is what a later question turns
@@ -423,13 +447,18 @@ class Profile(Protocol):
     # corpus conflict, the four triage buckets, Krippendorff's alpha over a set-valued
     # answer, adjudication and juror calibration are all written in terms of it, which
     # is what lets `shared/agreement.py` be generic without being a framework.
-    # Must be a metric -- profile rule 1, the one nothing generic enforces.
+    # Must satisfy profile rule 1's four properties -- the one nothing generic
+    # enforces. Not the triangle inequality: a compound answer's delta is a weighted
+    # average, requirement 4 says which four are claimed and why the fourth is not.
     def answer_distance(self, a: Answer, b: Answer) -> float: ...
 
     # Stage 5 `jury`. The votes' consensus: several answers to one record -> one
     # answer, deterministically. Named for whose consensus it is, because the pipeline
     # also combines *people's* answers and that is a different operation -- annotators
     # are aggregated with Dawid-Skene weighting in stage 10, never with this.
+    # Over a compound answer it is majority per name and then majority per argument,
+    # and a call it could only assemble partially is dropped rather than invented --
+    # requirement 74.
     # Returning None for every input is a legal declaration rather than a failure:
     # free-text generation has no defensible consensus, and inventing one would ship a
     # plausible machine-written label. It bars the optional consensus tier and nothing
@@ -449,7 +478,10 @@ class Profile(Protocol):
 
     # Stage 8 `publish`. The half of the annotation config that *captures* an answer,
     # constrained to this record's answer space wherever the UI can express it -- and
-    # asserted again at pull time, because a UI constraint is not a guarantee.
+    # asserted again at pull time, because a UI constraint is not a guarantee. For a
+    # compound answer that is a name control plus per-name argument fields, with a
+    # JSON text control as the declared fallback where the tool cannot express them --
+    # requirement 75, which also says why which one shipped is recorded.
     def answer_config(self, record: Record) -> UIControl: ...
 
     # Stages 4 `dedup` and 12 `split`. What makes two records the same scenario, so no
@@ -679,7 +711,11 @@ Every block below has exactly one owning stage, named in the comments. The one s
   // without touching all fifteen stages, so it is settled before stage one exists.
   "content": [
     { "type": "text",  "role": "system", "text": "…" },
-    { "type": "text",  "role": "user",   "text": "…" }
+    { "type": "text",  "role": "user",   "text": "…" },
+    // a turn that arrived as a `tool_calls` array, rendered canonically -- one form
+    // per value, so `rid` is reproducible (requirement 70, invariant 2)
+    { "type": "text",  "role": "assistant",
+      "text": "[{\"arguments\":{\"ma_khach\":\"480215\"},\"name\":\"LookupBalance\"}]" }
     // a voice profile would add, with no other change to any stage:
     // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
@@ -764,6 +800,12 @@ The convention has a second half, and it is what split `tool_schema.py`: **a sha
 
 **Profile rules are stated for the author, not enforced by a shared suite.** *Alternatives:* a generic conformance suite run at registration — which is what was built first, and removed; checking at first use. *Why:* the suite was 392 lines to check five properties, and 95 of those were machinery for inventing sample answers out of an arbitrary JSON Schema — code written for profiles that do not exist, which is the definition of speculative. The five properties are short enough to state in prose and each profile can prove them over its own answer type in a test module it owns, where the assertions read in that type's own terms rather than through a generated sample. *The cost, stated plainly:* nothing now fails when a profile breaks a rule. A `answer_distance` that is not a metric produces cohesion numbers that look fine and mean nothing, and it surfaces as a bad ranking rather than a red build. That cost is accepted because a rule the author is told to follow is the author's responsibility, and because the alternative was paying 392 lines and an import-time exam to insure against a mistake in code nobody has written yet. *Reversible:* yes — the rules are written so a suite could be built from them later, and the first profile to arrive without its own tests is the signal to do it.
 
+**A call is carried as a canonically-rendered text part, not as a new part type.** *Alternatives:* a `call` value in the part type's closed set; a separate `calls` field on the record beside `content`. *Why:* the part type discriminates *kinds of content* — `text | image | audio | video` — and a tool call is not a kind of content, it is something the profile understands. Adding `call` would oblige the text modality to know what a call is, which is the one thing the two-axis split exists to prevent; a `calls` field beside `content` is worse, because the call's position in the conversation is load-bearing and a parallel field loses the ordering. Rendered as canonical JSON in a text part, a call is a turn like any other: `rid` covers it, `embedding` sees it, `display_config` shows it, and the profile parses it because the profile is what declares the answer type. *The cost:* the canonical form is now load-bearing for `rid`, which is why requirement 70 specifies it and invariant 2 tests it. *Reversible:* yes before any artifact exists, and only then.
+
+**δ over a compound answer is soft, and the shape of the softness is specified here.** *Alternatives:* Jaccard over names alone, ignoring arguments; Jaccard over `(name, arguments)` treated as one atom. *Why:* ignoring arguments makes two jurors who agree on every tool and disagree on every value look unanimous — it discards exactly the signal a function-calling dataset is about. Treating the pair as an atom makes "right tool, one argument differs" identical to "wrong tool", which collapses the distinction the triage buckets exist to draw: the first is a record worth one annotator minute, the second is a label error. Name-first with per-argument agreement keeps them apart and reduces to Jaccard over names when arguments agree, so the names-only behaviour that was measured end to end is the special case rather than something replaced. *The cost, stated plainly:* the weighted form loses the triangle inequality, and the mean over the union of names is a choice — a record whose answer has one call weights that call's arguments as heavily as a record with four calls weights each of its own. Both are written into requirement 4 and requirement 72 rather than left to be discovered from a cohesion figure that looks wrong. *Reversible:* yes; it is one function with the profile's own tests around it, and the four properties are what any replacement must also satisfy.
+
+**One call per tool name per answer, enforced by a check.** *Alternatives:* a multiset answer with pairwise matching before comparing arguments; silently keeping the last call for a repeated name. *Why:* matching two calls to one tool is a second decision δ would have to make invisibly, and the wrong match produces a confident number. Keeping the last is data loss disguised as normalisation. A check that fires puts the record in front of a person, which is the correct response to an answer the profile cannot yet mean. *The cost:* a source that genuinely means parallel calls to one tool cannot be ingested without lifting this, and the day that source arrives is the day requirement 72 gains a matching rule. *Reversible:* yes — removing the check and adding the rule, in that order.
+
 **Content parts say `type`, the same word every provider uses.** *Alternatives:* `kind`, a name reserved for us so it could never be mistaken for a provider's field. *Why:* an ordered array of typed parts is how OpenAI, Anthropic and Gemini all model content, and all three call the discriminator `type` — so `type` is the field an engineer already recognises, which is worth more than avoiding a collision that cannot actually happen. The values disambiguate on their own: ours are closed and bare — `text | image | audio | video` — where OpenAI's are `input_text` / `input_image` / `input_audio` and Anthropic's differ again, so `"type": "audio"` is unambiguously a DataForce part. No provider's JSON is ever stored: a profile's `training_example` produces it, mapping both the value and its nesting to whatever that provider wants — ours keeps the payload flat on the part, where OpenAI nests it under a key repeating the type. The one real cost is that `type` shadows a Python builtin if a part is ever modelled as a dataclass attribute rather than a mapping key; that is a lint note, not a bug. *Reversible:* yes, but only before any artifact exists.
 
 **Media by reference and checksum, never inlined.** *Alternatives:* base64 in the JSONL; a parallel manifest keyed by `rid`. *Why:* artifacts must stay streamable and diffable, and inlining a video corpus makes both impossible. Content addressing also gives deduplication and integrity checks for free. *Reversible:* no — this is the decision that has to be right before the first line of code, and it is why it is specified now rather than with the first non-text modality.
@@ -807,14 +849,14 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 ## Invariants
 
 1. **Nothing is lost between stages.** `output + quarantined + deduped_out == input`, asserted on every stage and written to `metrics.json`.
-2. **`rid` is stable.** Re-ingesting the same source yields byte-identical `rid` values regardless of order. *Check:* shuffle a fixture, re-ingest, compare.
+2. **`rid` is stable.** Re-ingesting the same source yields byte-identical `rid` values regardless of order, and a turn that arrived as structure renders to one canonical string whatever spelling the source used. *Check:* shuffle a fixture, re-ingest, compare; plus one fixture carrying the same call with reordered keys and differing whitespace, asserting one `rid`.
 3. **No personal data downstream of `pii_check`, and the vault is untracked.** *Check:* a gate scanning every release-tier file, plus a repo test asserting the vault is in `.gitignore`, in no `.dvc` file, and that `data/raw/` is absent from DVC entirely.
 4. **No media is inlined.** No artifact under `interim/`, `processed/`, or `release/` contains a base64 blob or a non-text part without a `uri` and `sha256`. *Check:* a schema assertion on every artifact carrying content.
-5. **Every answer is inside the profile's answer space.** Every vote, correction, and exported label validates against `profile.answer_schema`. *Check:* pandera on every artifact carrying an answer — a second line of defence behind the schema the jury already passed to the library.
+5. **Every answer is inside the profile's answer space.** Every vote, correction, and exported label validates against `profile.answer_schema` — for a compound answer that means each call's name is in the record's catalog *and* its arguments satisfy that tool's parameter schema, requirement 71. *Check:* pandera on every artifact carrying an answer, plus the pull gate on a human correction — a second line of defence behind the schema the jury already passed to the library.
 6. **Every juror vote is valid or an abstention.** No stored vote is a truncation of a malformed response. *Check:* structurally guaranteed by `complete_structured` returning `None`, plus a test feeding malformed, prose-wrapped, over-long, and out-of-space responses through a stubbed endpoint.
 7. **Votes are reproducible and key-independent.** *Check:* two cold runs over a fixture against a recording proxy, diffed; a test forcing key rotation mid-run and diffing the votes.
 8. **The panel is diverse, measured, and clean.** ≥3 jurors, ≥3 distinct families, no `"unknown"`, no corpus-family juror unless tagged `control`. *Check:* the jury gate reads the panel config and calls `model_family` on every juror.
-9. **`answer_distance` is a metric.** For every profile: `d(a,a) = 0`, symmetry, range `[0,1]`, no `NaN`, including on the profile's empty answer. *Check:* the profile's own test module, over random answer pairs drawn from its answer schema — profile rule 1. This is the one invariant in this list that nothing generic enforces, which is why it is rule 1 and why the cost of breaking it is written down.
+9. **`answer_distance` satisfies profile rule 1's four properties.** For every profile: `d(a,a) = 0`, symmetry, range `[0,1]`, no `NaN`, including on the profile's empty answer. Not the triangle inequality — requirement 4 says why it is excluded and what would have to change to need it. *Check:* the profile's own test module, over random answer pairs drawn from its answer schema, plus for a compound answer the two cases that are the whole point: a differing name is farther than a differing argument, and identical arguments reduce δ to Jaccard over names. This is the one invariant in this list that nothing generic enforces, which is why it is rule 1 and why the cost of breaking it is written down.
 10. **No model output reaches an annotator.** *Check:* a contract test asserting the payload key set equals an explicit allowlist.
 11. **Corrections stay in the answer space.** *Check:* structurally where the UI can express it, and asserted again at pull time.
 12. **No group spans splits.** No `group_key` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
@@ -837,6 +879,9 @@ A failed gate raises `GateFailed` carrying every gate's verdict; the gate engine
 | Profile breaks a profile rule | Nothing stops the run. The rules are stated, not enforced; the symptom is in § *Rules a profile must satisfy*, per rule. |
 | Profile and modality names disagree | Hard stop. A profile declares its modality; a mismatched pair is a configuration error, not a coercion. |
 | A modality has no redactor for a part | Record quarantined to `quarantine/pii/`, never advanced. |
+| An answer's shape is not the profile's answer type | Quarantined by the validity check that names it, run continues. Never coerced: a call object read as a name, or a name read as a call, would put a guess in a label. |
+| An answer names one tool twice | Quarantined — requirement 73. A person decides whether the source means parallel calls or is malformed. |
+| A consensus call is missing a required argument | No consensus for that call; it is dropped rather than completed. The record ranks by disagreement as usual. |
 | `enable_redact` is false | The stage reports and stops there. The downstream personal-data scan then fails, so nothing ships — the default cannot silently release personal data. |
 | Privacy verification returns a schema-invalid response | Span is unverified, not negative. Record quarantined. |
 | LLM unavailable during privacy verification | Stage stops and resumes from its checkpoint; verified spans are kept. |
@@ -868,6 +913,7 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 - **Import purity, as a subprocess.** `python -c "import dataforce.profiles.tool_decision"` from a working directory that is not the repo root — invariant 19. This is the test that would have caught the problem the engine/api split exists to fix.
 - **Two registries in one process,** holding different profiles, neither seeing the other's.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.
+- **Compound answers.** δ hand-worked on four pairs: same call, same tool with one differing argument, different tools, and one answer empty — asserting the ordering `0 < δ(argument) < δ(tool) ≤ 1` and that identical arguments reproduce Jaccard over names exactly. Canonical rendering: one call spelled three ways — reordered keys, extra whitespace, arguments as a JSON string versus an object — yielding one part and one `rid`. Consensus: a vote set agreeing on the name and splitting 2–1 on one argument, and one where a required argument has no majority, asserting the call is dropped rather than half-built.
 - **Agreement.** α over an arbitrary δ against a hand-computed example, plus the degenerate check that α with an identity distance equals `krippendorff`'s nominal α on the same data. Consensus against hand-worked vote sets, including where consensus differs from every individual answer.
 - **Privacy.** Per modality: a fixture asserting recall on real personal data and *no* replacement on look-alikes; placeholder stability across two mentions of one value; the vault absent from every `.dvc` file and present in `.gitignore`.
 - **Jury.** A stubbed OpenAI-compatible endpoint returning a clean answer, a fenced answer, prose-wrapped JSON, an out-of-space answer, a wrong type, and empty — each becoming a valid answer or a clean abstention, with `repaired` true for exactly the fenced and prose-wrapped cases. Panel diversity against one-family and unrecognised-name configs. Cache determinism. Key-pool failover with a 429 on one key and a quota error on another, asserting identical votes to a single-key run and that an auth error stops the run instead.

@@ -1,10 +1,10 @@
 # Annotation Pipeline — Implementation Plan
 
-**Source:** [`spec.md`](spec.md) (69 requirements, 19 invariants, 15 stages) and [`../profiles/tool-decision/spec.md`](../profiles/tool-decision/spec.md) (27 requirements, 5 invariants).
+**Source:** [`spec.md`](spec.md) (75 requirements, 19 invariants, 15 stages) and [`../profiles/tool-decision/spec.md`](../profiles/tool-decision/spec.md) (27 requirements, 5 invariants).
 
 **One plan, two specs.** They are not independently buildable. Fourteen of the fifteen stages are written against two protocols, and `tool_decision` is the only implementation of one of them — a plan for the core alone would produce tasks whose acceptance criteria cannot be verified, because you cannot test `jury` without an answer type, a δ, and a corpus. [`guided-validation`](../guided-validation/spec.md) gets no separate plan: the pipeline consumes its question model inside `generate_questions`, so its requirements appear as acceptance criteria on that stage. [`dataforce-platform`](../dataforce-platform/spec.md) gets a plan only if the Phase 5 pilot gate says Label Studio is the constraint.
 
-**Six phases and two revision passes, 42 tasks.** Phases are ordered by risk and learning value, not by layer, and every phase ends in something runnable. Task numbers are stable — they are cited in commit messages and in both specs — so no task is ever renumbered, and the two revision passes use R and E numbers so the tasks after them keep the numbers they were planned under.
+**Six phases and three revision passes, 46 tasks.** Phases are ordered by risk and learning value, not by layer, and every phase ends in something runnable. Task numbers are stable — they are cited in commit messages and in both specs — so no task is ever renumbered, and the two revision passes use R and E numbers so the tasks after them keep the numbers they were planned under. 2C is the third: the answer type changed, and requirements 70–75 are what it is being changed to.
 
 ## Where the work stands
 
@@ -14,6 +14,7 @@
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
 | 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
 | 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
+| 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
@@ -50,6 +51,8 @@ Settled by the specs. No task re-decides them, and a task that violates one is r
 14. **`dataforce run [stage ...]` runs the named stages, or all fifteen.** There is no stage cache: naming stages is how a person re-does one without re-doing the corpus. — core Decisions
 15. **A number a task asserts comes from `metrics/corpus_profile.json`, not from prose.** The profiler is the only thing that measures the corpus, and CI pins its output. Three figures in the profile spec's own table had drifted from it unnoticed — corrected in this pass — so a task that quotes a count quotes the profiler, and prose in either spec is secondary to the committed file.
 
+16. **An answer is a set of calls, each with its arguments, and one call per tool name.** δ is name-first with per-argument agreement and reduces to Jaccard over names when arguments agree; consensus is majority per name then majority per argument, dropping a call it cannot assemble fully. A turn carrying a call is one canonically-rendered part, not a new part type. No task re-decides any of this — core requirements 70–75, core *Decisions*, built in Phase 2C. — the check on every task after 2C is that nothing under `pipeline/` or `shared/` changed to accommodate it.
+
 **Two prerequisites that are not code, and both blocking.** T21 (cross-border transfer review, before the first jury run against any offshore endpoint) and T27 (the marker-DSL glossary, before T23). They are numbered tasks rather than footnotes because skipping them silently is the failure mode.
 
 ---
@@ -72,21 +75,25 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
 | — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py` — **E2 moved both to `declared/`, leaving the `Manifest` type behind in `shared/`** — `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
 
-## The measurements later tasks are declared against
+## The measurements Phases 1 and 2 were verified against
+
+**Read the scope of this table before using a number from it.** These describe **one reference source** — the file Phases 1 and 2 were built and checked against, whose answer is a bare array of tool names. It is not the input this pipeline is being built for; core requirements 70–75 and Phase 2C say what that is. So a number here is evidence that the code works on a real file at real size, and it is **not** a threshold a later task may declare against. A task that needs an expected count measures the source it will actually run on and declares it in `params.yaml`, the same way this one was.
+
+That distinction is the correction this pass makes to the plan. Six of the rows below were cited by later tasks as if they described the corpus those tasks would run on, which is how a plan quietly overfits to whatever was measured first: the zero-label stratum in T20, the token estimate in T18, the gold set in T25 and the fingerprint groups in T15 and T29 all read a number from this table. Each of those citations is now marked as an *order of magnitude to plan against*, not a value to gate on.
 
 All from `metrics/corpus_profile.json`, which is what CI pins — see shared decision 13.
 
 | Measurement | Value | Depended on by |
 |---|---|---|
-| Records | 21,172 | every gate |
-| Answer cardinality 0 / 1 / 2 / 3 | 7,498 / 10,596 / 2,757 / 321 | T20 (the zero-label stratum is deliberately oversampled) |
+| Records | 21,172 | sizing only — every gate declares its own count in `params.yaml` |
+| Answer cardinality 0 / 1 / 2 / 3 | 7,498 / 10,596 / 2,757 / 321 | T20's stratum design — the *shape* (an empty answer is common and is a real answer), not these proportions |
 | Distinct tool names in labels | 14,411 | profile Decisions — no fixed class space, so no Confident Learning |
 | Distinct catalog fingerprints | 17,583 — 16,276 singletons, largest group 112 | T15, T29 |
 | Distinct `meta` key-sets | 22 | T8's fixture coverage |
 | Labelled by `gemma-4-31B-it` | 14,241 (67.3%) | T18 (no `gemma` juror on primary duty), T31 |
-| Records a person already checked | 951 | T25's gold set |
-| Total prompt characters | 100,557,297 | T18's token estimate |
-| All four validity counts | 0 | T12 |
+| Records a person already checked | 951 | T25 — that a gold set has to come from somewhere and this pool is biased, not that it is 951 |
+| Total prompt characters | 100,557,297 | T18's token estimate — an order of magnitude for budgeting, re-measured before any jury run |
+| All four validity counts | 0 | T12 — that a check reading 0 is the tripwire. C2 adds a fifth check, so the set is not closed |
 
 Three of these nine were wrong in the profile spec's table and are corrected in this pass: fingerprints were quoted as 17,596 with 16,293 singletons, key-sets as 13, and prompt characters as 100,557,307. The profiler fingerprints the **parsed** catalog where the earlier probe hashed raw block text, which collapses thirteen pairs differing only in formatting — the smaller number is also the right one, because `group_key` is that same parsed fingerprint. Two further figures in that table were wrong and are corrected with them: catalog size is 1–20 tools rather than 0–20, which is the direct reason `empty_catalog` reads 0, and the 491 duplicate user turns are 491 *groups* covering 982 records.
 
@@ -423,6 +430,97 @@ Two things the source documents did not account for, both found in the code and 
 
 **Out of scope.** The HTTP service — a later task wrapping `api/` without touching the engine. `api.run` and stage sequencing, which arrive with T11. Replacing `shared/schemas/`, which is its own spec.
 
+# Phase 2C — Revision: the answer is compound
+
+**Why this phase exists.** Phases 1 and 2 were built and verified against a source whose answer is a bare array of tool names. That is not the input this pipeline is for: a tool-decision answer is a set of **calls**, each with the arguments it is called with, and a conversation runs as many turns as it takes. Core requirements 70–75 specify that; this phase is the delta between them and the code.
+
+It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E was: **fourteen of the fifteen stages are written in terms of the answer type.** δ, consensus, the capture control, α, the triage buckets and the export assertion all read it. Changing it after the first stage exists means changing the stage too, and changing it after the jury has run means throwing away votes. It is cheapest now and it gets more expensive every task.
+
+**Task numbers use C so the tasks after this phase keep the numbers they were planned under** — the same rule as 2R and 2E.
+
+**What is *not* in scope.** Nothing under `pipeline/` or `shared/` changes. That is the two-axis design paying off and it is also the check on this phase: a diff that touches the generic core means the answer type leaked out of the profile, and the fix is in the profile.
+
+## C1 · A turn that carries a call becomes one canonical part
+
+**Goal.** `content_parts` renders a `tool_calls` turn into one text part holding canonical JSON, so a call is a turn like any other and `rid` is reproducible.
+
+**Context.** Today `content_parts` does `turn["content"]` and builds a `TextPart` — verified failure modes: `ValidationError` on `"content": null`, `KeyError` when the key is absent. Core requirement 70 settles the shape and *Decisions* settles why it is not a new part type: the part `type` discriminates kinds of content, and a modality that started reading arguments would have acquired an opinion about what an answer is.
+
+**Relevant files.** `src/dataforce/modalities/text/__init__.py`, `tests/unit/test_modalities.py`.
+
+**Proposed approach.** One rule in `content_parts`: a turn with no string `content` and a `tool_calls` array renders to `json.dumps(calls, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`, with each call reduced to `{"name": …, "arguments": {…}}` and `arguments` parsed first if the source spelled it as a JSON string. Nothing else about the modality changes. A turn with neither a string nor calls is still an error — it is a source-layout problem and requirement 70 does not license guessing.
+
+**Acceptance criteria.**
+- One call spelled three ways — reordered keys, added whitespace, `arguments` as a string versus an object — yields one part, one digest and one `rid`. Invariant 2.
+- A multi-turn record with `role: "tool"` turns builds, embeds and displays; `tool` needs no declaration to be carried, only to be read by meaning.
+- The names-only source still produces byte-identical parts. Nothing about a string turn changes.
+
+**Verify.** `uv run pytest tests/unit/test_modalities.py tests/unit/test_build_record.py`, then `make check`.
+
+**Out of scope.** Parsing the call into an answer — that is C2. This task only renders.
+
+## C2 · The answer type: calls with arguments, and the space that constrains them
+
+**Goal.** `answer_schema` and `answer_space` describe a set of calls, each name from the record's catalog and each argument set validating against that tool's own `parameters`.
+
+**Context.** Core requirement 71. The catalog already carries `parameters` per tool — `Tool.parameters` is a JSON Schema and `to_strict_openai` already emits it — so the argument space is data the record already has, not something new to declare. This is also where requirement 73's check lands: one call per tool name per answer.
+
+**Relevant files.** `src/dataforce/profiles/tool_decision/schema.py`, `utils.py`, `build_record.py`, `tests/unit/test_build_record.py`, `tests/unit/test_tool_decision.py`.
+
+**Proposed approach.** `ANSWER_SCHEMA` becomes an array of objects with `name` and `arguments`; `answer_space(catalog)` emits `oneOf` per tool — `name` as a single-value `enum`, `arguments` as that tool's `parameters` — which is one JSON Schema per record and is what the jury hands to `complete_structured` unchanged. `catalog_names` keeps reading the names back out of it, so `group_key` and the fingerprint are untouched. A fifth validity check, `answer_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
+
+**Acceptance criteria.**
+- An answer whose call names a tool the record offered and whose arguments satisfy that tool's schema validates; one violating either does not, and the pull gate rejects rather than truncates it — invariant 5.
+- `catalog_names(record)` returns the same names as before for a record built either way. `group_key` unchanged.
+- A record naming one tool twice is quarantined under the new check's name; the check appears in `params.yaml` with a declared count.
+- The existing quarantine-not-crash behaviour holds: an answer of the wrong shape entirely is still reported by a named check, never a `TypeError`.
+
+**Verify.** `make check`, then `uv run pytest -q -m integration`.
+
+**Out of scope.** δ and consensus — C3. The capture control — C4.
+
+## C3 · δ and consensus over a compound answer
+
+**Goal.** `answer_distance` distinguishes a wrong tool from a right tool with one differing argument, and `vote_consensus` assembles a call only when it can assemble it fully.
+
+**Context.** Core requirements 72 and 74, and the *Decisions* entry that rejects both simpler alternatives. This is the task with the most downstream reach and the least code: every cohesion figure, every triage bucket and every α reads it, and it is one function plus a consensus rule.
+
+**Relevant files.** `src/dataforce/profiles/tool_decision/answer.py`, `tests/unit/test_answer.py`.
+
+**Proposed approach.** Name-first: over the union of names, a matched name contributes the share of argument keys present in both and equal (two argument-less calls contribute 1), an unmatched name contributes 0, and δ is one minus the mean. Consensus: strict majority per name, then strict majority per argument key, and a call missing a `required` key with no majority is dropped rather than completed.
+
+**Acceptance criteria.**
+- Hand-worked: `0 = δ(same call) < δ(same tool, one argument differs) < δ(different tools) ≤ 1`.
+- Profile rule 1's four properties hold on the compound type, including on the empty answer. The triangle inequality is not asserted — requirement 4 says why.
+- **Reduction:** when every matched call has identical arguments, δ equals Jaccard over names to the bit, over the same vote sets the names-only implementation was measured on. This is the assertion that proves the old behaviour is a special case rather than something replaced.
+- A 2–1 split on one argument value yields the majority value; a required key with no majority drops the call and does not half-build it.
+
+**Verify.** `make check`. The α degenerate case against `krippendorff` still passes — T19 depends on δ being an arbitrary distance, and this is the first proof that it really is.
+
+**Out of scope.** Weighting a record's calls by anything other than the mean over the union of names. Requirement 72 records that the mean is a choice; changing it is a threshold decision with its own task, not a refinement of this one.
+
+## C4 · Capturing a compound answer, and the declared fallback
+
+**Goal.** `answer_config` captures a name and that name's arguments, or the declared JSON fallback, with which one shipped recorded on the project.
+
+**Context.** Core requirement 75. `<Choices>` captures a name and nothing else, so this is the first place the annotation tool may not be able to express the answer space — and the fallback has to be specified before T22 builds a project against it, because it changes what an annotator can physically express and therefore what their agreement means.
+
+**Relevant files.** `src/dataforce/profiles/tool_decision/ask_annotator.py`, `tests/unit/test_ask_annotator.py`.
+
+**Proposed approach.** Generate the per-name argument fields from each tool's `parameters` where the tool supports conditional visibility; otherwise one text control capturing JSON, validated at pull time against C2's schema. Either way the payload allowlist is unchanged — invariant 10 does not soften because the control got richer.
+
+**Acceptance criteria.**
+- A generated config validates against a live Label Studio instance, and a submitted answer pulls back inside the record's answer space.
+- The fallback path rejects an out-of-space answer at pull time rather than truncating it — invariant 11.
+- Which control shipped is on the project record.
+- No model output in the payload. Invariant 10's allowlist test still passes on the built payload.
+
+**Verify.** `make check`, then the Label Studio integration test.
+
+**Out of scope.** Deciding which control ships. That is a measurement on a live instance, and T22 owns it.
+
+---
+
 # Phase 3 — `data_quality` over the real corpus
 
 **Goal:** 21,172 records become a usable corpus — personal data found and reported, near-duplicates grouped, and nothing downstream matching a personal-data pattern. Five DVC stages, five gates, and the first working `dataforce run`.
@@ -435,7 +533,7 @@ Two things the source documents did not account for, both found in the code and 
 
 **Context.** This is the first task that has to resolve a `modality × profile` pair and stamp it, so it is where `dataforce run --modality text --profile tool_decision` stops being a stub. No earlier task owned that command, which is why it lands here rather than in Phase 1: an entry point with nothing to run is not testable.
 
-**Blocked by.** 2E — a stage written against the old layering would read `params.yaml` off a relative path and be rewritten. R2 settled the names and the modules; 2E settles who reads files and who orchestrates.
+**Blocked by.** 2E — a stage written against the old layering would read `params.yaml` off a relative path and be rewritten. R2 settled the names and the modules; 2E settles who reads files and who orchestrates. **And 2C**: this stage calls `content_parts` and `build_record` on every record, so it has to be written against the answer type it will keep, not the one it would then be rewritten for.
 
 **Relevant files.** `src/dataforce/pipeline/data_quality/load.py`, `src/dataforce/api/`, `src/dataforce/cli.py`.
 
@@ -456,7 +554,9 @@ Two things the source documents did not account for, both found in the code and 
 
 **Goal.** Stage 1: records that fail a provable check leave the main path into `quarantine/invalid/<check>.jsonl`, and can be re-admitted by an explicit command.
 
-**Context.** Written expecting 1,563 records, 7.4%, found by arithmetic in seconds; the measured answer is **0**, and that changes what this stage is for. It is no longer a saving — it is the tripwire that tells you the source or the reader moved, and it has to exist before the expensive stages so that a future non-zero count stops the run instead of costing 7.4% of the jury's ~101M estimated tokens and then teaching the model something false. Nothing is deleted: "remove" is scoped to the main path.
+**Changed by 2C.** Five checks, not four: `answer_names_one_tool_twice` arrives with C2, and its expected count is declared in `params.yaml` with the others. The quarantine names are the check names, so the fifth adds a file rather than changing any behaviour here.
+
+**Context.** Written expecting 1,563 records, 7.4% on the reference source; the measured answer there is **0**, and that changes what this stage is for. It is no longer a saving — it is the tripwire that tells you the source or the reader moved, and it has to exist before the expensive stages so that a future non-zero count stops the run instead of costing 7.4% of the jury's ~101M estimated tokens and then teaching the model something false. Nothing is deleted: "remove" is scoped to the main path.
 
 **Blocked by.** T11.
 
@@ -599,6 +699,8 @@ Two things the source documents did not account for, both found in the code and 
 
 **Goal.** Stage 5: several models answer the dataset's own task per record, and every vote is valid or a clean abstention.
 
+**Changed by 2C.** The schema handed to `complete_structured` is now per record and per tool — `oneOf` over the catalog, each branch carrying that tool's `parameters` — which is a bigger schema and a stricter one. Two consequences to measure here rather than assume: a provider's structured-output mode may reject or silently flatten a `oneOf` of that size, and the abstention rate is the thing that tells you. Estimated tokens per vote rise with the catalog, so T18's budget is re-estimated after C2 rather than carried over.
+
 **Context.** The answer schema *is* the constraint, enforced inside the library — `info.ok is False` is the abstention, and there is no path where a malformed response becomes a truncated set. The panel must be family-diverse and clean: `model_family` collapses every unrecognised name to `"unknown"`, so a panel containing one is not proved diverse, it is unmeasured.
 
 **Blocked by.** T15, T17.
@@ -626,6 +728,8 @@ Two things the source documents did not account for, both found in the code and 
 ## T19 · `agreement.py` — α over any δ, cohesion, plurality
 
 **Goal.** The agreement statistics the jury and the aggregation stages both need, computed over an arbitrary distance.
+
+**Changed by 2C.** δ is now a weighted average and does not satisfy the triangle inequality — core requirement 4 says which four properties are claimed. Nothing here needs it: α, cohesion and corpus conflict read pairwise distances only. This task's acceptance criteria must say so explicitly, because the next person to reach for a clustering or embedding approach over answers is the one who needs to know it is not available.
 
 **Context.** The `krippendorff` package covers nominal, ordinal, interval and ratio scales only, so α over a set-valued distance is written here. Its nominal degenerate case is tested against the library so the implementation is anchored.
 
@@ -698,7 +802,9 @@ Two things the source documents did not account for, both found in the code and 
 
 **Context.** The UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer, and neither may emit the other's half. This split is why a new modality does not multiply the profiles that already exist. Label Studio Community honouring `maximum_annotations` is an Assumption the smoke rung verifies before anything is built on it.
 
-**Blocked by.** R1 — this is the task that first calls `display_config` and `answer_config`, the two members requirement 3 composes.
+**Blocked by.** R1 — this is the task that first calls `display_config` and `answer_config`, the two members requirement 3 composes. **And C4**, which decides what the capture half even is.
+
+**Changed by 2C.** This task now owns a measurement it did not have: **whether Label Studio can express per-name argument fields at all.** Core requirement 75 declares the fallback — one JSON text control validated at pull time — so the outcome is not a blocker either way, but which one shipped is recorded on the project because it changes what an annotator could physically express and therefore what their agreement means. Measure it on the live instance before the pilot, not during it.
 
 **Relevant files.** `src/dataforce/pipeline/human_review/labelstudio/{config,client}.py`, `deploy/docker-compose.yml`.
 
@@ -762,6 +868,8 @@ Two things the source documents did not account for, both found in the code and 
 **Context.** This gate is the project's decision point. α below 0.667 means the guideline is broken, not the annotators, and the remedy is a guideline revision and a re-pilot — never a lower threshold. α above 0.95 on a subtle task means the questions dodge the hard cases.
 
 **Blocked by.** T19, T24.
+
+**Changed by 2C.** α on *corrections* is computed with the profile's `answer_distance`, which is now the soft δ — so a pilot where annotators agree on every tool and differ on argument values produces a high α rather than a low one, and that is the intended reading. Two things follow for the gate: the 0.667 floor was set with a names-only δ in mind and is re-examined on pilot data before it gates anything, and the per-focus breakdown must separate a tool disagreement from an argument disagreement, because they need different remedies — the first is a guideline problem, the second is usually a question that did not show the annotator the parameter.
 
 **Relevant files.** `src/dataforce/pipeline/human_review/aggregate.py`, `lib/{alpha,gold}.py`.
 
@@ -874,6 +982,8 @@ Two things the source documents did not account for, both found in the code and 
 **Goal.** Stage 13: training files in the shape a trainer expects, each record carrying where it came from.
 
 **Blocked by.** T29.
+
+**Changed by 2C.** `training_example`'s equality assertion — invariant 4, the answer in the target turn equals `meta.label` — is now over a nested structure rather than two flat arrays, so it compares canonically-rendered forms and not Python objects whose key order differs. The target turn ships in the source's own call shape, which means `training_example` is where the canonical part becomes a provider's `tool_calls` again; per core *Decisions*, no provider's JSON is ever stored, so that mapping lives here and nowhere earlier.
 
 **Relevant files.** `src/dataforce/pipeline/release/export.py`, `lib/manifest.py`.
 
