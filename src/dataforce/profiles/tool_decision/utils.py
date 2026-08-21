@@ -30,13 +30,13 @@ from typing import Any
 
 from agent_toolkit.string_utils import compute_hash
 
+from dataforce.core.record import Part, Record, TextPart
 from dataforce.profiles.tool_decision.schema import Catalog, Gap, Tool
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     TOOLS_KEY,
     SourceContract,
 )
-from dataforce.shared.record import Part, Record, TextPart
 
 __all__ = [
     "CATALOG_HEADER",

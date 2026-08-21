@@ -22,7 +22,7 @@ from pathlib import Path
 from agent_toolkit.file_utils import read_txt
 from agent_toolkit.string_utils import compute_hash
 
-from dataforce.shared.errors import ConfigError
+from dataforce.core.errors import ConfigError
 
 __all__ = ["SUFFIX", "digest", "prompt_path", "read_prompt", "versions"]
 

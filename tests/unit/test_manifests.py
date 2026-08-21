@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from conftest import CONFIG, SOURCE_ROOT, TEXT, TOOL_DECISION
 
+from dataforce.core.errors import ConfigError
 from dataforce.declared import manifest
-from dataforce.shared.errors import ConfigError
 
 DECLARED = ("name", "version", "modality")
 GENERIC = frozenset({"__init__", "base", "registry"})

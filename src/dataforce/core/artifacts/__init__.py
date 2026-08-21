@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pandera.pandas as pa
 
-from dataforce.shared.schemas import ai_review, data_quality, human_review, release
+from dataforce.core.artifacts import ai_review, data_quality, human_review, release
 
 __all__ = ["ARTIFACT_SCHEMAS", "schema_for"]
 

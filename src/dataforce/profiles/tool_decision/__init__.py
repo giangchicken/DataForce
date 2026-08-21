@@ -27,14 +27,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
+from dataforce.core.record import Part, Record, UIControl
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import answer, ask_annotator, build_record, schema
 from dataforce.profiles.tool_decision.build_record import PROVENANCE_KEY
 from dataforce.profiles.tool_decision.source_contract import read_source_contract
 from dataforce.profiles.tool_decision.utils import record_catalog
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
-from dataforce.shared.record import Part, Record, UIControl
 
 __all__ = ["MANIFEST_NAME", "PROVENANCE_KEY", "ToolDecisionProfile"]
 

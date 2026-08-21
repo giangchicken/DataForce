@@ -27,6 +27,8 @@ import pytest
 from conftest import TEXT, TOOL_DECISION
 from jsonschema import Draft202012Validator
 
+from dataforce.core.manifest import Manifest
+from dataforce.core.record import Record, TextPart
 from dataforce.profiles.tool_decision import ask_annotator, build_record, schema, utils
 from dataforce.profiles.tool_decision.answer import answer_distance, vote_consensus
 from dataforce.profiles.tool_decision.source_contract import (
@@ -34,8 +36,6 @@ from dataforce.profiles.tool_decision.source_contract import (
     SourceContract,
     read_source_contract,
 )
-from dataforce.shared.manifest import Manifest
-from dataforce.shared.record import Record, TextPart
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 

@@ -15,7 +15,7 @@ import pandera.pandas as pa
 import pytest
 from agent_toolkit.file_utils import read_jsonlines, write_jsonlines
 
-from dataforce.shared.schemas import ARTIFACT_SCHEMAS, schema_for
+from dataforce.core.artifacts import ARTIFACT_SCHEMAS, schema_for
 
 RID = "0123456789abcdef"
 TEXT_PART = {"type": "text", "role": "user", "text": "Book me a flight"}

@@ -6,9 +6,9 @@ import pytest
 from conftest import CONFIG, PARAMS, FakeTextModality, FreeTextProfile, SetProfile
 
 from dataforce import api
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import stamp
-from dataforce.shared.registry import Registry
+from dataforce.api.registry import Registry
+from dataforce.core.errors import ConfigError
+from dataforce.core.record import stamp
 
 
 def test_a_registered_modality_resolves_by_name(modality: object) -> None:

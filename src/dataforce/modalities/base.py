@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol, runtime_checkable
 
-from dataforce.shared.record import Part, Record, Span, UIControl, Versioned
+from dataforce.core.record import Part, Record, Span, UIControl, Versioned
 
 __all__ = ["Detector", "Modality"]
 

@@ -10,9 +10,9 @@ from __future__ import annotations
 import pytest
 from conftest import TEXT
 
-from dataforce.modalities.base import Modality
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import (
+from dataforce.api.registry import Registry
+from dataforce.core.errors import ConfigError
+from dataforce.core.record import (
     MediaPart,
     Producer,
     Record,
@@ -20,7 +20,7 @@ from dataforce.shared.record import (
     TextPart,
     compute_rid,
 )
-from dataforce.shared.registry import Registry
+from dataforce.modalities.base import Modality
 
 MARKERS = (
     "{trigger}",

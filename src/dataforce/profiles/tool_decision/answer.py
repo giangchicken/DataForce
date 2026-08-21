@@ -22,10 +22,10 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from dataforce.core.errors import InvariantError
+from dataforce.core.record import Record, TextPart
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision.schema import Catalog
-from dataforce.shared.errors import InvariantError
-from dataforce.shared.record import Record, TextPart
 
 __all__ = ["answer_distance", "calls_by_name", "training_example", "vote_consensus"]
 

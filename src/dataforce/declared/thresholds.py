@@ -1,6 +1,6 @@
 """Every number the pipeline compares against, read off disk.
 
-`shared/gates/runner.py` is the engine: it holds no number of its own, and it does
+`core/gates.py` is the engine: it holds no number of its own, and it does
 not read one either. A threshold is a committed, reviewable decision, so it lives in
 `config/gates.yaml` or `params.yaml` -- and the run manifest records each of those
 files' SHA-256, which is what makes the number attributable to a run afterwards.
@@ -16,7 +16,7 @@ from typing import Any
 
 from agent_toolkit.file_utils import read_yaml
 
-from dataforce.shared.errors import ConfigError, DataForceError
+from dataforce.core.errors import ConfigError, DataForceError
 
 __all__ = ["max_answer_cardinality", "thresholds"]
 

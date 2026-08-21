@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandera.pandas as pa
 
-from dataforce.shared.schemas.base import record_columns
+from dataforce.core.artifacts.base import record_columns
 
 
 # `{train,val,test}.jsonl` -- one file per split, group-based and never random.

@@ -17,13 +17,18 @@ what going unchecked costs.
 The state is per instance and not per process, so two registries holding different
 implementations can coexist. That is what one process serving two configurations
 needs, and it is why registration takes objects and names no implementation itself.
+
+Here rather than in `core/` because `api/engine.py` is the only thing that builds one,
+and a module with one caller is that caller's code. It is also the only module that
+imported both axes' contracts from inside the engine, so the move leaves `core/`
+knowing nothing about either axis.
 """
 
 from __future__ import annotations
 
+from dataforce.core.errors import ConfigError
 from dataforce.modalities.base import Modality
 from dataforce.profiles.base import Profile
-from dataforce.shared.errors import ConfigError
 
 __all__ = ["Registry"]
 

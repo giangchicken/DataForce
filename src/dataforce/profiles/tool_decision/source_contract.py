@@ -12,8 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
 
 __all__ = [
     "LEGACY_SYSTEM_PROMPT",

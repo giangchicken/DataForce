@@ -10,7 +10,7 @@ from typing import Any
 
 import pandera.pandas as pa
 
-from dataforce.shared.schemas.base import record_columns
+from dataforce.core.artifacts.base import record_columns
 
 # `loaded.jsonl` -- every source record as a canonical record, nothing judged yet.
 # Unparsable records are here too, carrying `parse_status = "unparsed"`, because

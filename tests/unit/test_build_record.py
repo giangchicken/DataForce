@@ -17,6 +17,9 @@ import pytest
 from conftest import TEXT, TOOL_DECISION
 from pydantic import ValidationError
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
+from dataforce.core.record import Producer, Record, Source, TextPart
 from dataforce.profiles.tool_decision import build_record, utils
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
@@ -24,9 +27,6 @@ from dataforce.profiles.tool_decision.source_contract import (
     SourceContract,
     read_source_contract,
 )
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
-from dataforce.shared.record import Producer, Record, Source, TextPart
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"

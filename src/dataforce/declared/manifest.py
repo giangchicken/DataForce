@@ -2,7 +2,7 @@
 
 The file's own name is the identity, checked against the `name` inside it, so a manifest
 cannot be copied to a new file and left claiming to be the old one. What a manifest
-holds once read is `shared/manifest.py`.
+holds once read is `core/manifest.py`.
 
 Two functions rather than one because a run has to record the SHA-256 of every policy
 file it read: locating a manifest and parsing one are separate steps, so the path is a
@@ -17,8 +17,8 @@ from pathlib import Path
 
 from agent_toolkit.file_utils import read_yaml
 
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
 
 __all__ = ["AXES", "manifest_path", "read_manifest"]
 

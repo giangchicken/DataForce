@@ -16,8 +16,8 @@ import pytest
 from agent_toolkit.string_utils import slot_filling
 from conftest import CONFIG, SOURCE_ROOT, TOOL_DECISION, docstring_ids, parsed_sources
 
+from dataforce.core.errors import ConfigError
 from dataforce.declared import prompts
-from dataforce.shared.errors import ConfigError
 
 ROOT = CONFIG / "prompts"
 

@@ -17,7 +17,7 @@ from typing import Any
 
 import pandera.pandas as pa
 
-from dataforce.shared.record import MEDIA_TYPES
+from dataforce.core.record import MEDIA_TYPES
 
 __all__ = ["VERSION_TAG", "content_is_by_reference", "record_columns"]
 

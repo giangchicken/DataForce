@@ -17,8 +17,7 @@ from typing import Any
 import pytest
 
 from dataforce.api import text_modality, tool_decision_profile
-from dataforce.profiles.base import Answer
-from dataforce.shared.record import (
+from dataforce.core.record import (
     Part,
     Producer,
     Record,
@@ -28,6 +27,7 @@ from dataforce.shared.record import (
     UIControl,
     compute_rid,
 )
+from dataforce.profiles.base import Answer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = REPO_ROOT / "src" / "dataforce"

@@ -17,7 +17,7 @@ from typing import Any
 
 from agent_toolkit.logging import get_logger
 
-from dataforce.shared.errors import DataForceError
+from dataforce.core.errors import DataForceError
 
 __all__ = [
     "MAX_OFFENDING_RIDS",

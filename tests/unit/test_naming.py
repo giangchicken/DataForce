@@ -9,7 +9,7 @@ core spec were the stage. A bare operation names no object, so read alone it say
 nothing -- *parse what, into what?*
 
 `declared/` is in scope too, since it is the surface both axes are configured
-through. `shared/` and `pipeline/` are out of scope, which is a scope and not a clean
+through. `core/` and `pipeline/` are out of scope, which is a scope and not a clean
 bill -- though the three names that broke both halves, `manifest.load`, `prompts.load`
 and `prompts.render`, are now `read_manifest`, `read_prompt` and gone respectively.
 """

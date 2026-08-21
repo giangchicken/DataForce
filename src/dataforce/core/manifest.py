@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from dataforce.shared.errors import ConfigError
+from dataforce.core.errors import ConfigError
 
 __all__ = ["Manifest"]
 

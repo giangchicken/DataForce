@@ -7,7 +7,7 @@ import random
 import pytest
 from pydantic import ValidationError
 
-from dataforce.shared.record import (
+from dataforce.core.record import (
     MediaPart,
     Producer,
     Record,

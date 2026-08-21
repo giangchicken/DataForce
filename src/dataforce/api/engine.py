@@ -1,7 +1,7 @@
 """A resolved run: one modality, one profile, and the policy that chose them.
 
 This is the composition root -- the one place a concrete implementation is named.
-Everything under `modalities/`, `profiles/`, `pipeline/` and `shared/` is handed
+Everything under `modalities/`, `profiles/`, `pipeline/` and `core/` is handed
 already-parsed declarations, so it works from any working directory; turning the
 committed files into those declarations happens here, once, at the top.
 
@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dataforce.api.registry import Registry
+from dataforce.core.record import Record, stamp
 from dataforce.declared.manifest import manifest_path, read_manifest
 from dataforce.declared.prompts import prompt_path, read_prompt
 from dataforce.declared.thresholds import max_answer_cardinality
@@ -26,8 +28,6 @@ from dataforce.modalities.text import TextModality
 from dataforce.profiles.base import Profile
 from dataforce.profiles.tool_decision import MANIFEST_NAME as TOOL_DECISION_MANIFEST
 from dataforce.profiles.tool_decision import ToolDecisionProfile
-from dataforce.shared.record import Record, stamp
-from dataforce.shared.registry import Registry
 
 __all__ = [
     "PROMPTS_DIR",

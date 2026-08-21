@@ -16,6 +16,15 @@ import json
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.record import (
+    Part,
+    Producer,
+    Record,
+    Source,
+    TextPart,
+    compute_rid,
+)
 from dataforce.profiles.tool_decision.answer import answer_distance, calls_by_name
 from dataforce.profiles.tool_decision.source_contract import (
     SourceContract,
@@ -23,15 +32,6 @@ from dataforce.profiles.tool_decision.source_contract import (
 from dataforce.profiles.tool_decision.utils import (
     catalog_hash,
     catalog_names,
-)
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import (
-    Part,
-    Producer,
-    Record,
-    Source,
-    TextPart,
-    compute_rid,
 )
 
 __all__ = [

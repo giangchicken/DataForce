@@ -17,11 +17,11 @@ from agent_toolkit.file_utils import read_yaml
 from conftest import CONFIG, TEXT, TOOL_DECISION
 
 from dataforce.api import tool_decision_profile
+from dataforce.api.registry import Registry
+from dataforce.core.errors import ConfigError
+from dataforce.core.record import Record
 from dataforce.declared.thresholds import max_answer_cardinality
 from dataforce.profiles.tool_decision import build_record
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import Record
-from dataforce.shared.registry import Registry
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"

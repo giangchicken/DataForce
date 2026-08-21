@@ -20,14 +20,14 @@ from dataforce.api import (
     record_gates,
     require_upstream_ok,
 )
-from dataforce.declared.thresholds import thresholds
-from dataforce.shared.gates.runner import (
+from dataforce.core.gates import (
     MAX_OFFENDING_RIDS,
     GateFailed,
     GateResult,
     assert_gates,
     conservation,
 )
+from dataforce.declared.thresholds import thresholds
 
 
 def _passing() -> GateResult:
@@ -108,7 +108,7 @@ def test_a_failing_gate_exits_non_zero_which_is_what_halts_the_run(
     script = f"""
 from pathlib import Path
 from dataforce.api import record_gates
-from dataforce.shared.gates.runner import conservation
+from dataforce.core.gates import conservation
 record_gates("load", [conservation(input_count=2, output_count=1)], out_dir=Path({str(tmp_path)!r}))
 """
     done = subprocess.run(
@@ -144,8 +144,8 @@ def test_the_engine_raises_its_verdict_and_writes_nothing(tmp_path: Path) -> Non
 
 def test_the_engine_holds_no_threshold(repo_root: Path) -> None:
     """Any number a gate compares against belongs in a config file, not here."""
-    runner = repo_root / "src" / "dataforce" / "shared" / "gates" / "runner.py"
-    tree = ast.parse(runner.read_text(encoding="utf-8"))
+    engine = repo_root / "src" / "dataforce" / "core" / "gates.py"
+    tree = ast.parse(engine.read_text(encoding="utf-8"))
     numbers = {
         node.value
         for node in ast.walk(tree)
@@ -153,4 +153,4 @@ def test_the_engine_holds_no_threshold(repo_root: Path) -> None:
         and isinstance(node.value, (int, float))
         and not isinstance(node.value, bool)
     }
-    assert numbers <= {0, MAX_OFFENDING_RIDS}, f"threshold in {runner}: {numbers}"
+    assert numbers <= {0, MAX_OFFENDING_RIDS}, f"threshold in {engine}: {numbers}"

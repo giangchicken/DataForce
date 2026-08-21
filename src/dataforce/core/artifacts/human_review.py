@@ -12,7 +12,7 @@ from typing import Any
 
 import pandera.pandas as pa
 
-from dataforce.shared.schemas.base import record_columns
+from dataforce.core.artifacts.base import record_columns
 
 VALIDATION_STATUSES = ("original", "corrected", "jury_consensus", "unvalidated")
 

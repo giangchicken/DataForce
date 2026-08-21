@@ -2,7 +2,7 @@
 
 This property degrades silently: one import added under deadline is how a stage
 acquires an opinion about what an answer is. Both axes arrive through their
-registries, so no module under `pipeline/` or `shared/` may name a concrete one.
+registries, so no module under `pipeline/` or `core/` may name a concrete one.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 from conftest import SOURCE_ROOT, parsed_sources
 
 GENERIC_MODULES = frozenset({"__init__", "base", "registry"})
-GUARDED_PACKAGES = ("pipeline", "shared")
+GUARDED_PACKAGES = ("pipeline", "core")
 
 
 def concrete_implementations(source_root: Path = SOURCE_ROOT) -> set[str]:

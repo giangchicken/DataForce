@@ -22,10 +22,10 @@ from typing import Any
 
 from agent_toolkit.string_utils import compute_hash
 
+from dataforce.core.record import Record, TextPart, stamp
 from dataforce.modalities.base import Modality
 from dataforce.profiles.tool_decision import PROVENANCE_KEY, ToolDecisionProfile
 from dataforce.profiles.tool_decision.utils import catalog_names
-from dataforce.shared.record import Record, TextPart, stamp
 
 __all__ = ["corpus_measurements", "moved_measurements"]
 

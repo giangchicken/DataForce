@@ -20,9 +20,9 @@ from typing import Any
 from agent_toolkit.file_utils import iter_json_array_file, read_yaml, write_json
 
 from dataforce.api.engine import Engine
+from dataforce.core.errors import ConfigError
+from dataforce.core.gates import GateFailed, GateResult, assert_gates
 from dataforce.profiles.tool_decision import measure_corpus
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.gates.runner import GateFailed, GateResult, assert_gates
 
 __all__ = [
     "GATE_FAILED_FILENAME",

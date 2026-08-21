@@ -1,6 +1,6 @@
 """The engine computes and never opens a file, asserted rather than remembered.
 
-`modalities/`, `profiles/`, `pipeline/` and `shared/` are the engine. Everything it
+`modalities/`, `profiles/`, `pipeline/` and `core/` are the engine. Everything it
 needs arrives already parsed, which is what lets a web handler, a notebook or another
 codebase import it from any working directory. `api/`, `declared/` and `cli.py` are
 where the filesystem lives, so none of them is guarded here.
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from conftest import SOURCE_ROOT, docstring_ids, parsed_sources
 
-GUARDED_PACKAGES = ("modalities", "profiles", "pipeline", "shared")
+GUARDED_PACKAGES = ("modalities", "profiles", "pipeline", "core")
 
 # Where the committed policy and the data tiers live. A module that spells one of
 # these in code has decided which directory it is being run from. Saying where the
@@ -120,7 +120,7 @@ def test_the_guard_catches_each_of_the_three_things_it_forbids() -> None:
     ]
     assert violations(ast.parse('handle = open("x")\n')) == ["line 1: calls open()"]
 
-    innocent = "from dataforce.shared.manifest import Manifest\nx = compute_hash(t)\n"
+    innocent = "from dataforce.core.manifest import Manifest\nx = compute_hash(t)\n"
     assert violations(ast.parse(innocent)) == []
 
     prose = ast.parse('"""Identity is a line in config/<axis>/<name>.yaml."""\n')

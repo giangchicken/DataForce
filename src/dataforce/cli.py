@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from dataforce import __version__, api
-from dataforce.shared.errors import DataForceError
+from dataforce.core.errors import DataForceError
 
 # Where the committed policy is, relative to the directory the command is run from.
 # An in-process caller passes its own; only a command line has a working directory

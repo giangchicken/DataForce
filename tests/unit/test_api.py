@@ -17,11 +17,11 @@ import pytest
 from conftest import CONFIG, PARAMS
 
 from dataforce import api
+from dataforce.api.registry import Registry
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
 from dataforce.modalities.text import TextModality
 from dataforce.profiles.tool_decision import ToolDecisionProfile, build_record
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
-from dataforce.shared.registry import Registry
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 

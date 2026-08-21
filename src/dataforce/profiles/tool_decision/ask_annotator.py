@@ -29,6 +29,8 @@ import html
 
 from agent_toolkit.string_utils import slot_filling
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.record import Record, UIControl
 from dataforce.profiles.tool_decision.schema import Tool
 from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY, SourceContract
 from dataforce.profiles.tool_decision.utils import (
@@ -37,8 +39,6 @@ from dataforce.profiles.tool_decision.utils import (
     record_catalog,
     tools_to_catalog,
 )
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import Record, UIControl
 
 __all__ = [
     "CONTROLS",

@@ -15,10 +15,10 @@ from typing import Any
 
 from model2vec import StaticModel
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
+from dataforce.core.record import Part, Record, TextPart, UIControl
 from dataforce.modalities.base import Detector
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.manifest import Manifest
-from dataforce.shared.record import Part, Record, TextPart, UIControl
 
 __all__ = ["MANIFEST_NAME", "TextModality"]
 
