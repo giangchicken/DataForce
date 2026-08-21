@@ -1,8 +1,10 @@
-"""STEP · stages 0-1 · one raw source item into one canonical record, then checked.
+"""STEP · data_quality (stages 0-4) · one raw item into one record, then the five checks.
 
 Stage 0 builds the record; stage 1 asks the five questions that can be answered by
 counting. They share a module because what stage 1 checks is exactly what stage 0
-wrote, and because `validity_checks` serves stage 1 and nothing else.
+wrote, and because `validity_checks` serves stage 1 and nothing else. Stages 2-4 --
+personal data, embedding, duplicates -- ask nothing of a profile, which is why this
+module covers a five-stage phase in two sections.
 
 The catalog is read through `utils`, whose format is defined once and round-trips
 byte-identically over all 21,172 records. Which of the two shapes an item is in, which
@@ -25,12 +27,10 @@ from dataforce.core.record import (
     TextPart,
     compute_rid,
 )
-from dataforce.profiles.tool_decision.answer import answer_distance, calls_by_name
-from dataforce.profiles.tool_decision.source_contract import (
-    SourceContract,
-)
+from dataforce.profiles.tool_decision.schema import SourceContract
 from dataforce.profiles.tool_decision.utils import (
-    catalog_hash,
+    answer_distance,
+    calls_by_name,
     catalog_names,
 )
 
@@ -38,9 +38,9 @@ __all__ = [
     "CHECK_NAMES",
     "PROVENANCE_KEY",
     "build_record",
-    "scenario_hash",
     "validity_checks",
 ]
+
 
 # Where the load stage puts the two things only it knows: which file this item came from
 # and which implementations were resolved to read it. Required rather than defaulted, so
@@ -107,20 +107,6 @@ def build_record(
     )
 
 
-def scenario_hash(record: Record, contract: SourceContract) -> str:
-    """This profile's answer to *same scenario*: the hash of the record's catalog.
-
-    Never `source_index`, which is unique per record and measured to be so. The generic
-    name is `scenario_hash` because a profile without a catalog still has to answer the
-    question; `catalog_hash` is what answering it means here.
-
-    Reads the catalog rather than a stored copy of its names, and asserting this stays
-    byte-identical over the whole reference source is what proves requirement 71
-    removed a field without moving any behaviour.
-    """
-    return catalog_hash(catalog_names(record, contract))
-
-
 # --- stage 1: the five validity checks ---------------------------------------
 #
 # Each returns True when its named failure holds, so the name reads as what is wrong with
@@ -131,13 +117,15 @@ def scenario_hash(record: Record, contract: SourceContract) -> str:
 # spec's table -- but the *fields* they read are not: which turn restates the answer and
 # where the answer is stated both come from the source contract.
 #
-# Three of the five read 0 on the current file, and that is a measurement rather than an
-# omission: `empty_catalog` and `label_not_in_catalog` count records the catalog format
+# Four of the five read 0 on the reference source, and that is a measurement rather than
+# an omission: `empty_catalog` and `label_not_in_catalog` count records the catalog format
 # resolves, and the 841 and 722 the profile spec quotes are what a stricter name pattern
-# reports about names carrying a dot, hyphen, space or tab. `label_names_one_tool_twice`
-# reads 0 because the reference source states its answer as a set. They stay as gates,
-# the way `label_assistant_mismatch` stayed at 0 after it was fixed upstream: a check
-# that reads 0 is what tells you when it stops reading 0.
+# reports about names carrying a dot, hyphen, space or tab. The fifth,
+# `label_names_one_tool_twice`, reads 10 -- measured, against an earlier claim in this
+# comment that it read 0 because a set cannot repeat a name. A JSON array can, and ten do;
+# `params.yaml` has carried the 10 since C2 and this text had not caught up. They stay as
+# gates, the way `label_assistant_mismatch` stayed at 0 after it was fixed upstream: a
+# check that reads 0 is what tells you when it stops reading 0.
 
 
 def _restated_answer(record: Record, role: str) -> Any:

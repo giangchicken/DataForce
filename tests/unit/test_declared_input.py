@@ -29,13 +29,16 @@ from jsonschema import Draft202012Validator
 
 from dataforce.core.manifest import Manifest
 from dataforce.core.record import Record, TextPart
-from dataforce.profiles.tool_decision import ask_annotator, build_record, schema, utils
-from dataforce.profiles.tool_decision.answer import answer_distance, vote_consensus
-from dataforce.profiles.tool_decision.source_contract import (
-    OPENAI_TOOLS,
-    SourceContract,
-    read_source_contract,
+from dataforce.profiles.tool_decision import (
+    data_quality,
+    human_review,
+    release,
+    schema,
+    utils,
 )
+from dataforce.profiles.tool_decision.ai_review import vote_consensus
+from dataforce.profiles.tool_decision.schema import OPENAI_TOOLS, SourceContract
+from dataforce.profiles.tool_decision.utils import answer_distance, read_source_contract
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 
@@ -88,8 +91,8 @@ def declared_item() -> dict[str, Any]:
 
 
 def declared_record() -> Record:
-    raw = {**declared_item(), build_record.PROVENANCE_KEY: PROVENANCE}
-    return build_record.build_record(raw, TEXT.content_parts(raw), CANONICAL)
+    raw = {**declared_item(), data_quality.PROVENANCE_KEY: PROVENANCE}
+    return data_quality.build_record(raw, TEXT.content_parts(raw), CANONICAL)
 
 
 @pytest.fixture
@@ -158,12 +161,12 @@ def test_rid_is_stable_across_a_reordered_spelling_of_the_same_calls() -> None:
                 dict(reversed(list(given.items()))), indent=2
             )
 
-    first = {**item, build_record.PROVENANCE_KEY: PROVENANCE}
-    second = {**reordered, build_record.PROVENANCE_KEY: PROVENANCE}
+    first = {**item, data_quality.PROVENANCE_KEY: PROVENANCE}
+    second = {**reordered, data_quality.PROVENANCE_KEY: PROVENANCE}
 
     assert (
-        build_record.build_record(first, TEXT.content_parts(first), CANONICAL).rid
-        == build_record.build_record(second, TEXT.content_parts(second), CANONICAL).rid
+        data_quality.build_record(first, TEXT.content_parts(first), CANONICAL).rid
+        == data_quality.build_record(second, TEXT.content_parts(second), CANONICAL).rid
     )
 
 
@@ -199,7 +202,7 @@ def test_the_record_carries_no_answer_space(record: Record) -> None:
 def test_the_scenario_hash_is_the_hash_of_this_record_s_catalog(
     record: Record, contract: SourceContract
 ) -> None:
-    assert build_record.scenario_hash(record, contract) == utils.catalog_hash(OFFERED)
+    assert release.scenario_hash(record, contract) == utils.catalog_hash(OFFERED)
 
 
 # --- the five checks over the declared shape ----------------------------------
@@ -208,7 +211,7 @@ def test_the_scenario_hash_is_the_hash_of_this_record_s_catalog(
 def test_the_declared_input_passes_every_validity_check(record: Record) -> None:
     """The point of the fixture: a well-formed item in the shape the spec declares is
     not quarantined by a check written when the answer was an array of names."""
-    checks = build_record.validity_checks(CANONICAL, answer_ceiling=3)
+    checks = data_quality.validity_checks(CANONICAL, answer_ceiling=3)
 
     fired = [name for name, check in checks.items() if check(record)]
 
@@ -224,7 +227,7 @@ def test_the_target_turn_and_the_label_are_compared_through_delta(
     turn is rendered JSON and the label is the source's own field, so the two are
     genuinely independent statements of one answer.
     """
-    checks = build_record.validity_checks(CANONICAL, answer_ceiling=3)
+    checks = data_quality.validity_checks(CANONICAL, answer_ceiling=3)
     disagreeing = record.model_copy(
         update={"label": [{"name": "OpenTicket", "arguments": {"ly_do": "khác"}}]}
     )
@@ -405,13 +408,13 @@ def test_a_consensus_call_is_inside_the_record_s_own_answer_space(
 
 
 def control_for(record: Record, contract: SourceContract, which: str) -> str:
-    return ask_annotator.answer_config(record, contract, control=which)
+    return human_review.answer_config(record, contract, control=which)
 
 
 def test_the_form_control_offers_every_name_and_no_others(
     record: Record, contract: SourceContract
 ) -> None:
-    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+    built = control_for(record, contract, human_review.PER_NAME_ARGUMENTS)
 
     # Inside the name control only: an argument with a declared `enum` contributes
     # `<Choice>` elements of its own, and those are a different question.
@@ -429,7 +432,7 @@ def test_each_tool_s_arguments_are_shown_only_when_that_tool_is_picked(
     """What makes this a form rather than a wall of fields: an annotator cannot state
     an argument for a tool they did not call, so an out-of-space answer is harder to
     express than to avoid."""
-    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+    built = control_for(record, contract, human_review.PER_NAME_ARGUMENTS)
 
     assert 'name="SendStatement.ky"' in built
     assert 'name="SendStatement.ma_khach"' in built
@@ -444,7 +447,7 @@ def test_an_argument_the_tool_constrains_is_a_closed_choice_not_free_text(
     """`ky` declares an `enum`, so the control that captures it declares one too --
     otherwise the surface would accept a value the answer space rejects, and the
     annotator would only find out at pull time."""
-    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+    built = control_for(record, contract, human_review.PER_NAME_ARGUMENTS)
 
     assert '<Choices name="SendStatement.ky"' in built
     assert 'value="thang_nay"' in built
@@ -458,7 +461,7 @@ def test_the_fallback_is_one_text_control_and_names_no_tool(
     """The declared fallback for a tool that cannot show a field conditionally. It can
     express any answer at all, which is why requirement 75 pairs it with validation at
     pull time rather than treating the two controls as equivalent."""
-    built = control_for(record, contract, ask_annotator.JSON_TEXT)
+    built = control_for(record, contract, human_review.JSON_TEXT)
 
     assert "<TextArea " in built
     assert "<Choices " not in built
@@ -472,10 +475,10 @@ def test_which_control_ships_is_declared_and_not_guessed() -> None:
     same question, so an agreement figure is only readable next to which surface
     produced it.
     """
-    assert TOOL_DECISION.answer_control in ask_annotator.CONTROLS
+    assert TOOL_DECISION.answer_control in human_review.CONTROLS
 
     with pytest.raises(Exception, match="not an answer control"):
-        ask_annotator.answer_config(
+        human_review.answer_config(
             declared_record(), CANONICAL, control="a_third_thing"
         )
 
@@ -486,7 +489,7 @@ def test_no_control_carries_anything_a_model_produced(
     """Invariant 10 does not soften because the control got richer. Everything in
     either control comes from the record's own catalog, and the record's `meta` carries
     a `label_source` naming what labelled it -- which must not reach the page."""
-    for which in ask_annotator.CONTROLS:
+    for which in human_review.CONTROLS:
         built = control_for(record, contract, which)
 
         assert "debait" not in built
@@ -520,7 +523,7 @@ def test_the_form_control_escapes_a_name_that_would_break_the_attribute(
         }
     )
 
-    built = control_for(hostile, contract, ask_annotator.PER_NAME_ARGUMENTS)
+    built = control_for(hostile, contract, human_review.PER_NAME_ARGUMENTS)
 
     assert 'onclick="steal()"' not in built
     assert "&quot;" in built

@@ -20,13 +20,13 @@ from pydantic import ValidationError
 from dataforce.core.errors import ConfigError
 from dataforce.core.manifest import Manifest
 from dataforce.core.record import Producer, Record, Source, TextPart
-from dataforce.profiles.tool_decision import build_record, utils
-from dataforce.profiles.tool_decision.source_contract import (
+from dataforce.profiles.tool_decision import data_quality, release, utils
+from dataforce.profiles.tool_decision.schema import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,
     SourceContract,
-    read_source_contract,
 )
+from dataforce.profiles.tool_decision.utils import read_source_contract
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"
@@ -75,12 +75,12 @@ def canonical_records() -> list[dict[str, Any]]:
 
 
 def sourced(raw: dict[str, Any], **extra: Any) -> dict[str, Any]:
-    return {**raw, **extra, build_record.PROVENANCE_KEY: PROVENANCE}
+    return {**raw, **extra, data_quality.PROVENANCE_KEY: PROVENANCE}
 
 
 def build_legacy(raw: dict[str, Any], **extra: Any) -> Any:
     item = sourced(raw, **extra)
-    return build_record.build_record(item, TEXT.content_parts(item), LEGACY)
+    return data_quality.build_record(item, TEXT.content_parts(item), LEGACY)
 
 
 # --- the two shapes agree ------------------------------------------------------
@@ -90,7 +90,7 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = build_record.build_record(
+    record = data_quality.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
@@ -113,12 +113,12 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     }
     as_legacy.pop("tools")
 
-    from_canonical = build_record.build_record(
+    from_canonical = data_quality.build_record(
         sourced(canonical),
         TEXT.content_parts(sourced(canonical)),
         contract_for(OPENAI_TOOLS),
     )
-    from_legacy = build_record.build_record(
+    from_legacy = data_quality.build_record(
         sourced(as_legacy),
         TEXT.content_parts(sourced(as_legacy)),
         contract_for(LEGACY_SYSTEM_PROMPT),
@@ -130,16 +130,16 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     assert utils.catalog_names(
         from_canonical, contract_for(OPENAI_TOOLS)
     ) == utils.catalog_names(from_legacy, contract_for(LEGACY_SYSTEM_PROMPT))
-    assert build_record.scenario_hash(
+    assert release.scenario_hash(
         from_canonical, contract_for(OPENAI_TOOLS)
-    ) == build_record.scenario_hash(from_legacy, contract_for(LEGACY_SYSTEM_PROMPT))
+    ) == release.scenario_hash(from_legacy, contract_for(LEGACY_SYSTEM_PROMPT))
 
 
 def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
     raw = canonical_records()[0]
     item = sourced({**raw, "tools": []})
 
-    record = build_record.build_record(
+    record = data_quality.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
@@ -162,8 +162,8 @@ def test_rid_changes_when_a_turn_changes() -> None:
     other = [*parts[:1], TextPart(role="user", text="một câu khác"), *parts[2:]]
 
     assert (
-        build_record.build_record(item, parts, LEGACY).rid
-        != build_record.build_record(item, other, LEGACY).rid
+        data_quality.build_record(item, parts, LEGACY).rid
+        != data_quality.build_record(item, other, LEGACY).rid
     )
 
 
@@ -260,7 +260,7 @@ def test_the_canonical_shape_keeps_its_tools_so_they_can_be_read() -> None:
     raw = canonical_records()[0]
     item = sourced(raw)
 
-    record = build_record.build_record(
+    record = data_quality.build_record(
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
@@ -280,13 +280,13 @@ def test_provenance_is_required_so_an_unsourced_record_cannot_be_built() -> None
     raw = legacy_records()[0]
 
     with pytest.raises(ConfigError, match="load stage"):
-        build_record.build_record(raw, TEXT.content_parts(sourced(raw)), LEGACY)
+        data_quality.build_record(raw, TEXT.content_parts(sourced(raw)), LEGACY)
 
 
 def test_the_provenance_key_is_not_itself_kept_as_metadata() -> None:
     record = build_legacy(legacy_records()[0])
 
-    assert build_record.PROVENANCE_KEY not in record.meta
+    assert data_quality.PROVENANCE_KEY not in record.meta
     assert record.source == Source(**PROVENANCE["source"])
     assert record.producer == Producer(**PROVENANCE["producer"])
 

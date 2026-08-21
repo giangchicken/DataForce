@@ -26,27 +26,38 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from agent_toolkit.string_utils import compute_hash
 
+from dataforce.core.errors import ConfigError
+from dataforce.core.manifest import Manifest
 from dataforce.core.record import Part, Record, TextPart
-from dataforce.profiles.tool_decision.schema import Catalog, Gap, Tool
-from dataforce.profiles.tool_decision.source_contract import (
+from dataforce.profiles.base import Answer
+from dataforce.profiles.tool_decision.schema import (
     LEGACY_SYSTEM_PROMPT,
+    SHAPES,
+    TARGET,
     TOOLS_KEY,
+    Catalog,
     SourceContract,
+    Tool,
 )
 
 __all__ = [
     "CATALOG_HEADER",
     "INSTRUCTION",
+    "Gap",
+    "answer_distance",
     "build_system_prompt",
+    "calls_by_name",
     "catalog_hash",
     "catalog_names",
     "catalog_to_tools",
     "openai_to_tools",
     "read_catalog",
+    "read_source_contract",
     "record_catalog",
     "to_strict_openai",
     "tools_to_catalog",
@@ -305,6 +316,26 @@ def _spec_from(declared: str, rest: str) -> tuple[dict[str, Any], bool, str | No
     return spec, bool(found_default), prose_default
 
 
+# `Gap` is here and not in `schema.py`, against the rule that a shape belongs in a
+# schema module. It is not a shape this profile's *data* has: no record carries one, no
+# stage sees one, and this module is both its only producer and its only consumer. The
+# rule that wins is the one about consumers -- a definition with one consumer is that
+# consumer's code. AGENTS.md §8, and the module-layout spec's requirement 10.
+@dataclass(frozen=True)
+class Gap:
+    """Something the text implies that the schema could not be given.
+
+    The parser's own account of what it could not recover. A format reader that returns
+    less than it was given and says nothing is the failure `utils.py` is arranged
+    against.
+    """
+
+    tool: str
+    parameter: str | None
+    kind: str
+    evidence: str
+
+
 def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
     lines = body.split("\n")
     require_at = next(
@@ -495,3 +526,133 @@ def catalog_hash(names: Sequence[str]) -> str:
     not this: it is unique per record, measured, and so gives no leakage protection.
     """
     return compute_hash("|".join(names), "sha256")[:_HASH_LENGTH]
+
+
+# --- one source's own vocabulary ---------------------------------------------
+
+
+def _declared(manifest: Manifest, key: str, inner: str) -> Any:
+    """One value out of a mapping the manifest declares, or an error naming both keys."""
+    block = manifest.require(key)
+    if not isinstance(block, Mapping) or inner not in block:
+        raise ConfigError(
+            f"{manifest.name}: {key}.{inner} is not declared; {key} holds "
+            f"{sorted(block) if isinstance(block, Mapping) else block!r}"
+        )
+    return block[inner]
+
+
+def read_source_contract(manifest: Manifest) -> SourceContract:
+    """One source's contract, from its manifest. Every missing key names itself."""
+    shape = manifest.require("shape")
+    if shape not in SHAPES:
+        raise ConfigError(
+            f"{manifest.name}: shape {shape!r} is not one of {list(SHAPES)}"
+        )
+    gold = manifest.declared.get("gold") or {}
+    contract = SourceContract(
+        name=manifest.name,
+        shape=shape,
+        roles=manifest.require("roles"),
+        label_key=_declared(manifest, "label", "at"),
+        meta=manifest.require("meta"),
+        gold_from=gold.get("from", ""),
+    )
+    # so an undeclared target role fails here rather than once per record
+    if not contract.restating_role:
+        raise ConfigError(f"{manifest.name}: roles.{TARGET} is declared empty")
+    return contract
+
+
+# --- an answer, read and compared --------------------------------------------
+#
+# Both phases that measure disagreement compute this: the jury's cohesion and the
+# triage buckets at stages 5-6, and Krippendorff's alpha at stage 10. So it is here
+# rather than in `ai_review.py`, which `human_review.py` would then have to import.
+
+
+def calls_by_name(answer: Answer) -> dict[str, dict[str, Any]]:
+    """The calls an answer means, keyed by tool name, the first spelling of a name winning.
+
+    A bare string entry is the call with no arguments. That is what makes a names-only
+    source a special case of this answer type rather than a second one, and requirement
+    72's reduction -- δ equals Jaccard over names when arguments agree -- is asserted on
+    exactly it.
+
+    A bare *answer* is rejected rather than iterated: `set("SendMail")` is a set of
+    characters, and a δ that accepted it would silently compare spellings.
+
+    A repeated name collapses here. Requirement 73 declares the multiset out and
+    `label_names_one_tool_twice` finds one by comparing this length against the
+    answer's, so nothing downstream has to decide which of two calls to one tool won.
+    """
+    if isinstance(answer, str) or not isinstance(answer, Iterable):
+        raise TypeError(f"an answer is an array of calls, not {type(answer).__name__}")
+    calls: dict[str, dict[str, Any]] = {}
+    for entry in answer:
+        if isinstance(entry, str):
+            calls.setdefault(entry, {})
+            continue
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("name"), str):
+            raise TypeError(f"a call is a name and its arguments, not {entry!r}")
+        arguments = entry.get("arguments") or {}
+        if not isinstance(arguments, Mapping):
+            raise TypeError(
+                f"the arguments of {entry['name']!r} are an object, not {arguments!r}"
+            )
+        calls.setdefault(entry["name"], dict(arguments))
+    return calls
+
+
+def _argument_agreement(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
+    """How far two calls to one tool agree: the share of keys present in both and equal.
+
+    Over the *union* of keys, so a key present in only one is a disagreement. That is
+    why it is not `len(shared) / len(left)`, which would call a one-argument call a
+    perfect match for the same call carrying five. Two calls with no arguments agree
+    perfectly, which is what makes a names-only answer reduce exactly. Both are
+    requirement 72.
+    """
+    keys = left.keys() | right.keys()
+    if not keys:
+        return 1.0
+    agreed = sum(
+        1 for key in keys if key in left and key in right and left[key] == right[key]
+    )
+    return agreed / len(keys)
+
+
+def answer_distance(a: Answer, b: Answer) -> float:
+    """Name-first: a different tool disagrees fully, a differing argument only partly.
+
+    Requirement 72. Over the union of names in the two answers, a name in both
+    contributes how far its arguments agree and a name in only one contributes zero;
+    δ is one minus the mean of those contributions. So naming a different tool is full
+    disagreement and naming the same tool with one differing argument is *partial*,
+    which is the whole point: the two failures are not equally wrong and a jury that
+    scored them the same would rank them the same.
+
+    `answer_distance(∅, ∅) = 0` is returned before the division, and it is load-bearing:
+    35.4% of the reference source is the empty answer, so a `0/0` would make the
+    population carrying the real difficulty look like the one with least agreement.
+
+    When every matched call has identical arguments this **is** Jaccard over names --
+    two argument-less calls agree perfectly, so each matched name contributes exactly 1
+    -- so a names-only profile is the special case rather than a different formula, and
+    every measurement taken before arguments existed still describes it.
+
+    The mean over the union of names is a *choice*, recorded as one in requirement 72:
+    it weights every named tool equally, so a record whose answer is one call and a
+    record whose answer is four are scored on the same scale. Changing it is a threshold
+    decision with its own task.
+    """
+    left, right = calls_by_name(a), calls_by_name(b)
+    names = left.keys() | right.keys()
+    if not names:
+        return 0.0
+    agreement = sum(
+        _argument_agreement(left[name], right[name])
+        for name in names
+        if name in left and name in right
+    )
+    return 1.0 - agreement / len(names)

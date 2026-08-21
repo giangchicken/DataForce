@@ -1,7 +1,7 @@
 """`tool_decision`'s validity checks, training example, group key and controls.
 
 Rules 4 and 5 of § *Rules a profile must satisfy* are proved here -- `build_record`
-preserving what it does not own is in `test_build_record.py`, and
+preserving what it does not own is in `test_data_quality.py`, and
 `training_example` reproducing the record's answer is below. Rules 1 to 3 are
 in `test_answers.py`.
 """
@@ -21,7 +21,7 @@ from dataforce.api.registry import Registry
 from dataforce.core.errors import ConfigError
 from dataforce.core.record import Record
 from dataforce.declared.thresholds import max_answer_cardinality
-from dataforce.profiles.tool_decision import build_record
+from dataforce.profiles.tool_decision import data_quality
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"
@@ -55,7 +55,7 @@ def raw_item(
             },
         ],
         "meta": {"label": label, "llm_model": "gemma-4-31B-it", "source_index": 1},
-        build_record.PROVENANCE_KEY: PROVENANCE,
+        data_quality.PROVENANCE_KEY: PROVENANCE,
     }
 
 
@@ -97,7 +97,7 @@ def test_validity_checks_are_the_five_names_params_declares_counts_for() -> None
     """The names are identifiers `params.yaml` keys on, so they are not free to drift."""
     built = TOOL_DECISION.validity_checks()
 
-    assert tuple(built) == build_record.CHECK_NAMES
+    assert tuple(built) == data_quality.CHECK_NAMES
     assert set(built) == set(read_yaml(PARAMS)["invalid_counts"])
 
 

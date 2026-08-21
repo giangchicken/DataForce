@@ -17,7 +17,7 @@ from agent_toolkit.file_utils import iter_json_array_file, read_yaml
 from agent_toolkit.string_utils import compute_hash
 from conftest import REPO_ROOT, TEXT, TOOL_DECISION
 
-from dataforce.profiles.tool_decision import build_record, schema, utils
+from dataforce.profiles.tool_decision import data_quality, schema, utils
 
 pytestmark = pytest.mark.integration
 
@@ -81,7 +81,7 @@ def test_no_record_in_this_file_has_an_empty_catalog(
     parsed: list[tuple[str, schema.Catalog, list[str]]],
 ) -> None:
     """So `empty_catalog` reads 0, not the 841 a stricter name pattern reports."""
-    assert [catalog.names for _, catalog, _ in parsed if catalog.is_empty] == []
+    assert [catalog.names for _, catalog, _ in parsed if not catalog.tools] == []
 
 
 def test_every_entry_parsed_a_name_and_a_description(
@@ -146,7 +146,7 @@ def test_the_reader_reports_every_gap_it_could_not_close(source: Path) -> None:
     and 20 whose allowed values are stated in prose where the schema has no enum.
     """
     instruction = TOOL_DECISION.contract.role_name("instruction")
-    gaps: list[schema.Gap] = []
+    gaps: list[utils.Gap] = []
     for raw in iter_json_array_file(source):
         turns = {turn["role"]: turn["content"] for turn in raw["messages"]}
         utils.catalog_to_tools(turns[instruction], gaps=gaps)
@@ -188,7 +188,7 @@ def test_the_five_checks_reproduce_the_counts_declared_in_params(source: Path) -
         record = TOOL_DECISION.build_record(
             {
                 **raw,
-                build_record.PROVENANCE_KEY: {
+                data_quality.PROVENANCE_KEY: {
                     "source": {
                         "file_sha256": "0" * 64,
                         "offset": offset,
@@ -217,7 +217,7 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
     record = TOOL_DECISION.build_record(
         {
             **raw,
-            build_record.PROVENANCE_KEY: {
+            data_quality.PROVENANCE_KEY: {
                 "source": {
                     "file_sha256": read_yaml(REPO_ROOT / "params.yaml")["source"][
                         "sha256"

@@ -21,7 +21,7 @@ from dataforce.api.registry import Registry
 from dataforce.core.errors import ConfigError
 from dataforce.core.manifest import Manifest
 from dataforce.modalities.text import TextModality
-from dataforce.profiles.tool_decision import ToolDecisionProfile, build_record
+from dataforce.profiles.tool_decision import ToolDecisionProfile, data_quality
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 
@@ -88,7 +88,7 @@ def raw_item(catalog: str, label: list[str]) -> dict[str, Any]:
             {"role": "assistant", "content": f"{label}".replace("'", '"')},
         ],
         "meta": {"label": label, "llm_model": "gemma-4-31B-it", "source_index": 1},
-        build_record.PROVENANCE_KEY: PROVENANCE,
+        data_quality.PROVENANCE_KEY: PROVENANCE,
     }
 
 

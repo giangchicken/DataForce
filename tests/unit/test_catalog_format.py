@@ -221,7 +221,7 @@ def test_catalog_size(fixture: str, size: int) -> None:
     parsed = utils.catalog_to_tools(text_of(fixture))
 
     assert len(parsed.tools) == size
-    assert parsed.is_empty == (size == 0)
+    assert bool(parsed.tools) == (size > 0)
 
 
 def test_parameters_carry_their_type_requiredness_and_clauses() -> None:
@@ -340,7 +340,7 @@ def test_a_malformed_entry_still_contributes_its_name() -> None:
 
 
 def test_a_message_with_no_header_is_an_empty_catalog_not_an_exception() -> None:
-    assert utils.catalog_to_tools(text_of("no_tools_header.txt")).is_empty
+    assert not utils.catalog_to_tools(text_of("no_tools_header.txt")).tools
 
 
 # --- what the reader could not recover ----------------------------------------
@@ -348,7 +348,7 @@ def test_a_message_with_no_header_is_an_empty_catalog_not_an_exception() -> None
 
 def test_the_reader_reports_what_it_could_not_be_given() -> None:
     """A format reader that returns less than it was given must say so."""
-    gaps: list[schema.Gap] = []
+    gaps: list[utils.Gap] = []
 
     utils.catalog_to_tools(text_of("one_tool.txt"), gaps=gaps)
 
@@ -359,7 +359,7 @@ def test_an_enum_stated_only_in_prose_is_reported_rather_than_guessed() -> None:
     source = text_of("one_tool.txt").replace(
         "Mã khách hàng cần tra cứu.", "Mã khách hàng. chỉ chấp nhận VIP hoặc STANDARD."
     )
-    gaps: list[schema.Gap] = []
+    gaps: list[utils.Gap] = []
 
     utils.catalog_to_tools(source, gaps=gaps)
 
@@ -385,7 +385,7 @@ def test_a_tool_whose_parameters_are_all_optional_is_reported() -> None:
         .replace("ma_khach* (string)", "ma_khach (string)")
         .replace("require: ma_khach", "require: ")
     )
-    gaps: list[schema.Gap] = []
+    gaps: list[utils.Gap] = []
 
     (tool,) = utils.catalog_to_tools(both_removed, gaps=gaps).tools
 

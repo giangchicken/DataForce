@@ -1,4 +1,4 @@
-"""STEP · stages 7-8 · what a person is asked, and what they answer with.
+"""STEP · human_review (stages 7-11) · what a person is asked, and what they answer with.
 
 Stage 7 writes the question, stage 8 puts it in front of an annotator with the
 control that captures the answer. One module because the two halves have to agree:
@@ -31,8 +31,7 @@ from agent_toolkit.string_utils import slot_filling
 
 from dataforce.core.errors import ConfigError
 from dataforce.core.record import Record, UIControl
-from dataforce.profiles.tool_decision.schema import Tool
-from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY, SourceContract
+from dataforce.profiles.tool_decision.schema import TOOLS_KEY, SourceContract, Tool
 from dataforce.profiles.tool_decision.utils import (
     catalog_names,
     openai_to_tools,
