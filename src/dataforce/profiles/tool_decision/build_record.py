@@ -214,9 +214,18 @@ def validity_checks(
     def label_not_in_catalog(record: Record) -> bool:
         """The target names a tool the record never offered -- unlearnable, and it
         teaches hallucination. Never truncated to the catalog: that would be a guess
-        about which of two disagreeing sources is right, applied invisibly at scale."""
+        about which of two disagreeing sources is right, applied invisibly at scale.
+
+        An entry that is not a name at all fires too. An answer here is an array of
+        strings -- every one of the 21,172 records is -- and a call object carrying
+        arguments is a different answer type, so it belongs in quarantine where a
+        person reads it, not in a `TypeError` that stops the run at record one.
+        """
         offered = set(catalog_names(record))
-        return any(name not in offered for name in record.label or [])
+        return any(
+            not isinstance(name, str) or name not in offered
+            for name in record.label or []
+        )
 
     def empty_catalog(record: Record) -> bool:
         """The record offers no tools. A quarantine for triage, not a verdict."""

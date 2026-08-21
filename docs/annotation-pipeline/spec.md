@@ -554,6 +554,7 @@ The braces are the **marker DSL**, not template slots — `{trigger}`, `{hold_mi
 
 ```jsonc
 {
+  "idx": 4471,                                              // the source's own row number
   "messages": [
     { "role": "system",    "content": "<the system turn above>" },
     { "role": "user",      "content": "Cho mình xem số dư tài khoản với, mã của mình là 480215." },
@@ -578,7 +579,7 @@ The braces are the **marker DSL**, not template slots — `{trigger}`, `{hold_mi
 }
 ```
 
-Fourteen `meta` keys, of which six appear in no specification — they are carried anyway, verbatim, because what looks like noise now is what a later question turns out to need. The profile owns five of them by declared meaning (`meta:` in its manifest) and reads none of the rest.
+Three top-level keys — `idx`, `messages`, `meta` — on all 21,172 records, and fourteen `meta` keys of which six appear in no specification — they are carried anyway, verbatim, because what looks like noise now is what a later question turns out to need. The profile owns five of them by declared meaning (`meta:` in its manifest) and reads none of the rest.
 
 **3 · What `load` adds before the profile sees it.** Not in the source file, and required rather than defaulted — a record without provenance cannot be constructed at all.
 
@@ -642,6 +643,39 @@ The label is in two places and they are asserted equal as the line is written. T
 ```
 
 Measured on both, and this is the whole argument for the declaration: **the same `answer_space` and the same `group_key` — `7fcb1af18418ba5a` — from a different `rid`, `5d98ceac916a55a9`.** The two shapes are the same scenario offering the same two tools, so they group together and split together; the `rid` differs because the content genuinely differs, which is what `rid` is for. One key in one manifest is what makes both true, and nothing downstream of stage 0 can tell which shape it read.
+
+#### More turns, and calls carrying arguments
+
+Two things a tool-decision corpus can have that **this** one does not, measured over all 21,172 records: every record is exactly **three turns**, always `(system, user, assistant)`, and the assistant content is **always a JSON array of strings** — 13,674 non-empty, 7,498 empty, never once an object with arguments. Both are properties of one file, so both are stated here rather than assumed anywhere in code.
+
+**More turns work now, and nothing had to change for them.** A five-turn record — `system, user, assistant, user, assistant`, the first call declined and the second made once the customer supplies the missing datum — traces through unchanged: five typed parts, the catalog still read out of the `system` turn, `rid 01a33035ca0cc3cc`, all four checks passing, and five messages exported.
+
+```jsonc
+"messages": [
+  { "role": "system",    "content": "<the catalog, as above>" },
+  { "role": "user",      "content": "Cho mình xem số dư tài khoản." },
+  { "role": "assistant", "content": "[]" },                      // nothing to call yet
+  { "role": "user",      "content": "Mã của mình là 480215." },
+  { "role": "assistant", "content": "[\"LookupBalance\"]" }      // the answer, and the target
+]
+```
+
+Nothing in stage 0 or stage 1 counts turns. `content_parts` yields one part per message whatever their number; the two checks that read a turn read it **by role and from the end** — `_restated_answer` walks the content in reverse for the last part carrying the target role — so the record's answer is compared against the last assistant turn, which is the one the model is trained to produce. A middle assistant turn is conversation, not target. The empty array in the middle is a first-class answer here, not a missing one: 35.4% of this corpus is the empty set.
+
+**A call carrying arguments is a different answer type, and the pipeline says so rather than guessing.** Requirement 5 makes an answer a value the profile's `answer_schema` accepts, and this profile's is an array of strings. Hand it `[{"name": "LookupBalance", "arguments": {"ma_khach": "480215"}}]` and it is quarantined at stage 1 — `label_not_in_catalog` and `label_assistant_mismatch` both fire, the record is written to `quarantine/invalid/` for a person to read, and the run continues. That is the specified behaviour for an answer the profile cannot express, and it is what a wrong answer type must do: be reported, not coerced and not fatal.
+
+**What it would take to make arguments the answer**, if a second source arrives carrying them — every item below is a consequence of the three-piece interface, not a list of files to edit:
+
+| Change | Why it is forced |
+|---|---|
+| `ANSWER_SCHEMA` and `answer_space` | the answer becomes an array of objects, and each object's `arguments` must validate against *that tool's* `parameters` — the schema stops being one shape and becomes per-tool |
+| `answer_distance` | δ over `(name, arguments)` is a design question, not an edit: two jurors agreeing on the tool and differing on one argument value are neither in agreement nor in full disagreement, and whatever number is chosen there propagates into cohesion, corpus conflict, the four triage buckets and α |
+| `vote_consensus` | a strict majority over names is well defined; over argument *values* it is a second consensus rule, per parameter |
+| `answer_config` | `<Choices>` captures a name. Capturing arguments needs a per-tool form generated from its `parameters`, which is the first thing in this design that Label Studio may not express |
+| `training_example` | the assistant turn becomes the call object, and invariant 4's equality assertion is then over a nested structure |
+| Every measurement | `distinct_tool_names`, `answer_cardinality` and the catalog fingerprint all count names; none of them means the same thing once an answer carries values |
+
+Which is the honest reason it is not a small change: **arguments move the answer type, and the answer type is what the generic core is written in terms of.** The seam is real — a profile declaring the richer answer is exactly what the two-axis design is for, and nothing under `pipeline/` or `shared/` would need editing — but it is a second profile with its own δ, its own consensus and its own corpus, not a widened version of this one. This corpus cannot validate it: there is no record in it whose answer carries an argument, so there is nothing to measure a δ against.
 
 ### Canonical record
 

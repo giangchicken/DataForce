@@ -135,6 +135,20 @@ def test_label_not_in_catalog_fires_when_the_target_names_a_tool_never_offered(
     assert not check["empty_catalog"](record)
 
 
+def test_a_call_object_is_quarantined_rather_than_crashing_the_stage(
+    check: dict[str, Any],
+) -> None:
+    """An answer is an array of names. One carrying arguments is a different answer
+    type, and stage 1 has to report it rather than raise from inside a set lookup."""
+    record = record_for(
+        catalog="one_tool.txt",
+        label=[{"name": "Lookup00_0a", "arguments": {"ma_khach": "480215"}}],
+    )
+
+    assert check["label_not_in_catalog"](record)
+    assert check["label_assistant_mismatch"](record)
+
+
 def test_a_name_with_a_dot_or_a_tab_is_in_its_catalog(check: dict[str, Any]) -> None:
     """The convention that decides whether 722 records are invalid or none are."""
     record = record_for(
