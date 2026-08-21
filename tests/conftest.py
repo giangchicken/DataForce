@@ -143,7 +143,7 @@ class SetProfile:
             return 0.0
         return 1.0 - len(left & right) / len(union)
 
-    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
+    def vote_consensus(self, votes: list[Answer], record: Record) -> Answer | None:
         if not votes:
             return None
         threshold = len(votes) / 2
@@ -192,7 +192,7 @@ class FreeTextProfile:
     def answer_distance(self, a: Answer, b: Answer) -> float:
         return 0.0 if a == b else 1.0
 
-    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
+    def vote_consensus(self, votes: list[Answer], record: Record) -> Answer | None:
         return None
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:

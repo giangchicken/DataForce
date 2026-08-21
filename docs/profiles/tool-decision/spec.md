@@ -10,8 +10,8 @@ This document specifies only what is specific to this dataset and this task. The
 |---|---|---|
 | source adapter | profile | parse the `TOOLS:` block, preserving the marker DSL verbatim |
 | answer schema | profile | `oneOf` per offered tool: the name as a `const`, the arguments as that tool's own `parameters`. Built per record, stored on none — core requirement 71 |
-| `answer_distance` | profile | `1 − |A∩B| / |A∪B|`, with `δ(∅,∅) = 0` |
-| `vote_consensus` | profile | tools included by a strict majority of valid votes |
+| `answer_distance` | profile | name-first over the union of names, each matched name contributing how far its arguments agree, with `δ(∅,∅) = 0` — core requirement 72 |
+| `vote_consensus` | profile | majority per name, then majority per argument; a call missing a `required` argument is dropped, not completed — core requirement 74 |
 | validity checks | profile | five checks, all provable without a human |
 | question templates | profile | per [`guided-validation`](../../guided-validation/spec.md), focus by marker rule |
 | exporter | profile | SFT JSONL in the source `messages` shape |
@@ -104,8 +104,14 @@ The 10 are `label_names_one_tool_twice`, and on that source they are the only re
     **At most one call per tool name** (core requirement 73). Two calls to one tool make the answer a multiset, and matching them pairwise before comparing arguments is a second decision δ would have to make silently; `label_names_one_tool_twice` sends such a record to quarantine, where a person decides whether the source means parallel calls or is malformed.
 
     A bare name is read as the call with no arguments. That is what makes a names-only source — the reference source is one — a special case of this answer type rather than a second one, and it is what core requirement 72's reduction is asserted on.
-6. `answer_distance(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`answer_distance(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
-7. `vote_consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
+6. **δ is name-first and soft** (core requirement 72). Over the union of names in the two answers, a name in both contributes the share of argument keys present in both and equal — counting a key present in only one as a disagreement, and two argument-less calls as agreeing perfectly — and a name in only one contributes zero; δ is one minus the mean. So naming a different tool is full disagreement and naming the same tool with one differing argument is *partial*, which is the point: the two are not equally wrong, and the argument error is the one a human fixes in a second.
+
+    **`answer_distance(∅, ∅) = 0` by definition.** Load-bearing: 35.4% of the reference source is the empty answer, and an implementation returning `0/0 → NaN`, or treating two empty answers as maximally distant, would make the zero-label population — the part carrying the real difficulty — look like the part with least agreement.
+
+    **It reduces exactly.** When every matched call has identical arguments this *is* Jaccard over names, asserted to the bit over the same sampled answers the names-only implementation was measured on. So every number taken before arguments existed still describes this δ, and a names-only source is the special case rather than a different formula. The mean over the union of names is a recorded *choice*: it weights every named tool equally, and changing it is a threshold decision with its own task.
+7. `vote_consensus` is **per name, then per argument** (core requirement 74). A name is in the consensus when a strict majority of all votes included it; each of that name's argument keys then takes the value a strict majority of the votes *naming that tool* gave — naming it, not voting at all, since a juror who did not call the tool has no opinion about its arguments. A key with no majority is absent, and a call missing a key the tool declares `required` is **dropped entirely rather than completed**: a consensus call that would fail requirement 71's validation is not a consensus, and half-building one would put a value no juror proposed into a ranking signal.
+
+    It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own. `vote_consensus` therefore takes the record as well as the votes — `required` is the tool's own declaration and nothing else can answer it.
 8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the validity checks of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
 
 ### The text modality's privacy detectors
@@ -172,10 +178,21 @@ Nothing stores this. Core requirement 71 carries the measurement that settled it
 ### δ, in full
 
 ```python
-def answer_distance(a: set[str], b: set[str]) -> float:
-    if not a and not b: return 0.0          # two abstentions agree perfectly
-    return 1.0 - len(a & b) / len(a | b)
+def answer_distance(a: Answer, b: Answer) -> float:
+    left, right = calls_by_name(a), calls_by_name(b)     # a bare name is a call with {}
+    names = left.keys() | right.keys()
+    if not names: return 0.0                             # two abstentions agree perfectly
+    agreement = sum(_argument_agreement(left[n], right[n])
+                    for n in names if n in left and n in right)
+    return 1.0 - agreement / len(names)
+
+def _argument_agreement(left, right) -> float:
+    keys = left.keys() | right.keys()
+    if not keys: return 1.0                              # two argument-less calls agree
+    return sum(k in left and k in right and left[k] == right[k] for k in keys) / len(keys)
 ```
+
+Hand-worked, and the ordering is the assertion: `δ(same call) = 0 < δ(same tool, one argument of two differs) = 0.5 < δ(different tools) = 1`. With every matched call argument-less, `_argument_agreement` returns 1 for each and the whole expression collapses to `1 − |A∩B| / |A∪B|`.
 
 ### The jury prompt
 

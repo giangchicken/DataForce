@@ -28,6 +28,7 @@ from conftest import TEXT, TOOL_DECISION
 from jsonschema import Draft202012Validator
 
 from dataforce.profiles.tool_decision import build_record, schema, utils
+from dataforce.profiles.tool_decision.answer import answer_distance, vote_consensus
 from dataforce.profiles.tool_decision.source_contract import (
     OPENAI_TOOLS,
     SourceContract,
@@ -300,3 +301,97 @@ def test_each_way_of_being_outside_the_space_is_outside_it(
     """Invariant 5. The pull gate rejects rather than truncating, so what "outside"
     means has to be exact for every one of these, not just for a wrong name."""
     assert not accepts(space_for(record), answer), why
+
+
+# --- δ and consensus over the declared shape ----------------------------------
+
+
+def wrong_argument() -> list[dict[str, Any]]:
+    """The target with one of its two arguments changed. A human fixes this in a second."""
+    return [
+        {
+            "name": "SendStatement",
+            "arguments": {"ma_khach": "480215", "ky": "thang_truoc"},
+        }
+    ]
+
+
+def wrong_tool() -> list[dict[str, Any]]:
+    return [{"name": "OpenTicket", "arguments": {"ly_do": "khách hỏi sao kê"}}]
+
+
+def test_a_wrong_argument_is_nearer_than_a_wrong_tool() -> None:
+    """Requirement 72 on the input this is for, not only on a synthetic pair.
+
+    This is the ordering every triage bucket and every cohesion figure is written on:
+    the jury calling the right tool with one argument wrong is a different kind of
+    record from the jury calling the wrong tool, and δ has to say so.
+    """
+    assert answer_distance(TARGET, TARGET) == 0.0
+    assert answer_distance(TARGET, wrong_argument()) == pytest.approx(0.5)
+    assert answer_distance(TARGET, wrong_tool()) == 1.0
+    assert answer_distance(TARGET, []) == 1.0
+
+
+def test_dropping_the_arguments_makes_the_target_a_names_only_answer(
+    record: Record,
+) -> None:
+    """The reduction, on this record: with arguments off both sides, δ is Jaccard."""
+    names_only = [{"name": "SendStatement"}]
+
+    assert answer_distance(names_only, ["SendStatement"]) == 0.0
+    assert answer_distance(names_only, ["OpenTicket"]) == 1.0
+
+
+def test_three_jurors_splitting_on_one_argument_agree_on_the_majority_value(
+    record: Record, contract: SourceContract
+) -> None:
+    """Requirement 74 against a real catalog, where `ky` and `ma_khach` are both
+    `required` -- so a split that left either without a majority would drop the call."""
+    catalog = utils.record_catalog(record, contract)
+    votes = [TARGET, TARGET, wrong_argument()]
+
+    assert vote_consensus(votes, catalog) == TARGET
+
+
+def test_a_required_argument_the_jurors_never_agreed_on_drops_the_call(
+    record: Record, contract: SourceContract
+) -> None:
+    """`SendStatement` declares both arguments `required`, so a three-way split on
+    `ma_khach` leaves nothing that would validate -- and a dropped call is the answer,
+    not a call carrying one juror's guess."""
+    catalog = utils.record_catalog(record, contract)
+    votes = [
+        [
+            {
+                "name": "SendStatement",
+                "arguments": {"ma_khach": "111111", "ky": "thang_nay"},
+            }
+        ],
+        [
+            {
+                "name": "SendStatement",
+                "arguments": {"ma_khach": "222222", "ky": "thang_nay"},
+            }
+        ],
+        [
+            {
+                "name": "SendStatement",
+                "arguments": {"ma_khach": "333333", "ky": "thang_nay"},
+            }
+        ],
+    ]
+
+    assert vote_consensus(votes, catalog) == []
+
+
+def test_a_consensus_call_is_inside_the_record_s_own_answer_space(
+    record: Record, contract: SourceContract
+) -> None:
+    """The tie between requirements 74 and 71: what consensus emits has to be a thing
+    the record could have answered, or the ranking signal is built on an invalid call."""
+    catalog = utils.record_catalog(record, contract)
+
+    consensus = vote_consensus([TARGET, TARGET, wrong_argument()], catalog)
+
+    assert accepts(space_for(record), consensus)

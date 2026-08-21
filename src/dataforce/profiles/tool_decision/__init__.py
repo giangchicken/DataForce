@@ -62,8 +62,8 @@ class ToolDecisionProfile:
     def answer_distance(self, a: Answer, b: Answer) -> float:
         return answer.answer_distance(a, b)
 
-    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
-        return answer.vote_consensus(votes)
+    def vote_consensus(self, votes: list[Answer], record: Record) -> Answer | None:
+        return answer.vote_consensus(votes, record_catalog(record, self.contract))
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
         return build_record.validity_checks(

@@ -47,8 +47,14 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def vote_consensus(self, votes: list[Answer]) -> Answer | None:
-        """One answer from several, deterministically.
+    def vote_consensus(self, votes: list[Answer], record: Record) -> Answer | None:
+        """One answer from several, deterministically, about one record.
+
+        The record is a parameter because a compound answer's consensus may have to
+        be checked against the answer space before it counts as one -- for tool
+        selection, a call missing an argument the tool declares `required` is
+        dropped rather than completed. A profile whose answer is a single value
+        ignores it, the same way it ignores the record in `scenario_hash`.
 
         A profile with no defensible consensus -- free-text generation is the
         honest example -- returns None for every input, including unanimous input.
