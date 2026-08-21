@@ -20,7 +20,7 @@
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **264 tests** (231 under `make check`, 33 marked `integration`), **35 source modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; the first stage arrives in Phase 3.
+Today: **332 tests** (298 under `make check`, 34 marked `integration`), **36 source modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; the first stage arrives in Phase 3.
 
 **Checking the built half, in four commands.** Each proves something a later phase depends on; none needs a network or a service except the third. A fifth, `uv run dvc repro`, is gone: with DVC no longer orchestrating there is no DAG to report on.
 
