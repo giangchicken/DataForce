@@ -30,12 +30,12 @@ from dataforce.profiles.tool_decision.utils import catalog_names
 __all__ = ["corpus_measurements", "moved_measurements"]
 
 
-def _percentile(ordered: list[int], quantile: float) -> int:
+def _percentile_value(ordered: list[int], quantile: float) -> int:
     """Nearest-rank, on the sorted values. Stated because a count needs a definition."""
     return ordered[int(quantile * (len(ordered) - 1))]
 
 
-def _records(
+def _raw_with_records(
     raw_items: Iterable[Mapping[str, Any]],
     modality: Modality,
     profile: ToolDecisionProfile,
@@ -66,7 +66,7 @@ def _records(
         )
 
 
-def _turn(record: Record, role: str) -> str:
+def _turn_text(record: Record, role: str) -> str:
     return next(
         (p.text for p in record.content if isinstance(p, TextPart) and p.role == role),
         "",
@@ -123,7 +123,7 @@ def corpus_measurements(
     relabelled = 0
     relabelled_changed = 0
 
-    for raw, record in _records(raw_items, modality, profile, digest):
+    for raw, record in _raw_with_records(raw_items, modality, profile, digest):
         records += 1
         label = record.label or []
         cardinality[len(label)] += 1
@@ -148,8 +148,8 @@ def corpus_measurements(
                 invalid[name] += 1
         for detector in detectors:
             signals[detector.__name__] += bool(detector(record.content))
-        system = _turn(record, instruction_role)
-        user = _turn(record, conversation_role)
+        system = _turn_text(record, instruction_role)
+        user = _turn_text(record, conversation_role)
         prompt_sizes.append(len(system) + len(user))
         total_characters += len(system) + len(user)
         user_digests[compute_hash(user, "sha256")] += 1
@@ -213,9 +213,9 @@ def corpus_measurements(
         "prompt_characters": {
             "total": total_characters,
             "mean": round(total_characters / records),
-            "p50": _percentile(prompt_sizes, 0.50),
-            "p90": _percentile(prompt_sizes, 0.90),
-            "p99": _percentile(prompt_sizes, 0.99),
+            "p50": _percentile_value(prompt_sizes, 0.50),
+            "p90": _percentile_value(prompt_sizes, 0.90),
+            "p99": _percentile_value(prompt_sizes, 0.99),
         },
         "invalid_counts": dict(invalid),
         # Empty until the modality declares detectors; then five counts appear here
@@ -224,10 +224,10 @@ def corpus_measurements(
     }
 
 
-def _leaves(value: Any, path: str = "") -> Iterator[tuple[str, Any]]:
+def _leaf_values(value: Any, path: str = "") -> Iterator[tuple[str, Any]]:
     if isinstance(value, Mapping):
         for key, nested in value.items():
-            yield from _leaves(nested, f"{path}.{key}" if path else str(key))
+            yield from _leaf_values(nested, f"{path}.{key}" if path else str(key))
     else:
         yield path, value
 
@@ -236,15 +236,15 @@ def moved_measurements(
     baseline: Mapping[str, Any], measured: Mapping[str, Any]
 ) -> list[str]:
     """Which counts moved, named one per line, in the baseline's own order."""
-    now = dict(_leaves(measured))
+    now = dict(_leaf_values(measured))
     moved = [
         f"{where}: was {was!r}, now {now.get(where, '<absent>')!r}"
-        for where, was in _leaves(baseline)
+        for where, was in _leaf_values(baseline)
         if where not in now or now[where] != was
     ]
     appeared = [
         f"{where}: absent before, now {value!r}"
         for where, value in now.items()
-        if where not in dict(_leaves(baseline))
+        if where not in dict(_leaf_values(baseline))
     ]
     return moved + appeared

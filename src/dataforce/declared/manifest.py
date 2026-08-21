@@ -25,7 +25,7 @@ __all__ = ["AXES", "manifest_path", "read_manifest"]
 AXES = ("modalities", "profiles")
 
 
-def _text(manifest: Mapping[str, object], key: str, where: Path) -> str:
+def _required_string(manifest: Mapping[str, object], key: str, where: Path) -> str:
     value = manifest.get(key)
     if not isinstance(value, str) or not value:
         raise ConfigError(
@@ -53,7 +53,7 @@ def read_manifest(path: Path) -> Manifest:
         raise ConfigError(
             f"{path}: a manifest is a mapping, got {type(declared).__name__}"
         )
-    name = _text(declared, "name", path)
+    name = _required_string(declared, "name", path)
     if name != path.stem:
         raise ConfigError(
             f"{path} declares the name {name!r}; a manifest's filename is "
@@ -61,6 +61,6 @@ def read_manifest(path: Path) -> Manifest:
         )
     return Manifest(
         name=name,
-        version=_text(declared, "version", path),
+        version=_required_string(declared, "version", path),
         declared={key: value for key, value in declared.items() if key != "name"},
     )

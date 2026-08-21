@@ -33,7 +33,7 @@ _TURN_SEPARATOR = "\n\n"
 
 
 @lru_cache(maxsize=1)
-def _model(name: str) -> StaticModel:
+def _embedder(name: str) -> StaticModel:
     """The embedder, loaded once per model name. Downloads first use, then caches."""
     return StaticModel.from_pretrained(name)
 
@@ -54,7 +54,7 @@ def _text_parts(parts: Sequence[Part]) -> list[TextPart]:
     return [part for part in parts if isinstance(part, TextPart)]
 
 
-def _arguments(function: Mapping[str, Any]) -> Any:
+def _call_arguments(function: Mapping[str, Any]) -> Any:
     """One call's arguments, whichever way the source spelled them.
 
     Every OpenAI-compatible provider sends `arguments` as a JSON *string* and some
@@ -75,7 +75,7 @@ def _arguments(function: Mapping[str, Any]) -> Any:
         ) from None
 
 
-def _call_text(calls: Sequence[Mapping[str, Any]]) -> str:
+def _canonical_call_text(calls: Sequence[Mapping[str, Any]]) -> str:
     """A turn's calls as one canonical string: sorted keys, no insignificant space.
 
     Requirement 70. A call keeps its name and its arguments and nothing else: the
@@ -87,7 +87,7 @@ def _call_text(calls: Sequence[Mapping[str, Any]]) -> str:
         [
             {
                 "name": call["function"]["name"],
-                "arguments": _arguments(call["function"]),
+                "arguments": _call_arguments(call["function"]),
             }
             for call in calls
         ],
@@ -97,7 +97,7 @@ def _call_text(calls: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
-def _one_part(turn: Mapping[str, Any]) -> TextPart:
+def _turn_as_part(turn: Mapping[str, Any]) -> TextPart:
     """One turn as one part, whether it carries a string or a call.
 
     A string is copied out byte-for-byte and never re-spelled -- only a turn
@@ -111,7 +111,7 @@ def _one_part(turn: Mapping[str, Any]) -> TextPart:
         return TextPart(role=turn["role"], text=content)
     calls = turn.get("tool_calls")
     if calls:
-        return TextPart(role=turn["role"], text=_call_text(calls))
+        return TextPart(role=turn["role"], text=_canonical_call_text(calls))
     raise ConfigError(
         f"a {turn.get('role')!r} turn carries neither string content nor "
         "tool_calls; one turn is one part, and there is nothing to build it from"
@@ -148,7 +148,7 @@ class TextModality:
         started reading arguments would have acquired an opinion about what an
         answer is.
         """
-        return [_one_part(turn) for turn in raw["messages"]]
+        return [_turn_as_part(turn) for turn in raw["messages"]]
 
     def embedding(self, parts: list[Part]) -> Sequence[float]:
         """One vector over the conversation, for near-duplicate detection only."""
@@ -158,7 +158,7 @@ class TextModality:
             if part.role not in self.not_embedded
         )
         vector: list[float] = (
-            _model(self.embedding_model).encode([document])[0].tolist()
+            _embedder(self.embedding_model).encode([document])[0].tolist()
         )
         return vector
 

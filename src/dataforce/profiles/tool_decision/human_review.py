@@ -33,19 +33,19 @@ from dataforce.core.errors import ConfigError
 from dataforce.core.record import Record, UIControl
 from dataforce.profiles.tool_decision.schema import TOOLS_KEY, SourceContract, Tool
 from dataforce.profiles.tool_decision.utils import (
+    catalog_from_openai,
     catalog_names,
-    openai_to_tools,
+    catalog_text,
     record_catalog,
-    tools_to_catalog,
 )
 
 __all__ = [
     "CONTROLS",
     "JSON_TEXT",
     "PER_NAME_ARGUMENTS",
+    "annotator_catalog_text",
     "answer_config",
     "question_text",
-    "readable_catalog",
 ]
 
 # The two ways an annotation tool can be asked to capture a set of calls.
@@ -67,7 +67,7 @@ JSON_TEXT = "json_text"
 CONTROLS = (PER_NAME_ARGUMENTS, JSON_TEXT)
 
 
-def _attribute(value: str) -> str:
+def _xml_attribute_text(value: str) -> str:
     """One tool name, safe in an XML attribute and readable back unchanged.
 
     Tabs and newlines become character references because an XML parser normalises
@@ -89,7 +89,7 @@ def question_text(template: str, focus: str) -> str:
     return slot_filling(template, {"focus": focus})
 
 
-def readable_catalog(record: Record) -> str:
+def annotator_catalog_text(record: Record) -> str:
     """The record's catalog as a person reads it, or empty if its turns already hold it.
 
     An annotator answering a question about `{hold_missing}` has to be able to read
@@ -100,10 +100,10 @@ def readable_catalog(record: Record) -> str:
     declared = record.meta.get(TOOLS_KEY)
     if not declared:
         return ""
-    return tools_to_catalog(openai_to_tools(declared).tools)
+    return catalog_text(catalog_from_openai(declared).tools)
 
 
-def _argument_fields(tool: Tool) -> str:
+def _argument_controls_text(tool: Tool) -> str:
     """One tool's arguments as controls, shown only when that tool is picked.
 
     `visibleWhen` is what makes this a form rather than a wall: an annotator sees the
@@ -121,13 +121,14 @@ def _argument_fields(tool: Tool) -> str:
         label = f"{name}{'*' if name in required else ''}"
         common = (
             f'perRegion="false" visibleWhen="choice-selected" '
-            f'whenTagName="tools" whenChoiceValue="{_attribute(tool.name)}"'
+            f'whenTagName="tools" whenChoiceValue="{_xml_attribute_text(tool.name)}"'
         )
-        field = f"{_attribute(tool.name)}.{_attribute(name)}"
+        field = f"{_xml_attribute_text(tool.name)}.{_xml_attribute_text(name)}"
         values = spec.get("enum")
         if values:
             options = "".join(
-                f'<Choice value="{_attribute(str(value))}"/>' for value in values
+                f'<Choice value="{_xml_attribute_text(str(value))}"/>'
+                for value in values
             )
             lines.append(
                 f'  <Choices name="{field}" toName="content" choice="single" '
@@ -136,7 +137,7 @@ def _argument_fields(tool: Tool) -> str:
         else:
             lines.append(
                 f'  <TextArea name="{field}" toName="content" rows="1" '
-                f'editable="true" maxSubmissions="1" placeholder="{_attribute(label)}" '
+                f'editable="true" maxSubmissions="1" placeholder="{_xml_attribute_text(label)}" '
                 f"{common}/>"
             )
     return "\n".join(lines)
@@ -155,7 +156,7 @@ def answer_config(
         raise ConfigError(
             f"{control!r} is not an answer control; there are two: {list(CONTROLS)}"
         )
-    readable = readable_catalog(record)
+    readable = annotator_catalog_text(record)
     shown = (
         f'<HyperText name="catalog" clickableLinks="false">'
         f"<pre>{html.escape(readable)}</pre></HyperText>\n"
@@ -174,12 +175,12 @@ def answer_config(
 
     catalog = record_catalog(record, contract)
     choices = "\n".join(
-        f'  <Choice value="{_attribute(name)}"/>'
+        f'  <Choice value="{_xml_attribute_text(name)}"/>'
         for name in catalog_names(record, contract)
     )
     arguments = "\n".join(
         fields
-        for fields in (_argument_fields(tool) for tool in catalog.tools)
+        for fields in (_argument_controls_text(tool) for tool in catalog.tools)
         if fields
     )
     return UIControl(

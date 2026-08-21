@@ -28,7 +28,7 @@ PARAMS = Path("params.yaml")
 BASELINE = Path("metrics/corpus_profile.json")
 
 
-def _parser() -> argparse.ArgumentParser:
+def _argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dataforce",
         description="Turn a raw corpus into a versioned, documented dataset.",
@@ -67,7 +67,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _profile(args: argparse.Namespace) -> int:
+def _profile_command(args: argparse.Namespace) -> int:
     engine = api.open_engine(profile=args.profile, config_root=CONFIG, params=PARAMS)
     measured, moved = api.profile_corpus(
         engine, accept=args.accept, baseline=BASELINE, params=PARAMS
@@ -89,14 +89,14 @@ def _profile(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
+    args = _argument_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     try:
         if args.command == "profile":
-            return _profile(args)
+            return _profile_command(args)
     except DataForceError as failed:
         print(failed, file=sys.stderr)
         return 2

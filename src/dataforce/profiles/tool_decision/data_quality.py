@@ -91,7 +91,7 @@ def build_record(
     # this profile stores about its answer space: the names and each name's
     # `parameters` are both already in it, so requirement 71's derived space needs no
     # field of its own. Under the legacy shape there is no such key and the catalog is
-    # in the content instead, which `read_catalog` is the one place that knows.
+    # in the content instead, which `catalog_from_source` is the one place that knows.
     unowned = {
         key: value
         for key, value in raw.items()
@@ -184,7 +184,7 @@ def validity_checks(
         `TypeError` that stops the run at record one.
 
         Only the names are checked here. Whether a call's *arguments* are in the space
-        is a JSON Schema question, and `answer_schema_for` is what answers it at the
+        is a JSON Schema question, and `answer_space` is what answers it at the
         two moments requirement 71 names -- neither of which is a counting check.
         """
         offered = set(catalog_names(record, contract))

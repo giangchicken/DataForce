@@ -246,10 +246,10 @@ def accepts(space: dict[str, Any], answer: Any) -> bool:
 def space_for(record: Record) -> dict[str, Any]:
     """This record's answer space, read under the contract it was built with.
 
-    Not `TOOL_DECISION.answer_schema_for` -- see the test below for why that would
+    Not `TOOL_DECISION.answer_space` -- see the test below for why that would
     quietly return the empty-catalog schema here.
     """
-    return schema.answer_schema_for(utils.record_catalog(record, CANONICAL))
+    return schema.answer_space(utils.record_catalog(record, CANONICAL))
 
 
 def test_the_configured_profile_reads_one_shape_and_it_is_not_this_one(
@@ -266,7 +266,7 @@ def test_the_configured_profile_reads_one_shape_and_it_is_not_this_one(
     that fact is asserted rather than rediscovered.
     """
     assert TOOL_DECISION.contract.shape != OPENAI_TOOLS
-    assert TOOL_DECISION.answer_schema_for(record) == {"type": "array", "maxItems": 0}
+    assert TOOL_DECISION.answer_space(record) == {"type": "array", "maxItems": 0}
 
     assert accepts(space_for(record), TARGET)
 

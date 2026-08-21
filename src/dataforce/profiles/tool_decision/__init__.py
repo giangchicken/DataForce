@@ -91,15 +91,15 @@ class ToolDecisionProfile:
     def question_text(self, record: Record, focus: str) -> str:
         return human_review.question_text(self.question_template, focus)
 
-    def readable_catalog(self, record: Record) -> str:
-        return human_review.readable_catalog(record)
+    def annotator_catalog_text(self, record: Record) -> str:
+        return human_review.annotator_catalog_text(record)
 
     def answer_config(self, record: Record) -> UIControl:
         return human_review.answer_config(
             record, self.contract, control=self.answer_control
         )
 
-    def answer_schema_for(self, record: Record) -> dict[str, Any]:
+    def answer_space(self, record: Record) -> dict[str, Any]:
         """This record's answer space, built now and stored nowhere.
 
         Requirement 71. Not a member of the `Profile` protocol yet: the two callers it
@@ -107,7 +107,7 @@ class ToolDecisionProfile:
         a human correction -- are Phases 4 and 5, and the protocol gains a member when
         something generic needs to call one, not before.
         """
-        return schema.answer_schema_for(record_catalog(record, self.contract))
+        return schema.answer_space(record_catalog(record, self.contract))
 
     def scenario_hash(self, record: Record) -> str:
         return release.scenario_hash(record, self.contract)

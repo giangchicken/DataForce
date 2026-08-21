@@ -103,11 +103,11 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
 def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     """The conversion is lossless, which is what makes the legacy shape a way in."""
     canonical = canonical_records()[0]
-    tools = utils.openai_to_tools(canonical["tools"]).tools
+    tools = utils.catalog_from_openai(canonical["tools"]).tools
     as_legacy = {
         **canonical,
         "messages": [
-            {"role": "system", "content": utils.build_system_prompt(tools)},
+            {"role": "system", "content": utils.system_prompt_text(tools)},
             *canonical["messages"][1:],
         ],
     }
@@ -186,13 +186,13 @@ def test_a_record_carries_no_answer_space_field_at_all() -> None:
 
 def test_the_answer_space_is_derived_from_this_record_s_own_catalog() -> None:
     record = build_legacy(legacy_records()[0])
-    expected = utils.catalog_to_tools(
+    expected = utils.catalog_from_text(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     )
 
     assert utils.catalog_names(record, LEGACY) == list(expected.names)
 
-    space = TOOL_DECISION.answer_schema_for(record)
+    space = TOOL_DECISION.answer_space(record)
     named = [
         branch["properties"]["name"]["const"] for branch in space["items"]["oneOf"]
     ]
@@ -200,7 +200,7 @@ def test_the_answer_space_is_derived_from_this_record_s_own_catalog() -> None:
 
 
 def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
-    names = utils.catalog_to_tools(
+    names = utils.catalog_from_text(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
@@ -208,10 +208,10 @@ def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
 
 
 def test_a_different_catalog_gets_a_different_fingerprint() -> None:
-    eight = utils.catalog_to_tools(
+    eight = utils.catalog_from_text(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
-    twenty = utils.catalog_to_tools(
+    twenty = utils.catalog_from_text(
         (CATALOGS / "twenty_tools.txt").read_text(encoding="utf-8")
     ).names
 
@@ -220,7 +220,7 @@ def test_a_different_catalog_gets_a_different_fingerprint() -> None:
 
 def test_the_fingerprint_is_order_sensitive() -> None:
     """Two orderings of one tool set are two prompts, so they are two scenarios."""
-    names = utils.catalog_to_tools(
+    names = utils.catalog_from_text(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
@@ -265,12 +265,12 @@ def test_the_canonical_shape_keeps_its_tools_so_they_can_be_read() -> None:
     )
 
     assert record.meta["tools"] == raw["tools"]
-    assert TOOL_DECISION.readable_catalog(record).startswith("[Lookup00_0a]")
+    assert TOOL_DECISION.annotator_catalog_text(record).startswith("[Lookup00_0a]")
 
 
 def test_a_legacy_record_has_no_catalog_to_re_render() -> None:
     """Its turns already carry one, so rendering a second would show it twice."""
-    assert TOOL_DECISION.readable_catalog(build_legacy(legacy_records()[0])) == ""
+    assert TOOL_DECISION.annotator_catalog_text(build_legacy(legacy_records()[0])) == ""
 
 
 # --- provenance ---------------------------------------------------------------

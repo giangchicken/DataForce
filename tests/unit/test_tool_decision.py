@@ -142,7 +142,7 @@ def test_a_call_carrying_arguments_is_an_answer_not_a_quarantine(
 
     This asserted the opposite before C2, when the answer was an array of names and a
     call object was a different answer type. Only the *name* is checked here -- whether
-    the arguments are in the space is a JSON Schema question that `answer_schema_for`
+    the arguments are in the space is a JSON Schema question that `answer_space`
     answers, not a counting check.
     """
     record = record_for(

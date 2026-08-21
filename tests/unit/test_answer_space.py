@@ -1,7 +1,7 @@
 """The answer space: derived from a record's own catalog, and stored nowhere.
 
 Requirement 71. `ANSWER_SCHEMA` is the answer *type*, which choosing this profile
-already settles; `answer_schema_for` is one record's *space*, which its catalog
+already settles; `answer_space` is one record's *space*, which its catalog
 settles. The tests below are about the difference, because the first draft of the
 requirement said the record should carry a copy and the measurement reversed it.
 
@@ -58,7 +58,7 @@ def accepts(space: dict[str, Any], answer: Any) -> bool:
 def test_a_call_the_catalog_offers_with_the_arguments_it_declares_is_in_the_space() -> (
     None
 ):
-    space = schema.answer_schema_for(TWO_TOOLS)
+    space = schema.answer_space(TWO_TOOLS)
 
     assert accepts(space, [{"name": "LookupBalance", "arguments": {"ma_khach": "480"}}])
     assert accepts(space, [{"name": "OpenTicket", "arguments": {"ly_do": "chưa nhận"}}])
@@ -66,11 +66,11 @@ def test_a_call_the_catalog_offers_with_the_arguments_it_declares_is_in_the_spac
 
 def test_the_empty_answer_is_in_every_space() -> None:
     """35.4% of the reference source, and a first-class answer rather than a missing one."""
-    assert accepts(schema.answer_schema_for(TWO_TOOLS), [])
+    assert accepts(schema.answer_space(TWO_TOOLS), [])
 
 
 def test_a_name_the_catalog_does_not_offer_is_outside_the_space() -> None:
-    space = schema.answer_schema_for(TWO_TOOLS)
+    space = schema.answer_space(TWO_TOOLS)
 
     assert not accepts(space, [{"name": "SendMail", "arguments": {}}])
 
@@ -82,7 +82,7 @@ def test_a_name_and_its_arguments_are_constrained_together_not_separately() -> N
     invalid call, which is the whole reason each branch of the `oneOf` closes over one
     tool's own `parameters`.
     """
-    space = schema.answer_schema_for(TWO_TOOLS)
+    space = schema.answer_space(TWO_TOOLS)
 
     assert not accepts(
         space, [{"name": "OpenTicket", "arguments": {"ma_khach": "480"}}]
@@ -90,7 +90,7 @@ def test_a_name_and_its_arguments_are_constrained_together_not_separately() -> N
 
 
 def test_arguments_that_violate_the_tool_s_own_schema_are_outside_the_space() -> None:
-    space = schema.answer_schema_for(TWO_TOOLS)
+    space = schema.answer_space(TWO_TOOLS)
 
     assert not accepts(space, [{"name": "LookupBalance", "arguments": {}}])
     assert not accepts(
@@ -100,7 +100,7 @@ def test_arguments_that_violate_the_tool_s_own_schema_are_outside_the_space() ->
 
 def test_an_empty_catalog_permits_exactly_one_answer() -> None:
     """Spelled `maxItems` because an empty `oneOf` is not a schema."""
-    space = schema.answer_schema_for(schema.Catalog(tools=()))
+    space = schema.answer_space(schema.Catalog(tools=()))
 
     assert accepts(space, [])
     assert not accepts(space, [{"name": "LookupBalance", "arguments": {}}])
@@ -108,7 +108,7 @@ def test_an_empty_catalog_permits_exactly_one_answer() -> None:
 
 def test_a_tool_declaring_no_parameters_is_called_with_none() -> None:
     quiet = schema.Catalog(tools=(schema.Tool(name="Escalate", description="Chuyển."),))
-    space = schema.answer_schema_for(quiet)
+    space = schema.answer_space(quiet)
 
     assert accepts(space, [{"name": "Escalate"}])
     assert accepts(space, [{"name": "Escalate", "arguments": {}}])
@@ -131,7 +131,7 @@ def test_the_type_constrains_no_name_and_the_space_does() -> None:
     outside = [{"name": "NotInAnyCatalog", "arguments": {}}]
 
     assert accepts(TOOL_DECISION.answer_schema, outside)
-    assert not accepts(schema.answer_schema_for(TWO_TOOLS), outside)
+    assert not accepts(schema.answer_space(TWO_TOOLS), outside)
 
 
 # --- the size claim -----------------------------------------------------------
@@ -180,6 +180,6 @@ def test_no_record_carries_an_answer_space_and_the_compound_one_is_bigger(
     would_have_stored = json.dumps(
         {"type": "array", "items": {"type": "string", "enum": names}}
     )
-    derived = json.dumps(TOOL_DECISION.answer_schema_for(eight_tool_record))
+    derived = json.dumps(TOOL_DECISION.answer_space(eight_tool_record))
 
     assert len(derived) > len(would_have_stored)

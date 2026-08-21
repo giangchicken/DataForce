@@ -54,7 +54,7 @@ def parsed(source: Path) -> list[tuple[str, schema.Catalog, list[str]]]:
         rows.append(
             (
                 turns[instruction],
-                utils.catalog_to_tools(turns[instruction]),
+                utils.catalog_from_text(turns[instruction]),
                 TOOL_DECISION.contract.read_label(raw) or [],
             )
         )
@@ -117,7 +117,7 @@ def test_every_catalog_re_renders_byte_identically(
     header = f"{utils.CATALOG_HEADER}\n"
     for system, catalog, _ in parsed:
         original = system.split(header, 1)[1]
-        assert utils.tools_to_catalog(catalog.tools) == original.rstrip("\n"), (
+        assert utils.catalog_text(catalog.tools) == original.rstrip("\n"), (
             catalog.names[:2]
         )
 
@@ -149,7 +149,7 @@ def test_the_reader_reports_every_gap_it_could_not_close(source: Path) -> None:
     gaps: list[utils.Gap] = []
     for raw in iter_json_array_file(source):
         turns = {turn["role"]: turn["content"] for turn in raw["messages"]}
-        utils.catalog_to_tools(turns[instruction], gaps=gaps)
+        utils.catalog_from_text(turns[instruction], gaps=gaps)
 
     assert Counter(gap.kind for gap in gaps) == {
         "nothing_required": 3901,
@@ -236,8 +236,8 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
     assert exported["meta"]["label"] == raw["meta"]["label"]
     assert record.rid
     assert utils.catalog_names(record, TOOL_DECISION.contract) == list(
-        utils.catalog_to_tools(raw["messages"][0]["content"]).names
+        utils.catalog_from_text(raw["messages"][0]["content"]).names
     )
     assert TOOL_DECISION.scenario_hash(record) == utils.catalog_hash(
-        utils.catalog_to_tools(raw["messages"][0]["content"]).names
+        utils.catalog_from_text(raw["messages"][0]["content"]).names
     )

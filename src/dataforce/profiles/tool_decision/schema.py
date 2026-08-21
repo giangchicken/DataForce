@@ -11,7 +11,7 @@ all usage guidance, and a JSON Schema of parameters. That is the source of truth
 catalog text a person reads is a rendering of it. A **catalog** is the tools one record
 offers, in the order it offers them. An **answer** is an array of **calls**, and a call
 is a name *and* the arguments it is called with: `ANSWER_SCHEMA` is the answer *type*,
-which choosing this profile already settles, and `answer_schema_for` is one record's
+which choosing this profile already settles, and `answer_space` is one record's
 answer *space*, built from its own catalog -- requirement 5's constraint, which the jury
 hands straight to `complete_structured`, and which is why no stage validates an answer
 against a catalog.
@@ -46,7 +46,7 @@ __all__ = [
     "Catalog",
     "SourceContract",
     "Tool",
-    "answer_schema_for",
+    "answer_space",
 ]
 
 
@@ -157,7 +157,7 @@ ANSWER_SCHEMA: dict[str, Any] = {
 }
 
 
-def answer_schema_for(catalog: Catalog) -> dict[str, Any]:
+def answer_space(catalog: Catalog) -> dict[str, Any]:
     """One record's answer space: the calls its own catalog permits, and no others.
 
     `oneOf` per tool with the name as a single-value `const`, so a name and its

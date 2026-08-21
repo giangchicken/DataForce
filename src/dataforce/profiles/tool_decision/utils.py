@@ -14,7 +14,7 @@ then re-rendered, byte-identical.
 
 Ported from the corpus generator's `openai_to_catalog.py` and `catalog_to_openai.py`,
 which own the same contract on the producing side, and carrying their names --
-`tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai` -- so
+`catalog_text`, `catalog_from_text`, `system_prompt_text`, `openai_function` -- so
 the two codebases can be diffed one conversion at a time.
 
 The description is never split. `Mục đích:` / `Khi nào gọi:` / `Khi nào KHÔNG gọi:` are
@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from agent_toolkit.string_utils import compute_hash
 
@@ -50,17 +50,17 @@ __all__ = [
     "INSTRUCTION",
     "Gap",
     "answer_distance",
-    "build_system_prompt",
     "calls_by_name",
+    "catalog_from_openai",
+    "catalog_from_source",
+    "catalog_from_text",
     "catalog_hash",
     "catalog_names",
-    "catalog_to_tools",
-    "openai_to_tools",
-    "read_catalog",
+    "catalog_text",
+    "openai_function",
     "read_source_contract",
     "record_catalog",
-    "to_strict_openai",
-    "tools_to_catalog",
+    "system_prompt_text",
 ]
 
 # The instruction the source puts above the catalog. Not part of the catalog: under the
@@ -119,7 +119,7 @@ _ENUM_IN_PROSE = (
 )
 
 
-def to_strict_openai(tool: Tool) -> dict[str, Any]:
+def openai_function(tool: Tool) -> dict[str, Any]:
     """The strict OpenAI shape: standard keys only."""
     function: dict[str, Any] = {"name": tool.name}
     if tool.description:
@@ -129,10 +129,10 @@ def to_strict_openai(tool: Tool) -> dict[str, Any]:
     return {"type": "function", "function": function}
 
 
-def openai_to_tools(entries: Iterable[Mapping[str, Any]]) -> Catalog:
-    """The catalog a source states as data. The inverse of `to_strict_openai`.
+def catalog_from_openai(entries: Iterable[Mapping[str, Any]]) -> Catalog:
+    """The catalog a source states as data. The inverse of `openai_function`.
 
-    One of the two ways a source carries its catalog; `catalog_to_tools` is the other,
+    One of the two ways a source carries its catalog; `catalog_from_text` is the other,
     and reading a rendered one is the expensive path. Named to match that pair, so the
     two directions of each conversion sit under names that differ only in order.
     """
@@ -159,7 +159,7 @@ def _default_text(value: Any) -> str:
     return str(value)
 
 
-def _effective_required(parameters: Mapping[str, Any]) -> set[str]:
+def _required_parameter_names(parameters: Mapping[str, Any]) -> set[str]:
     """Declared required, minus anything carrying a default -- the default wins.
 
     A parameter that is both required and defaulted is a contradiction in the schema,
@@ -174,7 +174,7 @@ def _effective_required(parameters: Mapping[str, Any]) -> set[str]:
     }
 
 
-def _is_rich(spec: Mapping[str, Any]) -> bool:
+def _needs_nested_rendering(spec: Mapping[str, Any]) -> bool:
     """Whether an object's subfields carry more than the inline form can hold."""
     for sub in (spec.get("properties") or {}).values():
         sub = sub or {}
@@ -194,7 +194,7 @@ def _parameter_lines(
     declared = spec.get("type", "string")
     description = (spec.get("description") or "").strip()
     subfields = spec.get("properties") or {}
-    rich = declared == "object" and bool(subfields) and _is_rich(spec)
+    rich = declared == "object" and bool(subfields) and _needs_nested_rendering(spec)
 
     if declared == "object" and subfields and not rich:
         sub_required = set(spec.get("required") or [])
@@ -218,19 +218,19 @@ def _parameter_lines(
 
     lines = [line]
     if rich:
-        deeper = _effective_required(spec)
+        deeper = _required_parameter_names(spec)
         for key, sub in subfields.items():
             lines.extend(_parameter_lines(key, sub, deeper, depth + 1))
     return lines
 
 
-def tools_to_catalog(tools: Iterable[Tool]) -> str:
+def catalog_text(tools: Iterable[Tool]) -> str:
     """The catalog as a person reads it. One block per tool, blank line between."""
-    return "\n\n".join(_render_tool(tool) for tool in tools)
+    return "\n\n".join(_tool_text(tool) for tool in tools)
 
 
-def _render_tool(tool: Tool) -> str:
-    required = _effective_required(tool.parameters)
+def _tool_text(tool: Tool) -> str:
+    required = _required_parameter_names(tool.parameters)
     block = [f"[{tool.name}]"]
     if tool.description:
         block.append(tool.description)
@@ -249,15 +249,15 @@ def _render_tool(tool: Tool) -> str:
     return "\n".join(block)
 
 
-def build_system_prompt(tools: Iterable[Tool]) -> str:
+def system_prompt_text(tools: Iterable[Tool]) -> str:
     """The legacy system message: the instruction, then the catalog under its header."""
-    return f"{INSTRUCTION}\n\n{CATALOG_HEADER}\n{tools_to_catalog(tools)}"
+    return f"{INSTRUCTION}\n\n{CATALOG_HEADER}\n{catalog_text(tools)}"
 
 
 # --- parsing: the text a person reads -> tools --------------------------------
 
 
-def _coerce(text: str, declared: str) -> Any:
+def _typed_value(text: str, declared: str) -> Any:
     text = text.strip()
     if declared == "boolean":
         return text.lower() in ("có", "true")
@@ -271,8 +271,21 @@ def _coerce(text: str, declared: str) -> Any:
     return text
 
 
-def _spec_from(declared: str, rest: str) -> tuple[dict[str, Any], bool, str | None]:
-    """A parameter spec from the text after `name (type):`."""
+class _ParsedParameter(NamedTuple):
+    """One parameter, read out of the text after `name (type):`.
+
+    Three values rather than one because the caller needs to know not only the schema
+    but where the default came from: a default the text declares with `= x` belongs in
+    the schema, and a default only stated in prose is a `Gap` the parser reports rather
+    than a value it invents.
+    """
+
+    spec: dict[str, Any]
+    had_declared_default: bool
+    prose_default: str | None
+
+
+def _parsed_parameter(declared: str, rest: str) -> _ParsedParameter:
     spec: dict[str, Any] = {"type": declared}
 
     found_enum = _ENUM.search(rest)
@@ -310,10 +323,10 @@ def _spec_from(declared: str, rest: str) -> tuple[dict[str, Any], bool, str | No
         else:
             spec["enum"] = values
     if found_default:
-        spec["default"] = _coerce(found_default.group(1), declared)
+        spec["default"] = _typed_value(found_default.group(1), declared)
     elif prose_default is not None:
-        spec["default"] = _coerce(prose_default, declared)
-    return spec, bool(found_default), prose_default
+        spec["default"] = _typed_value(prose_default, declared)
+    return _ParsedParameter(spec, bool(found_default), prose_default)
 
 
 # `Gap` is here and not in `schema.py`, against the rule that a shape belongs in a
@@ -336,7 +349,7 @@ class Gap:
     evidence: str
 
 
-def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
+def _tool_from_text(name: str, body: str, gaps: list[Gap] | None) -> Tool:
     lines = body.split("\n")
     require_at = next(
         (i for i, line in enumerate(lines) if line.lower().startswith(_REQUIRE)), None
@@ -373,7 +386,7 @@ def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
             indent, parameter, star, declared, rest = matched.groups()
             if top_indent is None:
                 top_indent = len(indent)
-            spec, had_default, prose_default = _spec_from(declared, rest)
+            spec, had_default, prose_default = _parsed_parameter(declared, rest)
 
             if len(indent) > top_indent and current_object is not None:
                 current_object.setdefault("properties", {})[parameter] = spec
@@ -388,17 +401,17 @@ def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
             current_object = spec if spec.get("type") == "object" else None
 
             if prose_default is not None and not had_default:
-                _note(gaps, name, parameter, "prose_default", rest)
+                _append_gap(gaps, name, parameter, "prose_default", rest)
             if (
                 "enum" not in spec
                 and declared != "array"
-                and _says(rest, _ENUM_IN_PROSE)
+                and _mentions_any(rest, _ENUM_IN_PROSE)
             ):
-                _note(gaps, name, parameter, "enum_stated_in_prose", rest)
+                _append_gap(gaps, name, parameter, "enum_stated_in_prose", rest)
 
         for parameter, spec in properties.items():
             if spec.get("type") == "object" and not spec.get("properties"):
-                _note(
+                _append_gap(
                     gaps,
                     name,
                     parameter,
@@ -412,10 +425,10 @@ def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
         if "default" not in properties.get(parameter, {})
     ]
     if properties and not required:
-        _note(gaps, name, None, "nothing_required", "")
+        _append_gap(gaps, name, None, "nothing_required", "")
     for parameter, rest in rest_of.items():
-        if parameter not in required and _says(rest, _REQUIRED_IN_PROSE):
-            _note(gaps, name, parameter, "required_stated_in_prose", rest)
+        if parameter not in required and _mentions_any(rest, _REQUIRED_IN_PROSE):
+            _append_gap(gaps, name, parameter, "required_stated_in_prose", rest)
 
     return Tool(
         name=name,
@@ -424,12 +437,12 @@ def _parse_tool(name: str, body: str, gaps: list[Gap] | None) -> Tool:
     )
 
 
-def _says(text: str, signals: Sequence[str]) -> bool:
+def _mentions_any(text: str, signals: Sequence[str]) -> bool:
     lowered = text.lower()
     return any(signal in lowered for signal in signals)
 
 
-def _note(
+def _append_gap(
     gaps: list[Gap] | None, tool: str, parameter: str | None, kind: str, evidence: str
 ) -> None:
     if gaps is not None:
@@ -438,7 +451,7 @@ def _note(
         )
 
 
-def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
+def catalog_from_text(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
     """The catalog a rendered text offers, with or without the instruction above it.
 
     Text with no catalog header, and text whose header is followed by no entry, both
@@ -452,11 +465,13 @@ def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
     bounds = [*(match.end() for match in found), len(body)]
     return Catalog(
         tools=tuple(
-            _parse_tool(
+            _tool_from_text(
                 match.group(1).strip(), body[bounds[i] : found[i + 1].start()], gaps
             )
             if i + 1 < len(found)
-            else _parse_tool(match.group(1).strip(), body[bounds[i] : len(body)], gaps)
+            else _tool_from_text(
+                match.group(1).strip(), body[bounds[i] : len(body)], gaps
+            )
             for i, match in enumerate(found)
         )
     )
@@ -467,7 +482,7 @@ def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
 _HASH_LENGTH = 16
 
 
-def read_catalog(
+def catalog_from_source(
     tools: Iterable[Mapping[str, Any]] | None,
     parts: Sequence[Part],
     contract: SourceContract,
@@ -476,7 +491,7 @@ def read_catalog(
 
     Under the canonical shape the tools are data and nothing is parsed. Under the
     legacy shape they were rendered into the instruction turn, so they are read back
-    out of it -- and this is the **only** caller of `catalog_to_tools` in the system,
+    out of it -- and this is the **only** caller of `catalog_from_text` in the system,
     asserted by test, which is what keeps a 93 µs parse from quietly becoming one per
     stage.
 
@@ -484,7 +499,7 @@ def read_catalog(
     and every later caller `record.meta["tools"]`, from one branch in one place.
     """
     if contract.shape != LEGACY_SYSTEM_PROMPT:
-        return openai_to_tools(tools or ())
+        return catalog_from_openai(tools or ())
     instruction = contract.role_name("instruction")
     rendered = next(
         (
@@ -494,16 +509,16 @@ def read_catalog(
         ),
         "",
     )
-    return catalog_to_tools(rendered)
+    return catalog_from_text(rendered)
 
 
 def record_catalog(record: Record, contract: SourceContract) -> Catalog:
     """The catalog a built record offers, from wherever its shape keeps it.
 
-    `read_catalog` takes the pieces because stage 0 has a raw item and no record yet;
+    `catalog_from_source` takes the pieces because stage 0 has a raw item and no record yet;
     every caller after stage 0 has one, and this is that call.
     """
-    return read_catalog(record.meta.get(TOOLS_KEY), record.content, contract)
+    return catalog_from_source(record.meta.get(TOOLS_KEY), record.content, contract)
 
 
 def catalog_names(record: Record, contract: SourceContract) -> list[str]:

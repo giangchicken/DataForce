@@ -25,7 +25,7 @@ def _passed_every_check(value: Any) -> bool:
     return isinstance(value, list) and not value
 
 
-def _usable() -> pa.DataFrameSchema:
+def _usable_schema() -> pa.DataFrameSchema:
     columns = record_columns()
     columns["failed_checks"] = pa.Column(
         object, pa.Check(_passed_every_check, element_wise=True)
@@ -33,7 +33,7 @@ def _usable() -> pa.DataFrameSchema:
     return pa.DataFrameSchema(columns, name="usable")
 
 
-USABLE = _usable()
+USABLE = _usable_schema()
 
 
 # `pii_findings.jsonl` -- one row per candidate span, always written. This is the artifact
@@ -75,7 +75,7 @@ PII_FINDINGS = pa.DataFrameSchema(
 # once in `clusters.jsonl`, and on the largest cluster measured -- 112 records -- a
 # member list on every row is 248,640 bytes against 2,240, and 112 copies of one fact.
 # Size is here because it is the question a reader of one row has: of how many.
-def _deduped() -> pa.DataFrameSchema:
+def _deduped_schema() -> pa.DataFrameSchema:
     columns = record_columns()
     columns["conversation_cluster"] = pa.Column(str)
     columns["conversation_cluster_size"] = pa.Column(int, pa.Check.ge(1))
@@ -83,4 +83,4 @@ def _deduped() -> pa.DataFrameSchema:
     return pa.DataFrameSchema(columns, name="deduped")
 
 
-DEDUPED = _deduped()
+DEDUPED = _deduped_schema()
