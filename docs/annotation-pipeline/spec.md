@@ -229,11 +229,11 @@ The layer diagram, the import rule and the order the split lands in are in [`../
 An answer may be more than one value. Tool selection is the case that forces this: the answer is a set of calls, and a call is a name *and* the arguments it is called with. These six requirements are what the rest of the document assumes wherever it says "answer", and they are numbered from 70 so that every citation of requirements 1–69 in the plan stays true.
 
 70. **A turn that is not a string becomes a part canonically.** A source may carry a tool call as structure — an OpenAI `tool_calls` array, `content: null` beside it. `content_parts` renders it into one text part holding **canonical JSON**: object keys sorted, no insignificant whitespace, arguments parsed from any string form the source used and re-emitted in that one form. Two sources spelling the same call differently therefore produce the same part, the same digest and the same `rid`. This is the modality's job because it is the source's layout, and it is a *rendering* rather than an interpretation: nothing here decides what a call means.
-71. **The answer space is held by reference, never inlined.** For tool selection the names are the record's catalog and each name's `arguments` must validate against *that tool's* `parameters` — but the record stores the catalog **once**, and `answer_space` carries the cheap part: the names. Every argument schema is already in the catalog the record carries, so copying it into a second field would store it twice.
+71. **A record stores no answer space. The profile derives one.** Choosing the profile settles the answer *type* — an array of calls — and the record's own content settles the *space*: which names, and each name's `parameters`. Both are already on the record, so a stored answer space is a second copy of one of them, and the record carries no field for it.
 
-    Where a single JSON Schema is genuinely needed — the jury's `complete_structured` call, pull-time validation of a human correction, invariant 5's check on an artifact — the profile **materialises one from the record at that moment** and nothing persists it. That is what requirement 5 means by an answer schema built per record.
+    Where a JSON Schema is genuinely needed — the jury's `complete_structured` call, pull-time validation of a human correction, invariant 5's check on an artifact — the profile **materialises one from the record at that moment**, and nothing persists it. That is what requirement 5 means by an answer schema built per record. Everything that needs only the *names* — `group_key`, the validity checks, the capture control — reads the catalog, not a schema wrapped around it.
 
-    Measured, because the difference is not marginal: on an eight-tool catalog with three parameters each, the catalog is 2,888 bytes, the names are 136, and a materialised compound schema is **3,247 — larger than the catalog it copies**, and it would sit on every record of every artifact from `loaded.jsonl` to `curated.jsonl`. This is the same rule as media by reference, for the same reason, and the same failure if ignored.
+    Measured, because the first draft of this requirement said the opposite and the numbers are what changed it. Deriving the catalog costs **0.27 µs** per record where the source carries it as data, against 0.07 µs to read a stored copy: **0.0 seconds across a 21,172-record run**, so the stored copy buys nothing on the shape this pipeline is for. Where a source renders its catalog into prose the parse is 93 µs, and paying it once at stage 0 — which already parses it — keeps that at zero too. Against which a stored copy costs a second thing that can disagree with the first, an artifact column on every record, and, for a compound answer, 3,247 bytes against the catalog's own 2,888 — a copy larger than the original. The pipeline's own rule already settled it: *a source's vocabulary is declared once, and everything derivable is derived.*
 
     A profile whose answer space cannot be expressed as one JSON Schema per record does not have a compound answer, it has a free-text one, and § *The three-piece interface* says what that costs.
 72. **δ over a compound answer is soft, and the softness is specified rather than chosen in a stage.** Answers are compared name-first: over the union of names in the two answers, a name in both contributes how far its arguments agree — the share of argument keys present in both and equal, counting a key present in only one as a disagreement, and counting two calls with no arguments as agreeing — and a name in only one contributes zero. δ is one minus the mean of those contributions. Two consequences are the point of it: naming a different tool is full disagreement, and naming the same tool with one differing argument is *partial*. And it degrades exactly: when every matched call has identical arguments, this **is** Jaccard over names, so a names-only profile is the special case rather than a different formula.
@@ -318,7 +318,7 @@ dataforce/
 │   │       ├── __init__.py      the profile object — the index to the rest
 │   │       │
 │   │       ├── schema.py        DEFINITION · every shape: a tool · a catalog ·
-│   │       │                    ANSWER_SCHEMA · answer_space
+│   │       │                    ANSWER_SCHEMA · answer_schema_for
 │   │       ├── answer.py        DEFINITION · what is computed from an answer:
 │   │       │                    answer_distance · vote_consensus · training_example
 │   │       ├── source_contract.py  DEFINITION · what this corpus calls things
@@ -515,7 +515,7 @@ class Profile(Protocol):
 
 Twelve methods across the two contracts, and thirteen of the fifteen stages call at least one of them. The two that call neither are `pull`, which normalizes what annotators returned, and `document`, which reads what earlier stages already recorded — and that is the expected shape of the list, not a gap in it.
 
-`answer_schema` may be built per record — a profile whose answer space depends on the record (a catalog, a candidate list) returns a schema closed over that record. The jury passes it straight to `complete_structured`, which is why answer-space validation is not pipeline code.
+`answer_schema` may be built per record — a profile whose answer space depends on the record (a catalog, a candidate list) builds one closed over that record, **at the moment a schema is needed and never stored on it** (requirement 71). The jury passes it straight to `complete_structured`, which is why answer-space validation is not pipeline code.
 
 **What the contracts deliberately do not own.** Each of these was a plausible member and each is somewhere better:
 
@@ -664,12 +664,10 @@ The item is invented. That is a rule rather than a convenience: this repository 
                // the target turn: the last one carrying `roles.target`
                { "type": "text", "role": "assistant",
                  "text": "[{\"arguments\":{\"ky\":\"thang_nay\",\"ma_khach\":\"480215\"},\"name\":\"SendStatement\"}]" } ],
-  // what an answer may be for *this* record -- the names, and nothing more. Each
-  // name's argument schema is that tool's own `parameters` in the catalog this
-  // record already carries; inlining a second copy here would be bigger than the
-  // catalog. Materialised into one JSON Schema only where one is needed -- req 71
-  "answer_space": { "type": "array",
-                    "items": { "type": "string", "enum": ["LookupBalance", "SendStatement", "…"] } },
+  // no `answer_space`. The profile settles the answer *type* and this record's own
+  // catalog settles the space, so a stored copy would be a second representation of
+  // one of them -- requirement 71. What needs the names reads the catalog; what needs
+  // a JSON Schema materialises one from the record and does not persist it
   // the same answer the target turn states, read from where the source states it.
   // Twice on purpose -- see below
   "label": [ { "name": "SendStatement",
@@ -755,12 +753,12 @@ Every block below has exactly one owning stage, named in the comments. The one s
     // { "type": "audio", "role": "user", "uri": "media/ab/abc123.wav",
     //   "sha256": "abc123…", "duration_s": 12.4, "transcript_part": 1 }
   ],
-  // stage 0, from the profile's `build_record`. The three fields it owns: what an
-  // answer may be for *this* record, the answer itself, and everything the profile
-  // does not own -- kept verbatim, because what looks like noise now is what a later
-  // question turns out to need.
-  "answer_space": { "…": "profile-defined; a catalog, a class list, or absent" },
-  "label": "…",                        // the profile's answer type
+  // stage 0, from the profile's `build_record`. The two fields it owns: the answer,
+  // and everything the profile does not own -- kept verbatim, because what looks like
+  // noise now is what a later question turns out to need.
+  "label": "…",                        // the profile's answer type. What an answer may
+                                       // *be* is derived from this record, never stored
+                                       // beside it -- requirement 71
   "meta": { "…": "verbatim from source" },
 
   "parse_status": "ok",   // stage 0: ingest drops nothing, so an unparsable record is
@@ -825,7 +823,7 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `shared/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `utils.py` holds one grammar rather than one copy per consumer for the same reason: a *format* copied into each of the places that reads it is two sources of truth.
 
-The second deviation is `schema.py`, and it is a convention rather than a conflict: **a profile's schemas live in one `schema.py` in the profile's own folder.** By R2 as written, what an answer looks like and what is computed from one are one noun and belong in one module. They are split because the schemas are read as a group and by different readers — the jury hands `answer_space` to `complete_structured`, the annotation UI constrains a control to it, and the first thing an author of a second profile needs is the shape their answers must have, not the metric over them. One file per profile folder is where that group is looked for. Nothing in `shared/schemas/` moves with it: those twelve are artifact schemas, and not one of them names anything a profile owns — `label` is `pa.Column(object)` precisely so that what a label *is* stays the profile's.
+The second deviation is `schema.py`, and it is a convention rather than a conflict: **a profile's schemas live in one `schema.py` in the profile's own folder.** By R2 as written, what an answer looks like and what is computed from one are one noun and belong in one module. They are split because the schemas are read as a group and by different readers — the jury hands `answer_schema_for(record)` to `complete_structured`, the annotation UI constrains a control to the same names, and the first thing an author of a second profile needs is the shape their answers must have, not the metric over them. One file per profile folder is where that group is looked for. Nothing in `shared/schemas/` moves with it: those twelve are artifact schemas, and not one of them names anything a profile owns — `label` is `pa.Column(object)` precisely so that what a label *is* stays the profile's.
 
 The convention has a second half, and it is what split `tool_schema.py`: **a shape is a shape, and turning one thing into another is logic.** So `schema.py` holds the `Tool`, `Catalog` and `Gap` types beside the two answer schemas, and `utils.py` holds every conversion over them — which is why the docstring prefixes gained a fourth word, `LOGIC ·`, beside `DEFINITION ·`, `STEP ·` and `TOOL ·`. The grammar itself was *not* split: rendering a catalog and reading one back are still one module, because the byte-identical round trip over 21,172 corpus catalogs is the proof the two directions agree, and it only reads as one proof while they sit together. `schema.py` is now the most-imported module in the profile — four importers against `utils.py`'s three — which is the check that the seam was a real one.
 
@@ -845,7 +843,11 @@ The convention has a second half, and it is what split `tool_schema.py`: **a sha
 
 **Content parts say `type`, the same word every provider uses.** *Alternatives:* `kind`, a name reserved for us so it could never be mistaken for a provider's field. *Why:* an ordered array of typed parts is how OpenAI, Anthropic and Gemini all model content, and all three call the discriminator `type` — so `type` is the field an engineer already recognises, which is worth more than avoiding a collision that cannot actually happen. The values disambiguate on their own: ours are closed and bare — `text | image | audio | video` — where OpenAI's are `input_text` / `input_image` / `input_audio` and Anthropic's differ again, so `"type": "audio"` is unambiguously a DataForce part. No provider's JSON is ever stored: a profile's `training_example` produces it, mapping both the value and its nesting to whatever that provider wants — ours keeps the payload flat on the part, where OpenAI nests it under a key repeating the type. The one real cost is that `type` shadows a Python builtin if a part is ever modelled as a dataclass attribute rather than a mapping key; that is a lint note, not a bug. *Reversible:* yes, but only before any artifact exists.
 
-**An answer space is held by reference too.** *Alternatives:* materialise the full per-record JSON Schema onto the record, which is what requirement 71 said in its first draft; store no answer space at all and re-derive the names wherever they are needed. *Why:* the first duplicates the catalog — measured at 3,247 bytes against the catalog's own 2,888 on an eight-tool record, on every record of every artifact, and the duplication is silent because both copies look authoritative. The second is worse in the other direction: re-deriving means re-parsing a rendered catalog in each of the stages that reads it, which is the cost the field exists to avoid, and it puts the format grammar in the blast radius of every stage. So the record carries the catalog once and the names once — the names because `group_key`, three validity checks and the capture control all read them, and reading them out of a schema is cheap. *The cost:* one field is derived from another on the same record, so they can disagree if a stage rewrites the catalog. No stage does; `content` and `meta` are written at stage 0 and never rewritten, which is the invariant that makes the derived copy safe. *Reversible:* yes — it is stage 0's one line either way.
+**The record has no `answer_space` field. Reversed, with the measurement that reversed it.** *Alternatives, both of which this document previously specified:* materialise the full per-record JSON Schema onto the record; store the names as a cheap index and derive the rest. *Why the reversal:* the case for storing anything was that deriving means re-parsing a rendered catalog in every stage that reads a name. Measured, that is **0.27 µs** per record where the source carries its catalog as data — 0.0 seconds across 21,172 records — because there is nothing to parse; and where a source does render it into prose, the parse belongs at stage 0, which already does it, so it is paid once rather than per stage. The cost the field was buying protection against does not exist on the shape this pipeline is for.
+
+What the field cost instead: a second representation of the catalog that can disagree with the first, an artifact column on every record of every artifact, a name that says *answer space* for something every consumer read as a *catalog index* — `record.answer_space["items"]["enum"]`, a name list mined out of a JSON Schema — and, under a compound answer, a copy larger than the original. It also does not survive its own generalisation: a compound answer space is `oneOf` with `const`, and there is no `enum` path to mine, so every consumer would have been rewritten anyway.
+
+*Why it took three passes to see:* each earlier version was defended on a cost that had never been measured. The rule that settles it was already in this document — *a source's vocabulary is declared once, and everything derivable is derived* — and the answer space is derivable from the record by definition, because everything the profile knows about a record is on the record. *The cost of the reversal:* reading a name now needs the source contract, so `catalog_names(record)` gains a parameter and moves beside the catalog grammar; and a source that renders its catalog into prose has exactly one place that may parse it, stage 0, with a test that no later stage does. *Reversible:* yes, and the field would come back as the catalog rather than as a schema.
 
 **Media by reference and checksum, never inlined.** *Alternatives:* base64 in the JSONL; a parallel manifest keyed by `rid`. *Why:* artifacts must stay streamable and diffable, and inlining a video corpus makes both impossible. Content addressing also gives deduplication and integrity checks for free. *Reversible:* no — this is the decision that has to be right before the first line of code, and it is why it is specified now rather than with the first non-text modality.
 
