@@ -467,10 +467,11 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Relevant files.** `src/dataforce/profiles/tool_decision/schema.py`, `utils.py`, `build_record.py`, `tests/unit/test_build_record.py`, `tests/unit/test_tool_decision.py`.
 
-**Proposed approach.** `ANSWER_SCHEMA` becomes an array of objects with `name` and `arguments`; `answer_space(catalog)` emits `oneOf` per tool — `name` as a single-value `enum`, `arguments` as that tool's `parameters` — which is one JSON Schema per record and is what the jury hands to `complete_structured` unchanged. `catalog_names` keeps reading the names back out of it, so `group_key` and the fingerprint are untouched. A fifth validity check, `answer_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
+**Proposed approach.** Two functions, and the split between them is requirement 71. `answer_space(catalog)` stays what it is — the names, 136 bytes, the cheap index `group_key`, three checks and the capture control read. A new `answer_schema_for(record)` materialises the full constraint at the point of use: `oneOf` per tool, `name` a single-value `const`, `arguments` that tool's `parameters` read out of the catalog the record already carries. Nothing persists it, so no artifact grows. `catalog_names` is unchanged, which is why `group_key` and the fingerprint are untouched. A fifth validity check, `answer_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
 
 **Acceptance criteria.**
 - An answer whose call names a tool the record offered and whose arguments satisfy that tool's schema validates; one violating either does not, and the pull gate rejects rather than truncates it — invariant 5.
+- **No artifact grows.** `answer_space` on a built record is byte-identical to what it is today; the compound schema exists only inside the call that needs it. Asserted on a record with an eight-tool catalog, where the materialised schema is larger than the catalog itself.
 - `catalog_names(record)` returns the same names as before for a record built either way. `group_key` unchanged.
 - A record naming one tool twice is quarantined under the new check's name; the check appears in `params.yaml` with a declared count.
 - The existing quarantine-not-crash behaviour holds: an answer of the wrong shape entirely is still reported by a named check, never a `TypeError`.
