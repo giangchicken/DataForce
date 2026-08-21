@@ -127,7 +127,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 
 **What `remove_invalid` is for.** Some records cannot be used and you can prove it by counting: the label contradicts the training target, the answer names something the record never offered, the answer space is empty. No person decides any of that — if telling right from wrong needs judgment, it is not this stage's business, it is an annotation task, and it belongs in `human_review` with the jury and the annotators.
 
-Running it first is what makes the rest affordable. In the first profile it moves **1,563 of 21,172 records — 7.4%** out of the main path in a few seconds of arithmetic. Left in, those records would have consumed 7.4% of the jury's ~121M estimated tokens, taken annotator hours, and then taught the model something false. Nothing is deleted: each goes to `quarantine/invalid/<check>.jsonl` naming the check it failed, and can be re-admitted by an explicit command once the cause is fixed.
+Running it first is what makes the rest affordable. Every record it moves is one the jury would have spent tokens on, an annotator would have spent minutes on, and the model would then have learned something false from — paid for in that order, and the arithmetic that avoids all three costs seconds. It is also the tripwire: a stage that moves ~0 today is what tells you the day the source or the reader moves, which is why the expected count per check is declared and why a count that shifts fails the gate rather than being logged. Nothing is deleted — each record goes to `quarantine/invalid/<check>.jsonl` naming the check it failed, and comes back by an explicit command once the cause is fixed.
 
 13. Ingest streams the source via `file_utils.iter_json_array_file` or the modality's loader. A source file is never loaded whole.
 14. Ingest records provenance per record: source file SHA-256, byte offset, the raw record verbatim, the modality and profile names with versions, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
@@ -491,17 +491,17 @@ The canonical record below is the middle. This is the two ends, written as assum
 
 *Assumption:* **where the content is** is the modality's to know and no other module's. `content_parts` is the only code in the system that reads the source's own layout; for `text` that is one part per turn of a `messages` array.
 
-*Assumption:* **the source's own answer is evidence, not truth.** ≥3.3% label errors in curated benchmarks is one of the four findings above, and 1,358 records of the first corpus had already been relabelled once, 1,346 of them to a different answer. It is carried into `label` verbatim and in source order, and every stage after `load` treats it as a claim to be checked.
+*Assumption:* **the source's own answer is evidence, not truth.** ≥3.3% label errors in curated benchmarks is one of the four findings above, and a source that has already been relabelled once says so in its own metadata. It is carried into `label` verbatim and in source order, and every stage after `load` treats it as a claim to be checked — which is what the jury, the triage buckets and the annotators are for.
 
-*Assumption:* **nothing else about the input is clean, and each uncleanliness gets a stage rather than a precondition.** The label may contradict the training target (`remove_invalid`), the content may carry personal data (`pii_check`), one scenario may appear many times (`dedup`), and the answer space itself may not be data at all — in the first corpus it is prose rendered into the instruction turn, which is why reading it back out is the profile's own grammar with a byte-identical round trip over all 21,172 records as its proof.
+*Assumption:* **nothing else about the input is clean, and each uncleanliness gets a stage rather than a precondition.** The label may contradict the training target (`remove_invalid`), the content may carry personal data (`pii_check`), one scenario may appear many times (`dedup`), and the answer space itself may not arrive as data — a source may render it into a turn as prose, in which case reading it back is the profile's own grammar, with a byte-identical round trip over the whole source as the only acceptable proof that the reader agrees with the writer.
 
 *Assumption:* **every corpus-specific name is declared, never spelled in code.** Which turn is the instruction, which turn restates the answer, which key holds the label, what this file calls its labelling model — all of it is `config/profiles/<name>.yaml`, read once into the profile's source contract. A module that names `llm_model` has quietly become a module about one file.
 
-**What an already-standardised input would buy, stated so the cost of the declaration is visible.** If a source arrives in the canonical shape — the answer space as data, the pipeline's own role names, the answer at a known key — then the shape branch has one arm, no catalog grammar is needed on the way in, and the source contract shrinks to roles and a label key. That saving is real and it is not available here: this corpus is in the legacy shape, produced by a generator that renders its catalog into text, and one person standardising 21,172 records by hand is the work this pipeline exists to avoid. The declaration is kept either way, because the *second* source is what it is for — and a hand-standardised input is a transformation nobody recorded, which is the one thing requirement 14 exists to prevent.
+**What an already-standardised input would buy, stated so the cost of the declaration is visible.** If a source arrives in the canonical shape — the answer space as data, the pipeline's own role names, the answer at a known key — then the shape branch has one arm, no catalog grammar is needed on the way in, and the source contract shrinks to roles and a label key. The declaration is kept anyway, and the reason is not that some source will fail to be tidy: **a hand-standardised input is a transformation nobody recorded.** Requirement 14 exists to stop exactly that — provenance says which file a record came from and at which offset, and a person having reshaped it in between makes both untrue. Whatever a source does natively, the profile declares it and stage 0 performs the conversion, so the transformation is code, digested with the run.
 
 **Out: `release/vN`, and only what a consumer can judge.**
 
-One line per record per split, in the shape this profile's trainer expects: `training_example(record)` and nothing generic. For `tool_decision` that is `{"messages": [...], "meta": {...}}` with the final label in both the target turn and `meta.label`, asserted equal as it is written — that assertion is the one that counted the 48 disagreeing records before the source was fixed.
+One line per record per split, in the shape this profile's trainer expects: `training_example(record)` and nothing generic. For a conversational profile that is `{"messages": [...], "meta": {...}}`, with the answer in both the target turn and `meta.label` and the two asserted equal as the line is written — the one assertion that catches a record whose two statements of the answer have drifted apart.
 
 ```
 release/v1/
@@ -521,67 +521,64 @@ The profile supplies the body; `export` adds the per-record provenance of requir
 
 #### One item, all the way through
 
-Every figure below is the real code's output on this item, not a sketch of it — `rid`, `group_key` and the answer space were produced by `build_records` and pasted back. The item itself is **invented**, and that is a rule rather than a convenience: this repository is public and the first corpus is call-centre transcript carrying spoken-form personal data, so no example, fixture or docstring here is ever lifted from it.
+Concrete so it can be argued with. This is the shape **the contracts are written against** — a conversation of as many turns as it takes, a catalog offered as data, and an answer that names calls *and their arguments*. It is not a description of any one file: a source's own layout is that source's business, absorbed by the profile manifest's `shape` and roles, and any single corpus's quirks and counts belong in that profile's spec, not here.
 
-**1 · The `system` turn, verbatim.** Under `shape: legacy_system_prompt` the catalog is not data — it is this text, and reading it back is what the profile's grammar does.
+The item is invented. That is a rule rather than a convenience: this repository is public, so no example, fixture or docstring here is ever lifted from real data.
 
-```
-Based on the available tools and conversation history, determine which tool(s) the assistant should call next.
-Return a JSON array of tool names.
-The array may contain zero, one, or multiple tool names.
-Return an empty array if no tool should be called.
-
-TOOLS:
-[LookupBalance]
-Mục đích: tra cứu số dư tài khoản của khách hàng.
-Khi nào gọi: {trigger} khách hàng hỏi số dư.
-Khi nào KHÔNG gọi: {hold_missing} chưa có mã khách hàng.
-require: ma_khach
-params:
-  ma_khach* (string): Mã khách hàng, 6 chữ số.
-  loai_tk (string): Loại tài khoản. Giá trị khả dụng: thanh_toan, tiet_kiem. Nếu khách không đề cập, mặc định là thanh_toan.
-
-[OpenTicket]
-Mục đích: mở phiếu hỗ trợ khi không tra cứu được.
-require: ly_do
-params:
-  ly_do* (string): Lý do mở phiếu.
-```
-
-The braces are the **marker DSL**, not template slots — `{trigger}`, `{hold_missing}` — and nothing takes the description apart, which is why they survive the round trip. `*` is requiredness and `require:` restates it; the stars win and the line covers for them.
-
-**2 · One element of the source array, complete.** Every key this corpus carries. `<the system turn above>` stands for the block in 1, verbatim — the only substitution in this example.
+**1 · One element of the source array, complete.**
 
 ```jsonc
 {
-  "idx": 4471,                                              // the source's own row number
+  "id": "s4471",
+  // Every turn, in order. Multi-turn is the normal case: a tool is often declined
+  // once, called after the customer supplies what was missing, and called again on
+  // the result. The answer is the *last* assistant turn -- what a model is trained
+  // to produce -- and everything before it is context.
   "messages": [
-    { "role": "system",    "content": "<the system turn above>" },
-    { "role": "user",      "content": "Cho mình xem số dư tài khoản với, mã của mình là 480215." },
-    { "role": "assistant", "content": "[\"LookupBalance\"]" }
+    { "role": "system", "content": "Choose which tool(s) to call next, with arguments." },
+    { "role": "user",   "content": "Cho mình xem số dư tài khoản." },
+    { "role": "assistant", "content": "Bạn cho mình mã khách hàng nhé." },
+    { "role": "user",   "content": "Mã của mình là 480215." },
+    { "role": "assistant", "content": null,
+      "tool_calls": [ { "id": "c1", "type": "function",
+                        "function": { "name": "LookupBalance",
+                                      "arguments": "{\"ma_khach\": \"480215\"}" } } ] },
+    { "role": "tool", "tool_call_id": "c1", "content": "{\"so_du\": 1250000}" },
+    { "role": "assistant", "content": "Số dư của bạn là 1.250.000 đồng. Bạn cần gì thêm không?" },
+    { "role": "user",   "content": "Gửi giúp mình sao kê tháng này qua email." },
+    // the target: the call this record teaches, with the arguments it teaches
+    { "role": "assistant", "content": null,
+      "tool_calls": [ { "id": "c2", "type": "function",
+                        "function": { "name": "SendStatement",
+                                      "arguments": "{\"ma_khach\": \"480215\", \"ky\": \"thang_nay\"}" } } ] }
   ],
-  "meta": {
-    "label":          ["LookupBalance"],                    // the answer. `label.at` says it is here
-    "orig_label":     ["LookupBalance", "OpenTicket"],      // relabelled once already — 1,358 records are
-    "base_label":     ["LookupBalance"],
-    "label_source":   "claude_corrected",
-    "llm_model":      "gemma-4-31B-it",                     // who labelled it. 67.3% of the corpus
-    "human_checked":  true,                                 // `gold.from` — the candidate gold pool
-    "human_check_src": "debait",
-    "domain":         "banking",
-    "scenario":       "balance_enquiry",
-    "subscenario":    "single_account",
-    "gen_category":   "confuse_b1",
-    "source":         "debait",
-    "source_index":   4471,                                 // unique per record. Not a group key
-    "job_id":         "job_0007"
-  }
+  // The catalog: what this record offered, as data. Standard OpenAI function objects,
+  // so `parameters` is a JSON Schema and is what an argument is checked against.
+  "tools": [
+    { "type": "function",
+      "function": { "name": "LookupBalance",
+                    "description": "Tra cứu số dư tài khoản của khách hàng.",
+                    "parameters": { "type": "object",
+                                    "properties": { "ma_khach": { "type": "string" } },
+                                    "required": ["ma_khach"] } } },
+    { "type": "function",
+      "function": { "name": "SendStatement",
+                    "description": "Gửi sao kê cho khách hàng qua email.",
+                    "parameters": { "type": "object",
+                                    "properties": { "ma_khach": { "type": "string" },
+                                                    "ky": { "type": "string",
+                                                            "enum": ["thang_nay", "thang_truoc"] } },
+                                    "required": ["ma_khach", "ky"] } } },
+    { "type": "function", "function": { "name": "OpenTicket", "…": "…" } }
+  ],
+  // Whatever else the source carries. Kept verbatim and read only where the profile
+  // manifest declares a meaning for a key -- what labelled this, whether a person has
+  // checked it, which scenario it came from.
+  "meta": { "label_source": "…", "human_checked": true, "scenario": "…" }
 }
 ```
 
-Three top-level keys — `idx`, `messages`, `meta` — on all 21,172 records, and fourteen `meta` keys of which six appear in no specification — they are carried anyway, verbatim, because what looks like noise now is what a later question turns out to need. The profile owns five of them by declared meaning (`meta:` in its manifest) and reads none of the rest.
-
-**3 · What `load` adds before the profile sees it.** Not in the source file, and required rather than defaulted — a record without provenance cannot be constructed at all.
+**2 · What `load` adds before the profile sees it.** Not in the source file, and required rather than defaulted — a record without provenance cannot be constructed at all.
 
 ```jsonc
 "__provenance__": {
@@ -591,23 +588,34 @@ Three top-level keys — `idx`, `messages`, `meta` — on all 21,172 records, an
 }
 ```
 
-**4 · The canonical record.** `content` is the three turns as typed parts; their text is identical to the input's and elided here only to avoid printing it twice.
+**3 · The canonical record.**
 
 ```jsonc
 {
-  "rid": "9d8cf9a80386a51c",          // sha256 of the parts' digests in order, first 16 hex
-  "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471, "ingested_at": "2026-08-21T09:14:02Z" },
+  "rid": "…",                         // sha256 over the content parts' digests, in order
+  "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471, "ingested_at": "…" },
   "producer": { "modality": "text@1", "profile": "tool_decision@1" },
-  "content": [ { "type": "text", "role": "system",    "text": "<the system turn above>" },
-               { "type": "text", "role": "user",      "text": "Cho mình xem số dư…" },
-               { "type": "text", "role": "assistant", "text": "[\"LookupBalance\"]" } ],
-  // the catalog, read out of the system turn and stored as the constraint on an answer
-  "answer_space": { "type": "array",
-                    "items": { "type": "string", "enum": ["LookupBalance", "OpenTicket"] } },
-  "label": ["LookupBalance"],         // verbatim from meta.label, in source order
-  "meta":  { "…": "all fourteen keys above, unchanged" },
+  // one part per turn, in order, each carrying its role. Calls and tool results are
+  // turns like any other: they are what the conversation was.
+  "content": [ { "type": "text", "role": "system",    "text": "…" },
+               { "type": "text", "role": "user",      "text": "…" },
+               { "type": "text", "role": "assistant", "text": "…" },
+               { "type": "text", "role": "user",      "text": "…" },
+               { "type": "call", "role": "assistant", "calls": [ { "name": "LookupBalance",
+                                   "arguments": { "ma_khach": "480215" } } ] },
+               { "type": "text", "role": "tool",      "text": "{\"so_du\": 1250000}" },
+               { "type": "text", "role": "assistant", "text": "…" },
+               { "type": "text", "role": "user",      "text": "…" },
+               { "type": "call", "role": "assistant", "calls": [ { "name": "SendStatement",
+                                   "arguments": { "ma_khach": "480215", "ky": "thang_nay" } } ] } ],
+  // what an answer may be for *this* record: its own catalog as the name space, and
+  // each name's own `parameters` as the argument space
+  "answer_space": { "type": "array", "items": { "type": "object", "…": "per-tool" } },
+  "label": [ { "name": "SendStatement",
+               "arguments": { "ma_khach": "480215", "ky": "thang_nay" } } ],
+  "meta":  { "…": "verbatim from source" },
   "parse_status": "ok",
-  "invalid": [],                      // stage 1: none of the four fired
+  "invalid": [],
   "privacy": null, "dup_cluster_id": null, "is_representative": null, "group_key": null,
   "jury": null, "triage": null, "validation": null, "split": null
 }
@@ -615,67 +623,33 @@ Three top-level keys — `idx`, `messages`, `meta` — on all 21,172 records, an
 
 Every block after `invalid` is `null` because the stage that owns it has not run. That is the shape of a record leaving stage 1, and no later stage removes a field.
 
-**5 · The four checks, on this item.** `label_assistant_mismatch` reads the assistant turn as JSON and compares it to `label` through δ — `["LookupBalance"]` against `["LookupBalance"]`, distance 0. `label_not_in_catalog`: both names are in the enum. `empty_catalog`: two tools. `label_cardinality_anomaly`: one name, ceiling 3. Nothing fires, so the record stays on the main path. Had the assistant turn said `["OpenTicket"]`, the first would fire and the record would be written to `quarantine/invalid/label_assistant_mismatch.jsonl` — not deleted, and re-admitted by `dataforce requeue --check label_assistant_mismatch`.
+**4 · The four validity checks, on this item.** The answer's calls name tools the record offered; each call's arguments satisfy that tool's `parameters`, `ky` inside its `enum`; the catalog is non-empty; one call is within the declared ceiling. Nothing fires, so the record stays on the main path. Any one of them failing writes it to `quarantine/invalid/<check>.jsonl` — named, not deleted, and re-admitted by `dataforce requeue --check <name>` once the cause is fixed.
 
-**6 · The exported line**, after annotation, from `training_example`:
-
-```jsonc
-{ "messages": [ { "role": "system",    "content": "<the system turn above>" },
-                { "role": "user",      "content": "Cho mình xem số dư…" },
-                { "role": "assistant", "content": "[\"LookupBalance\"]" } ],
-  "meta": { "…": "the record's meta", "label": ["LookupBalance"] } }
-```
-
-The label is in two places and they are asserted equal as the line is written. That assertion is the one that counted the 48 disagreeing records before the source was fixed, which is why it is at export rather than only at ingest: the answer can change at stage 11, and the check has to hold on the answer that ships.
-
-**The same item under `shape: openai_tools`, for contrast.** The `system` turn is the instruction alone, the catalog is a `tools` array of standard OpenAI function objects, and `read_catalog` parses nothing:
+**5 · The exported line**, after annotation:
 
 ```jsonc
-"tools": [ { "type": "function",
-             "function": { "name": "LookupBalance",
-                           "description": "Mục đích: …\nKhi nào gọi: …\nKhi nào KHÔNG gọi: …",
-                           "parameters": { "type": "object",
-                                           "properties": { "ma_khach": { "type": "string", "description": "Mã khách hàng, 6 chữ số." },
-                                                           "loai_tk":  { "type": "string", "description": "Loại tài khoản.",
-                                                                         "enum": ["thanh_toan", "tiet_kiem"], "default": "thanh_toan" } },
-                                           "required": ["ma_khach"] } } },
-           { "type": "function", "function": { "name": "OpenTicket", "…": "as above" } } ]
+{ "messages": [ "…every turn, unchanged…",
+                { "role": "assistant", "content": null,
+                  "tool_calls": [ { "id": "c2", "type": "function",
+                                    "function": { "name": "SendStatement",
+                                                  "arguments": "{\"ma_khach\": \"480215\", \"ky\": \"thang_nay\"}" } } ] } ],
+  "meta": { "…": "the record's meta", "label": [ { "name": "SendStatement", "arguments": { "…": "…" } } ] } }
 ```
 
-Measured on both, and this is the whole argument for the declaration: **the same `answer_space` and the same `group_key` — `7fcb1af18418ba5a` — from a different `rid`, `5d98ceac916a55a9`.** The two shapes are the same scenario offering the same two tools, so they group together and split together; the `rid` differs because the content genuinely differs, which is what `rid` is for. One key in one manifest is what makes both true, and nothing downstream of stage 0 can tell which shape it read.
+The answer is in two places — the final turn and `meta.label` — and they are asserted equal as the line is written. That assertion is at export and not only at ingest because the answer can change at stage 11, and it has to hold on the answer that ships.
 
-#### More turns, and calls carrying arguments
+#### The distance between this shape and the code
 
-Two things a tool-decision corpus can have that **this** one does not, measured over all 21,172 records: every record is exactly **three turns**, always `(system, user, assistant)`, and the assistant content is **always a JSON array of strings** — 13,674 non-empty, 7,498 empty, never once an object with arguments. Both are properties of one file, so both are stated here rather than assumed anywhere in code.
+Stated because the gap is the plan's, not the reader's to discover. Each line below was run:
 
-**More turns work now, and nothing had to change for them.** A five-turn record — `system, user, assistant, user, assistant`, the first call declined and the second made once the customer supplies the missing datum — traces through unchanged: five typed parts, the catalog still read out of the `system` turn, `rid 01a33035ca0cc3cc`, all four checks passing, and five messages exported.
+| The shape needs | Today | Verified |
+|---|---|---|
+| A turn that carries a call rather than a string | `content_parts` reads `turn["content"]` and builds a `TextPart` | `ValidationError` on `"content": null`, `KeyError` when the key is absent |
+| An answer of `(name, arguments)` | `answer_schema` is an array of strings | an argument-carrying label is quarantined by two checks — reported, run continues |
+| δ over `(name, arguments)` | `answer_distance` is Jaccard over names, and raises on anything else | `TypeError` by design: `_tools` refuses to compare a shape it cannot mean |
+| `role: "tool"` as a declared role | three roles are declared: instruction, conversation, target | it embeds and displays; it is simply not named, so nothing may read it by meaning |
 
-```jsonc
-"messages": [
-  { "role": "system",    "content": "<the catalog, as above>" },
-  { "role": "user",      "content": "Cho mình xem số dư tài khoản." },
-  { "role": "assistant", "content": "[]" },                      // nothing to call yet
-  { "role": "user",      "content": "Mã của mình là 480215." },
-  { "role": "assistant", "content": "[\"LookupBalance\"]" }      // the answer, and the target
-]
-```
-
-Nothing in stage 0 or stage 1 counts turns. `content_parts` yields one part per message whatever their number; the two checks that read a turn read it **by role and from the end** — `_restated_answer` walks the content in reverse for the last part carrying the target role — so the record's answer is compared against the last assistant turn, which is the one the model is trained to produce. A middle assistant turn is conversation, not target. The empty array in the middle is a first-class answer here, not a missing one: 35.4% of this corpus is the empty set.
-
-**A call carrying arguments is a different answer type, and the pipeline says so rather than guessing.** Requirement 5 makes an answer a value the profile's `answer_schema` accepts, and this profile's is an array of strings. Hand it `[{"name": "LookupBalance", "arguments": {"ma_khach": "480215"}}]` and it is quarantined at stage 1 — `label_not_in_catalog` and `label_assistant_mismatch` both fire, the record is written to `quarantine/invalid/` for a person to read, and the run continues. That is the specified behaviour for an answer the profile cannot express, and it is what a wrong answer type must do: be reported, not coerced and not fatal.
-
-**What it would take to make arguments the answer**, if a second source arrives carrying them — every item below is a consequence of the three-piece interface, not a list of files to edit:
-
-| Change | Why it is forced |
-|---|---|
-| `ANSWER_SCHEMA` and `answer_space` | the answer becomes an array of objects, and each object's `arguments` must validate against *that tool's* `parameters` — the schema stops being one shape and becomes per-tool |
-| `answer_distance` | δ over `(name, arguments)` is a design question, not an edit: two jurors agreeing on the tool and differing on one argument value are neither in agreement nor in full disagreement, and whatever number is chosen there propagates into cohesion, corpus conflict, the four triage buckets and α |
-| `vote_consensus` | a strict majority over names is well defined; over argument *values* it is a second consensus rule, per parameter |
-| `answer_config` | `<Choices>` captures a name. Capturing arguments needs a per-tool form generated from its `parameters`, which is the first thing in this design that Label Studio may not express |
-| `training_example` | the assistant turn becomes the call object, and invariant 4's equality assertion is then over a nested structure |
-| Every measurement | `distinct_tool_names`, `answer_cardinality` and the catalog fingerprint all count names; none of them means the same thing once an answer carries values |
-
-Which is the honest reason it is not a small change: **arguments move the answer type, and the answer type is what the generic core is written in terms of.** The seam is real — a profile declaring the richer answer is exactly what the two-axis design is for, and nothing under `pipeline/` or `shared/` would need editing — but it is a second profile with its own δ, its own consensus and its own corpus, not a widened version of this one. This corpus cannot validate it: there is no record in it whose answer carries an argument, so there is nothing to measure a δ against.
+Only the first is mechanical. The other three move the **answer type**, and the answer type is what the generic core is written in terms of — δ, `vote_consensus`, the capture control, `training_example` and every count that today means "names". None of it is `pipeline/` or `shared/` work, which is the two-axis design paying off: it is one profile declaring a richer answer, with its own δ and its own consensus rule per parameter. What it cannot be is a widened version of a names-only profile, because a δ that has to weigh a disagreement about one argument value against a disagreement about the tool is a decision, and every triage bucket and α inherits it.
 
 ### Canonical record
 

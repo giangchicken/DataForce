@@ -216,8 +216,8 @@ def validity_checks(
         teaches hallucination. Never truncated to the catalog: that would be a guess
         about which of two disagreeing sources is right, applied invisibly at scale.
 
-        An entry that is not a name at all fires too. An answer here is an array of
-        strings -- every one of the 21,172 records is -- and a call object carrying
+        An entry that is not a name at all fires too. This profile's answer is an
+        array of names -- `answer_schema` says so -- and a call object carrying
         arguments is a different answer type, so it belongs in quarantine where a
         person reads it, not in a `TypeError` that stops the run at record one.
         """
