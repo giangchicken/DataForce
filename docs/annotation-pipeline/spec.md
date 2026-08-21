@@ -519,6 +519,130 @@ The profile supplies the body; `export` adds the per-record provenance of requir
 
 **What the output is not.** Not a database, not an API response, and not one file per record. Fifteen stages produce JSONL and one release directory; the platform that would serve them is [`dataforce-platform`](../dataforce-platform/spec.md), deferred behind a Label Studio v0 until the first profile's pilot gate passes.
 
+#### One item, all the way through
+
+Every figure below is the real code's output on this item, not a sketch of it — `rid`, `group_key` and the answer space were produced by `build_records` and pasted back. The item itself is **invented**, and that is a rule rather than a convenience: this repository is public and the first corpus is call-centre transcript carrying spoken-form personal data, so no example, fixture or docstring here is ever lifted from it.
+
+**1 · The `system` turn, verbatim.** Under `shape: legacy_system_prompt` the catalog is not data — it is this text, and reading it back is what the profile's grammar does.
+
+```
+Based on the available tools and conversation history, determine which tool(s) the assistant should call next.
+Return a JSON array of tool names.
+The array may contain zero, one, or multiple tool names.
+Return an empty array if no tool should be called.
+
+TOOLS:
+[LookupBalance]
+Mục đích: tra cứu số dư tài khoản của khách hàng.
+Khi nào gọi: {trigger} khách hàng hỏi số dư.
+Khi nào KHÔNG gọi: {hold_missing} chưa có mã khách hàng.
+require: ma_khach
+params:
+  ma_khach* (string): Mã khách hàng, 6 chữ số.
+  loai_tk (string): Loại tài khoản. Giá trị khả dụng: thanh_toan, tiet_kiem. Nếu khách không đề cập, mặc định là thanh_toan.
+
+[OpenTicket]
+Mục đích: mở phiếu hỗ trợ khi không tra cứu được.
+require: ly_do
+params:
+  ly_do* (string): Lý do mở phiếu.
+```
+
+The braces are the **marker DSL**, not template slots — `{trigger}`, `{hold_missing}` — and nothing takes the description apart, which is why they survive the round trip. `*` is requiredness and `require:` restates it; the stars win and the line covers for them.
+
+**2 · One element of the source array, complete.** Every key this corpus carries. `<the system turn above>` stands for the block in 1, verbatim — the only substitution in this example.
+
+```jsonc
+{
+  "messages": [
+    { "role": "system",    "content": "<the system turn above>" },
+    { "role": "user",      "content": "Cho mình xem số dư tài khoản với, mã của mình là 480215." },
+    { "role": "assistant", "content": "[\"LookupBalance\"]" }
+  ],
+  "meta": {
+    "label":          ["LookupBalance"],                    // the answer. `label.at` says it is here
+    "orig_label":     ["LookupBalance", "OpenTicket"],      // relabelled once already — 1,358 records are
+    "base_label":     ["LookupBalance"],
+    "label_source":   "claude_corrected",
+    "llm_model":      "gemma-4-31B-it",                     // who labelled it. 67.3% of the corpus
+    "human_checked":  true,                                 // `gold.from` — the candidate gold pool
+    "human_check_src": "debait",
+    "domain":         "banking",
+    "scenario":       "balance_enquiry",
+    "subscenario":    "single_account",
+    "gen_category":   "confuse_b1",
+    "source":         "debait",
+    "source_index":   4471,                                 // unique per record. Not a group key
+    "job_id":         "job_0007"
+  }
+}
+```
+
+Fourteen `meta` keys, of which six appear in no specification — they are carried anyway, verbatim, because what looks like noise now is what a later question turns out to need. The profile owns five of them by declared meaning (`meta:` in its manifest) and reads none of the rest.
+
+**3 · What `load` adds before the profile sees it.** Not in the source file, and required rather than defaulted — a record without provenance cannot be constructed at all.
+
+```jsonc
+"__provenance__": {
+  "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471,
+                "ingested_at": "2026-08-21T09:14:02Z" },
+  "producer": { "modality": "text@1", "profile": "tool_decision@1" }
+}
+```
+
+**4 · The canonical record.** `content` is the three turns as typed parts; their text is identical to the input's and elided here only to avoid printing it twice.
+
+```jsonc
+{
+  "rid": "9d8cf9a80386a51c",          // sha256 of the parts' digests in order, first 16 hex
+  "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471, "ingested_at": "2026-08-21T09:14:02Z" },
+  "producer": { "modality": "text@1", "profile": "tool_decision@1" },
+  "content": [ { "type": "text", "role": "system",    "text": "<the system turn above>" },
+               { "type": "text", "role": "user",      "text": "Cho mình xem số dư…" },
+               { "type": "text", "role": "assistant", "text": "[\"LookupBalance\"]" } ],
+  // the catalog, read out of the system turn and stored as the constraint on an answer
+  "answer_space": { "type": "array",
+                    "items": { "type": "string", "enum": ["LookupBalance", "OpenTicket"] } },
+  "label": ["LookupBalance"],         // verbatim from meta.label, in source order
+  "meta":  { "…": "all fourteen keys above, unchanged" },
+  "parse_status": "ok",
+  "invalid": [],                      // stage 1: none of the four fired
+  "privacy": null, "dup_cluster_id": null, "is_representative": null, "group_key": null,
+  "jury": null, "triage": null, "validation": null, "split": null
+}
+```
+
+Every block after `invalid` is `null` because the stage that owns it has not run. That is the shape of a record leaving stage 1, and no later stage removes a field.
+
+**5 · The four checks, on this item.** `label_assistant_mismatch` reads the assistant turn as JSON and compares it to `label` through δ — `["LookupBalance"]` against `["LookupBalance"]`, distance 0. `label_not_in_catalog`: both names are in the enum. `empty_catalog`: two tools. `label_cardinality_anomaly`: one name, ceiling 3. Nothing fires, so the record stays on the main path. Had the assistant turn said `["OpenTicket"]`, the first would fire and the record would be written to `quarantine/invalid/label_assistant_mismatch.jsonl` — not deleted, and re-admitted by `dataforce requeue --check label_assistant_mismatch`.
+
+**6 · The exported line**, after annotation, from `training_example`:
+
+```jsonc
+{ "messages": [ { "role": "system",    "content": "<the system turn above>" },
+                { "role": "user",      "content": "Cho mình xem số dư…" },
+                { "role": "assistant", "content": "[\"LookupBalance\"]" } ],
+  "meta": { "…": "the record's meta", "label": ["LookupBalance"] } }
+```
+
+The label is in two places and they are asserted equal as the line is written. That assertion is the one that counted the 48 disagreeing records before the source was fixed, which is why it is at export rather than only at ingest: the answer can change at stage 11, and the check has to hold on the answer that ships.
+
+**The same item under `shape: openai_tools`, for contrast.** The `system` turn is the instruction alone, the catalog is a `tools` array of standard OpenAI function objects, and `read_catalog` parses nothing:
+
+```jsonc
+"tools": [ { "type": "function",
+             "function": { "name": "LookupBalance",
+                           "description": "Mục đích: …\nKhi nào gọi: …\nKhi nào KHÔNG gọi: …",
+                           "parameters": { "type": "object",
+                                           "properties": { "ma_khach": { "type": "string", "description": "Mã khách hàng, 6 chữ số." },
+                                                           "loai_tk":  { "type": "string", "description": "Loại tài khoản.",
+                                                                         "enum": ["thanh_toan", "tiet_kiem"], "default": "thanh_toan" } },
+                                           "required": ["ma_khach"] } } },
+           { "type": "function", "function": { "name": "OpenTicket", "…": "as above" } } ]
+```
+
+Measured on both, and this is the whole argument for the declaration: **the same `answer_space` and the same `group_key` — `7fcb1af18418ba5a` — from a different `rid`, `5d98ceac916a55a9`.** The two shapes are the same scenario offering the same two tools, so they group together and split together; the `rid` differs because the content genuinely differs, which is what `rid` is for. One key in one manifest is what makes both true, and nothing downstream of stage 0 can tell which shape it read.
+
 ### Canonical record
 
 One shape flows through every stage; each stage adds fields and removes none.
