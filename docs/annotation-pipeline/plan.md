@@ -67,7 +67,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that T9 and **T32** each carry rule tests for their own profile | the spec section; T9's and T32's *Verify* lines |
 | T6 | Guard tests | Import graph (no concrete axis reaches `shared/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
-| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_tool_schema.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
+| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog_format.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
 | T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `answer_distance` with `δ(∅,∅)=0` returned before the division, `vote_consensus` as the strict-majority set, the four named validity checks, and a `training_example` that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
 | — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py` — **E2 moved both to `declared/`, leaving the `Manifest` type behind in `shared/`** — `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
@@ -135,12 +135,12 @@ Inside the profile:
 
 | Was | Is | Lands in |
 |---|---|---|
-| `catalog.render` | `tools_to_catalog` | `tool_schema.py` — **done** |
-| `catalog.parse` | `catalog_to_tools` | `tool_schema.py` — **done** |
-| `catalog.render_system_prompt` | `build_system_prompt` | `tool_schema.py` — **done** |
-| `catalog.as_function` | `to_strict_openai` | `tool_schema.py` — **done** |
-| `adapter.catalog_names` | `catalog_names` | `tool_schema.py` |
-| `adapter.catalog_fingerprint` | `catalog_fingerprint` | `tool_schema.py` |
+| `catalog.render` | `tools_to_catalog` | `utils.py` — **done** |
+| `catalog.parse` | `catalog_to_tools` | `utils.py` — **done** |
+| `catalog.render_system_prompt` | `build_system_prompt` | `utils.py` — **done** |
+| `catalog.as_function` | `to_strict_openai` | `utils.py` — **done** |
+| `adapter.catalog_names` | `catalog_names` | `utils.py` |
+| `adapter.catalog_fingerprint` | `catalog_fingerprint` | `utils.py` |
 | `adapter.answer_space_for` | `answer_space` | `schema.py` |
 | `answers.delta` | `answer_distance` | `answer.py` |
 | `answers.consensus` | `vote_consensus` | `answer.py` |
@@ -185,7 +185,7 @@ The resolution is to say which kind each module is, because the two kinds have o
 
 | Module | Kind | Holds | Lines |
 |---|---|---|---|
-| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (449) and the catalog half of `adapter.py` | ~505 |
+| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (449) and the catalog half of `adapter.py`. *Since split: the conversions are `utils.py`, the three types are `schema.py`* | ~505 |
 | `answer.py` | definition | what an answer is — `answer_schema`, `answer_space`, `answer_distance`, `vote_consensus`, `training_example`. Absorbs `answers.py` (61) and `export.py` (37) | ~110 |
 | `source_contract.py` | definition | what this corpus calls things, read from the manifest. Was `source.py` | ~120 |
 | `build_record.py` | step | stages 0–1 — `build_record`, `read_catalog`, `validity_checks`, `max_answer_cardinality`, `group_key`. Absorbs the rest of `adapter.py` and `checks.py` (121) | ~330 |
@@ -200,15 +200,15 @@ Outside the profile: `shared/schemas/` stays a package split by pipeline phase (
 
 **Done.** **48 modules → 30.** The profile's nine became seven, `shared/schemas/`'s fourteen became six, and the eight empty `pipeline/**/__init__.py` are gone until a stage needs them.
 
-The three definitions are the three modules with more than one importer, and that is checked rather than claimed: `tool_schema` has four, `source_contract` three, `answer` two, and every other module in the package has one or none. Both step modules are imported by `__init__.py` and by nothing else. `measure_corpus` reads the front door the way `cli.py` does — which is the one thing this task added that the table above did not name: `PROVENANCE_KEY` is re-exported from `__init__.py`, because it is what the load stage stamps and a tool that fakes stage 0 has to spell it without importing a step.
+The definitions are the modules with more than one importer, and that is checked rather than claimed: `schema` has four, `source_contract` and `utils` three each, `answer` two, and every other module in the package has one or none. Both step modules are imported by `__init__.py` and by nothing else. `measure_corpus` reads the front door the way `cli.py` does — which is the one thing this task added that the table above did not name: `PROVENANCE_KEY` is re-exported from `__init__.py`, because it is what the load stage stamps and a tool that fakes stage 0 has to spell it without importing a step.
 
 `profile.py` became `__init__.py` (77 lines), so the object *is* the index: every member is one line naming the module that does the work. The cost is one delegation per member — `question_text` and `answer_config` were 20 lines of behaviour on the class and are now two lines there and one file for stages 7–8. Actual sizes against the estimates: `tool_schema.py` 482 (~505), `build_record.py` 247 (~330), `measure_corpus.py` 288 (~280), `source_contract.py` 120, `answer.py` 110, `ask_annotator.py` 80.
 
-One split that reads oddly and is deliberate: `answer.py` writes the answer space and `tool_schema.catalog_names` reads it back, because what is read back out of it is a catalog. `answer_space` is about the answer; its inverse is about the tools.
+One split that reads oddly and is deliberate: `schema.py` writes the answer space and `utils.catalog_names` reads it back, because what is read back out of it is a catalog. `answer_space` is about the answer; its inverse is about the tools.
 
 **No behavioural change, four ways.** 220 passing and 33 deselected under `make check`, 253 collected — every count identical to before. `mypy --strict` clean on 30 files. Integration 32 passed, 1 skipped. `dvc repro` up to date, and `metrics/corpus_profile.json` byte-identical after `dataforce profile` over all 21,172 records, with zero measurements moved.
 
-Two test modules were renamed with the source modules they test: `test_catalog.py` → `test_tool_schema.py` and `test_tool_decision_adapter.py` → `test_build_record.py`. `tests/unit/test_answers.py` keeps its name, because the core spec names that file. One error in the table above is corrected in place: `shared/schemas/` becomes `base.py` plus **four** phase modules, not five — there are four pipeline phases.
+Two test modules were renamed with the source modules they test: `test_catalog.py` → `test_tool_schema.py` (now `test_catalog_format.py`) and `test_tool_decision_adapter.py` → `test_build_record.py`. `tests/unit/test_answers.py` keeps its name, because the core spec names that file. One error in the table above is corrected in place: `shared/schemas/` becomes `base.py` plus **four** phase modules, not five — there are four pipeline phases.
 
 **Acceptance criteria.**
 - `find src -name '*.py' | wc -l` reports 30, down from 48.
@@ -222,6 +222,8 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 **Verify.** `make check && uv run pytest -q -m integration && find src -name '*.py' | wc -l`
 
 **Out of scope.** Splitting `tool_schema.py`. Its ~505 lines are one grammar in two directions, and the byte-identical round trip over 21,172 corpus catalogs is the proof the directions agree — a split puts the two halves where that proof no longer reads as one thing. It is also the module the generator's `openai_to_catalog.py` and `catalog_to_openai.py` correspond to, and keeping that correspondence one-to-one is what lets the two codebases be diffed.
+
+**Since revised, and the reason above is why it was revised the way it was.** `tool_schema.py` is now `utils.py`, and the `Tool`, `Catalog` and `Gap` types moved to `schema.py` under the rule that a shape belongs in a schema module and a conversion does not. The grammar was left whole: both directions and every format string are still in one module, so the round trip is still one proof and the correspondence with the generator's two modules is still one-to-one.
 
 ## R3 · Delete the conformance suite
 

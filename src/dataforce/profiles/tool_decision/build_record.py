@@ -4,7 +4,7 @@ Stage 0 builds the record; stage 1 asks the four questions that can be answered 
 counting. They share a module because what stage 1 checks is exactly what stage 0
 wrote, and because `validity_checks` serves stage 1 and nothing else.
 
-The catalog is read through `tool_schema`, whose format is defined once and round-trips
+The catalog is read through `utils`, whose format is defined once and round-trips
 byte-identically over all 21,172 records. Which of the two shapes an item is in, which
 turn is which, and where the answer is stated all come from the manifest, so nothing
 here spells a field name belonging to one corpus.
@@ -17,15 +17,13 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from dataforce.profiles.tool_decision.answer import answer_distance
-from dataforce.profiles.tool_decision.schema import answer_space
+from dataforce.profiles.tool_decision.schema import Catalog, Tool, answer_space
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     TOOLS_KEY,
     SourceContract,
 )
-from dataforce.profiles.tool_decision.tool_schema import (
-    Catalog,
-    Tool,
+from dataforce.profiles.tool_decision.utils import (
     catalog_fingerprint,
     catalog_names,
     catalog_to_tools,

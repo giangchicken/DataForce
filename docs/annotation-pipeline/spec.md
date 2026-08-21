@@ -295,18 +295,18 @@ dataforce/
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
 │   │   ├── base.py              Profile protocol: 9 members, nothing more
-│   │   └── tool_decision/       four definitions, two steps, one tool:
+│   │   └── tool_decision/       three definitions, the conversions, two steps, one tool:
 │   │       ├── __init__.py      the profile object — the index to the rest
 │   │       │
-│   │       ├── tool_schema.py   DEFINITION · what a tool is, and every conversion
-│   │       │                    of it: tools_to_catalog · catalog_to_tools
-│   │       │                    · build_system_prompt · to_strict_openai
-│   │       │                    · catalog_names · catalog_fingerprint
-│   │       ├── schema.py        DEFINITION · what an answer looks like, at both
-│   │       │                    levels: ANSWER_SCHEMA · answer_space
+│   │       ├── schema.py        DEFINITION · every shape: a tool · a catalog ·
+│   │       │                    ANSWER_SCHEMA · answer_space
 │   │       ├── answer.py        DEFINITION · what is computed from an answer:
 │   │       │                    answer_distance · vote_consensus · training_example
 │   │       ├── source_contract.py  DEFINITION · what this corpus calls things
+│   │       ├── utils.py         LOGIC · every conversion of a tool and a catalog:
+│   │       │                    tools_to_catalog · catalog_to_tools
+│   │       │                    · build_system_prompt · to_strict_openai
+│   │       │                    · catalog_names · catalog_fingerprint
 │   │       │
 │   │       ├── build_record.py  STEP · stages 0–1 · build_record · read_catalog
 │   │       │                    · validity_checks · group_key
@@ -576,13 +576,15 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 *Group what changes together.* The reader of this codebase follows a **path** — how does one record get from the source file to a training example — so a file per concern charges ten navigations for one step. Everything stage 0 and stage 1 do belongs in `build_record.py`, and the three modules that read the source changed together every time the source changed.
 
-*And a module is a definition or a step, never both.* A **definition** module defines one noun and every conversion of it — `tool_schema.py` is a tool and the six ways one is written or read; `answer.py` is the distance between two answers, the consensus of several, and the row a trainer wants. A definition is *supposed* to be used by many steps: one used in a single place is not a definition, it is that step. A **step** module is used by exactly one step of the flow and by nothing else, which is why `validity_checks` has no file of its own — it serves stage 1 alone, so it lives beside the stage-0 code that produces what it checks. This is what answers "why does one file turn up in four different states": only definitions do, there are four of them, and each is named for the noun it defines.
+*And a module is a definition or a step, never both.* A **definition** module defines one noun — `schema.py` is every shape this profile's data has, `source_contract.py` is what one corpus calls things — and a **logic** module holds every conversion of one: `utils.py` is the six ways a catalog is written or read, `answer.py` the distance between two answers, the consensus of several, and the row a trainer wants. A definition is *supposed* to be used by many steps: one used in a single place is not a definition, it is that step. A **step** module is used by exactly one step of the flow and by nothing else, which is why `validity_checks` has no file of its own — it serves stage 1 alone, so it lives beside the stage-0 code that produces what it checks. This is what answers "why does one file turn up in four different states": only definitions and their conversions do, there are five such modules, and each is named for the noun or for the job.
 
 *And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become six, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
 
-The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `shared/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `tool_schema.py` is a definition rather than a step for the same reason: a *format* copied into each of its consumers is two sources of truth for one grammar.
+The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `shared/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `utils.py` holds one grammar rather than one copy per consumer for the same reason: a *format* copied into each of the places that reads it is two sources of truth.
 
 The second deviation is `schema.py`, and it is a convention rather than a conflict: **a profile's schemas live in one `schema.py` in the profile's own folder.** By R2 as written, what an answer looks like and what is computed from one are one noun and belong in one module. They are split because the schemas are read as a group and by different readers — the jury hands `answer_space` to `complete_structured`, the annotation UI constrains a control to it, and the first thing an author of a second profile needs is the shape their answers must have, not the metric over them. One file per profile folder is where that group is looked for. Nothing in `shared/schemas/` moves with it: those twelve are artifact schemas, and not one of them names anything a profile owns — `label` is `pa.Column(object)` precisely so that what a label *is* stays the profile's.
+
+The convention has a second half, and it is what split `tool_schema.py`: **a shape is a shape, and turning one thing into another is logic.** So `schema.py` holds the `Tool`, `Catalog` and `Gap` types beside the two answer schemas, and `utils.py` holds every conversion over them — which is why the docstring prefixes gained a fourth word, `LOGIC ·`, beside `DEFINITION ·`, `STEP ·` and `TOOL ·`. The grammar itself was *not* split: rendering a catalog and reading one back are still one module, because the byte-identical round trip over 21,172 corpus catalogs is the proof the two directions agree, and it only reads as one proof while they sit together. `schema.py` is now the most-imported module in the profile — four importers against `utils.py`'s three — which is the check that the seam was a real one.
 
 *The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 

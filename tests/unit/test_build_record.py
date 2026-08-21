@@ -1,6 +1,6 @@
 """One raw item into one canonical record, from either shape.
 
-The format itself is tested in `test_tool_schema.py`. What is here is what
+The format itself is tested in `test_catalog_format.py`. What is here is what
 `build_record` decides:
 identity, provenance, the answer space, what it keeps, and that a record read from a
 `tools` array and one read from a rendered prompt come out the same.
@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from conftest import TEXT, TOOL_DECISION
 
-from dataforce.profiles.tool_decision import build_record, tool_schema
+from dataforce.profiles.tool_decision import build_record, schema, utils
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,
@@ -92,17 +92,15 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert tool_schema.catalog_names(record) == [
-        t["function"]["name"] for t in raw["tools"]
-    ]
-    assert tool_schema.CATALOG_HEADER not in raw["messages"][0]["content"]
+    assert utils.catalog_names(record) == [t["function"]["name"] for t in raw["tools"]]
+    assert utils.CATALOG_HEADER not in raw["messages"][0]["content"]
 
 
 def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     """The conversion is lossless, which is what makes the legacy shape a way in."""
     canonical = canonical_records()[0]
     tools = [
-        tool_schema.Tool(
+        schema.Tool(
             name=entry["function"]["name"],
             description=entry["function"].get("description", ""),
             parameters=entry["function"].get("parameters", {}),
@@ -112,7 +110,7 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     as_legacy = {
         **canonical,
         "messages": [
-            {"role": "system", "content": tool_schema.build_system_prompt(tools)},
+            {"role": "system", "content": utils.build_system_prompt(tools)},
             *canonical["messages"][1:],
         ],
     }
@@ -143,7 +141,7 @@ def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert tool_schema.catalog_names(record) == []
+    assert utils.catalog_names(record) == []
 
 
 # --- identity -----------------------------------------------------------------
@@ -172,47 +170,41 @@ def test_rid_changes_when_a_turn_changes() -> None:
 
 def test_the_answer_space_is_this_record_s_own_catalog() -> None:
     record = build_legacy(legacy_records()[0])
-    expected = tool_schema.catalog_to_tools(
+    expected = utils.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     )
 
     assert record.answer_space is not None
     assert record.answer_space["items"]["enum"] == list(expected.names)
-    assert tool_schema.catalog_names(record) == record.answer_space["items"]["enum"]
+    assert utils.catalog_names(record) == record.answer_space["items"]["enum"]
 
 
 def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
-    names = tool_schema.catalog_to_tools(
+    names = utils.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert tool_schema.catalog_fingerprint(names) == tool_schema.catalog_fingerprint(
-        list(names)
-    )
+    assert utils.catalog_fingerprint(names) == utils.catalog_fingerprint(list(names))
 
 
 def test_a_different_catalog_gets_a_different_fingerprint() -> None:
-    eight = tool_schema.catalog_to_tools(
+    eight = utils.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
-    twenty = tool_schema.catalog_to_tools(
+    twenty = utils.catalog_to_tools(
         (CATALOGS / "twenty_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert tool_schema.catalog_fingerprint(eight) != tool_schema.catalog_fingerprint(
-        twenty
-    )
+    assert utils.catalog_fingerprint(eight) != utils.catalog_fingerprint(twenty)
 
 
 def test_the_fingerprint_is_order_sensitive() -> None:
     """Two orderings of one tool set are two prompts, so they are two scenarios."""
-    names = tool_schema.catalog_to_tools(
+    names = utils.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert tool_schema.catalog_fingerprint(names) != tool_schema.catalog_fingerprint(
-        names[::-1]
-    )
+    assert utils.catalog_fingerprint(names) != utils.catalog_fingerprint(names[::-1])
 
 
 # --- what it keeps ------------------------------------------------------------
@@ -283,7 +275,7 @@ def test_a_record_with_no_answer_space_is_named_rather_than_read_blindly() -> No
     record = build_legacy(legacy_records()[0])
 
     with pytest.raises(ConfigError, match="not built"):
-        tool_schema.catalog_names(record.model_copy(update={"answer_space": None}))
+        utils.catalog_names(record.model_copy(update={"answer_space": None}))
 
 
 # --- the contract itself ------------------------------------------------------

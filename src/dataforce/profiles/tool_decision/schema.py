@@ -1,23 +1,76 @@
-"""DEFINITION · what an answer to this profile looks like, at both levels.
+"""DEFINITION · every shape this profile's data has: a tool, a catalog, an answer.
 
-The profile-level schema is the shape of any answer this profile produces: an array of
-tool names. One record's answer space is that shape drawn from the record's own
-catalog, and the `enum` is requirement 5's constraint -- the jury hands it straight to
-`complete_structured`, which is why no stage validates an answer against a catalog.
+A **tool** is an OpenAI function object -- a name, one verbatim `description` carrying
+all usage guidance, and a JSON Schema of parameters. That is the source of truth; the
+catalog text a person reads is a rendering of it. A **catalog** is the tools one record
+offers, in the order it offers them. An **answer** is an array of names drawn from that
+catalog: `ANSWER_SCHEMA` is the shape of any answer this profile produces, and
+`answer_space` is one record's, with its own catalog as the `enum` -- requirement 5's
+constraint, which the jury hands straight to `complete_structured`, and which is why no
+stage validates an answer against a catalog.
 
-Shapes only, and both of them here rather than one here and one at a call site: a
-change to either is then a visible decision about the other. What the pipeline
-*computes* from an answer -- the distance between two, the consensus of several, the
-training example one becomes -- is `answer.py`.
+Shapes only, and all of them here rather than one per call site: a change to any is
+then a visible decision about the others. Every conversion of them is `utils.py` --
+rendering a catalog and reading it back, the OpenAI wire form, the fingerprint that
+makes two records the same scenario. The distance between two answers and the consensus
+of several are `answer.py`.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
-from dataforce.profiles.tool_decision.tool_schema import Catalog
+__all__ = ["ANSWER_SCHEMA", "Catalog", "Gap", "Tool", "answer_space"]
 
-__all__ = ["ANSWER_SCHEMA", "answer_space"]
+
+@dataclass(frozen=True)
+class Gap:
+    """Something the text implies that the schema could not be given.
+
+    The parser's own account of what it could not recover. A format reader that returns
+    less than it was given and says nothing is the failure `utils.py` is arranged
+    against.
+    """
+
+    tool: str
+    parameter: str | None
+    kind: str
+    evidence: str
+
+
+@dataclass(frozen=True)
+class Tool:
+    """One tool, in OpenAI function-calling form."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def properties(self) -> dict[str, Any]:
+        props: dict[str, Any] = self.parameters.get("properties") or {}
+        return props
+
+    @property
+    def required(self) -> tuple[str, ...]:
+        return tuple(self.parameters.get("required") or ())
+
+
+@dataclass(frozen=True)
+class Catalog:
+    """The tools one record offers, in the order the record offers them."""
+
+    tools: tuple[Tool, ...]
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(tool.name for tool in self.tools)
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.tools
+
 
 # What the profile declares as its `answer_schema`, so the shape holds whatever record
 # an answer is about.

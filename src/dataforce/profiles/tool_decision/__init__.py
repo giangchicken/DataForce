@@ -5,9 +5,10 @@ record's own catalog, and the empty set -- 35.4% of this corpus -- is a first-cl
 answer rather than a missing one.
 
 The object below is the index to the rest. Every member delegates to the module that
-does the work, so the four definitions -- `tool_schema` (a tool), `schema` (what an
-answer looks like), `answer` (what is computed from one), `source_contract` (what this
-corpus calls things) -- and the two steps --
+does the work, so the three definitions -- `schema` (every shape: a tool, a
+catalog, an answer), `source_contract` (what this corpus calls things) and `answer`
+(what is computed from an answer) -- the conversions in `utils` -- and the two steps
+--
 `build_record` (stages 0-1) and `ask_annotator` (stages 7-8) -- can each be read on
 their own. `measure_corpus` is a tool rather than a step and is imported by the CLI,
 not from here.

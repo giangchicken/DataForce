@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from dataforce.profiles.tool_decision import tool_schema
+from dataforce.profiles.tool_decision import schema, utils
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"
@@ -37,7 +37,7 @@ def text_of(name: str) -> str:
 
 def catalog_part(name: str) -> str:
     """The fixture with its instruction preamble removed."""
-    header = f"{tool_schema.CATALOG_HEADER}\n"
+    header = f"{utils.CATALOG_HEADER}\n"
     body = text_of(name)
     return body.split(header, 1)[1] if header in body else ""
 
@@ -50,16 +50,14 @@ def test_a_catalog_read_and_re_rendered_is_byte_identical(fixture: str) -> None:
     """The one assertion that makes a single format definition trustworthy."""
     original = catalog_part(fixture)
 
-    again = tool_schema.tools_to_catalog(
-        tool_schema.catalog_to_tools(text_of(fixture)).tools
-    )
+    again = utils.tools_to_catalog(utils.catalog_to_tools(text_of(fixture)).tools)
 
     assert again == original.rstrip("\n")
 
 
 def test_tools_rendered_and_read_back_are_the_same_tools() -> None:
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="calc_loan",
             description="Mục đích: tính lãi.\nKhi nào gọi: {trigger} khách hỏi lãi.",
             parameters={
@@ -93,7 +91,7 @@ def test_tools_rendered_and_read_back_are_the_same_tools() -> None:
         ),
     )
 
-    again = tool_schema.catalog_to_tools(tool_schema.build_system_prompt(tools)).tools
+    again = utils.catalog_to_tools(utils.build_system_prompt(tools)).tools
 
     assert [t.name for t in again] == ["calc_loan"]
     assert again[0].description == tools[0].description
@@ -127,7 +125,7 @@ def test_tools_rendered_and_read_back_are_the_same_tools() -> None:
 
 def test_a_dotted_enum_value_survives_the_clause_that_ends_in_a_dot() -> None:
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="pick",
             description="Mục đích: chọn.",
             parameters={
@@ -140,14 +138,14 @@ def test_a_dotted_enum_value_survives_the_clause_that_ends_in_a_dot() -> None:
         ),
     )
 
-    again = tool_schema.catalog_to_tools(tool_schema.build_system_prompt(tools)).tools
+    again = utils.catalog_to_tools(utils.build_system_prompt(tools)).tools
 
     assert again[0].properties["kind"]["enum"] == ["phiGiaoDich.ngoaiTe", "b"]
 
 
 def test_a_decimal_default_is_not_cut_at_its_point() -> None:
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="scale",
             description="Mục đích: nhân.",
             parameters={
@@ -158,7 +156,7 @@ def test_a_decimal_default_is_not_cut_at_its_point() -> None:
         ),
     )
 
-    again = tool_schema.catalog_to_tools(tool_schema.build_system_prompt(tools)).tools
+    again = utils.catalog_to_tools(utils.build_system_prompt(tools)).tools
 
     assert again[0].properties["factor"]["default"] == 1.5
 
@@ -169,20 +167,20 @@ def test_a_decimal_default_is_not_cut_at_its_point() -> None:
 def test_a_freeform_description_is_kept_whole() -> None:
     """The failure the first reader had: three clause labels, and prose vanished."""
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="legacy",
             description="Tra cứu hoá đơn. Chỉ khi đã xác thực.",
             parameters={},
         ),
     )
 
-    again = tool_schema.catalog_to_tools(tool_schema.build_system_prompt(tools)).tools
+    again = utils.catalog_to_tools(utils.build_system_prompt(tools)).tools
 
     assert again[0].description == "Tra cứu hoá đơn. Chỉ khi đã xác thực."
 
 
 def test_a_structured_description_is_also_just_a_description() -> None:
-    (tool,) = tool_schema.catalog_to_tools(text_of("one_tool.txt")).tools
+    (tool,) = utils.catalog_to_tools(text_of("one_tool.txt")).tools
 
     assert tool.description.startswith("Mục đích: tra cứu số dư cho khách hàng.")
     assert "Khi nào gọi: {trigger}" in tool.description
@@ -193,7 +191,7 @@ def test_a_structured_description_is_also_just_a_description() -> None:
 @pytest.mark.parametrize("fixture", ALL_FIXTURES)
 def test_every_marker_token_survives_byte_for_byte(fixture: str) -> None:
     source = text_of(fixture)
-    tools = tool_schema.catalog_to_tools(source).tools
+    tools = utils.catalog_to_tools(source).tools
     kept = "\n".join(
         tool.description + json.dumps(tool.parameters, ensure_ascii=False)
         for tool in tools
@@ -218,14 +216,14 @@ def test_every_marker_token_survives_byte_for_byte(fixture: str) -> None:
     ],
 )
 def test_catalog_size(fixture: str, size: int) -> None:
-    parsed = tool_schema.catalog_to_tools(text_of(fixture))
+    parsed = utils.catalog_to_tools(text_of(fixture))
 
     assert len(parsed.tools) == size
     assert parsed.is_empty == (size == 0)
 
 
 def test_parameters_carry_their_type_requiredness_and_clauses() -> None:
-    (tool,) = tool_schema.catalog_to_tools(text_of("one_tool.txt")).tools
+    (tool,) = utils.catalog_to_tools(text_of("one_tool.txt")).tools
 
     assert list(tool.properties) == ["ma_khach", "ghi_chu"]
     assert tool.required == ("ma_khach",)
@@ -238,7 +236,7 @@ def test_parameters_carry_their_type_requiredness_and_clauses() -> None:
 def test_a_rich_object_keeps_its_subfields_instead_of_flattening_them() -> None:
     """The second failure the first reader had: subfields became sibling parameters."""
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="book",
             description="Mục đích: đặt lịch.",
             parameters={
@@ -267,7 +265,7 @@ def test_a_rich_object_keeps_its_subfields_instead_of_flattening_them() -> None:
         ),
     )
 
-    again = tool_schema.catalog_to_tools(tool_schema.build_system_prompt(tools)).tools
+    again = utils.catalog_to_tools(utils.build_system_prompt(tools)).tools
 
     assert list(again[0].properties) == ["customer", "channel"]
     customer = again[0].properties["customer"]
@@ -279,7 +277,7 @@ def test_a_rich_object_keeps_its_subfields_instead_of_flattening_them() -> None:
 def test_a_bare_object_stays_on_the_compact_inline_form() -> None:
     """Byte-stability with legacy catalogs, which is why the two forms both exist."""
     tools = (
-        tool_schema.Tool(
+        schema.Tool(
             name="note",
             description="Mục đích: ghi.",
             parameters={
@@ -298,12 +296,12 @@ def test_a_bare_object_stays_on_the_compact_inline_form() -> None:
             },
         ),
     )
-    rendered = tool_schema.tools_to_catalog(tools)
+    rendered = utils.tools_to_catalog(tools)
 
     assert "Gồm các trường: a*, b." in rendered
-    assert tool_schema.catalog_to_tools(rendered).tools[0].properties["who"][
-        "required"
-    ] == ["a"]
+    assert utils.catalog_to_tools(rendered).tools[0].properties["who"]["required"] == [
+        "a"
+    ]
 
 
 # --- the name convention ------------------------------------------------------
@@ -311,7 +309,7 @@ def test_a_bare_object_stays_on_the_compact_inline_form() -> None:
 
 def test_names_a_stricter_pattern_would_reject_are_real_entries() -> None:
     """The convention deciding whether 841 and 722 records are invalid or none are."""
-    parsed = tool_schema.catalog_to_tools(text_of("odd_names.txt"))
+    parsed = utils.catalog_to_tools(text_of("odd_names.txt"))
 
     assert parsed.names == (
         "card.search_faq",
@@ -323,7 +321,7 @@ def test_names_a_stricter_pattern_would_reject_are_real_entries() -> None:
 
 
 def test_a_bracketed_phrase_inside_prose_is_not_an_entry() -> None:
-    parsed = tool_schema.catalog_to_tools(text_of("bracket_inside_prose.txt"))
+    parsed = utils.catalog_to_tools(text_of("bracket_inside_prose.txt"))
 
     assert parsed.names == ("Lookup00_0a",)
     assert "[Phụ lục A]" in parsed.tools[0].description
@@ -331,7 +329,7 @@ def test_a_bracketed_phrase_inside_prose_is_not_an_entry() -> None:
 
 def test_a_malformed_entry_still_contributes_its_name() -> None:
     """Not an exception and not a partial catalog: the tool set stays complete."""
-    parsed = tool_schema.catalog_to_tools(text_of("entry_missing_clauses.txt"))
+    parsed = utils.catalog_to_tools(text_of("entry_missing_clauses.txt"))
 
     assert parsed.names == ("Bare_01a", "Full_02b")
     assert parsed.tools[0].description == ""
@@ -340,7 +338,7 @@ def test_a_malformed_entry_still_contributes_its_name() -> None:
 
 
 def test_a_message_with_no_header_is_an_empty_catalog_not_an_exception() -> None:
-    assert tool_schema.catalog_to_tools(text_of("no_tools_header.txt")).is_empty
+    assert utils.catalog_to_tools(text_of("no_tools_header.txt")).is_empty
 
 
 # --- what the reader could not recover ----------------------------------------
@@ -348,9 +346,9 @@ def test_a_message_with_no_header_is_an_empty_catalog_not_an_exception() -> None
 
 def test_the_reader_reports_what_it_could_not_be_given() -> None:
     """A format reader that returns less than it was given must say so."""
-    gaps: list[tool_schema.Gap] = []
+    gaps: list[schema.Gap] = []
 
-    tool_schema.catalog_to_tools(text_of("one_tool.txt"), gaps=gaps)
+    utils.catalog_to_tools(text_of("one_tool.txt"), gaps=gaps)
 
     assert [gap.kind for gap in gaps] == []
 
@@ -359,9 +357,9 @@ def test_an_enum_stated_only_in_prose_is_reported_rather_than_guessed() -> None:
     source = text_of("one_tool.txt").replace(
         "Mã khách hàng cần tra cứu.", "Mã khách hàng. chỉ chấp nhận VIP hoặc STANDARD."
     )
-    gaps: list[tool_schema.Gap] = []
+    gaps: list[schema.Gap] = []
 
-    tool_schema.catalog_to_tools(source, gaps=gaps)
+    utils.catalog_to_tools(source, gaps=gaps)
 
     assert [(g.parameter, g.kind) for g in gaps] == [
         ("ma_khach", "enum_stated_in_prose")
@@ -374,7 +372,7 @@ def test_the_require_line_is_the_fallback_when_a_star_is_missing() -> None:
         "ma_khach* (string)", "ma_khach (string)"
     )
 
-    (tool,) = tool_schema.catalog_to_tools(starless).tools
+    (tool,) = utils.catalog_to_tools(starless).tools
 
     assert tool.required == ("ma_khach",)
 
@@ -385,18 +383,18 @@ def test_a_tool_whose_parameters_are_all_optional_is_reported() -> None:
         .replace("ma_khach* (string)", "ma_khach (string)")
         .replace("require: ma_khach", "require: ")
     )
-    gaps: list[tool_schema.Gap] = []
+    gaps: list[schema.Gap] = []
 
-    (tool,) = tool_schema.catalog_to_tools(both_removed, gaps=gaps).tools
+    (tool,) = utils.catalog_to_tools(both_removed, gaps=gaps).tools
 
     assert tool.required == ()
     assert "nothing_required" in [gap.kind for gap in gaps]
 
 
 def test_to_strict_openai_emits_only_standard_openai_keys() -> None:
-    (tool,) = tool_schema.catalog_to_tools(text_of("one_tool.txt")).tools
+    (tool,) = utils.catalog_to_tools(text_of("one_tool.txt")).tools
 
-    emitted = tool_schema.to_strict_openai(tool)
+    emitted = utils.to_strict_openai(tool)
 
     assert set(emitted) == {"type", "function"}
     assert set(emitted["function"]) <= {"name", "description", "parameters"}

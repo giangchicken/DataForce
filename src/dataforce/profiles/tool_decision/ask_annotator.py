@@ -14,12 +14,9 @@ import html
 
 from agent_toolkit.string_utils import slot_filling
 
+from dataforce.profiles.tool_decision.schema import Tool
 from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY
-from dataforce.profiles.tool_decision.tool_schema import (
-    Tool,
-    catalog_names,
-    tools_to_catalog,
-)
+from dataforce.profiles.tool_decision.utils import catalog_names, tools_to_catalog
 from dataforce.shared.record import Record, UIControl
 
 __all__ = ["answer_config", "question_text", "readable_catalog"]

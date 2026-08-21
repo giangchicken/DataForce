@@ -1,16 +1,16 @@
-"""DEFINITION · a tool, and every conversion of one. Both directions, defined once.
+"""LOGIC · every conversion of a tool and a catalog. Both directions, defined once.
 
-A tool is an OpenAI function object: a name, one verbatim `description` carrying all
-usage guidance, and a JSON Schema of parameters. That is the source of truth. The
-catalog text is a *rendering* of it -- what a person reads, in the system prompt of a
-legacy record and on the annotator's screen -- and this module is the only place that
-knows how the two correspond.
+The shapes are `schema.py`; what is computed over them is here. The catalog text is a
+*rendering* of the tools -- what a person reads, in the system prompt of a legacy
+record and on the annotator's screen -- and this module is the only place that knows
+how the two correspond.
 
 Both directions live here on purpose. The strings below are the format: putting them in
 a config file while a parser also needed them would be two sources of truth for one
 grammar, and the way to know a grammar is self-consistent is to render and read with
-one definition and assert the round trip. Which is what `tests/unit/test_tool_schema.py`
-does, over the real corpus: 21,172 catalogs, read then re-rendered, byte-identical.
+one definition and assert the round trip. Which is what
+`tests/unit/test_catalog_format.py` does, over the real corpus: 21,172 catalogs, read
+then re-rendered, byte-identical.
 
 Ported from the corpus generator's `openai_to_catalog.py` and `catalog_to_openai.py`,
 which own the same contract on the producing side, and carrying their names --
@@ -26,20 +26,17 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
 from typing import Any
 
 from agent_toolkit.string_utils import compute_hash
 
+from dataforce.profiles.tool_decision.schema import Catalog, Gap, Tool
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import Record
 
 __all__ = [
     "CATALOG_HEADER",
     "INSTRUCTION",
-    "Catalog",
-    "Gap",
-    "Tool",
     "build_system_prompt",
     "catalog_fingerprint",
     "catalog_names",
@@ -102,54 +99,6 @@ _ENUM_IN_PROSE = (
     "một trong các giá trị",
     "chỉ nhận giá trị",
 )
-
-
-@dataclass(frozen=True)
-class Gap:
-    """Something the text implies that the schema could not be given.
-
-    The parser's own account of what it could not recover. A format reader that returns
-    less than it was given and says nothing is the failure this whole module is arranged
-    against.
-    """
-
-    tool: str
-    parameter: str | None
-    kind: str
-    evidence: str
-
-
-@dataclass(frozen=True)
-class Tool:
-    """One tool, in OpenAI function-calling form."""
-
-    name: str
-    description: str
-    parameters: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def properties(self) -> dict[str, Any]:
-        props: dict[str, Any] = self.parameters.get("properties") or {}
-        return props
-
-    @property
-    def required(self) -> tuple[str, ...]:
-        return tuple(self.parameters.get("required") or ())
-
-
-@dataclass(frozen=True)
-class Catalog:
-    """The tools one record offers, in the order the record offers them."""
-
-    tools: tuple[Tool, ...]
-
-    @property
-    def names(self) -> tuple[str, ...]:
-        return tuple(tool.name for tool in self.tools)
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.tools
 
 
 def to_strict_openai(tool: Tool) -> dict[str, Any]:
