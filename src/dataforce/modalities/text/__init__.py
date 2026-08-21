@@ -8,7 +8,8 @@ list until they land -- which the seam test tolerates and `pii_check` does not.
 from __future__ import annotations
 
 import html
-from collections.abc import Sequence
+import json
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -53,6 +54,70 @@ def _text_parts(parts: Sequence[Part]) -> list[TextPart]:
     return [part for part in parts if isinstance(part, TextPart)]
 
 
+def _arguments(function: Mapping[str, Any]) -> Any:
+    """One call's arguments, whichever way the source spelled them.
+
+    Every OpenAI-compatible provider sends `arguments` as a JSON *string* and some
+    send the object; both are the same call, so both are parsed to the object and
+    requirement 70 re-emits them in one form. Unparseable is a source-layout
+    problem, named as one -- guessing here would put a different `rid` on a record
+    depending on how its arguments were quoted.
+    """
+    given = function.get("arguments") or {}
+    if not isinstance(given, str):
+        return given
+    try:
+        return json.loads(given)
+    except json.JSONDecodeError as broken:
+        raise ConfigError(
+            f"the arguments of a call to {function.get('name')!r} are not JSON: "
+            f"{given!r} ({broken})"
+        ) from None
+
+
+def _call_text(calls: Sequence[Mapping[str, Any]]) -> str:
+    """A turn's calls as one canonical string: sorted keys, no insignificant space.
+
+    Requirement 70. A call keeps its name and its arguments and nothing else: the
+    provider's `id` and `type` are wire bookkeeping, and carrying them would put a
+    per-request identifier inside `rid`, so two runs over one source would disagree
+    about which records they are.
+    """
+    return json.dumps(
+        [
+            {
+                "name": call["function"]["name"],
+                "arguments": _arguments(call["function"]),
+            }
+            for call in calls
+        ],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def _one_part(turn: Mapping[str, Any]) -> TextPart:
+    """One turn as one part, whether it carries a string or a call.
+
+    A string is copied out byte-for-byte and never re-spelled -- only a turn
+    carrying structure *instead of* a string is rendered, so nothing about the
+    shape this corpus is in changes. A turn with neither is a source-layout
+    problem and says so: requirement 70 renders structure, and there is nothing
+    here to guess an absent content from.
+    """
+    content = turn.get("content")
+    if isinstance(content, str):
+        return TextPart(role=turn["role"], text=content)
+    calls = turn.get("tool_calls")
+    if calls:
+        return TextPart(role=turn["role"], text=_call_text(calls))
+    raise ConfigError(
+        f"a {turn.get('role')!r} turn carries neither string content nor "
+        "tool_calls; one turn is one part, and there is nothing to build it from"
+    )
+
+
 class TextModality:
     """Conversational text, one part per turn.
 
@@ -76,13 +141,14 @@ class TextModality:
     def content_parts(self, raw: Any) -> list[Part]:
         """One source item's turns, in order, each carrying its role.
 
-        The text is copied out byte-for-byte. Normalising here would silently
-        change what `rid` is computed over and what an annotator is shown.
+        A turn carrying a `tool_calls` array rather than a string is still one
+        part, rendered canonically so that two sources spelling one call
+        differently produce one part, one digest and one `rid`. Rendering, not
+        interpreting: what a call *means* is the profile's, and a modality that
+        started reading arguments would have acquired an opinion about what an
+        answer is.
         """
-        return [
-            TextPart(role=turn["role"], text=turn["content"])
-            for turn in raw["messages"]
-        ]
+        return [_one_part(turn) for turn in raw["messages"]]
 
     def embedding(self, parts: list[Part]) -> Sequence[float]:
         """One vector over the conversation, for near-duplicate detection only."""

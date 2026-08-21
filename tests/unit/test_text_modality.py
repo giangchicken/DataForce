@@ -71,6 +71,160 @@ def test_loaded_text_is_byte_identical_to_the_source() -> None:
         assert part.text == turn["content"]
 
 
+# One call, spelled three ways a real provider spells it: arguments as a JSON string,
+# the same string with the keys in the other order and whitespace added, and the object
+# form. Requirement 70 says all three are one call.
+CALL_AS_STRING = {
+    "role": "assistant",
+    "content": None,
+    "tool_calls": [
+        {
+            "id": "c2",
+            "type": "function",
+            "function": {
+                "name": "SendStatement",
+                "arguments": '{"ma_khach": "480215", "ky": "thang_nay"}',
+            },
+        }
+    ],
+}
+CALL_REORDERED = {
+    "role": "assistant",
+    "content": None,
+    "tool_calls": [
+        {
+            "id": "c9",
+            "type": "function",
+            "function": {
+                "arguments": '{ "ky" : "thang_nay" ,\n  "ma_khach" : "480215" }',
+                "name": "SendStatement",
+            },
+        }
+    ],
+}
+CALL_AS_OBJECT = {
+    "role": "assistant",
+    "content": None,
+    "tool_calls": [
+        {
+            "type": "function",
+            "function": {
+                "name": "SendStatement",
+                "arguments": {"ky": "thang_nay", "ma_khach": "480215"},
+            },
+        }
+    ],
+}
+
+CANONICAL = (
+    '[{"arguments":{"ky":"thang_nay","ma_khach":"480215"},"name":"SendStatement"}]'
+)
+
+
+def test_one_call_spelled_three_ways_is_one_part_and_one_rid() -> None:
+    """Requirement 70, and invariant 2: identity cannot depend on quoting.
+
+    A provider that quotes its arguments differently, or orders their keys
+    differently, is describing the same call -- so the canonical rendering is what
+    stops two ingests of one conversation becoming two records.
+    """
+    spellings = [CALL_AS_STRING, CALL_REORDERED, CALL_AS_OBJECT]
+
+    parts = [TEXT.content_parts({"messages": [turn]}) for turn in spellings]
+
+    for built in parts:
+        assert len(built) == 1
+        assert isinstance(built[0], TextPart)
+        assert built[0].role == "assistant"
+        assert built[0].text == CANONICAL
+    assert len({compute_rid(built) for built in parts}) == 1
+
+
+def test_a_call_carries_its_name_and_arguments_and_no_wire_bookkeeping() -> None:
+    """`id` is per-request. In `rid` it would make one conversation two records."""
+    (part,) = TEXT.content_parts({"messages": [CALL_AS_STRING]})
+
+    assert isinstance(part, TextPart)
+    assert "c2" not in part.text
+    assert "function" not in part.text
+
+
+def test_vietnamese_argument_values_are_not_escaped_away() -> None:
+    """The canonical form is still the text a person reads on the annotator's page."""
+    turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "OpenTicket",
+                    "arguments": {"ly_do": "khách chưa nhận được sao kê"},
+                },
+            }
+        ],
+    }
+
+    (part,) = TEXT.content_parts({"messages": [turn]})
+
+    assert isinstance(part, TextPart)
+    assert "khách chưa nhận được sao kê" in part.text
+
+
+def test_a_conversation_mixing_strings_and_calls_builds_in_turn_order() -> None:
+    """A `tool` role needs no declaration to be carried -- only to be read by meaning."""
+    raw = {
+        "messages": [
+            {"role": "user", "content": "Mã của mình là 480215."},
+            CALL_AS_STRING,
+            {"role": "tool", "tool_call_id": "c2", "content": '{"so_du": 1250000}'},
+            {"role": "assistant", "content": "Đã gửi sao kê cho bạn."},
+        ]
+    }
+
+    parts = TEXT.content_parts(raw)
+
+    assert [part.role for part in parts] == ["user", "assistant", "tool", "assistant"]
+    assert isinstance(parts[2], TextPart)
+    # a string turn is copied, never re-spelled: the space after the colon survives
+    assert parts[2].text == '{"so_du": 1250000}'
+    assert TEXT.display_config(record_from(list(parts)))
+
+
+def test_a_string_turn_wins_over_calls_beside_it() -> None:
+    """Requirement 70 renders structure carried *instead of* a string, not as well as.
+
+    Rendering a turn that already has text would change what `rid` covers on every
+    corpus where a provider sends both.
+    """
+    turn = {**CALL_AS_STRING, "content": "Để mình gửi sao kê nhé."}
+
+    (part,) = TEXT.content_parts({"messages": [turn]})
+
+    assert isinstance(part, TextPart)
+    assert part.text == "Để mình gửi sao kê nhé."
+
+
+def test_a_turn_with_neither_content_nor_calls_is_named_not_guessed() -> None:
+    with pytest.raises(ConfigError, match="neither string content nor"):
+        TEXT.content_parts({"messages": [{"role": "assistant", "content": None}]})
+
+
+def test_arguments_that_are_not_json_name_the_tool_rather_than_crashing_blindly() -> (
+    None
+):
+    turn = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {"type": "function", "function": {"name": "SendMail", "arguments": "{oops"}}
+        ],
+    }
+
+    with pytest.raises(ConfigError, match="SendMail"):
+        TEXT.content_parts({"messages": [turn]})
+
+
 def test_the_modality_is_registrable_through_the_real_gate() -> None:
     assert isinstance(TEXT, Modality)
     registry = Registry()
@@ -117,6 +271,25 @@ def test_a_media_part_is_a_configuration_error_not_a_silent_skip() -> None:
 
     with pytest.raises(ConfigError, match="audio"):
         TEXT.embedding([media])
+
+
+@pytest.mark.integration
+def test_a_record_carrying_a_call_embeds_like_any_other() -> None:
+    """The vector is over the conversation, and a rendered call is part of it."""
+    parts = TEXT.content_parts(
+        {
+            "messages": [
+                {"role": "user", "content": "Gửi sao kê giúp mình."},
+                CALL_AS_STRING,
+                {"role": "tool", "tool_call_id": "c2", "content": "{}"},
+            ]
+        }
+    )
+
+    vector = TEXT.embedding(parts)
+
+    assert len(vector) == 256
+    assert all(isinstance(value, float) for value in vector)
 
 
 @pytest.mark.integration
