@@ -17,35 +17,28 @@ and `prompts.render`, are now `read_manifest`, `read_prompt` and gone respective
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
-from conftest import REPO_ROOT, SOURCE_ROOT
+from conftest import SOURCE_ROOT, stage_table
 
 # Both axes, plus the package that reads their configuration.
 GUARDED_PACKAGES = ("modalities", "profiles", "declared")
-
-SPEC = REPO_ROOT / "docs" / "annotation-pipeline" / "spec.md"
 
 # Operations with no object. Every one of them was a member name here before R1.
 BARE_OPERATIONS = frozenset(
     {"adapt", "parse", "of", "render", "export", "load", "embed", "measure", "drift"}
 )
 
-# A stage-table row: `| 3 | data_quality | `embed` | ... `. The phase column is
-# plain words, which is what keeps this off the five-rule table further down.
-_STAGE_ROW = re.compile(r"^\|\s*\d+\s*\|\s*[\w ]+\|\s*`(\w+)`\s*\|")
 
+def stage_names() -> set[str]:
+    """The stage column of the core spec's stage table.
 
-def stage_names(spec: Path = SPEC) -> set[str]:
-    """The stage column of the core spec's stage table."""
-    found = {
-        match.group(1)
-        for line in spec.read_text(encoding="utf-8").splitlines()
-        if (match := _STAGE_ROW.match(line))
-    }
-    # The three the convention was invented for. If the table moves and the parse
-    # silently reads nothing, this fails instead of passing on an empty set.
+    Parsed by `conftest.stage_table`, which is also what `test_flow.py` checks the
+    phase names against: one regex for one table, so the two guards cannot come to
+    different conclusions about what the document says.
+    """
+    found = {stage for _, _, stage in stage_table()}
+    # The three the convention was invented for.
     assert {"load", "embed", "export"} <= found, f"read only {sorted(found)}"
     return found
 

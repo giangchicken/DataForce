@@ -10,6 +10,7 @@ conformance suite exercised.
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = REPO_ROOT / "src" / "dataforce"
 CONFIG = REPO_ROOT / "config"
 PARAMS = REPO_ROOT / "params.yaml"
+CORE_SPEC = REPO_ROOT / "docs" / "annotation-pipeline" / "spec.md"
 
 # Both axes, built once from the repository's own committed policy, through the same
 # composition root every caller uses. Neither is constructed at import time by the
@@ -55,6 +57,29 @@ def source_files() -> list[Path]:
     files = sorted(SOURCE_ROOT.rglob("*.py"))
     assert files, "no source modules found -- the guard tests would pass vacuously"
     return files
+
+
+_STAGE_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*([a-z_]+)\s*\|\s*`(\w+)`\s*\|")
+
+
+def stage_table(spec: Path = CORE_SPEC) -> tuple[tuple[int, str, str], ...]:
+    """The core spec's stage table: one `(number, phase, stage)` row per stage.
+
+    The document is the source for both the phase names and the stage names, so the
+    guards that check code against it all parse the table here rather than each
+    carrying its own regex for one document.
+    """
+    rows = tuple(
+        (int(found.group(1)), found.group(2), found.group(3))
+        for line in spec.read_text(encoding="utf-8").splitlines()
+        if (found := _STAGE_ROW.match(line))
+    )
+    # If the table moves and the parse silently reads nothing, every caller would
+    # pass vacuously. Two claims that hold however the table is edited.
+    assert rows, f"no stage row parsed out of {spec}"
+    numbers = [number for number, _, _ in rows]
+    assert len(set(numbers)) == len(numbers), f"a stage number is repeated: {numbers}"
+    return rows
 
 
 def parsed_sources(
