@@ -133,6 +133,8 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 13. Ingest streams the source via `file_utils.iter_json_array_file` or the modality's loader. A source file is never loaded whole.
 14. Ingest records provenance per record: source file SHA-256, byte offset, the raw record verbatim, the modality and profile names with versions, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
+
+    **Three of those are not what they say, and stage 0 states each deviation where it stamps it.** The *ingest timestamp* is not a clock reading: invariant 14 asks two runs over one source for byte-identical artifacts, and a per-record wall clock makes that impossible, so `ingested_at` is a required parameter of the stage — which therefore holds no clock — and `api/` supplies the source file's own last-modified time. The *byte offset* is the element's index in the source array: `iter_json_array_file` yields values and not positions, so a byte offset would cost a second pass over 126 MiB to recover what the index already answers, which element of the array this record is. And *the raw record verbatim* is a field no record has: what is kept is every key the profile does not own, plus the turns as canonical parts, plus `file_sha256` and `offset`, which locate the original — a second verbatim copy would double a 141 MB artifact to say what those two already say. The exception is the one place it is the only evidence there is: an unparsable item **is** carried verbatim, as its own single content part. Each of the three is the same trade — a value derived from the input, so that two runs over one input agree.
 15. The **source-integrity gate** runs the profile's validity checks, and each failure writes the record to `data/quarantine/invalid/<check>.jsonl` naming the check it failed, and removes it from the main path. Records are never silently deleted and never silently kept.
 16. Expected invalid counts per check are declared in `params.yaml`, and a count moving more than ±10% fails the gate. The source changed, and that must be a decision rather than a surprise. Re-admission is an explicit `dataforce requeue --check <name>` that versions the pipeline.
 17. Every artifact is written with `file_utils.write_jsonlines` or `write_json` and read with the matching reader. Both are atomic and create parent directories, so an interrupted stage leaves the previous artifact intact. No stage opens an artifact file directly.
@@ -294,9 +296,13 @@ dataforce/
 │   │   │                          cli.py included. Sequences the stages in-process,
 │   │   │                          persists artifacts, writes a gate's verdict
 │   │   ├── __init__.py          open_engine · build_records · profile_corpus
+│   │   │                        · stage_outputs
 │   │   ├── engine.py            Engine — a resolved (modality, profile, policy)
-│   │   └── artifacts.py         the only place an artifact is read or written,
-│   │                            and where a run manifest is built
+│   │   ├── artifacts.py         the only place an artifact is read or written,
+│   │   │                        and where a run manifest is built
+│   │   └── run.py               the sequence: which stages are built, which phase
+│   │                            directory each writes into, and the wiring that
+│   │                            turns a pure stage function into files
 │   │
 │   ├── declared/                ← the only package that reads config/
 │   │   ├── manifest.py          reads one from config/<axis>/<name>.yaml
@@ -306,7 +312,8 @@ dataforce/
 │   │
 │   ├── core/                    engine — no I/O, no working-directory assumption
 │   │   ├── flow.py              the four phases and the stages each covers
-│   │   ├── record.py            canonical record + typed content parts
+│   │   ├── record.py            canonical record + typed content parts + the key
+│   │   │                        stage 0 stamps provenance under, for any profile
 │   │   ├── manifest.py          what an implementation *is*, once read. The type
 │   │   │                        both axes are handed, so it cannot live above them
 │   │   ├── artifacts/           one module per phase, so a stage imports its own
@@ -643,6 +650,7 @@ The item is invented. That is a rule rather than a convenience: this repository 
 ```jsonc
 "__provenance__": {
   "source":   { "file_sha256": "7c0d4e19b2a8f3", "offset": 4471,
+                // the source file's own mtime, not the clock -- requirement 14
                 "ingested_at": "2026-08-21T09:14:02Z" },
   "producer": { "modality": "text@1", "profile": "tool_decision@1" }
 }

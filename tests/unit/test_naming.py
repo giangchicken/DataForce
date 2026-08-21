@@ -17,8 +17,9 @@ private `_` prefix is not an excuse; you still have to read it.* `_note`, `_says
 this file.
 
 `declared/` is in scope since it is the surface both axes are configured through, and
-`core/` is in scope as of the module-layout pass. `pipeline/` is still out, which is a
-scope rather than a clean bill -- there is nothing in it yet.
+`core/` is in scope as of the module-layout pass. `pipeline/` joined them with stage 0,
+which is the first time there was anything in it -- and it is the package where a name
+shared with a stage is most likely, since every module in it is named for one.
 """
 
 from __future__ import annotations
@@ -28,8 +29,9 @@ from pathlib import Path
 
 from conftest import SOURCE_ROOT, stage_table
 
-# Both axes, what they are written against, and the package that configures them.
-GUARDED_PACKAGES = ("core", "modalities", "profiles", "declared")
+# Both axes, what they are written against, the stages, and the package that configures
+# them.
+GUARDED_PACKAGES = ("core", "modalities", "pipeline", "profiles", "declared")
 
 # Operations with no object. Every one of them was a member name here before R1.
 BARE_OPERATIONS = frozenset(

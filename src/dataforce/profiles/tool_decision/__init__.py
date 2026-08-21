@@ -29,7 +29,7 @@ from typing import Any
 
 from dataforce.core.errors import ConfigError
 from dataforce.core.manifest import Manifest
-from dataforce.core.record import Part, Record, UIControl
+from dataforce.core.record import PROVENANCE_KEY, Part, Record, UIControl
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import (
     ai_review,
@@ -38,7 +38,6 @@ from dataforce.profiles.tool_decision import (
     release,
     schema,
 )
-from dataforce.profiles.tool_decision.data_quality import PROVENANCE_KEY
 from dataforce.profiles.tool_decision.utils import (
     answer_distance,
     read_source_contract,

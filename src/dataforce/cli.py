@@ -26,6 +26,7 @@ from dataforce.core.errors import DataForceError
 CONFIG = Path("config")
 PARAMS = Path("params.yaml")
 BASELINE = Path("metrics/corpus_profile.json")
+DATA = Path("data")
 
 
 def _argument_parser() -> argparse.ArgumentParser:
@@ -67,6 +68,23 @@ def _argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_command(args: argparse.Namespace) -> int:
+    """The stages the command named, or every stage that is built.
+
+    Both axes are resolved before the source is opened, so a pair the profile does not
+    declare stops here rather than after 126 MiB has been read.
+    """
+    engine = api.open_engine(
+        profile=args.profile,
+        modality=args.modality,
+        config_root=CONFIG,
+        params=PARAMS,
+    )
+    written = api.stage_outputs(engine, args.stages, params=PARAMS, data_root=DATA)
+    print(json.dumps({name: str(path) for name, path in written.items()}, indent=2))
+    return 0
+
+
 def _profile_command(args: argparse.Namespace) -> int:
     engine = api.open_engine(profile=args.profile, config_root=CONFIG, params=PARAMS)
     measured, moved = api.profile_corpus(
@@ -95,6 +113,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     try:
+        if args.command == "run":
+            return _run_command(args)
         if args.command == "profile":
             return _profile_command(args)
     except DataForceError as failed:

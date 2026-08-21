@@ -3,10 +3,14 @@
 data/raw/
 
 # Artifacts. DVC tracks what is under data/ apart from raw/; git tracks neither.
+# Listed per tier rather than as `data/`, so a `.dvc` pointer file beside an artifact
+# can still be committed. `run.json` is a file rather than a tier -- one run, one
+# manifest, at the root of what it wrote.
 data/interim/
 data/processed/
 data/release/
 data/quarantine/
+data/run.json
 *.jsonl
 !tests/fixtures/**/*.jsonl
 

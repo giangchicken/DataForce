@@ -22,7 +22,7 @@ import ast
 import re
 from pathlib import Path
 
-from conftest import SOURCE_ROOT
+from conftest import SOURCE_ROOT, first_docstring_line
 
 from dataforce.core.flow import PHASES
 
@@ -55,13 +55,6 @@ def implementation_packages(source_root: Path = SOURCE_ROOT) -> list[Path]:
 
 def modules_of(package: Path) -> dict[str, Path]:
     return {path.stem: path for path in sorted(package.glob("*.py"))}
-
-
-def first_docstring_line(path: Path) -> str:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    doc = ast.get_docstring(tree)
-    assert doc, f"{path} has no module docstring"
-    return doc.splitlines()[0]
 
 
 def imported_modules(tree: ast.Module, prefix: str) -> set[str]:

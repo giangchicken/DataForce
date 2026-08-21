@@ -20,6 +20,7 @@ from typing import Any
 
 from dataforce.core.errors import ConfigError
 from dataforce.core.record import (
+    PROVENANCE_KEY,
     Part,
     Producer,
     Record,
@@ -36,16 +37,10 @@ from dataforce.profiles.tool_decision.utils import (
 
 __all__ = [
     "CHECK_NAMES",
-    "PROVENANCE_KEY",
     "build_record",
     "validity_checks",
 ]
 
-
-# Where the load stage puts the two things only it knows: which file this item came from
-# and which implementations were resolved to read it. Required rather than defaulted, so
-# a record without provenance cannot be constructed at all.
-PROVENANCE_KEY = "__provenance__"
 
 # The order the checks are reported in, and the keys `params.yaml` declares counts
 # against.

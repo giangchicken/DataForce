@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "MEDIA_TYPES",
+    "PROVENANCE_KEY",
     "MediaPart",
     "Part",
     "Producer",
@@ -87,8 +88,22 @@ class Span(BaseModel):
     locator: dict[str, Any]
 
 
+# Where stage 0 puts the two things only it can know -- which file an item came from
+# and which implementations were resolved to read it -- for a profile's `build_record`
+# to lift out. Here rather than beside one profile's `build_record`, which is where it
+# started, because it is the ingest contract between the stage and *any* profile, and
+# `pipeline/` may not import a concrete one -- invariant 16. Required rather than
+# defaulted, so a record without provenance cannot be constructed at all.
+PROVENANCE_KEY = "__provenance__"
+
+
 class Source(BaseModel):
-    """Which file this record came from, and where in it."""
+    """Which file this record came from, and where in it.
+
+    `offset` is the element's index in the source array, not a byte offset -- see
+    `pipeline/data_quality/load.py`, which stamps it, for the requirement that says
+    byte and the reader that cannot give one.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

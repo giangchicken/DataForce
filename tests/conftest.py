@@ -82,6 +82,19 @@ def stage_table(spec: Path = CORE_SPEC) -> tuple[tuple[int, str, str], ...]:
     return rows
 
 
+def first_docstring_line(path: Path) -> str:
+    """The first line of one module's docstring, which is where its kind is declared.
+
+    Two guards read it -- `test_layout.py` for a profile's phase modules, `test_flow.py`
+    for a stage module -- so the parse is here rather than in whichever of them was
+    written first.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    doc = ast.get_docstring(tree)
+    assert doc, f"{path} has no module docstring"
+    return doc.splitlines()[0]
+
+
 def parsed_sources(
     source_root: Path = SOURCE_ROOT,
 ) -> Iterator[tuple[Path, ast.Module]]:

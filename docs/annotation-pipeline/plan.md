@@ -16,18 +16,18 @@
 | 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
 | 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | **built**, two criteria carried to Phase 5 — see C4 |
 | 2L | The tree mirrors the flow: `core/` is the base, every profile is the same seven files, and a name states what comes back | 6 | **built** |
-| 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
+| 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | **T11 built** — stage 0 runs over the whole source and reproduces byte for byte |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **345 tests** (311 under `make check`, 34 marked `integration`), **36 source modules**, **27 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; Phase 2L made the tree mirror the flow, so a stage author looks for a phase name rather than for a function; the first stage arrives in Phase 3.
+Today: **359 tests** (325 under `make check`, 34 marked `integration`), **39 source modules**, **28 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. **One stage of the fifteen exists.** `dataforce run load` reads all 21,172 records of the declared source and writes them as canonical records, twice over, byte for byte — which is the first time any claim in this plan has been checked against the whole corpus by the pipeline rather than by the profiler. The three revision passes are what made that a small task: 2E fixed the layering it would otherwise have been written against, 2C settled the answer type so it is not written twice, and 2L made the tree mirror the flow, so `pipeline/data_quality/load.py` was a filename before it was a decision.
 
 **Checking the built half, in four commands.** Each proves something a later phase depends on; none needs a network or a service except the third. A fifth, `uv run dvc repro`, is gone: with DVC no longer orchestrating there is no DAG to report on.
 
 | Command | What it proves |
 |---|---|
-| `make check` | ruff, `mypy --strict` on `src/`, and 310 tests |
+| `make check` | ruff, `mypy --strict` on `src/`, and 325 tests |
 | `uv run dataforce profile --profile tool_decision` | the profiler reads all 21,172 records, streaming, and reproduces every committed count |
 | `uv run pytest -q -m integration` | the corpus-wide claims: byte-identical catalog round trip, the four validity counts, the drift check |
 | `uv run pytest tests/unit/test_import_graph.py tests/unit/test_no_reimplementation.py` | invariants 16 and 17 — no concrete axis reaches `core/` or `pipeline/`, and no toolkit function is re-implemented |
@@ -658,7 +658,72 @@ from `core/`, left alone because it is data and pre-existing.
 
 **Source.** core requirements 7, 13, 14, 17; core § Error Behavior (source SHA-256, profile/modality disagreement).
 
-**Verify.** `uv run dataforce run load && uv run pytest tests/integration/test_load.py`
+**Verify.** `uv run dataforce run load && uv run pytest tests/unit/test_load.py` — the
+integration half of that line changed, and the next paragraph but three says why.
+
+**Done.** `src/dataforce/pipeline/data_quality/load.py` is stage 0: raw items in, records
+out, both gates as pure functions, no path and no clock. `api/run.py` is the sequence —
+`stage_outputs`, the table of which stages are built, and where a phase's
+`interim/<n>_<phase>` directory comes from; `cli.py` gained an argument-parsing branch and
+no logic of its own. Measured over the declared source: **21,172 items in, 21,172 parsed,
+0 unparsed, both gates passed, 15 s wall clock, 75 MB peak RSS** against a 126 MiB source
+and a 141 MB artifact — which is requirement 13's *never loaded whole* measured rather
+than asserted. Two consecutive runs wrote `loaded.jsonl` and `run.json` byte for byte
+identically, on the real corpus and on an invented fixture.
+
+**Three decisions the plan had left to whoever built it.**
+
+1. **`api/run.py`, rather than growing `artifacts.py`.** `artifacts.py`'s job is the
+   primitives every stage needs — a digest, a run manifest, a gate's verdict on disk. The
+   sequence is a different job, and it is the one that grows fifteen times. Splitting when
+   the second stage arrives would have meant splitting under pressure; splitting now costs
+   one module. The name is `stage_outputs` and not `run`, because `run` is the command's
+   name and says nothing about what comes back.
+2. **`PROVENANCE_KEY` moved to `core/record.py`.** It was in the profile's
+   `data_quality.py`, and stage 0 is what stamps it — so `pipeline/` would have had to
+   import a concrete profile to spell it, which is invariant 16. It is the ingest contract
+   between the stage and *any* profile, so it belongs beside `Source` and `Producer`. The
+   profile's re-export stays; both importers keep working.
+3. **Three of requirement 14's five provenance fields are not what the requirement says**,
+   and requirement 14 now records each: the ingest timestamp is the source file's own
+   mtime rather than a clock reading, because a per-record clock and invariant 14's
+   byte-identical artifact cannot both hold; the offset is the element's index, because
+   the streaming reader yields values and not positions; and no field holds the raw record
+   verbatim, because `file_sha256` and `offset` locate the original and a copy would double
+   the artifact. An unparsable item is the exception — there, the verbatim text is the only
+   evidence there is, so it is carried as the record's single content part.
+
+**One guard the plan had not asked for, and one it had.** The phase names are a file
+layout in three places — `core/artifacts/<phase>.py`, `profiles/<name>/<phase>.py`,
+`pipeline/<phase>/` — and until this task the third held nothing, so it was the one mirror
+nothing checked: the directory that holds the *stages*. `test_flow.py` now checks every
+`pipeline/` directory against `core/flow.py`, every stage module's filename, directory and
+docstring against the core spec's stage table, and `api.STAGES` against that table's order.
+`pipeline/` also joined `test_naming.py`'s scope, whose docstring had said it was out
+"because there is nothing in it yet". All five claims were proved by perturbation, each
+failing on exactly the mistake it names. Two guards that already existed earned their keep
+without being touched: the layering guard caught stage 0's gate assertion spelling
+`params.yaml` — the engine may not name a location, even in a message — and the
+byte-identity test *failed* to catch a wall clock, because two runs a moment apart share a
+second, which is why `test_load.py` now pins `ingested_at` to a source mtime set to 2019.
+
+**And one defect the first `git status` after the corpus run found.** `.gitignore` listed
+the four artifact tiers, and the run manifest is not in a tier — so `data/run.json` was
+committable, and `git add -A` staged the manifest of a 21,172-record run. The rule is
+there now, and so is the guard that would have caught it: `test_repo_hygiene.py` asks
+`git check-ignore` about every path a run writes, rather than reading `.gitignore` for a
+line that resembles one. Nothing was committed; the sweep before the commit is what
+surfaced it.
+
+**What this task did not do, deliberately.** There is no
+`tests/integration/test_load.py` running stage 0 over the declared corpus, which is what
+this task's *Verify* line originally named. The standing instruction on this project is
+that the declared source is not a test input — a test asserts about a file whose digest,
+element order and unreadable rows it chose — so the ten tests in `tests/unit/test_load.py`
+run on invented items, and the corpus run is the command a person runs and the numbers
+above are its result. `dvc.yaml` still declares zero stages, by shared decision 9.
+`dataforce requeue` is still the `not implemented` branch: it is T12's, along with the
+`quarantine/` tier and stage 1's five declared counts.
 
 ## T12 · `remove_invalid` stage and `dataforce requeue`
 
