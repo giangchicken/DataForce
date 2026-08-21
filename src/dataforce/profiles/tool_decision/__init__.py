@@ -42,22 +42,15 @@ class ToolDecisionProfile:
     """Tool selection over Vietnamese call-centre text, composed with `text`."""
 
     def __init__(
-        self, declared: Manifest, *, question_template: str, ceiling: int
+        self, declared: Manifest, *, question_template: str, answer_ceiling: int
     ) -> None:
         self.manifest = declared
         self.name = declared.name
         self.version = declared.version
         self.modality: str = declared.require("modality")
-        # The version names the file and is stamped into `questions.jsonl`; the
-        # template is its text, read by whoever built this object. Both are kept:
-        # an artifact records which prompt asked a question, and rendering it here
-        # is what keeps `config/prompts` out of the engine.
         self.question_prompt: str = declared.require("prompts")["question"]
         self.question_template = question_template
-        # The largest answer this source is declared to contain, from `params.yaml`.
-        # Held rather than read per record, and read before this object exists, so an
-        # undeclared ceiling fails earlier than the first of 21,172 rows.
-        self.ceiling = ceiling
+        self.answer_ceiling = answer_ceiling
         self.contract = read_source_contract(declared)
         self.answer_schema = schema.ANSWER_SCHEMA
 
@@ -71,7 +64,9 @@ class ToolDecisionProfile:
         return answer.vote_consensus(votes)
 
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
-        return build_record.validity_checks(self.contract, ceiling=self.ceiling)
+        return build_record.validity_checks(
+            self.contract, answer_ceiling=self.answer_ceiling
+        )
 
     def question_text(self, record: Record, focus: str) -> str:
         return ask_annotator.question_text(self.question_template, focus)

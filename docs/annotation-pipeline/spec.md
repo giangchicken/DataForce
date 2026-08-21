@@ -481,6 +481,44 @@ Twelve methods across the two contracts, and thirteen of the fifteen stages call
 | Any threshold | `params.yaml`, `config/gates.yaml` | a number in code is not reviewable, and every run records the digest of each policy file it read |
 | Its own identity | `config/<axis>/<name>.yaml` | `version` is a claim about how a dataset was made; edited as a class attribute it is a claim no review saw |
 
+### What goes in, and what comes out
+
+The canonical record below is the middle. This is the two ends, written as assumptions because they are what the pipeline takes on trust — and each one is why some stage or gate exists.
+
+**In: one source file, and nothing believed about it.**
+
+*Assumption:* a source is **one file holding one JSON array**, one element per record, readable in a single streaming pass. Its identity is the SHA-256 in `params.yaml` rather than its path, and `load` hard-stops when the two disagree — which is how running the same command over a changed file becomes a decision rather than a surprise. A record never spans two elements, and one run reads one source.
+
+*Assumption:* **where the content is** is the modality's to know and no other module's. `content_parts` is the only code in the system that reads the source's own layout; for `text` that is one part per turn of a `messages` array.
+
+*Assumption:* **the source's own answer is evidence, not truth.** ≥3.3% label errors in curated benchmarks is one of the four findings above, and 1,358 records of the first corpus had already been relabelled once, 1,346 of them to a different answer. It is carried into `label` verbatim and in source order, and every stage after `load` treats it as a claim to be checked.
+
+*Assumption:* **nothing else about the input is clean, and each uncleanliness gets a stage rather than a precondition.** The label may contradict the training target (`remove_invalid`), the content may carry personal data (`pii_check`), one scenario may appear many times (`dedup`), and the answer space itself may not be data at all — in the first corpus it is prose rendered into the instruction turn, which is why reading it back out is the profile's own grammar with a byte-identical round trip over all 21,172 records as its proof.
+
+*Assumption:* **every corpus-specific name is declared, never spelled in code.** Which turn is the instruction, which turn restates the answer, which key holds the label, what this file calls its labelling model — all of it is `config/profiles/<name>.yaml`, read once into the profile's source contract. A module that names `llm_model` has quietly become a module about one file.
+
+**What an already-standardised input would buy, stated so the cost of the declaration is visible.** If a source arrives in the canonical shape — the answer space as data, the pipeline's own role names, the answer at a known key — then the shape branch has one arm, no catalog grammar is needed on the way in, and the source contract shrinks to roles and a label key. That saving is real and it is not available here: this corpus is in the legacy shape, produced by a generator that renders its catalog into text, and one person standardising 21,172 records by hand is the work this pipeline exists to avoid. The declaration is kept either way, because the *second* source is what it is for — and a hand-standardised input is a transformation nobody recorded, which is the one thing requirement 14 exists to prevent.
+
+**Out: `release/vN`, and only what a consumer can judge.**
+
+One line per record per split, in the shape this profile's trainer expects: `training_example(record)` and nothing generic. For `tool_decision` that is `{"messages": [...], "meta": {...}}` with the final label in both the target turn and `meta.label`, asserted equal as it is written — that assertion is the one that counted the 48 disagreeing records before the source was fixed.
+
+```
+release/v1/
+├── train.jsonl  val.jsonl  test.jsonl   one training example per line
+├── MANIFEST.sha256                      every file above, digested
+├── run_manifest.json                    every policy file read, both axes as
+│                                          name@version, every artifact written — req 69
+├── datasheet.md   data_statement.md     what this dataset is made of — req 62
+└── croissant.json                       validated by mlcroissant
+```
+
+The profile supplies the body; `export` adds the per-record provenance of requirement 60. The record's internal blocks do **not** travel: votes, cohesion, the triage bucket, privacy counts and the duplicate cluster stay in `interim/`, where the pipeline's own reasoning belongs. A consumer gets what was decided and how the dataset was made, not the machinery that decided it.
+
+*Assumption:* a consumer's question is *can I train on this, and can I say where it came from* — and the three invariants that answer it are 13 (test is 100% human-validated), 12 (no group straddles a split) and 14 (two runs from a clean checkout are byte-identical). Anything the release cannot answer about itself is a documentation defect rather than a data one, which is why `document` is a gated stage and not a README.
+
+**What the output is not.** Not a database, not an API response, and not one file per record. Fifteen stages produce JSONL and one release directory; the platform that would serve them is [`dataforce-platform`](../dataforce-platform/spec.md), deferred behind a Label Studio v0 until the first profile's pilot gate passes.
+
 ### Canonical record
 
 One shape flows through every stage; each stage adds fields and removes none.

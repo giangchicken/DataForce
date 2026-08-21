@@ -68,7 +68,7 @@ def text_modality(*, config_root: Path) -> TextModality:
 
 
 def tool_decision_profile(*, config_root: Path, params: Path) -> ToolDecisionProfile:
-    """The `tool_decision` profile, with the question template and ceiling it declares."""
+    """The `tool_decision` profile, with the template and answer ceiling it declares."""
     declared = read_manifest(
         manifest_path("profiles", TOOL_DECISION_MANIFEST, root=config_root)
     )
@@ -77,7 +77,7 @@ def tool_decision_profile(*, config_root: Path, params: Path) -> ToolDecisionPro
         question_template=read_prompt(
             declared.require("prompts")["question"], root=config_root / PROMPTS_DIR
         ),
-        ceiling=max_answer_cardinality(params=params),
+        answer_ceiling=max_answer_cardinality(params=params),
     )
 
 

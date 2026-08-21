@@ -184,13 +184,15 @@ def _restated_answer(record: Record, role: str) -> Any:
 
 
 def validity_checks(
-    contract: SourceContract, *, ceiling: int
+    contract: SourceContract, *, answer_ceiling: int
 ) -> dict[str, Callable[[Record], bool]]:
-    """The four, bound to one source's vocabulary and one declared ceiling.
+    """The four, bound to one source's vocabulary and one declared answer ceiling.
 
-    The ceiling is handed in rather than read, so an undeclared threshold fails
-    before a profile exists to check with -- earlier than the first of 21,172 rows,
-    and without this module knowing what a file is. `declared/thresholds.py` reads it.
+    The ceiling is the largest answer this source is declared to contain, and it is
+    handed in rather than read -- so an undeclared threshold fails before a profile
+    exists to check with, earlier than the first of 21,172 rows and without this
+    module knowing what a file is. `declared/thresholds.py` reads it, off the
+    `max_answer_cardinality` key that is its name on disk.
     """
     restating_role = contract.restating_role
 
@@ -222,7 +224,7 @@ def validity_checks(
 
     def label_cardinality_anomaly(record: Record) -> bool:
         """More tools in the answer than this source is declared to contain."""
-        return len(record.label or []) > ceiling
+        return len(record.label or []) > answer_ceiling
 
     return {
         "label_assistant_mismatch": label_assistant_mismatch,

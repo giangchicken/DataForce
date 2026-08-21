@@ -105,7 +105,7 @@ def test_records_are_built_with_no_filesystem_anywhere() -> None:
         profile=ToolDecisionProfile(
             TOOL_DECISION_DECLARED,
             question_template="Tập trung vào: {{focus}}",
-            ceiling=3,
+            answer_ceiling=3,
         ),
         registry=Registry(),
         policy=(),
