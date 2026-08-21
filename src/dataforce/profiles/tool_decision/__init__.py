@@ -32,6 +32,7 @@ from dataforce.profiles.tool_decision import answer, ask_annotator, build_record
 from dataforce.profiles.tool_decision.build_record import PROVENANCE_KEY
 from dataforce.profiles.tool_decision.source_contract import read_source_contract
 from dataforce.profiles.tool_decision.utils import record_catalog
+from dataforce.shared.errors import ConfigError
 from dataforce.shared.manifest import Manifest
 from dataforce.shared.record import Part, Record, UIControl
 
@@ -55,6 +56,14 @@ class ToolDecisionProfile:
         self.answer_ceiling = answer_ceiling
         self.contract = read_source_contract(declared)
         self.answer_schema = schema.ANSWER_SCHEMA
+        # Required, not defaulted: a silently-defaulted capture control is exactly what
+        # requirement 75 forbids, because the two are not equivalent surfaces.
+        self.answer_control: str = declared.require("answer_control")
+        if self.answer_control not in ask_annotator.CONTROLS:
+            raise ConfigError(
+                f"{declared.name}: answer_control {self.answer_control!r} is not one "
+                f"of {list(ask_annotator.CONTROLS)}"
+            )
 
     def build_record(self, raw: Any, parts: list[Part]) -> Record:
         return build_record.build_record(raw, parts, self.contract)
@@ -77,7 +86,9 @@ class ToolDecisionProfile:
         return ask_annotator.readable_catalog(record)
 
     def answer_config(self, record: Record) -> UIControl:
-        return ask_annotator.answer_config(record, self.contract)
+        return ask_annotator.answer_config(
+            record, self.contract, control=self.answer_control
+        )
 
     def answer_schema_for(self, record: Record) -> dict[str, Any]:
         """This record's answer space, built now and stored nowhere.

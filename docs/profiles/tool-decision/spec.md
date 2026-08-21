@@ -148,7 +148,11 @@ The 10 are `label_names_one_tool_twice`, and on that source they are the only re
 
 ### Annotation surface
 
-23. The correction control is a dynamic `<Choices value="$tool_choices" choice="multiple">` populated from that record's own catalog plus an explicit "no tool" option, so a correction is a set drawn from the catalog by construction.
+23. The correction control is a **form**, because the answer is a set of calls (core requirement 75). `per_name_arguments` emits a `<Choices choice="multiple">` populated from that record's own catalog, plus, per tool, the argument fields generated from that tool's own `parameters` and shown only when that tool is picked — so an annotator cannot state an argument for a tool they did not call, and an argument the tool constrains with an `enum` is a closed choice rather than free text. `json_text` is the declared fallback for an annotation tool that cannot show a field conditionally: one text control in which the annotator writes the calls.
+
+    **Which one shipped is declared in the profile manifest and stamped on the project**, because the two are not equivalent surfaces: an annotator who filled in a form and one who hand-wrote JSON were not asked the same question, and an agreement figure is only readable next to the surface that produced it. Deciding which one ships is a measurement on a live instance and belongs to the task that builds the project.
+
+    The fallback can express any answer at all, including one outside the space, which is why requirement 75 pairs it with validation at pull time rather than treating the two as interchangeable. **That validation is not built**: it needs a JSON Schema applied to a value already in hand, `agent-toolkit` owns schema validation and exposes only `complete_structured`, and no module here may import `jsonschema` directly. The core spec's § *Out of Scope* files it against the library. Until it lands the fallback control is emitted and nothing accepts its output.
 24. Question generation follows [`guided-validation`](../../guided-validation/spec.md) unchanged in substance: focus chosen by marker rule, batch pre-generation, token budget as a hard ceiling, idempotence on `(rid, prompt_version, model)`. Only the rendering surface changes, from a bespoke React card to a generated Label Studio config.
 25. `slot_filling` uses `{{double-brace}}` placeholders while the marker DSL uses `{single-brace}` tokens, so filling a template can never consume `{trigger}` or `{hold_missing}`. This non-collision is asserted by test, not assumed.
 

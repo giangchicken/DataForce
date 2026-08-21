@@ -5,6 +5,15 @@ modality: text
 prompts:
   question: profiles/tool_decision/question.v1
 
+# Which control captures the answer. Declared rather than detected, because it changes
+# what an annotator can physically express and therefore what their agreement means:
+# `per_name_arguments` is a form -- a name control plus each chosen tool's own argument
+# fields -- and `json_text` is the fallback for an annotation tool that cannot show a
+# field conditionally, where the annotator writes the calls by hand. Which one this
+# project shipped is stamped from here, so a measured agreement figure can be read
+# against the surface it was measured on. Requirement 75.
+answer_control: per_name_arguments
+
 shape: legacy_system_prompt
 
 roles:

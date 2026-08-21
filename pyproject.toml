@@ -41,9 +41,10 @@ dev = [
     "ruff>=0.13.1",
     "pandas-stubs",
     # Proves `answer_schema_for` means what it says: a call in the record's space
-    # validates and one outside it does not. Test-time only for now -- the pull gate
-    # that validates a human correction at runtime is Phase 5, and this moves to
-    # `dependencies` with it.
+    # validates and one outside it does not. Tests only, and it stays that way: the
+    # library owns schema validation and `test_no_reimplementation.py` forbids any
+    # module under `src/` from importing this. See the core spec's § *Out of Scope*
+    # for the one function the library still needs.
     "jsonschema>=4.26",
 ]
 

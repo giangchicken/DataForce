@@ -27,7 +27,7 @@ import pytest
 from conftest import TEXT, TOOL_DECISION
 from jsonschema import Draft202012Validator
 
-from dataforce.profiles.tool_decision import build_record, schema, utils
+from dataforce.profiles.tool_decision import ask_annotator, build_record, schema, utils
 from dataforce.profiles.tool_decision.answer import answer_distance, vote_consensus
 from dataforce.profiles.tool_decision.source_contract import (
     OPENAI_TOOLS,
@@ -87,10 +87,14 @@ def declared_item() -> dict[str, Any]:
     return loaded[0]
 
 
-@pytest.fixture
-def record() -> Record:
+def declared_record() -> Record:
     raw = {**declared_item(), build_record.PROVENANCE_KEY: PROVENANCE}
     return build_record.build_record(raw, TEXT.content_parts(raw), CANONICAL)
+
+
+@pytest.fixture
+def record() -> Record:
+    return declared_record()
 
 
 @pytest.fixture
@@ -395,3 +399,128 @@ def test_a_consensus_call_is_inside_the_record_s_own_answer_space(
     consensus = vote_consensus([TARGET, TARGET, wrong_argument()], catalog)
 
     assert accepts(space_for(record), consensus)
+
+
+# --- requirement 75: capturing a compound answer ------------------------------
+
+
+def control_for(record: Record, contract: SourceContract, which: str) -> str:
+    return ask_annotator.answer_config(record, contract, control=which)
+
+
+def test_the_form_control_offers_every_name_and_no_others(
+    record: Record, contract: SourceContract
+) -> None:
+    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+
+    # Inside the name control only: an argument with a declared `enum` contributes
+    # `<Choice>` elements of its own, and those are a different question.
+    names = built.split('<Choices name="tools"')[1].split("</Choices>")[0]
+
+    assert names.count("<Choice ") == 3
+    for name in OFFERED:
+        assert f'value="{name}"' in names
+    assert "DeleteAccount" not in built
+
+
+def test_each_tool_s_arguments_are_shown_only_when_that_tool_is_picked(
+    record: Record, contract: SourceContract
+) -> None:
+    """What makes this a form rather than a wall of fields: an annotator cannot state
+    an argument for a tool they did not call, so an out-of-space answer is harder to
+    express than to avoid."""
+    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+
+    assert 'name="SendStatement.ky"' in built
+    assert 'name="SendStatement.ma_khach"' in built
+    assert 'name="OpenTicket.ly_do"' in built
+    assert built.count('visibleWhen="choice-selected"') == 4
+    assert 'whenChoiceValue="SendStatement"' in built
+
+
+def test_an_argument_the_tool_constrains_is_a_closed_choice_not_free_text(
+    record: Record, contract: SourceContract
+) -> None:
+    """`ky` declares an `enum`, so the control that captures it declares one too --
+    otherwise the surface would accept a value the answer space rejects, and the
+    annotator would only find out at pull time."""
+    built = control_for(record, contract, ask_annotator.PER_NAME_ARGUMENTS)
+
+    assert '<Choices name="SendStatement.ky"' in built
+    assert 'value="thang_nay"' in built
+    assert 'value="thang_truoc"' in built
+    assert '<TextArea name="SendStatement.ky"' not in built
+
+
+def test_the_fallback_is_one_text_control_and_names_no_tool(
+    record: Record, contract: SourceContract
+) -> None:
+    """The declared fallback for a tool that cannot show a field conditionally. It can
+    express any answer at all, which is why requirement 75 pairs it with validation at
+    pull time rather than treating the two controls as equivalent."""
+    built = control_for(record, contract, ask_annotator.JSON_TEXT)
+
+    assert "<TextArea " in built
+    assert "<Choices " not in built
+    assert "SendStatement.ky" not in built
+
+
+def test_which_control_ships_is_declared_and_not_guessed() -> None:
+    """Requirement 75's last clause: it is on the profile, so `publish` can stamp it.
+
+    An annotator who filled in a form and one who hand-wrote JSON were not asked the
+    same question, so an agreement figure is only readable next to which surface
+    produced it.
+    """
+    assert TOOL_DECISION.answer_control in ask_annotator.CONTROLS
+
+    with pytest.raises(Exception, match="not an answer control"):
+        ask_annotator.answer_config(
+            declared_record(), CANONICAL, control="a_third_thing"
+        )
+
+
+def test_no_control_carries_anything_a_model_produced(
+    record: Record, contract: SourceContract
+) -> None:
+    """Invariant 10 does not soften because the control got richer. Everything in
+    either control comes from the record's own catalog, and the record's `meta` carries
+    a `label_source` naming what labelled it -- which must not reach the page."""
+    for which in ask_annotator.CONTROLS:
+        built = control_for(record, contract, which)
+
+        assert "debait" not in built
+        assert "480215" not in built
+        assert str(record.label) not in built
+
+
+def test_the_form_control_escapes_a_name_that_would_break_the_attribute(
+    record: Record, contract: SourceContract
+) -> None:
+    """Argument field names are built from tool names, so they are escaped on the same
+    terms -- a name is source data and the field name is now derived from it."""
+    hostile = record.model_copy(
+        update={
+            "meta": {
+                **record.meta,
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": 'Send" onclick="steal()',
+                            "description": "",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"ky": {"type": "string"}},
+                            },
+                        },
+                    }
+                ],
+            }
+        }
+    )
+
+    built = control_for(hostile, contract, ask_annotator.PER_NAME_ARGUMENTS)
+
+    assert 'onclick="steal()"' not in built
+    assert "&quot;" in built

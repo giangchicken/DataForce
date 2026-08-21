@@ -54,6 +54,7 @@ TOOL_DECISION_DECLARED = Manifest(
         "version": "1",
         "modality": "text",
         "prompts": {"question": "profiles/tool_decision/question.v1"},
+        "answer_control": "per_name_arguments",
         "shape": "legacy_system_prompt",
         "roles": {
             "instruction": "system",

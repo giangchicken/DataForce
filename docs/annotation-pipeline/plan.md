@@ -14,7 +14,7 @@
 | 2 | One raw record becomes a canonical record and comes back out as a training example | 4 | **built** |
 | 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
 | 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
-| 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | |
+| 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | **built**, two criteria carried to Phase 5 — see C4 |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
@@ -459,6 +459,8 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Out of scope.** Parsing the call into an answer — that is C2. This task only renders.
 
+**Done.** `e57c876`. One call spelled three ways — arguments as a JSON string, the keys reordered with whitespace added, arguments as an object — gives one part, one digest and one `rid`. Two rules were decided that the task did not name: a string turn *wins* over `tool_calls` beside it, because rendering a turn that already has text would change what `rid` covers on every corpus where a provider sends both — and it is why the reference source's parts are byte-identical, all its turns being strings; and `id`/`type` are dropped as wire bookkeeping, since a per-request identifier inside `rid` would make two ingests of one conversation two records. Unparseable arguments name the tool rather than raising a bare `JSONDecodeError` at record one of 21,172. **239 unit + 33 integration.**
+
 ## C2 · The answer type: calls with arguments, and the space that constrains them
 
 **Goal.** A set of calls is the answer type, each name from the record's catalog and each argument set validating against that tool's own `parameters` — and the record stores no answer space at all, because it already carries the catalog both are derived from.
@@ -487,6 +489,18 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Out of scope.** δ and consensus — C3. The capture control — C4.
 
+**Done.** `1bdc63f`. The catalog reader moved to `utils.py` beside the grammar, because `catalog_names` needs it and `build_record` already imports `utils`; it is now the only caller of `catalog_to_tools`, asserted by AST. `catalog_names(record, contract)` as planned, plus `record_catalog` for the two callers that need the whole catalog.
+
+Three corrections this task forced, each measured:
+
+**`label_names_one_tool_twice` is 10, not 0.** It was first declared 0 on the reasoning that a set of names cannot repeat one — a JSON array plainly can. All 10 state one name literally twice with no arguments, and they are invisible to the other four checks: the name is in the catalog, the catalog is not empty, the restating turn agrees, and cardinality 2 is under the ceiling of 3.
+
+**The baseline had to be regenerated**, which this task's criteria said would not happen — a fifth check is a fifth key. The diff is the proof instead: one added key, nothing removed, nothing changed, **69 leaf values byte-identical**, including `catalog_fingerprints.largest.fingerprint` and the 17,583/16,276 counts. So `scenario_hash` is unchanged over all 21,172 records with the field it used to read gone.
+
+**Requirement 71's cost claim was wrong for the prose shape.** `catalog_names` is 2.70 µs on the declared input — 0.29 s per pass — but 119 µs on a rendered catalog, so 12.6 s per pass rather than the "zero" the requirement claimed. A parse cache and normalising the catalog into `meta.tools` at stage 0 were both rejected, and the number is in the spec instead of the claim.
+
+`tests/unit/test_declared_input.py` is new and is what the phase was for: the spec's own worked example as a fixture, so the **input** is tested and not only the reference source. It immediately found that the configured profile object declares the reference source's shape and therefore reads a declared-input record as an empty catalog — honest, since a run declares one source, and now asserted rather than rediscovered. **275 unit + 33 integration.**
+
 ## C3 · δ and consensus over a compound answer
 
 **Goal.** `answer_distance` distinguishes a wrong tool from a right tool with one differing argument, and `vote_consensus` assembles a call only when it can assemble it fully.
@@ -507,6 +521,12 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Out of scope.** Weighting a record's calls by anything other than the mean over the union of names. Requirement 72 records that the mean is a choice; changing it is a threshold decision with its own task, not a refinement of this one.
 
+**Done.** `d368afd`. The ordering is asserted as an ordering: `0 = δ(same call) < δ(same tool, one of two arguments differs) = 0.5 < δ(different tools) = 1`. Argument agreement is over the **union** of keys, not the left side — `len(shared) / len(left)` would call a one-argument call a perfect match for the same call carrying five. The reduction is asserted to the bit over the same sampled answers the names-only implementation was measured on.
+
+**A contract change, called out:** `Profile.vote_consensus` takes the record as well as the votes. Requirement 74's `required`-key rule is unimplementable otherwise, since `required` is the tool's own declaration. Cheap now and not later — no stage calls it yet, so the change is the protocol, this profile and two fakes — and it leaks no answer type, since four other protocol members already take a record.
+
+**One criterion not met, and it cannot be yet:** "the α degenerate case against `krippendorff` still passes" has no test to run, because α is T19. What it wanted proved is that δ may be an arbitrary distance; the compound metric properties are asserted directly instead — reflexive, symmetric, in `[0,1]`, never NaN, empty answer included. **291 unit + 33 integration.**
+
 ## C4 · Capturing a compound answer, and the declared fallback
 
 **Goal.** `answer_config` captures a name and that name's arguments, or the declared JSON fallback, with which one shipped recorded on the project.
@@ -526,6 +546,14 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 **Verify.** `make check`, then the Label Studio integration test.
 
 **Out of scope.** Deciding which control ships. That is a measurement on a live instance, and T22 owns it.
+
+**Done in part, and the part that is missing is a dependency boundary rather than a shortcut.**
+
+Built: both controls. `per_name_arguments` emits the name control plus, per tool, argument fields generated from that tool's own `parameters` and shown only when that tool is picked — so an annotator cannot state an argument for a tool they did not call — with an `enum`-constrained argument becoming a closed choice rather than free text, because a surface that accepts what the space rejects sends the annotator away and tells them at pull time. `json_text` is the one-text-control fallback. Which one ships is `answer_control` in the profile manifest, **required rather than defaulted**, because a silently-defaulted capture control is what requirement 75 forbids. Invariant 10 re-asserted on both: neither carries `label_source`, the label, or any argument value from the record.
+
+**Not built: pull-time validation of the fallback's output.** It needs a JSON Schema applied to a value already in hand. `agent-toolkit` owns schema validation and exposes only `complete_structured`, which makes an LLM request, and `jsonschema` is in `test_no_reimplementation.py`'s `NOT_OURS` — hand-rolling a validator is exactly the reimplementation that set exists to prevent. The core spec's § *Out of Scope* already settles which way this resolves: a gap is fixed by a release there, not patched locally. Filed, naming the one function needed — a value, a schema, the list of faults. **Until it lands the fallback control is emitted and nothing accepts its output**, which is stated in the module docstring and in the profile spec's requirement 23.
+
+**Also not verified:** "a generated config validates against a live Label Studio instance." There is no Label Studio harness in the repo at all — that is T22 — so the config is built and unverified against a real instance. Both carried criteria belong to Phase 5, which owns `pull` and `publish`. **298 unit + 33 integration.**
 
 ---
 
