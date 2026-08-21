@@ -163,6 +163,7 @@ class Record(BaseModel):
 
     privacy: dict[str, Any] | None = None
     dup_cluster_id: str | None = None
+    dup_cluster_size: int | None = None
     is_representative: bool | None = None
     group_key: str | None = None
 

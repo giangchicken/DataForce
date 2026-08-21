@@ -60,7 +60,10 @@ SAMPLES: dict[str, dict[str, Any]] = {
         "verified": None,
     },
     "deduped": _record_row(
-        dup_cluster_id="c_0331", is_representative=True, group_key="g_7a1e"
+        dup_cluster_id="c_0331",
+        dup_cluster_size=112,
+        is_representative=True,
+        group_key="g_7a1e",
     ),
     "votes": {
         "rid": RID,

@@ -66,9 +66,16 @@ PII_FINDINGS = pa.DataFrameSchema(
 # here: one is marked `is_representative` and deletion happens at export from an explicit
 # filter, so the decision is reversible and recorded. `group_key` is what keeps variants
 # of one scenario from straddling a split.
+#
+# The cluster's id and its size, never the list of its members: the membership exists
+# once in `clusters.jsonl`, and on the largest cluster measured -- 112 records -- a
+# member list on every row is 248,640 bytes against 2,240, and 112 copies of one fact.
+# Size is here because it is the question a reader of one row has: `is_representative`
+# says whether this row survives export, and `dup_cluster_size` says of how many.
 def _deduped() -> pa.DataFrameSchema:
     columns = record_columns()
     columns["dup_cluster_id"] = pa.Column(str)
+    columns["dup_cluster_size"] = pa.Column(int, pa.Check.ge(1))
     columns["is_representative"] = pa.Column(bool)
     columns["group_key"] = pa.Column(str)
     return pa.DataFrameSchema(columns, name="deduped")

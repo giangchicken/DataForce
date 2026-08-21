@@ -141,13 +141,17 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 18. `pii_check` detects in two layers with separate jobs: the modality's detectors maximise recall and are allowed to be noisy, and an LLM pass over a bounded window, via `llm.complete_structured` against a fixed classification schema, sets precision. It **always** writes a findings artifact — every candidate span with its class, its surrounding window, and the verifier's verdict — which is what a person reads before deciding anything. A verification response that fails its schema leaves the span **unverified, not negative**.
 19. Rewriting content is controlled by one parameter, `enable_redact`, **false by default**. False: the stage reports and leaves content untouched. True: verified spans are replaced with **stable typed placeholders** scoped per record (`<PHONE_1>`, `<EMAIL_1>`), so a value referenced twice stays co-referent — and never deleted, because deleting a value can change the ground truth of the very judgment the record encodes.
+
+    What lands on the record is one entry per span: the `Span` shape — which part, the modality's own locator into it, the class — plus the placeholder it became. That is enough to say *this field held a phone number here, and it is now `<PHONE_1>`* without the record containing a phone number, which is the whole trick: the class and the location are the meaningful part, and the value is the part that cannot be kept. Counts and the class set are **derived** from the spans rather than stored beside them, so the two can never disagree about what was found.
 20. The gate is what makes the default safe. With redaction off, release-tier artifacts still match literal personal-data patterns, so the scan below fails and nothing ships. Turning it on is a change to `params.yaml`, which is committed and whose digest every run records in its run manifest — so the decision is attributable, without a bespoke approval format.
 21. The placeholder-to-original mapping is written to `data/raw/pii_vault.jsonl`. `data/raw/` is **not DVC-tracked and not committed**: the source file's identity is a SHA-256 in `params.yaml`, and the vault appears in `.gitignore` and in no `.dvc` file. Every other directory under `data/` may be versioned with `dvc add`. The findings and redaction reports record, per class, the counts and a sample of 20 *placeholders in context* — never original values — and the gate fails if any release-tier artifact matches a literal personal-data pattern.
 
 ### Duplicates and grouping
 
 22. Exact duplicates are removed on `compute_hash` of the content digest, keeping the record with the richer metadata.
-23. Near-duplicates are found with SemHash over the modality's embeddings. Cluster members are **not deleted**: they get a shared `dup_cluster_id` and one is marked `is_representative`. Deletion happens at export from an explicit filter, so the decision is reversible and recorded.
+23. Near-duplicates are found with SemHash over the modality's embeddings. Cluster members are **not deleted**: they get a shared `dup_cluster_id`, the size of the cluster they are in, and one is marked `is_representative`. Deletion happens at export from an explicit filter, so the decision is reversible and recorded.
+
+    A record carries the cluster's **id and size, never the list of its siblings' ids.** The membership exists once, in `clusters.jsonl`, which is the artifact a person investigating duplicates opens. On the largest cluster measured — 112 records — a sibling list on every row is **248,640 bytes against 2,240, and 112 copies of one fact**, any of which can disagree with the others after any stage touches a cluster. The size is there because it is the question a reader of one row actually has: `is_representative` says whether this row is the one that survives export, and `dup_cluster_size` says *of how many* — both O(1), and both answerable without a second file.
 24. Every record gets a `group_key` from the profile, unioned with its `dup_cluster_id`. A field that is unique per record is not a group key, and the profile is responsible for saying so with a measurement rather than an assumption.
 
 ### The jury
@@ -768,18 +772,22 @@ Every block below has exactly one owning stage, named in the comments. The one s
   // one per kind of failure -- the check name already says which kind it is, and "is
   // this record on the main path" has to stay one condition no stage can half-remember
   "failed_checks": [],
-  // stage 2 `pii_check`: the *evidence* -- what was found and replaced, counts and
-  // classes only; the placeholder-to-original mapping lives in the untracked vault,
-  // never here. Not the verdict: a record this stage withheld says so in
-  // `failed_checks`, because these counts look the same either way
-  "privacy": { "spans_replaced": 2, "classes": ["PHONE", "EMAIL"] },
+  // stage 2 `pii_check`: the *evidence*, one entry per span -- which part held it,
+  // where in that part, which class it is, and the placeholder it became. Counts and
+  // the class set are derived from this, not stored beside it. The matched *text* is
+  // never here: that text is the personal data, and `<PHONE_1>` -> original lives in
+  // the untracked vault, keyed by placeholder, for whoever is entitled to it. Not the
+  // verdict either: a record this stage withheld says so in `failed_checks`
+  "privacy": { "spans": [ { "part": 1, "type": "PHONE",
+                            "locator": { "start": 42, "end": 52 },
+                            "placeholder": "<PHONE_1>" } ] },
   // stage 4 `dedup`: cluster members are marked, never deleted, so the decision stays
   // reversible and recorded. `group_key` is the profile's, unioned with the cluster, so
   // variants of one scenario cannot straddle a split. Deliberately *not* a
   // `failed_checks` entry: a duplicate is not withheld, it stays on the main path and
   // is filtered at export by an explicit choice -- which is why the conservation gate
   // counts `deduped_out` as its own term rather than folding it into `quarantined`.
-  "dup_cluster_id": "c_0331", "is_representative": true,
+  "dup_cluster_id": "c_0331", "dup_cluster_size": 112, "is_representative": true,
   "group_key": "g_7a1e…",
 
   // stage 5 `jury`: every vote kept, including abstentions, because an abstention is
