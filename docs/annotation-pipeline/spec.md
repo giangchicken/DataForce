@@ -227,7 +227,7 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 ### Layers and the published surface
 
-66. **The engine computes and never touches the filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`. Neither axis is constructed at import time, so importing a profile reads nothing and works from any working directory.
+66. **The engine computes and never touches the filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `core/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`. Neither axis is constructed at import time, so importing a profile reads nothing and works from any working directory.
 67. **`declared/` is the only package that reads `config/`.** It turns files into the objects the engine accepts. Every path it takes is a required parameter with no module-level default, so nothing infers a location from the process's cwd.
 68. **`api/` is the published surface.** Every caller enters through it, `cli.py` included — the CLI holds argument parsing, logging setup and exit codes, and no behaviour of its own. `api/` sequences the fifteen stages in-process, persists artifacts, and is the only place a gate's verdict is written to disk.
 69. **Every run writes a run manifest** recording the SHA-256 of every policy file it read, the `name@version` of both axes, and the SHA-256 of every artifact it wrote. This is the lineage record that DVC's declared dependencies used to be, and diffing two of them is how reproducibility is checked.
@@ -304,20 +304,20 @@ dataforce/
 │   │   └── thresholds.py        what a gate compares against, and what one
 │   │                            source is declared to hold: gates.yaml, params
 │   │
-│   ├── shared/                  engine — no I/O, no working-directory assumption
+│   ├── core/                    engine — no I/O, no working-directory assumption
+│   │   ├── flow.py              the four phases and the stages each covers
 │   │   ├── record.py            canonical record + typed content parts
 │   │   ├── manifest.py          what an implementation *is*, once read. The type
 │   │   │                        both axes are handed, so it cannot live above them
-│   │   ├── schemas/             one module per pipeline phase, so a stage imports
+│   │   ├── artifacts/           one module per phase, so a stage imports its own
 │   │   │   ├── base.py          the columns every artifact carries
 │   │   │   ├── data_quality.py  loaded · usable · pii_findings · deduped
 │   │   │   ├── ai_review.py     votes · queue
 │   │   │   ├── human_review.py  questions · published · responses · aggregated
 │   │   │   │                    · curated
 │   │   │   └── release.py       split
-│   │   ├── registry.py          both axes by name; instance state, no global
 │   │   ├── agreement.py         α over any δ, cohesion, plurality
-│   │   ├── gates/runner.py      engine only — raises, and writes nothing
+│   │   ├── gates.py             engine only — raises, and writes nothing
 │   │   └── errors.py
 │   │
 │   ├── modalities/              ← axis 1: how content is read
@@ -325,24 +325,25 @@ dataforce/
 │   │   └── text/                content_parts · embedding · detectors · display
 │   │
 │   ├── profiles/                ← axis 2: what an answer is
-│   │   ├── base.py              Profile protocol: 9 members, nothing more
-│   │   └── tool_decision/       three definitions, the conversions, two steps, one tool:
+│   │   ├── base.py              Profile protocol: 9 members, ordered by phase
+│   │   └── tool_decision/       two definitions and the four phases, plus one tool:
 │   │       ├── __init__.py      the profile object — the index to the rest
 │   │       │
-│   │       ├── schema.py        DEFINITION · every shape: a tool · a catalog ·
-│   │       │                    ANSWER_SCHEMA · answer_schema_for
-│   │       ├── answer.py        DEFINITION · what is computed from an answer:
-│   │       │                    answer_distance · vote_consensus · training_example
-│   │       ├── source_contract.py  DEFINITION · what this corpus calls things
-│   │       ├── utils.py         LOGIC · every conversion of a tool and a catalog:
-│   │       │                    tools_to_catalog · catalog_to_tools
-│   │       │                    · build_system_prompt · to_strict_openai
-│   │       │                    · catalog_names · catalog_hash
+│   │       ├── schema.py        DEFINITION · every shape: a source contract · a
+│   │       │                    tool · a catalog · ANSWER_SCHEMA · answer_space
+│   │       ├── utils.py         LOGIC · every conversion and computation over them:
+│   │       │                    catalog_text · catalog_from_text · catalog_from_openai
+│   │       │                    · catalog_from_source · openai_function
+│   │       │                    · system_prompt_text · catalog_names · catalog_hash
+│   │       │                    · read_source_contract · calls_by_name
+│   │       │                    · answer_distance — δ, because two phases need it
 │   │       │
-│   │       ├── build_record.py  STEP · stages 0–1 · build_record · read_catalog
-│   │       │                    · validity_checks · scenario_hash
-│   │       ├── ask_annotator.py STEP · stages 7–8 · question_text · answer_config
-│   │       │                    · readable_catalog
+│   │       ├── data_quality.py  STEP · stages 0–4 · build_record · validity_checks
+│   │       ├── ai_review.py     STEP · stages 5–6 · vote_consensus
+│   │       ├── human_review.py  STEP · stages 7–11 · question_text · answer_config
+│   │       │                    · annotator_catalog_text
+│   │       ├── release.py       STEP · stages 12–14 · scenario_hash
+│   │       │                    · training_example
 │   │       │
 │   │       ├── measure_corpus.py  TOOL · `dataforce profile`, not in the flow
 │   │       └── schemas/         JSON Schema per input shape: what a record and a
@@ -466,7 +467,7 @@ class Profile(Protocol):
     # answers -- and the *only* thing the core knows about disagreement. Cohesion,
     # corpus conflict, the four triage buckets, Krippendorff's alpha over a set-valued
     # answer, adjudication and juror calibration are all written in terms of it, which
-    # is what lets `shared/agreement.py` be generic without being a framework.
+    # is what lets `core/agreement.py` be generic without being a framework.
     # Must satisfy profile rule 1's four properties -- the one nothing generic
     # enforces. Not the triangle inequality: a compound answer's delta is a weighted
     # average, requirement 4 says which four are claimed and why the fourth is not.
@@ -727,7 +728,7 @@ Stated because the gap is the plan's, not the reader's to discover. Each line be
 | δ over `(name, arguments)` | `answer_distance` is Jaccard over names, and raises on anything else | `TypeError` by design: `_tools` refuses to compare a shape it cannot mean |
 | `role: "tool"` as a declared role | three roles are declared: instruction, conversation, target | it embeds and displays; it is simply not named, so nothing may read it by meaning |
 
-Only the first is mechanical. The other three move the **answer type**, and the answer type is what the generic core is written in terms of — δ, `vote_consensus`, the capture control, `training_example` and every count that today means "names". None of it is `pipeline/` or `shared/` work, which is the two-axis design paying off: it is one profile declaring a richer answer, with its own δ and its own consensus rule per parameter. What it cannot be is a widened version of a names-only profile, because a δ that has to weigh a disagreement about one argument value against a disagreement about the tool is a decision, and every triage bucket and α inherits it.
+Only the first is mechanical. The other three move the **answer type**, and the answer type is what the generic core is written in terms of — δ, `vote_consensus`, the capture control, `training_example` and every count that today means "names". None of it is `pipeline/` or `core/` work, which is the two-axis design paying off: it is one profile declaring a richer answer, with its own δ and its own consensus rule per parameter. What it cannot be is a widened version of a names-only profile, because a δ that has to weigh a disagreement about one argument value against a disagreement about the tool is a decision, and every triage bucket and α inherits it.
 
 ### Canonical record
 
@@ -835,19 +836,21 @@ The second vote is what an abstention looks like: `ok: false`, `answer: null`, a
 
 **A profile may declare `vote_consensus = None`.** *Why:* free-text generation has no defensible consensus, and inventing one would produce a plausible machine-written label that the optional tier could ship. Declaring the gap keeps such profiles fully supported for triage — where they are genuinely useful — while making the one thing they cannot do explicit. *Reversible:* a profile can gain a consensus later; nothing depends on its absence.
 
-**A module holds one step of the workflow — and merging stops where the consumers differ.** *Alternatives:* one file per concern, which is what was built first: a profile of nine modules where four were under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist. The opposite extreme — one module per package, `shared/artifacts.py` holding all twelve artifact schemas — was drafted and rejected. *Why:* two rules pull against each other and both are load-bearing.
+**A module holds one step of the workflow — and merging stops where the consumers differ.** *Alternatives:* one file per concern, which is what was built first: a profile of nine modules where four were under ninety lines, and fourteen schema modules of which eleven describe stages that do not exist. The opposite extreme — one module per package, one `core/artifacts.py` holding all twelve artifact schemas — was drafted and rejected. *Why:* two rules pull against each other and both are load-bearing.
 
 *Group what changes together.* The reader of this codebase follows a **path** — how does one record get from the source file to a training example — so a file per concern charges ten navigations for one step. Everything stage 0 and stage 1 do belongs in `build_record.py`, and the three modules that read the source changed together every time the source changed.
 
 *And a module is a definition or a step, never both.* A **definition** module defines one noun — `schema.py` is every shape this profile's data has, `source_contract.py` is what one corpus calls things — and a **logic** module holds every conversion of one: `utils.py` is the six ways a catalog is written or read, `answer.py` the distance between two answers, the consensus of several, and the row a trainer wants. A definition is *supposed* to be used by many steps: one used in a single place is not a definition, it is that step. A **step** module is used by exactly one step of the flow and by nothing else, which is why `validity_checks` has no file of its own — it serves stage 1 alone, so it lives beside the stage-0 code that produces what it checks. This is what answers "why does one file turn up in four different states": only definitions and their conversions do, there are five such modules, and each is named for the noun or for the job.
 
-*And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `shared/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `shared/schemas/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become six, and `load.py` imports `schemas/data_quality.py` and nothing else. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
+*And never make a consumer depend on what it does not use.* This is what kills the single-module version. Fifteen stages under `pipeline/` import from `core/`; if all twelve artifact schemas sit in one module, then `data_quality/load.py` and `release/document.py` import the same file, and editing the release schema puts every stage in the blast radius. So `core/artifacts/` stays a package and is divided by **pipeline phase** — the boundary along which artifacts actually change and along which stages actually import. Fourteen modules become six, and `load.py` imports `artifacts/data_quality.py` and nothing else. Phase 2L made that boundary the layout rule everywhere rather than only here: the phase names are `core/flow.py`, and every profile has one module per phase for the same reason a stage has one artifact schema per phase. `schema_for(name)` still resolves all of them by name, for the round-trip test that must iterate every artifact; a stage never uses it.
 
-The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `shared/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `utils.py` holds one grammar rather than one copy per consumer for the same reason: a *format* copied into each of the places that reads it is two sources of truth.
+The same test keeps `manifest.py` and `prompts.py` apart inside `declared/` despite both being "things read from `config/`": a caller that wants a prompt has no business importing manifest loading. It is also the one rule the layering overrides. A definition owning every conversion of its noun would put `Manifest` and the code that reads one in a single module, but invariant 18 forbids the engine importing `declared/` and three engine modules need the type — so the shape is `core/manifest.py` and the reader is `declared/manifest.py`, and where the two rules disagree the layering wins. And `utils.py` holds one grammar rather than one copy per consumer for the same reason: a *format* copied into each of the places that reads it is two sources of truth.
 
-The second deviation is `schema.py`, and it is a convention rather than a conflict: **a profile's schemas live in one `schema.py` in the profile's own folder.** By R2 as written, what an answer looks like and what is computed from one are one noun and belong in one module. They are split because the schemas are read as a group and by different readers — the jury hands `answer_schema_for(record)` to `complete_structured`, the annotation UI constrains a control to the same names, and the first thing an author of a second profile needs is the shape their answers must have, not the metric over them. One file per profile folder is where that group is looked for. Nothing in `shared/schemas/` moves with it: those twelve are artifact schemas, and not one of them names anything a profile owns — `label` is `pa.Column(object)` precisely so that what a label *is* stays the profile's.
+The second deviation is `schema.py`, and it is a convention rather than a conflict: **a profile's schemas live in one `schema.py` in the profile's own folder.** By R2 as written, what an answer looks like and what is computed from one are one noun and belong in one module. They are split because the schemas are read as a group and by different readers — the jury hands `answer_space(record)` to `complete_structured`, the annotation UI constrains a control to the same names, and the first thing an author of a second profile needs is the shape their answers must have, not the metric over them. One file per profile folder is where that group is looked for. Nothing in `core/artifacts/` moves with it: those twelve are artifact schemas, and not one of them names anything a profile owns — `label` is `pa.Column(object)` precisely so that what a label *is* stays the profile's.
 
-The convention has a second half, and it is what split `tool_schema.py`: **a shape is a shape, and turning one thing into another is logic.** So `schema.py` holds the `Tool`, `Catalog` and `Gap` types beside the two answer schemas, and `utils.py` holds every conversion over them — which is why the docstring prefixes gained a fourth word, `LOGIC ·`, beside `DEFINITION ·`, `STEP ·` and `TOOL ·`. The grammar itself was *not* split: rendering a catalog and reading one back are still one module, because the byte-identical round trip over 21,172 corpus catalogs is the proof the two directions agree, and it only reads as one proof while they sit together. `schema.py` is now the most-imported module in the profile — four importers against `utils.py`'s three — which is the check that the seam was a real one.
+The convention has a second half, and it is what split `tool_schema.py`: **a shape is a shape, and turning one thing into another is logic.** So `schema.py` holds the `Tool` and `Catalog` types beside the two answer schemas, and `utils.py` holds every conversion over them — which is why the docstring prefixes gained a fourth word, `LOGIC ·`, beside `DEFINITION ·`, `STEP ·` and `TOOL ·`. The grammar itself was *not* split: rendering a catalog and reading one back are still one module, because the byte-identical round trip over 21,172 corpus catalogs is the proof the two directions agree, and it only reads as one proof while they sit together.
+
+**Since revised twice, both recorded in [`docs/module-layout/spec.md`](../module-layout/spec.md).** `Gap` was in that list and is not a shape this profile's *data* has — no record carries one and no stage sees one — so it is in `utils.py`, which is both its only producer and its only consumer; the rule that wins there is the one about consumers. And `SourceContract` came *in*, from a `source_contract.py` that was a shape plus its reader, split by kind. The four modules that were named for operations — `build_record.py`, `answer.py`, `ask_annotator.py` and that one — are now named for the phase of the flow that asks for what is in them, so *what does stage 8 ask of this profile* is answerable as a filename.
 
 *The cost:* the file count falls less than a flat merge would give — 49 to 30, not 21. *Reversible:* yes, and splitting later is cheaper than merging, because a merge is what proves two halves belonged together.
 
@@ -865,7 +868,7 @@ The convention has a second half, and it is what split `tool_schema.py`: **a sha
 
 **Content parts say `type`, the same word every provider uses.** *Alternatives:* `kind`, a name reserved for us so it could never be mistaken for a provider's field. *Why:* an ordered array of typed parts is how OpenAI, Anthropic and Gemini all model content, and all three call the discriminator `type` — so `type` is the field an engineer already recognises, which is worth more than avoiding a collision that cannot actually happen. The values disambiguate on their own: ours are closed and bare — `text | image | audio | video` — where OpenAI's are `input_text` / `input_image` / `input_audio` and Anthropic's differ again, so `"type": "audio"` is unambiguously a DataForce part. No provider's JSON is ever stored: a profile's `training_example` produces it, mapping both the value and its nesting to whatever that provider wants — ours keeps the payload flat on the part, where OpenAI nests it under a key repeating the type. The one real cost is that `type` shadows a Python builtin if a part is ever modelled as a dataclass attribute rather than a mapping key; that is a lint note, not a bug. *Reversible:* yes, but only before any artifact exists.
 
-**The record has no `answer_space` field. Reversed, with the measurement that reversed it.** *Alternatives, both of which this document previously specified:* materialise the full per-record JSON Schema onto the record; store the names as a cheap index and derive the rest. *Why the reversal:* the case for storing anything was that deriving means re-parsing a rendered catalog in every stage that reads a name. Measured, that is **0.27 µs** per record where the source carries its catalog as data — 0.0 seconds across 21,172 records — because there is nothing to parse; and where a source does render it into prose, the parse belongs at stage 0, which already does it, so it is paid once rather than per stage. The cost the field was buying protection against does not exist on the shape this pipeline is for.
+**The record has no `answer_space` field. Reversed, with the measurement that reversed it.** *Alternatives, both of which this document previously specified:* materialise the full per-record JSON Schema onto the record; store the names as a cheap index and derive the rest. *Why the reversal:* the case for storing anything was that deriving means re-parsing a rendered catalog in every stage that reads a name. Measured, that is **2.70 µs** per record where the source carries its catalog as data — 0.29 s across 21,172 records over the five callers a record has, and re-measured against the built code, which is why it is not the 0.27 µs this paragraph first carried — because there is nothing to parse; and where a source does render it into prose, the parse belongs at stage 0, which already does it, so it is paid once rather than per stage. The cost the field was buying protection against does not exist on the shape this pipeline is for.
 
 What the field cost instead: a second representation of the catalog that can disagree with the first, an artifact column on every record of every artifact, a name that says *answer space* for something every consumer read as a *catalog index* — `record.answer_space["items"]["enum"]`, a name list mined out of a JSON Schema — and, under a compound answer, a copy larger than the original. It also does not survive its own generalisation: a compound answer space is `oneOf` with `const`, and there is no `enum` path to mine, so every consumer would have been rewritten anyway.
 
@@ -926,9 +929,9 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 13. **Test is fully human-validated.** Every test record has `validation.status ∈ {original, corrected}`. *Check:* export gate.
 14. **Releases are reproducible.** Two `dataforce run` invocations from a clean checkout produce byte-identical artifacts. *Check:* CI on the smoke fixture, diffing the run manifest and `MANIFEST.sha256`.
 15. **The sampling design is reconstructible.** Every annotated record records its stratum and selection probability. *Check:* the residual-error estimator refuses to run when any lacks one.
-16. **The core is task-agnostic and modality-agnostic.** No module under `pipeline/` or `shared/` imports a concrete profile or modality. *Check:* an import-graph test over the source tree.
+16. **The core is task-agnostic and modality-agnostic.** No module under `pipeline/` or `core/` imports a concrete profile or modality. *Check:* an import-graph test over the source tree.
 17. **The library is not re-implemented.** No module defines a hash helper, a JSONL reader or writer, an atomic-write context manager, a JSON-from-text extractor, a template filler, or a retry wrapper; `openai`, `tenacity`, `tiktoken`, and `jsonschema` appear in no pipeline import. *Check:* a lint test over the source tree.
-18. **The engine touches no filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`; and none of them imports `api/` or `declared/`. *Check:* an AST guard over the source tree, asserting the guarded set is non-empty so it cannot pass vacuously.
+18. **The engine touches no filesystem.** No module under `modalities/`, `profiles/`, `pipeline/` or `core/` opens a file, names a config or data location, or imports `agent_toolkit.file_utils`; and none of them imports `api/` or `declared/`. *Check:* an AST guard over the source tree, asserting the guarded set is non-empty so it cannot pass vacuously.
 19. **Importing the engine reads nothing.** *Check:* a subprocess importing a concrete profile with a working directory that is not the repo root, and succeeding — the one assertion that cannot be written in-process.
 
 ## Error Behavior
@@ -972,7 +975,7 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 - **Profile rules.** Not a shared suite — requirement 6 and *Decisions* say why, and what it costs. Each profile proves the five rules of § *Rules a profile must satisfy* in its own test module, over its own answer type: `answer_distance` a metric including on the empty answer, `vote_consensus` deterministic and honouring unanimity, an answer surviving a JSON round trip, `build_record` preserving every field it does not own, and `training_example` reproducing the record's answer. A profile arriving without them is the signal to build the suite after all.
 - **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
 - **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `remove_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
-- **Import graph.** No `pipeline/` or `shared/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17. No engine module opens a file or imports `api/` or `declared/` — invariant 18, shown failing on the five I/O sites it was written against.
+- **Import graph.** No `pipeline/` or `core/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17. No engine module opens a file or imports `api/` or `declared/` — invariant 18, shown failing on the five I/O sites it was written against.
 - **Import purity, as a subprocess.** `python -c "import dataforce.profiles.tool_decision"` from a working directory that is not the repo root — invariant 19. This is the test that would have caught the problem the engine/api split exists to fix.
 - **Two registries in one process,** holding different profiles, neither seeing the other's.
 - **Contracts.** Every artifact has a pandera schema; a round-trip test writes with `write_jsonlines`, reads with `read_jsonlines`, and validates.

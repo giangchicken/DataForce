@@ -23,20 +23,31 @@ Detector = Callable[[list[Part]], list[Span]]
 
 @runtime_checkable
 class Modality(Versioned, Protocol):
-    def content_parts(self, raw: Any) -> list[Part]:
-        """Turn one raw source item into ordered, typed content parts."""
-        ...
+    """Read in the order the flow asks: three questions in `data_quality`, one later.
 
-    def embedding(self, parts: list[Part]) -> Sequence[float]:
-        """Turn content into a vector, for near-duplicate detection only."""
+    The members are ordered by the stage that calls them, and the section comments say
+    which, so *what does stage 3 need from a modality* is answerable by scrolling rather
+    than by reading the stage. `core/flow.py` names the phases.
+    """
+
+    # --- data_quality (stages 0-4) --------------------------------------------
+
+    def content_parts(self, raw: Any) -> list[Part]:
+        """Turn one raw source item into ordered, typed content parts. Stage 0."""
         ...
 
     def personal_data_detectors(self) -> list[Detector]:
-        """The high-recall detectors this kind of content needs."""
+        """The high-recall detectors this kind of content needs. Stage 2."""
         ...
 
+    def embedding(self, parts: list[Part]) -> Sequence[float]:
+        """Turn content into a vector, for near-duplicate detection only. Stage 3."""
+        ...
+
+    # --- human_review (stages 7-11) -------------------------------------------
+
     def display_config(self, record: Record) -> UIControl:
-        """The annotation-UI control that *displays* a record.
+        """The annotation-UI control that *displays* a record. Stage 8.
 
         Half of a composed config. A modality never emits the control that
         captures an answer -- that half belongs to the profile.

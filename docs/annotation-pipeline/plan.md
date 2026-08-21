@@ -15,21 +15,22 @@
 | 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
 | 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
 | 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | **built**, two criteria carried to Phase 5 — see C4 |
+| 2L | The tree mirrors the flow: `core/` is the base, every profile is the same seven files, and a name states what comes back | 6 | **built** |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
 | 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
 
-Today: **332 tests** (298 under `make check`, 34 marked `integration`), **36 source modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; the first stage arrives in Phase 3.
+Today: **344 tests** (310 under `make check`, 34 marked `integration`), **36 source modules**, **27 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. Nothing is a pipeline stage yet — what exists is two contracts, one modality, one profile, the surface every caller enters through, and the measurements every later gate is declared against. Phase 2E fixed the layering the first stage would otherwise have been written against; Phase 2C settled what an answer is, so the first stage is written against the answer type it keeps; Phase 2L made the tree mirror the flow, so a stage author looks for a phase name rather than for a function; the first stage arrives in Phase 3.
 
 **Checking the built half, in four commands.** Each proves something a later phase depends on; none needs a network or a service except the third. A fifth, `uv run dvc repro`, is gone: with DVC no longer orchestrating there is no DAG to report on.
 
 | Command | What it proves |
 |---|---|
-| `make check` | ruff, `mypy --strict` on `src/`, and 231 tests |
+| `make check` | ruff, `mypy --strict` on `src/`, and 310 tests |
 | `uv run dataforce profile --profile tool_decision` | the profiler reads all 21,172 records, streaming, and reproduces every committed count |
 | `uv run pytest -q -m integration` | the corpus-wide claims: byte-identical catalog round trip, the four validity counts, the drift check |
-| `uv run pytest tests/unit/test_import_graph.py tests/unit/test_no_reimplementation.py` | invariants 16 and 17 — no concrete axis reaches `shared/` or `pipeline/`, and no toolkit function is re-implemented |
+| `uv run pytest tests/unit/test_import_graph.py tests/unit/test_no_reimplementation.py` | invariants 16 and 17 — no concrete axis reaches `core/` or `pipeline/`, and no toolkit function is re-implemented |
 
 ## Shared decisions — read once, apply to every task
 
@@ -37,21 +38,25 @@ Settled by the specs. No task re-decides them, and a task that violates one is r
 
 1. **The library is not re-implemented.** No module defines a hash helper, a JSONL reader/writer, an atomic-write context manager, a JSON-from-text extractor, a template filler, or a retry wrapper. `openai`, `tenacity`, `tiktoken`, `jsonschema` appear in no pipeline import. Use the call table in spec § *What `agent-toolkit` already provides*. — core invariant 17
 2. **Every artifact is read and written through `file_utils`**, which is already atomic and creates parents. No stage opens an artifact file directly. — core requirement 17
-3. **Nothing under `pipeline/` or `shared/` imports a concrete profile or modality.** Both arrive through their registries. — core invariant 16
+3. **Nothing under `pipeline/` or `core/` imports a concrete profile or modality.** Both arrive through their registries. — core invariant 16
 4. **Every token figure is an estimate.** `agent-toolkit`'s `Completion` discards `usage`, so budgets are enforced on `count_tokens` estimates and every reported figure is labelled "estimated". — core requirement 37, Assumption
-5. **Thresholds live in `params.yaml` and `config/gates.yaml`, never in code.** `shared/gates/runner.py` is an engine: it raises with a gate's verdict and writes nothing. — core requirement 68
+5. **Thresholds live in `params.yaml` and `config/gates.yaml`, never in code.** `core/gates.py` is an engine: it raises with a gate's verdict and writes nothing. — core requirement 68
 6. **One `except LLMError` per dispatching stage.** Nothing catches bare `Exception` around an LLM call. — core § Error Behavior
 7. **Content parts use `type`, not `kind`**, with closed values `text | image | audio | video` and the payload flat on the part. — core Decisions
 8. **Python `>=3.12,<3.13`**; `agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0`. `git` must exist on the installing machine. CI sets `TIKTOKEN_CACHE_DIR` against a populated cache.
 9. **`data/raw/` is outside DVC entirely.** Not tracked, not committed, in `.gitignore`. Every other `data/` directory is versioned by `dvc add` when a person decides a milestone is worth keeping — DVC does not orchestrate, and `dvc.yaml` declares no stages. — core Decisions
 10. **Every name contains its result**, everywhere — not only on the contracts. `X_to_Y` for a conversion, `build_X` for something assembled, `read_X` for something pulled out of a larger structure; the convention is the corpus generator's own. Rejected: a single word naming an operation without its object (`adapt`, `parse`, `of`), a name that reads backwards (`label_of`), and any name that is also a stage name (`load`, `export`). — core § The two contracts, core Decisions
+
+    **Revised in Phase 2L: `X_to_Y` and `build_X` are rejected too.** `X_to_Y` names both ends and says which one comes back only by convention, and the convention broke in this repository: `tools_to_catalog` returned text while `catalog_to_tools` returned a `Catalog`, so each name promised what the other gave and neither could be read at a call site. A conversion is now `Y_from_X` — `catalog_from_text`, `catalog_from_openai`, `catalog_from_source` — or is named for the result alone where the input is obvious: `catalog_text`, `openai_function`, `system_prompt_text`. `read_X` stays. The rule now applies to private names as well, because AGENTS.md §5 always said it did and `tests/unit/test_naming.py` had never looked at one.
 11. **A module is a definition or a step, never both.** A definition module defines one noun and every conversion of it, and is expected to serve many steps. A step module serves exactly one step and nothing else — so a helper used by one step gets no file of its own. Two further limits: a module may not force a consumer to depend on what it does not use, which is why `shared/schemas/` stays a package divided by pipeline phase rather than becoming one file every stage imports; and a module's name says what is inside it. — core Decisions
+
+    **Revised in Phase 2L: inside an implementation of either axis, a step module is a *phase* module.** One per phase of the flow, named for it — `data_quality.py`, `ai_review.py`, `human_review.py`, `release.py` — because a profile's contribution to a five-stage phase is not five files' worth, and because the alternative is what actually happened: modules named for whichever function was being written, with two members of one phase ending up in two modules named for other phases. The four names come from `core/flow.py`, the file set is asserted by `tests/unit/test_layout.py`, and a phase module may not import a sibling. `shared/schemas/` is `core/artifacts/` and unchanged in kind.
 12. **There is no conformance suite.** The five profile rules are stated in core § *Rules a profile must satisfy* and each profile proves them in its own tests. Nothing checks them at registration, and the cost of that is stated with the rules. — core requirement 6, core Decisions
-13. **The engine computes; `declared/` reads config; `api/` is the surface.** No module under `modalities/`, `profiles/`, `pipeline/` or `shared/` opens a file, names a config or data location, imports `agent_toolkit.file_utils`, or is constructed at import time. Every path is a required parameter. Every caller enters through `api/`, `cli.py` included. — core requirements 66–69, core invariants 18–19
+13. **The engine computes; `declared/` reads config; `api/` is the surface.** No module under `modalities/`, `profiles/`, `pipeline/` or `core/` opens a file, names a config or data location, imports `agent_toolkit.file_utils`, or is constructed at import time. Every path is a required parameter. Every caller enters through `api/`, `cli.py` included. — core requirements 66–69, core invariants 18–19
 14. **`dataforce run [stage ...]` runs the named stages, or all fifteen.** There is no stage cache: naming stages is how a person re-does one without re-doing the corpus. — core Decisions
 15. **A number a task asserts comes from `metrics/corpus_profile.json`, not from prose.** The profiler is the only thing that measures the corpus, and CI pins its output. Three figures in the profile spec's own table had drifted from it unnoticed — corrected in this pass — so a task that quotes a count quotes the profiler, and prose in either spec is secondary to the committed file.
 
-16. **An answer is a set of calls, each with its arguments, and one call per tool name.** δ is name-first with per-argument agreement and reduces to Jaccard over names when arguments agree; consensus is majority per name then majority per argument, dropping a call it cannot assemble fully. A turn carrying a call is one canonically-rendered part, not a new part type. No task re-decides any of this — core requirements 70–75, core *Decisions*, built in Phase 2C. — the check on every task after 2C is that nothing under `pipeline/` or `shared/` changed to accommodate it.
+16. **An answer is a set of calls, each with its arguments, and one call per tool name.** δ is name-first with per-argument agreement and reduces to Jaccard over names when arguments agree; consensus is majority per name then majority per argument, dropping a call it cannot assemble fully. A turn carrying a call is one canonically-rendered part, not a new part type. No task re-decides any of this — core requirements 70–75, core *Decisions*, built in Phase 2C. — the check on every task after 2C is that nothing under `pipeline/` or `core/` changed to accommodate it.
 
 **Two prerequisites that are not code, and both blocking.** T21 (cross-border transfer review, before the first jury run against any offshore endpoint) and T27 (the marker-DSL glossary, before T23). They are numbered tasks rather than footnotes because skipping them silently is the failure mode.
 
@@ -68,7 +73,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T3 | Gate runner | A gate is a named predicate over a stage's inputs and outputs with thresholds from `config/gates.yaml`. A failure writes `GATE_FAILED.json` carrying the assertion, observed, expected and up to 100 offending `rid`s, then exits non-zero. No numeric threshold in `runner.py` | `test_gate_runner.py` |
 | T4 | The two protocols and their registries | `Modality` with four members; `Profile` with twelve protocol attributes — the nine of requirement 2 plus `name`, `version`, `modality`. Both member sets are pinned as literals, so adding a member fails a test. A profile whose declared modality differs from `--modality` is a hard stop. **R1 renamed ten of them** | `test_protocols.py`, `test_registries.py` |
 | T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that T9 and **T32** each carry rule tests for their own profile | the spec section; T9's and T32's *Verify* lines |
-| T6 | Guard tests | Import graph (no concrete axis reaches `shared/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
+| T6 | Guard tests | Import graph (no concrete axis reaches `core/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
 | T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `scenario_hash` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog_format.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
 | T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `answer_distance` with `δ(∅,∅)=0` returned before the division, `vote_consensus` as the strict-majority set, the four named validity checks, and a `training_example` that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
@@ -557,6 +562,67 @@ Built: both controls. `per_name_arguments` emits the name control plus, per tool
 
 ---
 
+# Phase 2L — Revision: the tree mirrors the flow
+
+**Goal:** the four phase names that already name the stage table, the planned `pipeline/`
+directories and the artifact schemas also name every profile's files — so *what does
+stage 8 ask of this profile* is answerable as a filename — and every function name says
+what comes back, private ones included, with a guard for each claim.
+
+**Source.** [`docs/module-layout/spec.md`](../module-layout/spec.md), written first and
+approved before any code moved.
+
+**Why now.** The trigger was a review question about `schema.py` holding `Gap`. Measured,
+the answer was larger than the question: `shared/` was named for its consumers ("what
+every stage uses"), so it had admitted a registry with one caller and an artifacts
+package with none, and the profile was the only place in the tree that ignored the flow's
+own vocabulary. Doing this before Phase 3 means the fifteen stages are written against
+the layout rather than against an exception to it.
+
+| Task | What | Depends on |
+|---|---|---|
+| L1 | `shared/` → `core/`, `gates/` flattened, `schemas/` → `artifacts/`, `registry.py` → `api/` | — |
+| L2 | `core/flow.py`, checked against the core spec's stage table | L1 |
+| L3 | The profile regrouped into seven files, four named for phases | L2 |
+| L4 | The layout and layering guards | L3 |
+| L5 | The renames, public and private, and the guard that keeps them | L4 |
+| L6 | Both contracts ordered by phase, and the docs | L5 |
+
+**Done, in six commits.** `beef239` `2e928de` `e034294` `90ee7a3` `9c093b2` and this one.
+344 tests (310 under `make check`, 34 integration with 1 skipped), `mypy --strict` clean
+over 36 modules, and `metrics/corpus_profile.json` byte-identical at `46a9280` across two
+full integration runs — which is the proof that nothing here changed behaviour, since
+that file is every number this profile measures about the corpus.
+
+**Four things the build found that the spec had not.** Each is recorded where the next
+reader hits it rather than only here.
+
+1. **A false comment, carried since Phase 2C.** The stage-1 block in the old
+   `build_record.py` said `label_names_one_tool_twice` reads 0 "because the reference
+   source states its answer as a set". It reads 10; `params.yaml` has said 10 since C2
+   and the comment had not caught up. Fixed in the commit that moved the text, because
+   moving a false statement forward is worse than moving it.
+2. **The naming guard had never read a private name.** Two dozen were sitting in the gap
+   between AGENTS.md §5 — *a private `_` prefix is not an excuse* — and a guard that
+   filtered on `startswith("_")`. `_note` appended a `Gap`, `_says` returned a bool,
+   `_spec_from` returned a three-tuple.
+3. **Three of the spec's own rename proposals were wrong**, because it had guessed at
+   code it had not read: `_records` pairs raw items with records rather than reading a
+   file, `cli._profile` returns an exit code, and `modalities/text._model` returns an
+   embedder. The code won and the spec records it.
+4. **`X_to_Y` had to go**, which contradicts shared decision 10 as it was written. The
+   contradiction is the evidence: `tools_to_catalog` returned text and
+   `catalog_to_tools` returned a `Catalog`. Decision 10 now says `Y_from_X`.
+
+**Carried, not done.** `registry.py` in `api/` is the move I would undo first — one
+caller says it is `api/`'s code, and a Registry still reads like a base type; the spec's
+Decision 4 says so. The protocol renames `build_record` → `canonical_record` and
+`answer_config` → `answer_control` are Decision 6 and were not taken: they edit the core
+spec's requirement text and its rules table, and this phase did not need them to make the
+layout hold. `profiles/tool_decision/schemas/`, three JSON Schema files for the input
+shapes, is still `schemas/` one directory from `schema.py` — the same ambiguity L1 removed
+from `core/`, left alone because it is data and pre-existing.
+
 # Phase 3 — `data_quality` over the real corpus
 
 **Goal:** 21,172 records become a usable corpus — personal data found and reported, near-duplicates grouped, and nothing downstream matching a personal-data pattern. Five DVC stages, five gates, and the first working `dataforce run`.
@@ -775,7 +841,7 @@ Built: both controls. `per_name_arguments` emits the name control plus, per tool
 
 **Blocked by.** R1.
 
-**Relevant files.** `src/dataforce/shared/agreement.py`.
+**Relevant files.** `src/dataforce/core/agreement.py`.
 
 **Proposed approach.** α with a pluggable distance — the profile's `answer_distance`, δ in the formulas; cohesion as `1 − mean pairwise δ`; plurality. Nominal α delegates to the `krippendorff` package. Nothing here imports a concrete profile: the distance arrives as an argument.
 
@@ -1075,7 +1141,7 @@ Built: both controls. `per_name_arguments` emits the name control plus, per tool
 **Proposed approach.** Single-label classification over a 30-record text fixture: the answer is one class, `answer_distance` is `0` if equal else `1`, `vote_consensus` is the mode. Run all fifteen stages with stubbed jurors, a stubbed generator and a containerized Label Studio. Follow the definition/step module rule from the start — this profile is small enough that it should be three files, not nine.
 
 **Acceptance criteria.**
-- All fifteen stages complete for the second profile with no change to any module under `pipeline/` or `shared/`.
+- All fifteen stages complete for the second profile with no change to any module under `pipeline/` or `core/`, and its own package is the same seven files.
 - Its own tests prove the five profile rules for a single-label answer. **If this profile arrives without them, that is the signal to build the suite after all** — see core Decisions.
 - Any change required in `pipeline/` to make this pass is itself a defect report against the core, recorded before the change is made.
 

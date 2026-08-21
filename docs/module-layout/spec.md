@@ -1,7 +1,20 @@
 # Module layout — the tree mirrors the flow
 
-**Status:** proposed. Supersedes `docs/engine-api-split/spec.md`, whose one rule
-(§ *the engine never opens a file*) is restated here as requirement 3.
+**Status:** built, in six commits, Phase 2L of the plan. Supersedes
+`docs/engine-api-split/spec.md`, whose one rule (§ *the engine never opens a file*) is
+restated here as requirement 3.
+
+**What the build changed about this document.** Three renames in § *Naming — private*
+were guesses this document made about code it had not read, and the code won:
+`_records` is `_raw_with_records` rather than `_read_records`, because it reads no file
+-- it pairs raw items with the records they became; `cli._profile` is `_profile_command`
+rather than `_named_profile`, because it returns an exit code for a subcommand; and
+`modalities/text._model` is `_embedder`. Everything else was applied as written. Two
+things were found on the way and fixed in the commit that moved them rather than
+carried forward: a comment in the old `build_record.py` claimed
+`label_names_one_tool_twice` reads 0, where `params.yaml` has said 10 since Phase 2C;
+and `test_naming.py`'s scan had never looked at a private name, which is where two
+dozen of them had been sitting.
 
 ## What
 

@@ -1,5 +1,13 @@
 # Engine / API split
 
+**Superseded by [`docs/module-layout/spec.md`](../module-layout/spec.md).** Everything
+below was built and still holds; what changed is where it lives and what it is called.
+`shared/` is now `core/`, `shared/schemas/` is `core/artifacts/`, `shared/gates/runner.py`
+is `core/gates.py`, and `shared/registry.py` is `api/registry.py`. The one rule this
+document exists for -- the engine computes and never opens a file -- is requirement 3 of
+that spec and is still asserted by `tests/unit/test_layering.py`. Kept for the reasoning,
+not as a description of the tree.
+
 ## What
 
 Split `dataforce` into an **engine** that computes and never touches the filesystem, a **loader** that is the only code reading the `config/` directory, and an **`api/` package** that is the published surface every caller goes through — the CLI included. DVC keeps its data-versioning job and loses its orchestration job: there is no `dvc.yaml` stage DAG and no `dvc repro`, and `api/` sequences the fifteen stages in-process instead. A dataset is versioned when a person decides it is worth versioning, with `dvc add`.

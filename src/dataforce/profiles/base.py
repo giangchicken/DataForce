@@ -26,16 +26,21 @@ Answer = Any
 
 @runtime_checkable
 class Profile(Versioned, Protocol):
+    """Read in the order the flow asks, which is the order a profile's files are in.
+
+    Two members belong to no phase and come first, then the four phases in flow order,
+    each section naming the stage that calls what is under it. So *what does stage 8 ask
+    of a profile* is answerable here and the answer is a filename in the profile:
+    `human_review.py`. `core/flow.py` names the phases.
+    """
+
     modality: str
     answer_schema: dict[str, Any]
 
-    def build_record(self, raw: Any, parts: list[Part]) -> Record:
-        """Turn a raw source item and its parts into a canonical record.
-
-        Preserves every field it does not own: what looks like noise now is what
-        a later question turns out to need.
-        """
-        ...
+    # --- asked by more than one phase -----------------------------------------
+    #
+    # `answer_distance` is stages 5 and 6 in `ai_review` and stage 10 in
+    # `human_review`, which is why a profile keeps it out of both phase modules.
 
     def answer_distance(self, a: Answer, b: Answer) -> float:
         """Distance between two answers. A metric -- rule 1, proved by the profile.
@@ -46,6 +51,26 @@ class Profile(Versioned, Protocol):
         why, and for what a profile that breaks it costs.
         """
         ...
+
+    # --- data_quality (stages 0-4) --------------------------------------------
+
+    def build_record(self, raw: Any, parts: list[Part]) -> Record:
+        """Turn a raw source item and its parts into a canonical record.
+
+        Preserves every field it does not own: what looks like noise now is what
+        a later question turns out to need.
+        """
+        ...
+
+    def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
+        """Checks a record either passes or provably fails, by name.
+
+        Provably: no judgment. If telling right from wrong needs a person, it is
+        an annotation task, not a validity check.
+        """
+        ...
+
+    # --- ai_review (stages 5-6) -----------------------------------------------
 
     def vote_consensus(self, votes: list[Answer], record: Record) -> Answer | None:
         """One answer from several, deterministically, about one record.
@@ -64,13 +89,7 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def validity_checks(self) -> dict[str, Callable[[Record], bool]]:
-        """Checks a record either passes or provably fails, by name.
-
-        Provably: no judgment. If telling right from wrong needs a person, it is
-        an annotation task, not a validity check.
-        """
-        ...
+    # --- human_review (stages 7-11) -------------------------------------------
 
     def question_text(self, record: Record, focus: str) -> str:
         """One focused, answerable question about this record."""
@@ -83,6 +102,8 @@ class Profile(Versioned, Protocol):
         space wherever the UI can express it, and asserted again at pull time.
         """
         ...
+
+    # --- release (stages 12-14) -----------------------------------------------
 
     def scenario_hash(self, record: Record) -> str:
         """What makes two records the same scenario, so they cannot straddle a split.
