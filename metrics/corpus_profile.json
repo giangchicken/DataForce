@@ -326,7 +326,8 @@
     "label_assistant_mismatch": 0,
     "label_not_in_catalog": 0,
     "empty_catalog": 0,
-    "label_cardinality_anomaly": 0
+    "label_cardinality_anomaly": 0,
+    "label_names_one_tool_twice": 10
   },
   "privacy_signals": {}
 }

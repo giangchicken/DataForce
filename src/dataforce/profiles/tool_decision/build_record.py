@@ -1,6 +1,6 @@
 """STEP · stages 0-1 · one raw source item into one canonical record, then checked.
 
-Stage 0 builds the record; stage 1 asks the four questions that can be answered by
+Stage 0 builds the record; stage 1 asks the five questions that can be answered by
 counting. They share a module because what stage 1 checks is exactly what stage 0
 wrote, and because `validity_checks` serves stage 1 and nothing else.
 
@@ -13,20 +13,16 @@ here spells a field name belonging to one corpus.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from typing import Any
 
-from dataforce.profiles.tool_decision.answer import answer_distance
-from dataforce.profiles.tool_decision.schema import Catalog, Tool, answer_space
+from dataforce.profiles.tool_decision.answer import answer_distance, calls_by_name
 from dataforce.profiles.tool_decision.source_contract import (
-    LEGACY_SYSTEM_PROMPT,
-    TOOLS_KEY,
     SourceContract,
 )
 from dataforce.profiles.tool_decision.utils import (
     catalog_hash,
     catalog_names,
-    catalog_to_tools,
 )
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.record import (
@@ -43,7 +39,6 @@ __all__ = [
     "PROVENANCE_KEY",
     "build_record",
     "scenario_hash",
-    "read_catalog",
     "validity_checks",
 ]
 
@@ -59,41 +54,11 @@ CHECK_NAMES = (
     "label_not_in_catalog",
     "empty_catalog",
     "label_cardinality_anomaly",
+    "label_names_one_tool_twice",
 )
 
 
 # --- stage 0: build the record -----------------------------------------------
-
-
-def read_catalog(
-    raw: Mapping[str, Any], parts: Sequence[Part], contract: SourceContract
-) -> Catalog:
-    """This item's catalog, from wherever its shape keeps it.
-
-    Under the canonical shape the tools are data and nothing is parsed. Under the legacy
-    shape they were rendered into the instruction turn, so they are read back out of it.
-    """
-    if contract.shape != LEGACY_SYSTEM_PROMPT:
-        return Catalog(
-            tools=tuple(
-                Tool(
-                    name=entry["function"]["name"],
-                    description=entry["function"].get("description", ""),
-                    parameters=entry["function"].get("parameters", {}),
-                )
-                for entry in raw.get(TOOLS_KEY) or []
-            )
-        )
-    instruction = contract.role_name("instruction")
-    rendered = next(
-        (
-            part.text
-            for part in parts
-            if isinstance(part, TextPart) and part.role == instruction
-        ),
-        "",
-    )
-    return catalog_to_tools(rendered)
 
 
 def _provenance(raw: Mapping[str, Any]) -> tuple[Source, Producer]:
@@ -121,11 +86,12 @@ def build_record(
     `training_example`'s `meta.label` out of step with the assistant message that
     invariant 4 asserts it equals.
     """
-    catalog = read_catalog(raw, parts, contract)
     source, producer = _provenance(raw)
-    # `tools` is kept rather than consumed: the answer space takes the names, and the
-    # descriptions are what an annotator reads. Under the legacy shape there is no such
-    # key and the catalog is already in the content.
+    # `tools` is carried through rather than consumed, and that is the whole of what
+    # this profile stores about its answer space: the names and each name's
+    # `parameters` are both already in it, so requirement 71's derived space needs no
+    # field of its own. Under the legacy shape there is no such key and the catalog is
+    # in the content instead, which `read_catalog` is the one place that knows.
     unowned = {
         key: value
         for key, value in raw.items()
@@ -136,23 +102,26 @@ def build_record(
         source=source,
         producer=producer,
         content=list(parts),
-        answer_space=answer_space(catalog),
         label=contract.read_label(raw),
         meta={**unowned, **(raw.get("meta") or {})},
     )
 
 
-def scenario_hash(record: Record) -> str:
+def scenario_hash(record: Record, contract: SourceContract) -> str:
     """This profile's answer to *same scenario*: the hash of the record's catalog.
 
     Never `source_index`, which is unique per record and measured to be so. The generic
     name is `scenario_hash` because a profile without a catalog still has to answer the
     question; `catalog_hash` is what answering it means here.
+
+    Reads the catalog rather than a stored copy of its names, and asserting this stays
+    byte-identical over the whole reference source is what proves requirement 71
+    removed a field without moving any behaviour.
     """
-    return catalog_hash(catalog_names(record))
+    return catalog_hash(catalog_names(record, contract))
 
 
-# --- stage 1: the four validity checks ---------------------------------------
+# --- stage 1: the five validity checks ---------------------------------------
 #
 # Each returns True when its named failure holds, so the name reads as what is wrong with
 # the record and `Record.failed_checks` is the list of names that fired. No person decides
@@ -162,12 +131,13 @@ def scenario_hash(record: Record) -> str:
 # spec's table -- but the *fields* they read are not: which turn restates the answer and
 # where the answer is stated both come from the source contract.
 #
-# Two of the four read 0 on the current file, and that is a measurement rather than an
+# Three of the five read 0 on the current file, and that is a measurement rather than an
 # omission: `empty_catalog` and `label_not_in_catalog` count records the catalog format
 # resolves, and the 841 and 722 the profile spec quotes are what a stricter name pattern
-# reports about names carrying a dot, hyphen, space or tab. They stay as gates, the way
-# `label_assistant_mismatch` stayed at 0 after it was fixed upstream: a check that reads 0
-# is what tells you when it stops reading 0.
+# reports about names carrying a dot, hyphen, space or tab. `label_names_one_tool_twice`
+# reads 0 because the reference source states its answer as a set. They stay as gates,
+# the way `label_assistant_mismatch` stayed at 0 after it was fixed upstream: a check
+# that reads 0 is what tells you when it stops reading 0.
 
 
 def _restated_answer(record: Record, role: str) -> Any:
@@ -191,7 +161,7 @@ def _restated_answer(record: Record, role: str) -> Any:
 def validity_checks(
     contract: SourceContract, *, answer_ceiling: int
 ) -> dict[str, Callable[[Record], bool]]:
-    """The four, bound to one source's vocabulary and one declared answer ceiling.
+    """The five, bound to one source's vocabulary and one declared answer ceiling.
 
     The ceiling is the largest answer this source is declared to contain, and it is
     handed in rather than read -- so an undeclared threshold fails before a profile
@@ -217,32 +187,56 @@ def validity_checks(
             return True
 
     def label_not_in_catalog(record: Record) -> bool:
-        """The target names a tool the record never offered -- unlearnable, and it
+        """The target calls a tool the record never offered -- unlearnable, and it
         teaches hallucination. Never truncated to the catalog: that would be a guess
         about which of two disagreeing sources is right, applied invisibly at scale.
 
-        An entry that is not a name at all fires too. This profile's answer is an
-        array of names -- `answer_schema` says so -- and a call object carrying
-        arguments is a different answer type, so it belongs in quarantine where a
-        person reads it, not in a `TypeError` that stops the run at record one.
+        An entry that is neither a name nor a call fires too, so an answer of the wrong
+        shape entirely belongs in quarantine where a person reads it, not in a
+        `TypeError` that stops the run at record one.
+
+        Only the names are checked here. Whether a call's *arguments* are in the space
+        is a JSON Schema question, and `answer_schema_for` is what answers it at the
+        two moments requirement 71 names -- neither of which is a counting check.
         """
-        offered = set(catalog_names(record))
-        return any(
-            not isinstance(name, str) or name not in offered
-            for name in record.label or []
-        )
+        offered = set(catalog_names(record, contract))
+        try:
+            called = calls_by_name(record.label or [])
+        except TypeError:
+            return True
+        return any(name not in offered for name in called)
 
     def empty_catalog(record: Record) -> bool:
         """The record offers no tools. A quarantine for triage, not a verdict."""
-        return not catalog_names(record)
+        return not catalog_names(record, contract)
 
     def label_cardinality_anomaly(record: Record) -> bool:
         """More tools in the answer than this source is declared to contain."""
         return len(record.label or []) > answer_ceiling
+
+    def label_names_one_tool_twice(record: Record) -> bool:
+        """Two calls to one tool, which makes the answer a multiset.
+
+        Requirement 73 declares that out rather than teaching δ to match two calls to
+        one tool pairwise before comparing their arguments -- a second decision δ would
+        have to make silently. A person reads the record and decides whether the source
+        means parallel calls or is malformed.
+
+        An answer that cannot be read as calls at all is not this check's failure:
+        `label_not_in_catalog` names that one, and firing both would report one defect
+        under two names.
+        """
+        label = record.label or []
+        try:
+            called = calls_by_name(label)
+        except TypeError:
+            return False
+        return len(called) != len(list(label))
 
     return {
         "label_assistant_mismatch": label_assistant_mismatch,
         "label_not_in_catalog": label_not_in_catalog,
         "empty_catalog": empty_catalog,
         "label_cardinality_anomaly": label_cardinality_anomaly,
+        "label_names_one_tool_twice": label_names_one_tool_twice,
     }

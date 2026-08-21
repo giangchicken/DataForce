@@ -14,9 +14,12 @@ import html
 
 from agent_toolkit.string_utils import slot_filling
 
-from dataforce.profiles.tool_decision.schema import Tool
-from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY
-from dataforce.profiles.tool_decision.utils import catalog_names, tools_to_catalog
+from dataforce.profiles.tool_decision.source_contract import TOOLS_KEY, SourceContract
+from dataforce.profiles.tool_decision.utils import (
+    catalog_names,
+    openai_to_tools,
+    tools_to_catalog,
+)
 from dataforce.shared.record import Record, UIControl
 
 __all__ = ["answer_config", "question_text", "readable_catalog"]
@@ -55,17 +58,10 @@ def readable_catalog(record: Record) -> str:
     declared = record.meta.get(TOOLS_KEY)
     if not declared:
         return ""
-    return tools_to_catalog(
-        Tool(
-            name=entry["function"]["name"],
-            description=entry["function"].get("description", ""),
-            parameters=entry["function"].get("parameters", {}),
-        )
-        for entry in declared
-    )
+    return tools_to_catalog(openai_to_tools(declared).tools)
 
 
-def answer_config(record: Record) -> UIControl:
+def answer_config(record: Record, contract: SourceContract) -> UIControl:
     """The capture half of the config, constrained to this record's catalog."""
     readable = readable_catalog(record)
     shown = (
@@ -75,7 +71,8 @@ def answer_config(record: Record) -> UIControl:
         else ""
     )
     choices = "\n".join(
-        f'  <Choice value="{_attribute(name)}"/>' for name in catalog_names(record)
+        f'  <Choice value="{_attribute(name)}"/>'
+        for name in catalog_names(record, contract)
     )
     return UIControl(
         f'{shown}<Choices name="tools" toName="content" choice="multiple" '

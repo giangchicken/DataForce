@@ -72,7 +72,7 @@ def test_the_distance_is_jaccard() -> None:
 
 def test_a_bare_string_is_not_an_answer() -> None:
     """Otherwise `set("SendMail")` would make δ compare spellings, silently."""
-    with pytest.raises(TypeError, match="array of tool names"):
+    with pytest.raises(TypeError, match="array of calls"):
         answer_distance("SendMail", ["SendMail"])
 
 

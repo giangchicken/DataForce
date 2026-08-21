@@ -10,10 +10,12 @@ would still satisfy `marker in text`.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
 import pytest
+from conftest import SOURCE_ROOT, parsed_sources
 
 from dataforce.profiles.tool_decision import schema, utils
 
@@ -399,3 +401,37 @@ def test_to_strict_openai_emits_only_standard_openai_keys() -> None:
     assert set(emitted) == {"type", "function"}
     assert set(emitted["function"]) <= {"name", "description", "parameters"}
     assert emitted["type"] == "function"
+
+
+def test_only_one_module_in_the_system_parses_a_rendered_catalog() -> None:
+    """The 93 µs parse cannot quietly become one per stage.
+
+    `read_catalog` is the one caller, and it is in the module that defines the grammar.
+    This is the check on requirement 71's cost argument: the reason no record stores its
+    answer space is that deriving one is free where the catalog is data and paid once
+    where it is prose -- and a second caller of the parser is what would make the second
+    half of that false, silently, from anywhere.
+    """
+    callers = set()
+    for path, tree in parsed_sources():
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            named = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            if named == "catalog_to_tools":
+                callers.add(path.relative_to(SOURCE_ROOT).as_posix())
+
+    assert callers == {"profiles/tool_decision/utils.py"}, callers
+
+
+def test_the_two_ways_a_source_carries_a_catalog_agree() -> None:
+    """`openai_to_tools` and `catalog_to_tools` are the two, and `read_catalog` picks.
+
+    Losslessness in this direction is what makes a rendered catalog a way *in* rather
+    than a second format to maintain.
+    """
+    parsed = utils.catalog_to_tools(text_of("eight_tools.txt"))
+
+    as_data = [utils.to_strict_openai(tool) for tool in parsed.tools]
+
+    assert utils.openai_to_tools(as_data) == parsed

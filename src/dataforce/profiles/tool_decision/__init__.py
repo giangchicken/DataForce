@@ -1,8 +1,9 @@
 """The `tool_decision` profile: tool selection over Vietnamese call-centre text.
 
-Composes with the `text` modality. The answer is a set of tool names drawn from the
-record's own catalog, and the empty set -- 35.4% of this corpus -- is a first-class
-answer rather than a missing one.
+Composes with the `text` modality. The answer is a set of **calls** drawn from the
+record's own catalog -- a call being a tool name and the arguments it is called with --
+and the empty set, 35.4% of the reference source, is a first-class answer rather than a
+missing one.
 
 The object below is the index to the rest. Every member delegates to the module that
 does the work, so the three definitions -- `schema` (every shape: a tool, a
@@ -30,6 +31,7 @@ from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision import answer, ask_annotator, build_record, schema
 from dataforce.profiles.tool_decision.build_record import PROVENANCE_KEY
 from dataforce.profiles.tool_decision.source_contract import read_source_contract
+from dataforce.profiles.tool_decision.utils import record_catalog
 from dataforce.shared.manifest import Manifest
 from dataforce.shared.record import Part, Record, UIControl
 
@@ -75,10 +77,20 @@ class ToolDecisionProfile:
         return ask_annotator.readable_catalog(record)
 
     def answer_config(self, record: Record) -> UIControl:
-        return ask_annotator.answer_config(record)
+        return ask_annotator.answer_config(record, self.contract)
+
+    def answer_schema_for(self, record: Record) -> dict[str, Any]:
+        """This record's answer space, built now and stored nowhere.
+
+        Requirement 71. Not a member of the `Profile` protocol yet: the two callers it
+        is for -- the jury's `complete_structured` request and pull-time validation of
+        a human correction -- are Phases 4 and 5, and the protocol gains a member when
+        something generic needs to call one, not before.
+        """
+        return schema.answer_schema_for(record_catalog(record, self.contract))
 
     def scenario_hash(self, record: Record) -> str:
-        return build_record.scenario_hash(record)
+        return build_record.scenario_hash(record, self.contract)
 
     def training_example(self, record: Record) -> dict[str, Any]:
         return answer.training_example(record)

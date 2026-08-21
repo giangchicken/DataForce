@@ -2,8 +2,9 @@
 
 The format itself is tested in `test_catalog_format.py`. What is here is what
 `build_record` decides:
-identity, provenance, the answer space, what it keeps, and that a record read from a
-`tools` array and one read from a rendered prompt come out the same.
+identity, provenance, the answer space it derives rather than stores, what it keeps,
+and that a record read from a `tools` array and one read from a rendered prompt come
+out the same.
 """
 
 from __future__ import annotations
@@ -14,8 +15,9 @@ from typing import Any
 
 import pytest
 from conftest import TEXT, TOOL_DECISION
+from pydantic import ValidationError
 
-from dataforce.profiles.tool_decision import build_record, schema, utils
+from dataforce.profiles.tool_decision import build_record, utils
 from dataforce.profiles.tool_decision.source_contract import (
     LEGACY_SYSTEM_PROMPT,
     OPENAI_TOOLS,
@@ -24,7 +26,7 @@ from dataforce.profiles.tool_decision.source_contract import (
 )
 from dataforce.shared.errors import ConfigError
 from dataforce.shared.manifest import Manifest
-from dataforce.shared.record import Producer, Source, TextPart
+from dataforce.shared.record import Producer, Record, Source, TextPart
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "tool_decision"
 CATALOGS = FIXTURES / "catalogs"
@@ -92,21 +94,16 @@ def test_the_canonical_shape_needs_no_parsing() -> None:
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert utils.catalog_names(record) == [t["function"]["name"] for t in raw["tools"]]
+    assert utils.catalog_names(record, contract_for(OPENAI_TOOLS)) == [
+        t["function"]["name"] for t in raw["tools"]
+    ]
     assert utils.CATALOG_HEADER not in raw["messages"][0]["content"]
 
 
 def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     """The conversion is lossless, which is what makes the legacy shape a way in."""
     canonical = canonical_records()[0]
-    tools = [
-        schema.Tool(
-            name=entry["function"]["name"],
-            description=entry["function"].get("description", ""),
-            parameters=entry["function"].get("parameters", {}),
-        )
-        for entry in canonical["tools"]
-    ]
+    tools = utils.openai_to_tools(canonical["tools"]).tools
     as_legacy = {
         **canonical,
         "messages": [
@@ -127,10 +124,15 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
         contract_for(LEGACY_SYSTEM_PROMPT),
     )
 
-    assert from_canonical.answer_space == from_legacy.answer_space
-    assert TOOL_DECISION.scenario_hash(from_canonical) == TOOL_DECISION.scenario_hash(
-        from_legacy
-    )
+    # Each record is read under the contract it was built under. Before C2 the names
+    # were stored on the record, so one profile object could read both shapes; now the
+    # shape says where to look, and a run declares one source and therefore one shape.
+    assert utils.catalog_names(
+        from_canonical, contract_for(OPENAI_TOOLS)
+    ) == utils.catalog_names(from_legacy, contract_for(LEGACY_SYSTEM_PROMPT))
+    assert build_record.scenario_hash(
+        from_canonical, contract_for(OPENAI_TOOLS)
+    ) == build_record.scenario_hash(from_legacy, contract_for(LEGACY_SYSTEM_PROMPT))
 
 
 def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
@@ -141,7 +143,7 @@ def test_an_item_with_no_tools_at_all_is_an_empty_catalog() -> None:
         item, TEXT.content_parts(item), contract_for(OPENAI_TOOLS)
     )
 
-    assert utils.catalog_names(record) == []
+    assert utils.catalog_names(record, contract_for(OPENAI_TOOLS)) == []
 
 
 # --- identity -----------------------------------------------------------------
@@ -165,18 +167,36 @@ def test_rid_changes_when_a_turn_changes() -> None:
     )
 
 
-# --- the answer space and the group key ---------------------------------------
+# --- the answer space, derived rather than stored ------------------------------
 
 
-def test_the_answer_space_is_this_record_s_own_catalog() -> None:
+def test_a_record_carries_no_answer_space_field_at_all() -> None:
+    """Requirement 71. The catalog is already on the record; a copy of it is not.
+
+    Asserted on the model rather than on one instance, because the point is that
+    there is nowhere for a second copy to disagree from the first.
+    """
+    assert "answer_space" not in Record.model_fields
+
+    record = build_legacy(legacy_records()[0])
+
+    with pytest.raises(ValidationError):
+        Record.model_validate({**record.model_dump(), "answer_space": {}})
+
+
+def test_the_answer_space_is_derived_from_this_record_s_own_catalog() -> None:
     record = build_legacy(legacy_records()[0])
     expected = utils.catalog_to_tools(
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     )
 
-    assert record.answer_space is not None
-    assert record.answer_space["items"]["enum"] == list(expected.names)
-    assert utils.catalog_names(record) == record.answer_space["items"]["enum"]
+    assert utils.catalog_names(record, LEGACY) == list(expected.names)
+
+    space = TOOL_DECISION.answer_schema_for(record)
+    named = [
+        branch["properties"]["name"]["const"] for branch in space["items"]["oneOf"]
+    ]
+    assert named == list(expected.names)
 
 
 def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
@@ -271,11 +291,19 @@ def test_the_provenance_key_is_not_itself_kept_as_metadata() -> None:
     assert record.producer == Producer(**PROVENANCE["producer"])
 
 
-def test_a_record_with_no_answer_space_is_named_rather_than_read_blindly() -> None:
-    record = build_legacy(legacy_records()[0])
+def test_a_canonical_record_whose_tools_went_missing_is_empty_not_an_exception() -> (
+    None
+):
+    """`empty_catalog` is a quarantine for triage, and it is the one that reports this.
 
-    with pytest.raises(ConfigError, match="not built"):
-        utils.catalog_names(record.model_copy(update={"answer_space": None}))
+    There is no longer a "record built by another profile" error to raise, because
+    there is no field whose absence would mean that -- the catalog is read from the
+    record's own content, and content that offers nothing offers nothing.
+    """
+    record = build_legacy(legacy_records()[0])
+    stripped = record.model_copy(update={"meta": {}, "content": []})
+
+    assert utils.catalog_names(stripped, contract_for(OPENAI_TOOLS)) == []
 
 
 # --- the contract itself ------------------------------------------------------

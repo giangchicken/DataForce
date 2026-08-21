@@ -44,7 +44,7 @@ RUN_MANIFEST_FILENAME = "run.json"
 _DIGEST_BLOCK = 1 << 20
 
 # Which profile knows how to measure its own corpus. A profile is not required to:
-# the four validity counts and the group sizes are generic, everything else a
+# the validity counts and the group sizes are generic, everything else a
 # measurement holds is what one corpus specifically contains.
 _MEASURERS: dict[str, Callable[..., dict[str, Any]]] = {
     "tool_decision": measure_corpus.corpus_measurements,

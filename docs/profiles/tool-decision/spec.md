@@ -9,10 +9,10 @@ This document specifies only what is specific to this dataset and this task. The
 | Piece | Owner | This profile / modality |
 |---|---|---|
 | source adapter | profile | parse the `TOOLS:` block, preserving the marker DSL verbatim |
-| answer schema | profile | `{"type":"array","items":{"type":"string","enum":<this record's catalog>}}` |
+| answer schema | profile | `oneOf` per offered tool: the name as a `const`, the arguments as that tool's own `parameters`. Built per record, stored on none — core requirement 71 |
 | `answer_distance` | profile | `1 − |A∩B| / |A∪B|`, with `δ(∅,∅) = 0` |
 | `vote_consensus` | profile | tools included by a strict majority of valid votes |
-| validity checks | profile | four checks, all provable without a human |
+| validity checks | profile | five checks, all provable without a human |
 | question templates | profile | per [`guided-validation`](../../guided-validation/spec.md), focus by marker rule |
 | exporter | profile | SFT JSONL in the source `messages` shape |
 | content loader | `text` | system / user / assistant turns as text parts |
@@ -88,16 +88,22 @@ Each catalog entry carries clauses written in a small marker language — `{trig
 
 ### The adapter
 
-The four validity checks below are all provable by counting — no person decides any of them — which is why `remove_invalid` runs first. Together they move 1,563 records (7.4%) out of the main path before the jury spends a token on them.
+The five validity checks below are all provable by counting — no person decides any of them — which is why `remove_invalid` runs first. On the reference source four read **0** and the fifth reads **10**, both measured: the 1,563 records (7.4%) this section first claimed were an artifact of a stricter tool-name pattern than the reader ships with, and a check reading 0 is what tells you when it stops reading 0.
+
+The 10 are `label_names_one_tool_twice`, and on that source they are the only records any check moves. Both counts describe the **reference source** — the file this profile was verified against, whose catalog is rendered into a prompt and whose answer is a bare array of names. They are evidence that the checks run at real scale on a real file; they are not properties of the declared input, which states its catalog as data and its answer as calls with arguments, and against which the same five checks are exercised by `tests/unit/test_declared_input.py`. Each states one tool name literally twice — `["hr.logScreeningAnswer", "hr.logScreeningAnswer"]` — with no arguments, so they are duplications rather than the parallel calls core requirement 73 was written for. They are also invisible to the other four: the name is in the catalog, the catalog is not empty, the restating turn agrees, and a cardinality of 2 is under the declared ceiling of 3. A target of `["X", "X"]` teaches a model to call `X` twice, which is why quarantine rather than a silent de-duplication — collapsing them here would be a guess about what the source meant, applied invisibly.
 
 1. The adapter reads the `TOOLS:` block into a structured catalog — a tool name, **one verbatim `description`**, and a JSON Schema of parameters — and **preserves every marker token byte-identically**. The description is never split. `Mục đích:` / `Khi nào gọi:` / `Khi nào KHÔNG gọi:` are text *inside* it, not structure around it: splitting on those three labels was specified first and rejected on measurement, because a tool documented in freeform prose came back with three empty clauses and no error, and 3,901 tools in this corpus have no `require:` line for a clause parser to key on. Keeping the description whole is also what makes the round trip assertable — all 21,172 corpus catalogs read and re-rendered byte-identically — which a three-clause split cannot be. A parser that strips them would pass every other test while destroying the annotator's evidence.
-2. `answer_space` per record is the list of catalog tool names. `validity_checks()` returns the four checks above. `scenario_hash` is the catalog fingerprint, and never `source_index`.
+2. **No record carries an answer space.** The space is derived from the record's own catalog at the moment one is needed — core requirement 71, reversed from the opposite claim on a measurement — and `answer_schema_for(record)` is what derives it. `validity_checks()` returns the five checks above. `scenario_hash` is the catalog hash, and never `source_index`.
 3. `rid` is `compute_hash` over the content parts in order, each contributing `type:role:digest` — text contributes its text, media its checksum — truncated to 16 hex characters. So identity is independent of position in the file but *not* of order within the record: a system turn and a user turn saying the same thing are not the same record.
 4. Fixtures cover all **22** observed `meta` key-sets — 13 was an undercount, measured before the profiler read the whole file — each answer cardinality, catalog sizes 0 / 1 / 8 / 20, and malformed `TOOLS:` blocks. Fixtures are invented, never extracted: the corpus is call-centre transcript and the repository is public.
 
 ### The answer, δ, and consensus
 
-5. The answer is a **set of tool names drawn from that record's own catalog**, and the empty set is a first-class answer, not a missing value. No stage may substitute a per-tool binary, a coarse proxy class, or a cardinality bucket.
+5. The answer is a **set of calls drawn from that record's own catalog** — a call being a tool name *and* the arguments it is called with — and the empty set is a first-class answer, not a missing value. No stage may substitute a per-tool binary, a coarse proxy class, or a cardinality bucket.
+
+    **At most one call per tool name** (core requirement 73). Two calls to one tool make the answer a multiset, and matching them pairwise before comparing arguments is a second decision δ would have to make silently; `label_names_one_tool_twice` sends such a record to quarantine, where a person decides whether the source means parallel calls or is malformed.
+
+    A bare name is read as the call with no arguments. That is what makes a names-only source — the reference source is one — a special case of this answer type rather than a second one, and it is what core requirement 72's reduction is asserted on.
 6. `answer_distance(a, b) = 1 − |a ∩ b| / |a ∪ b|`, with **`answer_distance(∅, ∅) = 0` by definition**. That convention is load-bearing: 35.4% of this corpus is the empty set, and a Jaccard implementation returning `0/0 → NaN`, or treating two empty sets as maximally distant, would make the zero-label population — the part carrying the corpus's real difficulty — look like the part with least agreement.
 7. `vote_consensus` is the set of tools a strict majority of valid votes included. It can be a set no individual juror proposed, which is acceptable for a ranking signal and is why the core forbids it from becoming a label on its own.
 8. Marker-DSL rules — missing required parameter, `{hold_missing}` satisfied, `{trigger}` keyword in the last turn, `{constraint}` violated, `{turn_trigger}` scope violation — act as hard validity constraints and as the validity checks of requirement 2. They may additionally be admitted as one **rule juror** producing a set, but only if their gold set-F1 clears the same floor as any other juror.
@@ -150,15 +156,18 @@ The four validity checks below are all provable by counting — no person decide
 ### The answer schema is the catalog constraint
 
 ```python
-schema = {"type": "array",
-          "items": {"type": "string", "enum": [t.name for t in record.catalog]}}
+schema = profile.answer_schema_for(record)   # oneOf per tool; nothing persisted
 value, info = await complete_structured(
     prompt, schema, mode="prompt",
     model=juror.model, api_key=key.api_key, base_url=juror.base_url, temperature=0,
 )
 ```
 
-The `enum` enforces requirement 5's catalog constraint inside the library. `info.ok is False` *is* the abstention: the profile stores `info.error`, `.raw`, `.repaired`, `.strategy`, and `.reasoning` and moves on. There is no bespoke parse-and-check step and no path where a malformed response becomes a truncated set.
+`answer_schema_for` emits one `oneOf` branch per offered tool — the name as a single-value `const`, the arguments as that tool's own `parameters`, which the catalog already carries. A name and its arguments are therefore constrained **together**: `OpenTicket` carrying `LookupBalance`'s argument is two valid halves and one invalid call, which an `enum` of names beside a free-form argument object could not say. An empty catalog permits exactly one answer, the empty array, spelled `maxItems: 0` because an empty `oneOf` is not a schema.
+
+This enforces requirement 5's catalog constraint inside the library. `info.ok is False` *is* the abstention: the profile stores `info.error`, `.raw`, `.repaired`, `.strategy`, and `.reasoning` and moves on. There is no bespoke parse-and-check step and no path where a malformed response becomes a truncated set.
+
+Nothing stores this. Core requirement 71 carries the measurement that settled it: deriving the catalog is 0.27 µs where the source carries it as data against 0.07 µs to read a stored copy — 0.0 seconds across a 21,172-record run — while a stored copy costs a second thing that can disagree with the first and, for a compound answer, more bytes than the catalog it copies. One test asserts that exactly one module in the system parses a rendered catalog, which is what keeps the 93 µs prose path from becoming one parse per stage.
 
 ### δ, in full
 

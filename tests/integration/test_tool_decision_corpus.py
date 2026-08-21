@@ -174,7 +174,7 @@ def test_no_two_tools_in_one_catalog_share_a_name(
         assert len(set(catalog.names)) == len(catalog.names)
 
 
-def test_the_four_checks_reproduce_the_counts_declared_in_params(source: Path) -> None:
+def test_the_five_checks_reproduce_the_counts_declared_in_params(source: Path) -> None:
     """T9's criterion: what the checks count is what `params.yaml` declares.
 
     Streamed rather than collected, so this test cannot pass by holding the whole
@@ -234,7 +234,10 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
 
     assert exported["messages"] == raw["messages"]
     assert exported["meta"]["label"] == raw["meta"]["label"]
-    assert record.rid and record.answer_space is not None
+    assert record.rid
+    assert utils.catalog_names(record, TOOL_DECISION.contract) == list(
+        utils.catalog_to_tools(raw["messages"][0]["content"]).names
+    )
     assert TOOL_DECISION.scenario_hash(record) == utils.catalog_hash(
         utils.catalog_to_tools(raw["messages"][0]["content"]).names
     )

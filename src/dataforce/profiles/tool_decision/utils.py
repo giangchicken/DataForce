@@ -31,8 +31,12 @@ from typing import Any
 from agent_toolkit.string_utils import compute_hash
 
 from dataforce.profiles.tool_decision.schema import Catalog, Gap, Tool
-from dataforce.shared.errors import ConfigError
-from dataforce.shared.record import Record
+from dataforce.profiles.tool_decision.source_contract import (
+    LEGACY_SYSTEM_PROMPT,
+    TOOLS_KEY,
+    SourceContract,
+)
+from dataforce.shared.record import Part, Record, TextPart
 
 __all__ = [
     "CATALOG_HEADER",
@@ -41,6 +45,9 @@ __all__ = [
     "catalog_hash",
     "catalog_names",
     "catalog_to_tools",
+    "openai_to_tools",
+    "read_catalog",
+    "record_catalog",
     "to_strict_openai",
     "tools_to_catalog",
 ]
@@ -109,6 +116,25 @@ def to_strict_openai(tool: Tool) -> dict[str, Any]:
     if tool.parameters:
         function["parameters"] = tool.parameters
     return {"type": "function", "function": function}
+
+
+def openai_to_tools(entries: Iterable[Mapping[str, Any]]) -> Catalog:
+    """The catalog a source states as data. The inverse of `to_strict_openai`.
+
+    One of the two ways a source carries its catalog; `catalog_to_tools` is the other,
+    and reading a rendered one is the expensive path. Named to match that pair, so the
+    two directions of each conversion sit under names that differ only in order.
+    """
+    return Catalog(
+        tools=tuple(
+            Tool(
+                name=entry["function"]["name"],
+                description=entry["function"].get("description", ""),
+                parameters=entry["function"].get("parameters", {}),
+            )
+            for entry in entries
+        )
+    )
 
 
 # --- rendering: tools -> the text a person reads ------------------------------
@@ -410,15 +436,54 @@ def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
 _HASH_LENGTH = 16
 
 
-def catalog_names(record: Record) -> list[str]:
-    """The catalog a record was built with, read back off its answer space."""
-    if record.answer_space is None:
-        raise ConfigError(
-            f"record {record.rid} carries no answer space; "
-            "it was not built by the tool_decision profile"
-        )
-    names: list[str] = record.answer_space["items"]["enum"]
-    return names
+def read_catalog(
+    tools: Iterable[Mapping[str, Any]] | None,
+    parts: Sequence[Part],
+    contract: SourceContract,
+) -> Catalog:
+    """One record's catalog, from wherever its shape keeps it.
+
+    Under the canonical shape the tools are data and nothing is parsed. Under the
+    legacy shape they were rendered into the instruction turn, so they are read back
+    out of it -- and this is the **only** caller of `catalog_to_tools` in the system,
+    asserted by test, which is what keeps a 93 µs parse from quietly becoming one per
+    stage.
+
+    Takes the tools rather than the raw item so that stage 0 can pass `raw["tools"]`
+    and every later caller `record.meta["tools"]`, from one branch in one place.
+    """
+    if contract.shape != LEGACY_SYSTEM_PROMPT:
+        return openai_to_tools(tools or ())
+    instruction = contract.role_name("instruction")
+    rendered = next(
+        (
+            part.text
+            for part in parts
+            if isinstance(part, TextPart) and part.role == instruction
+        ),
+        "",
+    )
+    return catalog_to_tools(rendered)
+
+
+def record_catalog(record: Record, contract: SourceContract) -> Catalog:
+    """The catalog a built record offers, from wherever its shape keeps it.
+
+    `read_catalog` takes the pieces because stage 0 has a raw item and no record yet;
+    every caller after stage 0 has one, and this is that call.
+    """
+    return read_catalog(record.meta.get(TOOLS_KEY), record.content, contract)
+
+
+def catalog_names(record: Record, contract: SourceContract) -> list[str]:
+    """The names a record's own catalog offers, in the order it offers them.
+
+    Derived from the record's content, never read off a stored copy: requirement 71,
+    and the measurement that reversed the first draft of it -- 0.27 µs against 0.07,
+    which is 0.0 seconds across a 21,172-record run, against a second thing that can
+    disagree with the first.
+    """
+    return list(record_catalog(record, contract).names)
 
 
 def catalog_hash(names: Sequence[str]) -> str:

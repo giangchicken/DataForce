@@ -40,7 +40,6 @@ def _record_row(**extra: Any) -> dict[str, Any]:
         "content": [TEXT_PART],
         "meta": {"label": 1},
         "label": ["SendMail"],
-        "answer_space": {"tools": ["SendMail"]},
         "parse_status": "ok",
         "failed_checks": [],
     }

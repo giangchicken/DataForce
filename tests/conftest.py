@@ -133,7 +133,6 @@ class SetProfile:
             producer=Producer(modality="fake_text@1", profile="fake_tools@1"),
             content=parts,
             label=list(raw.get("tools", [])),
-            answer_space={"tools": TOOLS},
             meta=dict(raw),
         )
 

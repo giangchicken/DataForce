@@ -69,7 +69,7 @@ PARAMS = FIXTURES.parents[2] / "params.yaml"
 
 @pytest.fixture
 def check() -> dict[str, Any]:
-    """The four checks, bound to the profile's contract and the committed ceiling."""
+    """The five checks, bound to the profile's contract and the committed ceiling."""
     return TOOL_DECISION.validity_checks()
 
 
@@ -84,7 +84,7 @@ def test_the_profile_composes_with_the_text_modality() -> None:
     assert registry.profile("tool_decision", modality="text") is TOOL_DECISION
 
 
-# --- the four validity checks ------------------------------------------------
+# --- the five validity checks ------------------------------------------------
 
 
 def test_a_well_formed_record_fails_no_check(check: dict[str, Any]) -> None:
@@ -93,7 +93,7 @@ def test_a_well_formed_record_fails_no_check(check: dict[str, Any]) -> None:
     assert [name for name, fires in check.items() if fires(record)] == []
 
 
-def test_validity_checks_are_the_four_names_params_declares_counts_for() -> None:
+def test_validity_checks_are_the_five_names_params_declares_counts_for() -> None:
     """The names are identifiers `params.yaml` keys on, so they are not free to drift."""
     built = TOOL_DECISION.validity_checks()
 
@@ -135,18 +135,68 @@ def test_label_not_in_catalog_fires_when_the_target_names_a_tool_never_offered(
     assert not check["empty_catalog"](record)
 
 
-def test_a_call_object_is_quarantined_rather_than_crashing_the_stage(
+def test_a_call_carrying_arguments_is_an_answer_not_a_quarantine(
     check: dict[str, Any],
 ) -> None:
-    """An answer is an array of names. One carrying arguments is a different answer
-    type, and stage 1 has to report it rather than raise from inside a set lookup."""
+    """Requirement 71: the answer type is calls, so a call is in the space by shape.
+
+    This asserted the opposite before C2, when the answer was an array of names and a
+    call object was a different answer type. Only the *name* is checked here -- whether
+    the arguments are in the space is a JSON Schema question that `answer_schema_for`
+    answers, not a counting check.
+    """
     record = record_for(
         catalog="one_tool.txt",
         label=[{"name": "Lookup00_0a", "arguments": {"ma_khach": "480215"}}],
     )
 
+    assert not check["label_not_in_catalog"](record)
+    assert not check["label_names_one_tool_twice"](record)
+
+
+def test_a_call_naming_a_tool_the_record_never_offered_is_quarantined(
+    check: dict[str, Any],
+) -> None:
+    record = record_for(
+        catalog="one_tool.txt",
+        label=[{"name": "Lookup07_7a", "arguments": {"ma_khach": "480215"}}],
+    )
+
     assert check["label_not_in_catalog"](record)
-    assert check["label_assistant_mismatch"](record)
+
+
+def test_an_answer_of_the_wrong_shape_entirely_is_reported_not_raised(
+    check: dict[str, Any],
+) -> None:
+    """A named check, never a `TypeError` that stops the run at record one of 21,172."""
+    record = record_for(catalog="one_tool.txt", label=[7])
+
+    assert check["label_not_in_catalog"](record)
+    assert not check["label_names_one_tool_twice"](record)
+
+
+def test_naming_one_tool_twice_is_quarantined_under_its_own_name(
+    check: dict[str, Any],
+) -> None:
+    """Requirement 73. Two calls to one tool make the answer a multiset, and matching
+    them pairwise before comparing arguments is a decision δ would have to make
+    silently -- so a person decides whether the source means parallel calls."""
+    record = record_for(
+        catalog="one_tool.txt",
+        label=[
+            {"name": "Lookup00_0a", "arguments": {"ma_khach": "480215"}},
+            {"name": "Lookup00_0a", "arguments": {"ma_khach": "999999"}},
+        ],
+    )
+
+    assert check["label_names_one_tool_twice"](record)
+    assert not check["label_not_in_catalog"](record)
+
+
+def test_one_call_per_name_is_not_a_duplicate(check: dict[str, Any]) -> None:
+    record = record_for(catalog="eight_tools.txt", label=["Lookup00_0a", "Lookup01_1a"])
+
+    assert not check["label_names_one_tool_twice"](record)
 
 
 def test_a_name_with_a_dot_or_a_tab_is_in_its_catalog(check: dict[str, Any]) -> None:

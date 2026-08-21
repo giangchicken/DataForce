@@ -154,7 +154,6 @@ class Record(BaseModel):
     producer: Producer
     content: list[Part]
 
-    answer_space: dict[str, Any] | None = None
     label: Any = None
     meta: dict[str, Any] = Field(default_factory=dict)
 

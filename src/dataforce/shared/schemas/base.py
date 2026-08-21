@@ -85,7 +85,6 @@ def record_columns() -> dict[str, pa.Column]:
         ),
         "meta": pa.Column(object, nullable=True),
         "label": pa.Column(object, nullable=True),
-        "answer_space": pa.Column(object, nullable=True),
         "parse_status": pa.Column(str, pa.Check.isin(["ok", "unparsed"])),
         "failed_checks": pa.Column(
             object, pa.Check(lambda v: isinstance(v, list), element_wise=True)

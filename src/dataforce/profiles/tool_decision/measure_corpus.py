@@ -128,7 +128,7 @@ def corpus_measurements(
         label = record.label or []
         cardinality[len(label)] += 1
         tool_names.update(label)
-        catalog_sizes[len(catalog_names(record))] += 1
+        catalog_sizes[len(catalog_names(record, profile.contract))] += 1
         fingerprints[profile.scenario_hash(record)] += 1
         # The source's own `meta`, not the record's: `build_record` adds the fields the
         # item carried outside `meta`, and what drifted is what the file contains.
