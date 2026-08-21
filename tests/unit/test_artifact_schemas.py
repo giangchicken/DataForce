@@ -42,14 +42,14 @@ def _record_row(**extra: Any) -> dict[str, Any]:
         "label": ["SendMail"],
         "answer_space": {"tools": ["SendMail"]},
         "parse_status": "ok",
-        "invalid": [],
+        "failed_checks": [],
     }
     row.update(extra)
     return row
 
 
 SAMPLES: dict[str, dict[str, Any]] = {
-    "loaded": _record_row(invalid=["label_contradiction"]),
+    "loaded": _record_row(failed_checks=["label_contradiction"]),
     "usable": _record_row(),
     "pii_findings": {
         "rid": RID,
@@ -144,7 +144,7 @@ def test_no_artifact_admits_an_inlined_blob(artifact: str) -> None:
 
 
 def test_usable_admits_no_record_that_failed_a_check() -> None:
-    row = _record_row(invalid=["label_contradiction"])
+    row = _record_row(failed_checks=["label_contradiction"])
     with pytest.raises(pa.errors.SchemaError):
         schema_for("usable").validate(pd.DataFrame([row]))
 

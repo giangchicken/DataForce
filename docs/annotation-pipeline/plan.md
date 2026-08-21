@@ -467,7 +467,7 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Relevant files.** `src/dataforce/profiles/tool_decision/schema.py`, `utils.py`, `build_record.py`, `tests/unit/test_build_record.py`, `tests/unit/test_tool_decision.py`.
 
-**Proposed approach.** Two functions, and the split between them is requirement 71. `answer_space(catalog)` stays what it is — the names, 136 bytes, the cheap index `group_key`, three checks and the capture control read. A new `answer_schema_for(record)` materialises the full constraint at the point of use: `oneOf` per tool, `name` a single-value `const`, `arguments` that tool's `parameters` read out of the catalog the record already carries. Nothing persists it, so no artifact grows. `catalog_names` is unchanged, which is why `group_key` and the fingerprint are untouched. A fifth validity check, `answer_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
+**Proposed approach.** Two functions, and the split between them is requirement 71. `answer_space(catalog)` stays what it is — the names, 136 bytes, the cheap index `group_key`, three checks and the capture control read. A new `answer_schema_for(record)` materialises the full constraint at the point of use: `oneOf` per tool, `name` a single-value `const`, `arguments` that tool's `parameters` read out of the catalog the record already carries. Nothing persists it, so no artifact grows. `catalog_names` is unchanged, which is why `group_key` and the fingerprint are untouched. A fifth validity check, `label_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
 
 **Acceptance criteria.**
 - An answer whose call names a tool the record offered and whose arguments satisfy that tool's schema validates; one violating either does not, and the pull gate rejects rather than truncates it — invariant 5.
@@ -555,7 +555,7 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Goal.** Stage 1: records that fail a provable check leave the main path into `quarantine/invalid/<check>.jsonl`, and can be re-admitted by an explicit command.
 
-**Changed by 2C.** Five checks, not four: `answer_names_one_tool_twice` arrives with C2, and its expected count is declared in `params.yaml` with the others. The quarantine names are the check names, so the fifth adds a file rather than changing any behaviour here.
+**Changed by 2C.** Five checks, not four: `label_names_one_tool_twice` arrives with C2, and its expected count is declared in `params.yaml` with the others. The quarantine names are the check names, so the fifth adds a file rather than changing any behaviour here.
 
 **Context.** Written expecting 1,563 records, 7.4% on the reference source; the measured answer there is **0**, and that changes what this stage is for. It is no longer a saving — it is the tripwire that tells you the source or the reader moved, and it has to exist before the expensive stages so that a future non-zero count stops the run instead of costing 7.4% of the jury's ~101M estimated tokens and then teaching the model something false. Nothing is deleted: "remove" is scoped to the main path.
 

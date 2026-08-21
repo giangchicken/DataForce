@@ -477,6 +477,13 @@ class Profile(Protocol):
     # Provably: no judgment. If telling right from wrong needs a person, it is an
     # annotation task, not a validity check. The names are the quarantine filenames
     # and the keys `params.yaml` declares expected counts against.
+    #
+    # A name also says which *kind* of defect it is, because the two have different
+    # remedies: `label_*` is a defect in the answer, which a person can fix, and a
+    # bare noun is a defect in the record, which they cannot -- nobody can annotate
+    # a record that offers no options. That is why `Record.failed_checks` is one
+    # list: the classification is in the name, so a stage that needs the split
+    # derives it, and no second field can drift out of step with the first.
     def validity_checks(self) -> dict[str, Callable[[Record], bool]]: ...
 
     # Stage 7 `generate_questions`. The text of one focused, answerable question about
@@ -669,13 +676,13 @@ The item is invented. That is a rule rather than a convenience: this repository 
                "arguments": { "ma_khach": "480215", "ky": "thang_nay" } } ],
   "meta":  { "…": "verbatim from source" },
   "parse_status": "ok",
-  "invalid": [],
+  "failed_checks": [],
   "privacy": null, "dup_cluster_id": null, "is_representative": null, "group_key": null,
   "jury": null, "triage": null, "validation": null, "split": null
 }
 ```
 
-Every block after `invalid` is `null` because the stage that owns it has not run. That is the shape of a record leaving stage 1, and no later stage removes a field.
+Every block after `failed_checks` is `null` because the stage that owns it has not run. That is the shape of a record leaving stage 1, and no later stage removes a field.
 
 **Why the answer appears twice.** `label` and the target turn hold the same value, and that redundancy is load-bearing rather than sloppy: it is the *only* thing that makes a mismatch detectable. A source states its answer once as a field and once as the content the model is trained to produce, the two can disagree, and `label_assistant_mismatch` is the check that reads both and compares them through δ. On the reference source it found 48 records where they differed — records that would have trained a model on the losing side of two disagreeing sources. Collapse the two into one and the check has nothing to compare.
 
@@ -758,9 +765,11 @@ Every block below has exactly one owning stage, named in the comments. The one s
 
   "parse_status": "ok",   // stage 0: ingest drops nothing, so an unparsable record is
                           // here too, flagged rather than absent
-  "invalid": [],          // stage 1 `remove_invalid`: the names of the checks that
-                          // fired. Non-empty means the record is in quarantine, with
-                          // the check name as its filename
+  // stage 1 `remove_invalid`: the names of the checks that fired. Non-empty means the
+  // record is in quarantine, with the check name as its filename. One list rather than
+  // one per kind of failure -- the check name already says which kind it is, and "is
+  // this record on the main path" has to stay one condition no stage can half-remember
+  "failed_checks": [],
   // stage 2 `pii_check`: what was found and replaced -- counts and classes only. The
   // placeholder-to-original mapping lives in the untracked vault, never here.
   "privacy": { "spans_replaced": 2, "classes": ["PHONE", "EMAIL"] },

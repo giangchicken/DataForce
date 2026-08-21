@@ -159,7 +159,7 @@ class Record(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
     parse_status: Literal["ok", "unparsed"] = "ok"
-    invalid: list[str] = Field(default_factory=list)
+    failed_checks: list[str] = Field(default_factory=list)
 
     privacy: dict[str, Any] | None = None
     dup_cluster_id: str | None = None

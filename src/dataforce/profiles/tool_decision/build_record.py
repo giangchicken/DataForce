@@ -150,7 +150,7 @@ def group_key(record: Record) -> str:
 # --- stage 1: the four validity checks ---------------------------------------
 #
 # Each returns True when its named failure holds, so the name reads as what is wrong with
-# the record and `Record.invalid` is the list of names that fired. No person decides any
+# the record and `Record.failed_checks` is the list of names that fired. No person decides
 # of them.
 #
 # The names are declared identifiers -- they appear in `params.yaml` and in the profile

@@ -19,7 +19,7 @@ LOADED = pa.DataFrameSchema(record_columns(), name="loaded")
 
 
 # `usable.jsonl` -- what survived the validity checks, and so what the run costs. A row
-# here has an empty `invalid` list by construction: a record that failed a check went to
+# here has an empty `failed_checks` list by construction: a record that failed one went to
 # `quarantine/invalid/<check>.jsonl` instead.
 def _passed_every_check(value: Any) -> bool:
     return isinstance(value, list) and not value
@@ -27,7 +27,7 @@ def _passed_every_check(value: Any) -> bool:
 
 def _usable() -> pa.DataFrameSchema:
     columns = record_columns()
-    columns["invalid"] = pa.Column(
+    columns["failed_checks"] = pa.Column(
         object, pa.Check(_passed_every_check, element_wise=True)
     )
     return pa.DataFrameSchema(columns, name="usable")

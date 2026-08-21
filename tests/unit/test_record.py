@@ -86,7 +86,7 @@ def test_a_record_defaults_every_field_a_later_stage_owns() -> None:
         content=list(_conversation("hi")),
     )
     assert record.parse_status == "ok"
-    assert record.invalid == []
+    assert record.failed_checks == []
     assert record.jury is None
     assert record.split is None
 
