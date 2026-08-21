@@ -162,10 +162,9 @@ class Record(BaseModel):
     failed_checks: list[str] = Field(default_factory=list)
 
     privacy: dict[str, Any] | None = None
-    dup_cluster_id: str | None = None
-    dup_cluster_size: int | None = None
-    is_representative: bool | None = None
-    group_key: str | None = None
+    conversation_cluster: str | None = None
+    conversation_cluster_size: int | None = None
+    scenario_hash: str | None = None
 
     jury: dict[str, Any] | None = None
     triage: dict[str, Any] | None = None

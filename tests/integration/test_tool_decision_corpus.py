@@ -161,9 +161,7 @@ def test_the_reader_reports_every_gap_it_could_not_close(source: Path) -> None:
 def test_the_largest_catalog_group_is_the_one_the_split_gate_will_protect(
     parsed: list[tuple[str, schema.Catalog, list[str]]],
 ) -> None:
-    groups = Counter(
-        utils.catalog_fingerprint(catalog.names) for _, catalog, _ in parsed
-    )
+    groups = Counter(utils.catalog_hash(catalog.names) for _, catalog, _ in parsed)
 
     assert groups.most_common(1)[0] == LARGEST_GROUP
 
@@ -237,6 +235,6 @@ def test_one_real_record_makes_the_round_trip(source: Path) -> None:
     assert exported["messages"] == raw["messages"]
     assert exported["meta"]["label"] == raw["meta"]["label"]
     assert record.rid and record.answer_space is not None
-    assert TOOL_DECISION.group_key(record) == utils.catalog_fingerprint(
+    assert TOOL_DECISION.scenario_hash(record) == utils.catalog_hash(
         utils.catalog_to_tools(raw["messages"][0]["content"]).names
     )

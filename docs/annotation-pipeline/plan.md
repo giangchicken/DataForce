@@ -70,7 +70,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that T9 and **T32** each carry rule tests for their own profile | the spec section; T9's and T32's *Verify* lines |
 | T6 | Guard tests | Import graph (no concrete axis reaches `shared/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
-| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `group_key` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog_format.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
+| T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `scenario_hash` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog_format.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
 | T9 | The answer contract | `answer_schema` per record (that record's catalog as an `enum`), `answer_distance` with `δ(∅,∅)=0` returned before the division, `vote_consensus` as the strict-majority set, the four named validity checks, and a `training_example` that states the answer twice and asserts the two equal | `tests/unit/test_answers.py`, `tests/unit/test_tool_decision.py` |
 | T10 | `dataforce profile` | Streams the 126 MiB source — peak allocation a fraction of it — and writes `metrics/corpus_profile.json` beside the source SHA-256. CI fails on drift and names the count that moved; pointed at the 2026-08-17 backup it reports `label_assistant_mismatch = 48` and fails | `tests/integration/test_corpus_profile.py` |
 | — | Declared config *(unplanned)* | `shared/manifest.py`, `shared/prompts.py` — **E2 moved both to `declared/`, leaving the `Manifest` type behind in `shared/`** — `config/modalities/text.yaml`, `config/profiles/tool_decision.yaml`, `config/prompts/profiles/tool_decision/question.v1.txt`, and three JSON Schemas for the input shapes. Delivered without a task in the plan; recorded here so the tree and the plan reconcile | `test_manifests.py`, `test_prompts.py`, `tests/integration/test_input_schemas.py` |
@@ -95,7 +95,7 @@ All from `metrics/corpus_profile.json`, which is what CI pins — see shared dec
 | Total prompt characters | 100,557,297 | T18's token estimate — an order of magnitude for budgeting, re-measured before any jury run |
 | All four validity counts | 0 | T12 — that a check reading 0 is the tripwire. C2 adds a fifth check, so the set is not closed |
 
-Three of these nine were wrong in the profile spec's table and are corrected in this pass: fingerprints were quoted as 17,596 with 16,293 singletons, key-sets as 13, and prompt characters as 100,557,307. The profiler fingerprints the **parsed** catalog where the earlier probe hashed raw block text, which collapses thirteen pairs differing only in formatting — the smaller number is also the right one, because `group_key` is that same parsed fingerprint. Two further figures in that table were wrong and are corrected with them: catalog size is 1–20 tools rather than 0–20, which is the direct reason `empty_catalog` reads 0, and the 491 duplicate user turns are 491 *groups* covering 982 records.
+Three of these nine were wrong in the profile spec's table and are corrected in this pass: fingerprints were quoted as 17,596 with 16,293 singletons, key-sets as 13, and prompt characters as 100,557,307. The profiler fingerprints the **parsed** catalog where the earlier probe hashed raw block text, which collapses thirteen pairs differing only in formatting — the smaller number is also the right one, because `scenario_hash` is that same parsed fingerprint. Two further figures in that table were wrong and are corrected with them: catalog size is 1–20 tools rather than 0–20, which is the direct reason `empty_catalog` reads 0, and the 491 duplicate user turns are 491 *groups* covering 982 records.
 
 **What Phase 2 left open, deliberately.** `privacy_signals` in the corpus profile is an empty object: the detectors arrive with T13, which fills it, and the drift test pins the five counts from then on. Until then the drift test pins seven figures rather than every figure in the file.
 
@@ -136,7 +136,7 @@ The convention is not invented for this task. The corpus generator already had i
 | Profile | `answer_control` | `answer_config` | `UIControl` |
 | Profile | `export` | `training_example` | `dict[str, Any]` |
 
-`validity_checks`, `group_key`, `answer_schema`, `name`, `version` and `modality` are unchanged; each already contains its result. `build_record` takes the verb because `record` alone is the name of the argument nearly every other function here already receives.
+`validity_checks`, `scenario_hash`, `answer_schema`, `name`, `version` and `modality` are unchanged; each already contains its result. `build_record` takes the verb because `record` alone is the name of the argument nearly every other function here already receives.
 
 Inside the profile:
 
@@ -147,7 +147,7 @@ Inside the profile:
 | `catalog.render_system_prompt` | `build_system_prompt` | `utils.py` — **done** |
 | `catalog.as_function` | `to_strict_openai` | `utils.py` — **done** |
 | `adapter.catalog_names` | `catalog_names` | `utils.py` |
-| `adapter.catalog_fingerprint` | `catalog_fingerprint` | `utils.py` |
+| `adapter.catalog_hash` | `catalog_hash` | `utils.py` |
 | `adapter.answer_space_for` | `answer_space` | `schema.py` |
 | `answers.delta` | `answer_distance` | `answer.py` |
 | `answers.consensus` | `vote_consensus` | `answer.py` |
@@ -176,7 +176,7 @@ The guards scan `modalities/` and `profiles/` — the scope of this task's goal,
 
 **Verify.** `make check && uv run dataforce profile --profile tool_decision && git diff --stat metrics/corpus_profile.json`
 
-**Out of scope.** Record field names. `group_key`, `label`, `answer_space` and `meta` stay as they are — renaming a field means rewriting artifacts, and no artifact exists yet to make it free.
+**Out of scope.** Record field names. `scenario_hash`, `label`, `answer_space` and `meta` stay as they are — renaming a field means rewriting artifacts, and no artifact exists yet to make it free.
 
 ## R2 · A module is a definition or a step, and its name says which
 
@@ -192,10 +192,10 @@ The resolution is to say which kind each module is, because the two kinds have o
 
 | Module | Kind | Holds | Lines |
 |---|---|---|---|
-| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_fingerprint`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (449) and the catalog half of `adapter.py`. *Since split: the conversions are `utils.py`, the three types are `schema.py`* | ~505 |
+| `tool_schema.py` | definition | what a tool is and every conversion of it — `tools_to_catalog`, `catalog_to_tools`, `build_system_prompt`, `to_strict_openai`, `catalog_names`, `catalog_hash`, and the `Tool` / `Catalog` / `Gap` types. Absorbs `catalog.py` (449) and the catalog half of `adapter.py`. *Since split: the conversions are `utils.py`, the three types are `schema.py`* | ~505 |
 | `answer.py` | definition | what an answer is — `answer_schema`, `answer_space`, `answer_distance`, `vote_consensus`, `training_example`. Absorbs `answers.py` (61) and `export.py` (37) | ~110 |
 | `source_contract.py` | definition | what this corpus calls things, read from the manifest. Was `source.py` | ~120 |
-| `build_record.py` | step | stages 0–1 — `build_record`, `read_catalog`, `validity_checks`, `max_answer_cardinality`, `group_key`. Absorbs the rest of `adapter.py` and `checks.py` (121) | ~330 |
+| `build_record.py` | step | stages 0–1 — `build_record`, `read_catalog`, `validity_checks`, `max_answer_cardinality`, `scenario_hash`. Absorbs the rest of `adapter.py` and `checks.py` (121) | ~330 |
 | `ask_annotator.py` | step | stages 7–8 — `question_text`, `answer_config`, `readable_catalog`. From `profile.py` | ~85 |
 | `measure_corpus.py` | tool | `dataforce profile`. Not in the flow at all: it reuses stage 0 to count things. Was `profiler.py` | ~280 |
 | `__init__.py` | — | the profile object, and nothing else. The front door is the index | ~120 |
@@ -469,7 +469,7 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Proposed approach.** Delete `Record.answer_space`, its pandera column and `schema.answer_space` — requirement 71. Then two moves cover every consumer:
 
-- **The catalog is read from where the source put it.** `read_catalog` takes the tools and the parts rather than the raw item, so stage 0 calls it with `raw.get("tools")` and every later caller with `record.meta.get("tools")` — one shape branch, one place, and for a source that renders its catalog into prose the parse happens only at stage 0. `catalog_names(record, contract)` gains the contract, which its six call sites all already have, and moves beside the grammar in `utils.py`. `group_key` and the fingerprint are unchanged, which is the assertion that this refactor changed nothing.
+- **The catalog is read from where the source put it.** `read_catalog` takes the tools and the parts rather than the raw item, so stage 0 calls it with `raw.get("tools")` and every later caller with `record.meta.get("tools")` — one shape branch, one place, and for a source that renders its catalog into prose the parse happens only at stage 0. `catalog_names(record, contract)` gains the contract, which its six call sites all already have, and moves beside the grammar in `utils.py`. `scenario_hash` and the fingerprint are unchanged, which is the assertion that this refactor changed nothing.
 - **The schema is materialised where one is needed.** `answer_schema_for(record)`: `oneOf` per tool, `name` a single-value `const`, `arguments` that tool's `parameters`. Called by the jury before its request and by pull-time validation, and persisted nowhere.
 
 `ANSWER_SCHEMA` stays — it is the profile-level answer *type*, which is what `profile.answer_schema` is and what choosing the profile already tells you. A fifth validity check, `label_names_one_tool_twice`, is added to `CHECK_NAMES` and to `params.yaml`'s declared counts.
@@ -477,9 +477,9 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 **Acceptance criteria.**
 - An answer whose call names a tool the record offered and whose arguments satisfy that tool's schema validates; one violating either does not, and the pull gate rejects rather than truncates it — invariant 5.
 - **No artifact grows, and one shrinks.** No record carries an answer space; the compound schema exists only inside the call that needs it. Asserted on an eight-tool record, where the materialised schema is larger than the catalog it would have copied.
-- **`group_key` is byte-identical** on every record of the reference source, and `metrics/corpus_profile.json` does not change. That is the whole proof that removing the field moved no behaviour — the fingerprint is computed from the names, and the names now come from the catalog instead of from a copy of them.
+- **`scenario_hash` is byte-identical** on every record of the reference source, and `metrics/corpus_profile.json` does not change. That is the whole proof that removing the field moved no behaviour — the fingerprint is computed from the names, and the names now come from the catalog instead of from a copy of them.
 - **Exactly one place may parse a rendered catalog.** A test asserts no module outside stage 0 calls `catalog_to_tools`, so the 93 µs parse cannot silently become per-stage — which is the cost the deleted field was supposed to be buying protection against.
-- `catalog_names(record)` returns the same names as before for a record built either way. `group_key` unchanged.
+- `catalog_names(record)` returns the same names as before for a record built either way. `scenario_hash` unchanged.
 - A record naming one tool twice is quarantined under the new check's name; the check appears in `params.yaml` with a declared count.
 - The existing quarantine-not-crash behaviour holds: an answer of the wrong shape entirely is still reported by a named check, never a `TypeError`.
 
@@ -642,14 +642,16 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Relevant files.** `src/dataforce/pipeline/data_quality/{embed,dedup}.py`.
 
-**Proposed approach.** `embed` calls the modality's `embedding` and writes `embeddings.npy`. `dedup` removes exact duplicates on `compute_hash` of the content digest, keeping the record with richer metadata, then finds near-duplicates with SemHash over the embeddings. Cluster members are **not deleted**: they get a shared `dup_cluster_id` and one is marked `is_representative`. Deletion happens at export from an explicit filter. `group_key` is the profile's, unioned with `dup_cluster_id`.
+**Proposed approach.** `embed` calls the modality's `embedding` and writes `embeddings.npy`. `dedup` needs no exact-duplicate pass of its own: `rid` is already a hash over every part, so exact duplicates are a `rid` collision — measured, 21,171 distinct over 21,172 — and of a colliding pair the record with the richer metadata is kept. Near-duplicates come from SemHash over the embeddings and get a shared `conversation_cluster` and its size. Members are **not deleted**; `export` drops all but one by the declared rule — most `meta` keys, ties broken by lowest `rid` — so no `is_representative` column exists to disagree with the rule. `scenario_hash` is the profile's, unioned with `conversation_cluster` at stage 12.
+
+**Renamed by the naming pass.** `group_key` → `scenario_hash`, `dup_cluster_id` → `conversation_cluster`, `catalog_fingerprint` → `catalog_hash`, and `is_representative` deleted. Object plus what the value is, so a reader can say whether two records should share one without opening the implementation — and `conversation_cluster` is not called a hash because near-identical conversations hash differently.
 
 **Acceptance criteria.**
 - Gates: embedding row count matches record count; exact duplicates 0; a cluster report is emitted.
 - Known duplicate pairs from the corpus land in one cluster — 491 duplicate-user-turn groups covering 982 records, and 1 duplicate (system, user) pair.
 - No record is deleted by `dedup`; the count out equals the count in, with cluster fields added.
 - `source_index` is rejected as a group key by an explicit test, since it is unique per record and gives no leakage protection.
-- The 112-record catalog group shares one `group_key`.
+- The 112-record catalog group shares one `scenario_hash`.
 
 **Source.** core requirements 22, 23, 24; profile § Dedup and grouping tests; profile Decisions (group split).
 
@@ -975,7 +977,7 @@ It is a revision phase rather than a set of Phase 3 tasks for the same reason 2E
 
 **Relevant files.** `src/dataforce/pipeline/release/split.py`, `lib/decontaminate.py`.
 
-**Proposed approach.** Group-based on `group_key`, never random. A group is wholly in one split, and the same holds for any training subsample. The test split is **100% human-validated**: a record that has not been annotated cannot enter test at any budget, and `jury_consensus` records are barred permanently. Decontamination verifies zero n-gram overlap between test and train and zero shared `group_key`.
+**Proposed approach.** Group-based on `scenario_hash`, never random. A group is wholly in one split, and the same holds for any training subsample. The test split is **100% human-validated**: a record that has not been annotated cannot enter test at any budget, and `jury_consensus` records are barred permanently. Decontamination verifies zero n-gram overlap between test and train and zero shared `scenario_hash`.
 
 **Acceptance criteria.**
 - Gate: zero group leakage; zero n-gram overlap. Either is a hard stop.

@@ -128,7 +128,7 @@ def test_both_shapes_give_the_same_catalog_for_the_same_tools() -> None:
     )
 
     assert from_canonical.answer_space == from_legacy.answer_space
-    assert TOOL_DECISION.group_key(from_canonical) == TOOL_DECISION.group_key(
+    assert TOOL_DECISION.scenario_hash(from_canonical) == TOOL_DECISION.scenario_hash(
         from_legacy
     )
 
@@ -184,7 +184,7 @@ def test_records_sharing_a_catalog_share_a_fingerprint() -> None:
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert utils.catalog_fingerprint(names) == utils.catalog_fingerprint(list(names))
+    assert utils.catalog_hash(names) == utils.catalog_hash(list(names))
 
 
 def test_a_different_catalog_gets_a_different_fingerprint() -> None:
@@ -195,7 +195,7 @@ def test_a_different_catalog_gets_a_different_fingerprint() -> None:
         (CATALOGS / "twenty_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert utils.catalog_fingerprint(eight) != utils.catalog_fingerprint(twenty)
+    assert utils.catalog_hash(eight) != utils.catalog_hash(twenty)
 
 
 def test_the_fingerprint_is_order_sensitive() -> None:
@@ -204,7 +204,7 @@ def test_the_fingerprint_is_order_sensitive() -> None:
         (CATALOGS / "eight_tools.txt").read_text(encoding="utf-8")
     ).names
 
-    assert utils.catalog_fingerprint(names) != utils.catalog_fingerprint(names[::-1])
+    assert utils.catalog_hash(names) != utils.catalog_hash(names[::-1])
 
 
 # --- what it keeps ------------------------------------------------------------

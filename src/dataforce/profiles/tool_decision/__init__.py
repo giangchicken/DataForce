@@ -77,8 +77,8 @@ class ToolDecisionProfile:
     def answer_config(self, record: Record) -> UIControl:
         return ask_annotator.answer_config(record)
 
-    def group_key(self, record: Record) -> str:
-        return build_record.group_key(record)
+    def scenario_hash(self, record: Record) -> str:
+        return build_record.scenario_hash(record)
 
     def training_example(self, record: Record) -> dict[str, Any]:
         return answer.training_example(record)

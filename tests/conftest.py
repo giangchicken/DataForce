@@ -160,7 +160,7 @@ class SetProfile:
     def answer_config(self, record: Record) -> UIControl:
         return UIControl("<Choices name='answer' toName='content'/>")
 
-    def group_key(self, record: Record) -> str:
+    def scenario_hash(self, record: Record) -> str:
         return f"g_{record.rid[:8]}"
 
     def training_example(self, record: Record) -> dict[str, Any]:
@@ -205,7 +205,7 @@ class FreeTextProfile:
     def answer_config(self, record: Record) -> UIControl:
         return UIControl("<TextArea name='answer' toName='content'/>")
 
-    def group_key(self, record: Record) -> str:
+    def scenario_hash(self, record: Record) -> str:
         return record.rid
 
     def training_example(self, record: Record) -> dict[str, Any]:

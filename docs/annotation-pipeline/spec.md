@@ -110,7 +110,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 ### The profile and modality contracts
 
 1. A **modality** supplies exactly four things, each named for what it returns: `content_parts` (raw → typed parts), `embedding` (parts → vector) for duplicate detection, `personal_data_detectors`, and `display_config`, the annotation-UI half that *displays* a record. Nothing else. A turn that carries something other than a string — a tool call, an attachment reference — is still one part, and rendering it into one is `content_parts`' job by requirement 70: it is the source's own layout, and this is the only member that is allowed to know it.
-2. A **profile** supplies exactly nine things, each named for what it returns: `build_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `group_key`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
+2. A **profile** supplies exactly nine things, each named for what it returns: `build_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `scenario_hash`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
 4. `answer_distance` must satisfy four properties on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53. **The triangle inequality is deliberately not among the four**, because a compound answer's δ is a weighted average and weighted Jaccard does not satisfy it. Nothing in the pipeline needs it: cohesion, corpus conflict, the four buckets and α are all defined on pairwise distances, and no stage embeds an answer in a metric space or clusters answers by distance. A stage that ever wants to is the moment to revisit this, and it says so here so that moment is not a surprise.
 5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated with per-annotator reliability weighting in stage 10.
@@ -148,13 +148,17 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 ### Duplicates and grouping
 
-22. Exact duplicates are removed on `compute_hash` of the content digest, keeping the record with the richer metadata.
-23. Near-duplicates are found with SemHash over the modality's embeddings. Cluster members are **not deleted**: they get a shared `dup_cluster_id`, the size of the cluster they are in, and one is marked `is_representative`. Deletion happens at export from an explicit filter, so the decision is reversible and recorded.
+22. **Exact duplicates are a `rid` collision and need no field.** `rid` is already a hash over every part's `type:role:text` in order, so two records with byte-identical content carry the same one by construction — a second content hash beside it would be a second name for it. Measured on the reference source: 21,171 distinct rids over 21,172 records, which is that check already run. Of a colliding pair the record with the richer metadata is kept.
+23. **Near-duplicates are a cluster, not a hash**, because near-identical is not identical: they are found with SemHash over the modality's embeddings, and a record carries `conversation_cluster` and `conversation_cluster_size`. Members are **not deleted** — `export` drops all but one, so the decision is reversible and recorded.
 
-    A record carries the cluster's **id and size, never the list of its siblings' ids.** The membership exists once, in `clusters.jsonl`, which is the artifact a person investigating duplicates opens. On the largest cluster measured — 112 records — a sibling list on every row is **248,640 bytes against 2,240, and 112 copies of one fact**, any of which can disagree with the others after any stage touches a cluster. The size is there because it is the question a reader of one row actually has: `is_representative` says whether this row is the one that survives export, and `dup_cluster_size` says *of how many* — both O(1), and both answerable without a second file.
-24. Every record gets a `group_key` from the profile, unioned with its `dup_cluster_id`. A field that is unique per record is not a group key, and the profile is responsible for saying so with a measurement rather than an assumption.
+    **Which one survives is a declared rule, not a stored flag.** The rule: the member with the most `meta` keys, ties broken by the lowest `rid`. Deterministic, so two runs drop the same rows. A rule rather than an `is_representative` boolean because a stored outcome records *that* a choice was made without recording *why* — and this document carried that flag through four requirements with **no rule behind it at all**, which meant which records ship was undecided in a document that specifies fifteen gates.
 
-    **The two are not nested, and the union is what protects.** They answer different questions over different halves of the record: `group_key` is the profile's — *is this the same scenario* — a pure function of one record, reproducible without a corpus; `dup_cluster_id` is `dedup`'s — *do these two say the same thing* — from an embedding that deliberately excludes the instruction role, so it compares the conversation. Neither is a refinement of the other, and the measurement says so loudly: on the reference source, **490 of 491 exact-duplicate-conversation groups span two different catalogs**, covering 980 records. Same utterance, different tools offered, different correct answer. `group_key` alone puts every one of those pairs in a *different* group and lets it straddle a split, which is the leak a model exploits by recognising a conversation it saw with another catalog. This is why requirement 57 splits on the union rather than on either, and why a profile is asked for a measurement rather than an opinion about its own grouping.
+    A record carries the cluster's **id and size, never the list of its siblings' ids.** The membership exists once, in `clusters.jsonl`, the artifact a person investigating duplicates opens. On the largest cluster measured — 112 records — a sibling list on every row is **248,640 bytes against 2,240, and 112 copies of one fact**, any of which can disagree after any stage touches a cluster. Size is there because it is the question a reader of one row actually has: *of how many* — O(1), no second file.
+24. Every record gets a `scenario_hash` from the profile, unioned with its `conversation_cluster`. A field that is unique per record is not a group key, and the profile is responsible for saying so with a measurement rather than an assumption.
+
+    **Both are named for the object and for what the value is**, because that is all a reader needs in order to say whether two records should share one. `scenario_hash` is a hash of whatever this profile means by one scenario — for tool selection the catalog, which is why the profile's own function is `catalog_hash`. `conversation_cluster` is a cluster id over conversations and deliberately *not* called a hash: two near-identical conversations hash differently, so the word would be a lie in the name. `rid` covers the identical case and is already a hash.
+
+    **The two are not nested, and the union is what protects.** They answer different questions over different halves of the record: `scenario_hash` is the profile's — *is this the same scenario* — a pure function of one record, reproducible without a corpus; `conversation_cluster` is `dedup`'s — *do these two say the same thing* — from an embedding that deliberately excludes the instruction role, so it compares the conversation. Neither is a refinement of the other, and the measurement says so loudly: on the reference source, **490 of 491 exact-duplicate-conversation groups span two different catalogs**, covering 980 records. Same utterance, different tools offered, different correct answer. `scenario_hash` alone puts every one of those pairs in a *different* group and lets it straddle a split, which is the leak a model exploits by recognising a conversation it saw with another catalog. This is why requirement 57 splits on the union rather than on either, and why a profile is asked for a measurement rather than an opinion about its own grouping.
 
 ### The jury
 
@@ -208,9 +212,9 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 ### Split, export, document
 
-57. Splitting is **group-based on `group_key`**, never random. A group is wholly in one split, and the same holds for any training subsample.
+57. Splitting is **group-based on `scenario_hash`**, never random. A group is wholly in one split, and the same holds for any training subsample.
 58. The test split is **100% human-validated**. A record that has not been annotated cannot enter test at any budget, and `jury_consensus` records are barred permanently.
-59. Decontamination verifies zero n-gram overlap between test and train, and zero shared `group_key`. Either fails the gate.
+59. Decontamination verifies zero n-gram overlap between test and train, and zero shared `scenario_hash`. Either fails the gate.
 60. Export emits the profile's training format. Every exported record carries provenance: source SHA-256, pipeline version, modality and profile versions, `agent-toolkit` version, validation status, validator, dedup cluster, split, stratum, and the panel version where the jury touched it.
 61. The release is a DVC-tracked directory with a manifest listing every file's SHA-256, reproducible from one git commit plus one `dataforce run`.
 62. Each release ships a **datasheet** (Gebru et al.), a **data statement** (Bender & Friedman), and a **Croissant** file validated by `mlcroissant`. The datasheet states the machine-labelled share explicitly and names the jury panel with each juror's family and gold-calibrated weight, because which records humans looked at is part of how the dataset was made. Documentation is a gated stage; a missing required field fails the release.
@@ -237,7 +241,7 @@ An answer may be more than one value. Tool selection is the case that forces thi
 70. **A turn that is not a string becomes a part canonically.** A source may carry a tool call as structure — an OpenAI `tool_calls` array, `content: null` beside it. `content_parts` renders it into one text part holding **canonical JSON**: object keys sorted, no insignificant whitespace, arguments parsed from any string form the source used and re-emitted in that one form. Two sources spelling the same call differently therefore produce the same part, the same digest and the same `rid`. This is the modality's job because it is the source's layout, and it is a *rendering* rather than an interpretation: nothing here decides what a call means.
 71. **A record stores no answer space. The profile derives one.** Choosing the profile settles the answer *type* — an array of calls — and the record's own content settles the *space*: which names, and each name's `parameters`. Both are already on the record, so a stored answer space is a second copy of one of them, and the record carries no field for it.
 
-    Where a JSON Schema is genuinely needed — the jury's `complete_structured` call, pull-time validation of a human correction, invariant 5's check on an artifact — the profile **materialises one from the record at that moment**, and nothing persists it. That is what requirement 5 means by an answer schema built per record. Everything that needs only the *names* — `group_key`, the validity checks, the capture control — reads the catalog, not a schema wrapped around it.
+    Where a JSON Schema is genuinely needed — the jury's `complete_structured` call, pull-time validation of a human correction, invariant 5's check on an artifact — the profile **materialises one from the record at that moment**, and nothing persists it. That is what requirement 5 means by an answer schema built per record. Everything that needs only the *names* — `scenario_hash`, the validity checks, the capture control — reads the catalog, not a schema wrapped around it.
 
     Measured, because the first draft of this requirement said the opposite and the numbers are what changed it. Deriving the catalog costs **0.27 µs** per record where the source carries it as data, against 0.07 µs to read a stored copy: **0.0 seconds across a 21,172-record run**, so the stored copy buys nothing on the shape this pipeline is for. Where a source renders its catalog into prose the parse is 93 µs, and paying it once at stage 0 — which already parses it — keeps that at zero too. Against which a stored copy costs a second thing that can disagree with the first, an artifact column on every record, and, for a compound answer, 3,247 bytes against the catalog's own 2,888 — a copy larger than the original. The pipeline's own rule already settled it: *a source's vocabulary is declared once, and everything derivable is derived.*
 
@@ -331,10 +335,10 @@ dataforce/
 │   │       ├── utils.py         LOGIC · every conversion of a tool and a catalog:
 │   │       │                    tools_to_catalog · catalog_to_tools
 │   │       │                    · build_system_prompt · to_strict_openai
-│   │       │                    · catalog_names · catalog_fingerprint
+│   │       │                    · catalog_names · catalog_hash
 │   │       │
 │   │       ├── build_record.py  STEP · stages 0–1 · build_record · read_catalog
-│   │       │                    · validity_checks · group_key
+│   │       │                    · validity_checks · scenario_hash
 │   │       ├── ask_annotator.py STEP · stages 7–8 · question_text · answer_config
 │   │       │                    · readable_catalog
 │   │       │
@@ -511,7 +515,7 @@ class Profile(Protocol):
     # profile's job -- with a measurement, not an assumption. Written at `dedup`,
     # unioned with the duplicate cluster; enforced at `split`, where a straddling group
     # fails the gate.
-    def group_key(self, record: Record) -> str: ...
+    def scenario_hash(self, record: Record) -> str: ...
 
     # Stage 13 `export`. One training example, in the shape this profile's trainer
     # expects. The last place the pipeline can assert that the answer it is shipping is
@@ -681,7 +685,8 @@ The item is invented. That is a rule rather than a convenience: this repository 
   "meta":  { "…": "verbatim from source" },
   "parse_status": "ok",
   "failed_checks": [],
-  "privacy": null, "dup_cluster_id": null, "is_representative": null, "group_key": null,
+  "privacy": null, "conversation_cluster": null, "conversation_cluster_size": null,
+  "scenario_hash": null,
   "jury": null, "triage": null, "validation": null, "split": null
 }
 ```
@@ -784,13 +789,13 @@ Every block below has exactly one owning stage, named in the comments. The one s
                             "locator": { "start": 42, "end": 52 },
                             "placeholder": "<PHONE_1>" } ] },
   // stage 4 `dedup`: cluster members are marked, never deleted, so the decision stays
-  // reversible and recorded. `group_key` is the profile's, unioned with the cluster, so
+  // reversible and recorded. `scenario_hash` is the profile's, unioned with the cluster, so
   // variants of one scenario cannot straddle a split. Deliberately *not* a
   // `failed_checks` entry: a duplicate is not withheld, it stays on the main path and
   // is filtered at export by an explicit choice -- which is why the conservation gate
   // counts `deduped_out` as its own term rather than folding it into `quarantined`.
-  "dup_cluster_id": "c_0331", "dup_cluster_size": 112, "is_representative": true,
-  "group_key": "g_7a1e…",
+  "conversation_cluster": "c_0331", "conversation_cluster_size": 112,
+  "scenario_hash": "g_7a1e…",
 
   // stage 5 `jury`: every vote kept, including abstentions, because an abstention is
   // evidence about a juror. `panel_version` and `prompt_version` are here so a number
@@ -814,7 +819,7 @@ Every block below has exactly one owning stage, named in the comments. The one s
   // from a human; `jury_consensus` records are barred from test permanently.
   "validation": { "status": "corrected", "verdict": "incorrect", "curated_label": "…",
                   "validators": ["u12","u07"], "alpha_contrib": true, "decided_at": "…" },
-  "split": "test"   // stage 12: assigned by `group_key`, never at random
+  "split": "test"   // stage 12: assigned by `scenario_hash`, never at random
 }
 ```
 
@@ -915,7 +920,7 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 9. **`answer_distance` satisfies profile rule 1's four properties.** For every profile: `d(a,a) = 0`, symmetry, range `[0,1]`, no `NaN`, including on the profile's empty answer. Not the triangle inequality — requirement 4 says why it is excluded and what would have to change to need it. *Check:* the profile's own test module, over random answer pairs drawn from its answer schema, plus for a compound answer the two cases that are the whole point: a differing name is farther than a differing argument, and identical arguments reduce δ to Jaccard over names. This is the one invariant in this list that nothing generic enforces, which is why it is rule 1 and why the cost of breaking it is written down.
 10. **No model output reaches an annotator.** *Check:* a contract test asserting the payload key set equals an explicit allowlist.
 11. **Corrections stay in the answer space.** *Check:* structurally where the UI can express it, and asserted again at pull time.
-12. **No group spans splits.** No `group_key` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
+12. **No group spans splits.** No `scenario_hash` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
 13. **Test is fully human-validated.** Every test record has `validation.status ∈ {original, corrected}`. *Check:* export gate.
 14. **Releases are reproducible.** Two `dataforce run` invocations from a clean checkout produce byte-identical artifacts. *Check:* CI on the smoke fixture, diffing the run manifest and `MANIFEST.sha256`.
 15. **The sampling design is reconstructible.** Every annotated record records its stratum and selection probability. *Check:* the residual-error estimator refuses to run when any lacks one.

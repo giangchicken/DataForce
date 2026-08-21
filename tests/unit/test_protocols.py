@@ -35,7 +35,7 @@ PROFILE_MEMBERS = frozenset(
         "validity_checks",
         "question_text",
         "answer_config",
-        "group_key",
+        "scenario_hash",
         "training_example",
     }
 )

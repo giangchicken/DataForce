@@ -78,11 +78,19 @@ class Profile(Versioned, Protocol):
         """
         ...
 
-    def group_key(self, record: Record) -> str:
+    def scenario_hash(self, record: Record) -> str:
         """What makes two records the same scenario, so they cannot straddle a split.
 
-        A field that is unique per record is not a group key, and saying so is the
-        profile's job -- with a measurement, not an assumption.
+        A hash of whatever *this* profile means by one scenario -- for tool selection the
+        catalog offered, for a document task the document. Named for the object and the
+        fact that it is a hash, so two records getting the same value is checkable
+        without reading the implementation.
+
+        A field that is unique per record is not one of these, and saying so is the
+        profile's job -- with a measurement, not an assumption. Near-identical *content*
+        is a separate protection with a separate field: `conversation_cluster`, which is
+        not a hash because near-identical is not identical, and stage 12 splits on the
+        union of the two.
         """
         ...
 

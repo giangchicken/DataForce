@@ -38,7 +38,7 @@ __all__ = [
     "CATALOG_HEADER",
     "INSTRUCTION",
     "build_system_prompt",
-    "catalog_fingerprint",
+    "catalog_hash",
     "catalog_names",
     "catalog_to_tools",
     "to_strict_openai",
@@ -405,9 +405,9 @@ def catalog_to_tools(text: str, *, gaps: list[Gap] | None = None) -> Catalog:
     )
 
 
-# A catalog fingerprint, in hex characters. Long enough that two different catalogs
-# colliding is not a thing that happens to 21,172 records.
-_FINGERPRINT_LENGTH = 16
+# A catalog hash, in hex characters. Long enough that two different catalogs colliding
+# is not a thing that happens at corpus scale.
+_HASH_LENGTH = 16
 
 
 def catalog_names(record: Record) -> list[str]:
@@ -421,11 +421,12 @@ def catalog_names(record: Record) -> list[str]:
     return names
 
 
-def catalog_fingerprint(names: Sequence[str]) -> str:
-    """What makes two records the same scenario: the tools they were offered.
+def catalog_hash(names: Sequence[str]) -> str:
+    """The hash of one catalog: what makes two records the same scenario here.
 
-    Order-sensitive, because the catalog is presented in order and two orderings are two
-    prompts. `source_index` is not this: it is unique per record, measured, and so gives
-    no leakage protection at all.
+    Named for what it hashes, because that is the only thing a reader needs to know to
+    say whether two records should get the same value. Order-sensitive, because the
+    catalog is presented in order and two orderings are two prompts. `source_index` is
+    not this: it is unique per record, measured, and so gives no leakage protection.
     """
-    return compute_hash("|".join(names), "sha256")[:_FINGERPRINT_LENGTH]
+    return compute_hash("|".join(names), "sha256")[:_HASH_LENGTH]

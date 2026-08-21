@@ -60,10 +60,9 @@ SAMPLES: dict[str, dict[str, Any]] = {
         "verified": None,
     },
     "deduped": _record_row(
-        dup_cluster_id="c_0331",
-        dup_cluster_size=112,
-        is_representative=True,
-        group_key="g_7a1e",
+        conversation_cluster="c_0331",
+        conversation_cluster_size=112,
+        scenario_hash="g_7a1e",
     ),
     "votes": {
         "rid": RID,
@@ -103,7 +102,7 @@ SAMPLES: dict[str, dict[str, Any]] = {
             "decided_at": "2026-08-18T00:00:00Z",
         }
     ),
-    "split": _record_row(group_key="g_7a1e", split="test"),
+    "split": _record_row(scenario_hash="g_7a1e", split="test"),
 }
 
 CONTENT_ARTIFACTS = sorted(

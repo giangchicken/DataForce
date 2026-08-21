@@ -24,7 +24,7 @@ from dataforce.profiles.tool_decision.source_contract import (
     SourceContract,
 )
 from dataforce.profiles.tool_decision.utils import (
-    catalog_fingerprint,
+    catalog_hash,
     catalog_names,
     catalog_to_tools,
 )
@@ -42,7 +42,7 @@ __all__ = [
     "CHECK_NAMES",
     "PROVENANCE_KEY",
     "build_record",
-    "group_key",
+    "scenario_hash",
     "read_catalog",
     "validity_checks",
 ]
@@ -142,9 +142,14 @@ def build_record(
     )
 
 
-def group_key(record: Record) -> str:
-    """The catalog fingerprint. Never `source_index`, which is unique per record."""
-    return catalog_fingerprint(catalog_names(record))
+def scenario_hash(record: Record) -> str:
+    """This profile's answer to *same scenario*: the hash of the record's catalog.
+
+    Never `source_index`, which is unique per record and measured to be so. The generic
+    name is `scenario_hash` because a profile without a catalog still has to answer the
+    question; `catalog_hash` is what answering it means here.
+    """
+    return catalog_hash(catalog_names(record))
 
 
 # --- stage 1: the four validity checks ---------------------------------------

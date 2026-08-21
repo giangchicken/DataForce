@@ -63,21 +63,23 @@ PII_FINDINGS = pa.DataFrameSchema(
 
 
 # `deduped.jsonl` -- grouped, not thinned. Near-duplicate cluster members are all still
-# here: one is marked `is_representative` and deletion happens at export from an explicit
-# filter, so the decision is reversible and recorded. `group_key` is what keeps variants
-# of one scenario from straddling a split.
+# here; `export` drops all but one by a declared rule, so the decision is reversible and
+# recorded. `scenario_hash` is what keeps variants of one scenario from straddling a
+# split; `conversation_cluster` is what keeps near-identical text from straddling one.
+#
+# Exact duplicates need no column at all: `rid` is a hash over every part's
+# `type:role:text`, so two records with identical content already share one. 21,171
+# distinct rids over 21,172 records is that check, already run.
 #
 # The cluster's id and its size, never the list of its members: the membership exists
 # once in `clusters.jsonl`, and on the largest cluster measured -- 112 records -- a
 # member list on every row is 248,640 bytes against 2,240, and 112 copies of one fact.
-# Size is here because it is the question a reader of one row has: `is_representative`
-# says whether this row survives export, and `dup_cluster_size` says of how many.
+# Size is here because it is the question a reader of one row has: of how many.
 def _deduped() -> pa.DataFrameSchema:
     columns = record_columns()
-    columns["dup_cluster_id"] = pa.Column(str)
-    columns["dup_cluster_size"] = pa.Column(int, pa.Check.ge(1))
-    columns["is_representative"] = pa.Column(bool)
-    columns["group_key"] = pa.Column(str)
+    columns["conversation_cluster"] = pa.Column(str)
+    columns["conversation_cluster_size"] = pa.Column(int, pa.Check.ge(1))
+    columns["scenario_hash"] = pa.Column(str)
     return pa.DataFrameSchema(columns, name="deduped")
 
 

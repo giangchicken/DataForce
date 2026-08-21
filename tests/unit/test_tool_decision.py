@@ -235,13 +235,13 @@ def test_export_preserves_the_marker_dsl_in_the_system_message() -> None:
         assert marker in system
 
 
-def test_the_group_key_is_the_catalog_and_not_the_source_index() -> None:
+def test_the_scenario_hash_is_the_catalog_and_not_the_source_index() -> None:
     one = record_for(label=["Lookup00_0a"])
     other = record_for(label=[])
 
     assert one.meta["source_index"] == other.meta["source_index"]
-    assert TOOL_DECISION.group_key(one) == TOOL_DECISION.group_key(other)
-    assert TOOL_DECISION.group_key(one) != TOOL_DECISION.group_key(
+    assert TOOL_DECISION.scenario_hash(one) == TOOL_DECISION.scenario_hash(other)
+    assert TOOL_DECISION.scenario_hash(one) != TOOL_DECISION.scenario_hash(
         record_for(catalog="one_tool.txt", label=[])
     )
 
