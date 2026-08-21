@@ -64,9 +64,13 @@ def first_docstring_line(path: Path) -> str:
     return doc.splitlines()[0]
 
 
-def imported_modules(tree: ast.Module, package: str) -> set[str]:
-    """Which modules of one package this tree imports, however it spells the import."""
-    prefix = f"dataforce.profiles.{package}"
+def imported_modules(tree: ast.Module, prefix: str) -> set[str]:
+    """Which modules of one package this tree imports, however it spells the import.
+
+    Takes the dotted prefix rather than the package name, because the axis is part of it
+    and a guard that assumed `profiles` would have read every modality package as
+    importing nothing -- passing vacuously on exactly the tree it exists to check.
+    """
     found: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -81,9 +85,14 @@ def imported_modules(tree: ast.Module, package: str) -> set[str]:
     return found
 
 
-def sibling_phase_imports(module: str, tree: ast.Module, package: str) -> set[str]:
+def sibling_phase_imports(module: str, tree: ast.Module, prefix: str) -> set[str]:
     """The phase modules this phase module imports, which must be none of them."""
-    return (imported_modules(tree, package) & PHASE_NAMES) - {module}
+    return (imported_modules(tree, prefix) & PHASE_NAMES) - {module}
+
+
+def dotted_prefix(package: Path) -> str:
+    """One implementation package as it is imported: `dataforce.<axis>.<name>`."""
+    return f"dataforce.{package.parent.name}.{package.name}"
 
 
 def test_an_implementation_is_the_seven_files_or_declares_itself_out_of_the_flow() -> (
@@ -123,7 +132,10 @@ def test_every_phase_module_states_its_own_phase_and_stage_range() -> None:
                 f"{path} claims stages {found.group(2)}-{found.group(3)}, "
                 f"`core/flow.py` gives {name} {ranges[name]}"
             )
-    assert seen == len(PHASES), f"only {seen} phase modules scanned"
+    # At least one full set, not exactly one: a second implementation that splits
+    # brings its own four, and an equality here would fail on the arrival of the very
+    # thing this file exists to keep uniform.
+    assert seen >= len(PHASES), f"only {seen} phase modules scanned"
 
 
 def test_the_two_phase_independent_modules_say_which_kind_they_are() -> None:
@@ -142,7 +154,7 @@ def test_no_phase_module_imports_a_sibling_phase() -> None:
             if name not in PHASE_NAMES:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            siblings = sibling_phase_imports(name, tree, package.name)
+            siblings = sibling_phase_imports(name, tree, dotted_prefix(package))
             assert not siblings, (
                 f"{package.name}/{name}.py imports {sorted(siblings)}; anything two "
                 "phases need belongs in schema.py or utils.py"
@@ -157,7 +169,7 @@ def test_schema_and_utils_import_no_phase_module_and_schema_imports_no_utils() -
             if path is None:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            imported = imported_modules(tree, package.name)
+            imported = imported_modules(tree, dotted_prefix(package))
             assert not imported & PHASE_NAMES, (
                 f"{package.name}/{name}.py imports the phase module(s) "
                 f"{sorted(imported & PHASE_NAMES)}"
@@ -165,7 +177,7 @@ def test_schema_and_utils_import_no_phase_module_and_schema_imports_no_utils() -
         schema = modules.get("schema")
         if schema is not None:
             tree = ast.parse(schema.read_text(encoding="utf-8"), filename=str(schema))
-            assert "utils" not in imported_modules(tree, package.name), (
+            assert "utils" not in imported_modules(tree, dotted_prefix(package)), (
                 f"{package.name}/schema.py imports utils.py -- a shape must not depend "
                 "on a conversion over it"
             )
@@ -173,13 +185,14 @@ def test_schema_and_utils_import_no_phase_module_and_schema_imports_no_utils() -
 
 def test_the_sibling_guard_finds_one_when_there_is_one() -> None:
     """Proved against synthetic source, three spellings of the same mistake."""
-    for source in (
-        "from dataforce.profiles.x.ai_review import vote_consensus\n",
-        "from dataforce.profiles.x import ai_review\n",
-        "import dataforce.profiles.x.ai_review\n",
-    ):
-        found = sibling_phase_imports("human_review", ast.parse(source), "x")
-        assert found == {"ai_review"}, f"{source!r} slipped past the guard"
+    for prefix in ("dataforce.profiles.x", "dataforce.modalities.x"):
+        for source in (
+            f"from {prefix}.ai_review import vote_consensus\n",
+            f"from {prefix} import ai_review\n",
+            f"import {prefix}.ai_review\n",
+        ):
+            found = sibling_phase_imports("human_review", ast.parse(source), prefix)
+            assert found == {"ai_review"}, f"{source!r} slipped past the guard"
 
 
 def test_the_sibling_guard_allows_the_phase_independent_two() -> None:
@@ -188,4 +201,12 @@ def test_the_sibling_guard_allows_the_phase_independent_two() -> None:
         "from dataforce.profiles.x.utils import answer_distance\n"
         "from dataforce.core.record import Record\n"
     )
-    assert sibling_phase_imports("ai_review", ast.parse(source), "x") == set()
+    prefix = "dataforce.profiles.x"
+    assert sibling_phase_imports("ai_review", ast.parse(source), prefix) == set()
+
+
+def test_the_guard_reads_the_axis_and_not_only_profiles() -> None:
+    """A modality package's own imports were invisible to this before the prefix."""
+    source = "from dataforce.modalities.x.release import training_example\n"
+    assert imported_modules(ast.parse(source), "dataforce.modalities.x") == {"release"}
+    assert imported_modules(ast.parse(source), "dataforce.profiles.x") == set()

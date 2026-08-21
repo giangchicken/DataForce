@@ -525,9 +525,11 @@ def catalog_names(record: Record, contract: SourceContract) -> list[str]:
     """The names a record's own catalog offers, in the order it offers them.
 
     Derived from the record's content, never read off a stored copy: requirement 71,
-    and the measurement that reversed the first draft of it -- 0.27 µs against 0.07,
-    which is 0.0 seconds across a 21,172-record run, against a second thing that can
-    disagree with the first.
+    and the measurement that reversed the first draft of it -- 2.70 µs where the source
+    carries its catalog as data, so 0.29 s across a 21,172-record pass over the five
+    callers a record has, against a second thing that can disagree with the first. Where
+    a source renders its catalog into prose it is 119 µs and 12.6 s, which is why exactly
+    one module parses one.
     """
     return list(record_catalog(record, contract).names)
 
