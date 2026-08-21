@@ -50,7 +50,7 @@ __all__ = [
     "INSTRUCTION",
     "Gap",
     "answer_distance",
-    "calls_by_name",
+    "named_calls",
     "catalog_from_openai",
     "catalog_from_source",
     "catalog_from_text",
@@ -588,7 +588,7 @@ def read_source_contract(manifest: Manifest) -> SourceContract:
 # rather than in `ai_review.py`, which `human_review.py` would then have to import.
 
 
-def calls_by_name(answer: Answer) -> dict[str, dict[str, Any]]:
+def named_calls(answer: Answer) -> dict[str, dict[str, Any]]:
     """The calls an answer means, keyed by tool name, the first spelling of a name winning.
 
     A bare string entry is the call with no arguments. That is what makes a names-only
@@ -663,7 +663,7 @@ def answer_distance(a: Answer, b: Answer) -> float:
     record whose answer is four are scored on the same scale. Changing it is a threshold
     decision with its own task.
     """
-    left, right = calls_by_name(a), calls_by_name(b)
+    left, right = named_calls(a), named_calls(b)
     names = left.keys() | right.keys()
     if not names:
         return 0.0

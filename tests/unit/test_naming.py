@@ -1,7 +1,7 @@
 """Every function is named for its result, not for an operation. Private ones too.
 
-Three objectively checkable halves of that convention; the fourth -- whether a name
-actually reads as its result -- needs a person, so it is not here.
+Four objectively checkable parts of that convention; the fifth -- whether a name actually
+reads as its result -- needs a person, so it is not here.
 
 A name shared with a stage makes a sentence ambiguous rather than wrong: `load` was
 stage 0 and a modality member at once, and most of its ten mentions in the core spec
@@ -15,6 +15,14 @@ comparison, because AGENTS.md §5 says what the old scope implied was untrue -- 
 private `_` prefix is not an excuse; you still have to read it.* `_note`, `_says`,
 `_coerce`, `_turn`, `_leaves` and `_records` all lived in the gap between the rule and
 this file.
+
+The fourth part is that a name is a name and not a phrase. A joining word --
+`from`, `with`, `by`, `as`, `and` -- makes a name describe a relation between two things
+instead of naming one, and then the call site has to be read as a sentence. Measured when
+the rule arrived: 153 functions, no conjunction among them, and thirteen prepositions. Five
+were phrases and were renamed; the other eight are in `JOINED_ALLOWED` with the reason each
+is not one, because an allowlist whose entries carry no reason is how a rule decays into a
+list of exceptions.
 
 `declared/` is in scope since it is the surface both axes are configured through, and
 `core/` is in scope as of the module-layout pass. `pipeline/` joined them with stage 0,
@@ -76,8 +84,35 @@ RENAMED_AWAY = frozenset(
         "text",
         "turn",
         "usable",
+        # Phrases rather than names: each described a relation between two things.
+        "schema_for",
+        "calls_by_name",
+        "with_provenance",
+        "raw_with_records",
+        "turn_as_part",
     }
 )
+
+# Words that turn a name into a phrase. `of` is absent on purpose: `list_of_x` is a phrase
+# but `part_of_speech` is one noun, and no name here uses either.
+JOINING_WORDS = frozenset(
+    {"and", "or", "but", "nor", "with", "from", "by", "as", "for", "in", "to", "than"}
+)
+
+# The joined names that stay, and why each one is not a phrase. Three reasons only:
+# it is a term the spec itself uses, it is a Python idiom, or it is a declared identifier
+# that appears in `params.yaml`, a filename or a document table -- where renaming the
+# function renames a data contract.
+JOINED_ALLOWED = {
+    "catalog_from_text": "shared decision 10: a conversion is `Y_from_X`",
+    "catalog_from_openai": "shared decision 10",
+    "catalog_from_source": "shared decision 10",
+    "tool_from_text": "shared decision 10",
+    "content_is_by_reference": "`by reference` is the core spec's own term for media",
+    "part_is_by_reference": "same term",
+    "as_dict": "the `dataclasses.asdict` idiom",
+    "label_not_in_catalog": "a `params.yaml` key and a quarantine filename",
+}
 
 
 def stage_names() -> set[str]:
@@ -139,3 +174,19 @@ def test_no_guarded_function_uses_a_name_this_repo_removed() -> None:
         if name in RENAMED_AWAY
     }
     assert not returned, f"these names were removed on purpose: {returned}"
+
+
+def test_no_guarded_function_name_is_a_phrase() -> None:
+    """A name names one thing. A joining word makes it a relation between two."""
+    functions = guarded_functions()
+    joined = {
+        name: str(path.relative_to(SOURCE_ROOT))
+        for name, path in functions.items()
+        if set(name.split("_")) & JOINING_WORDS and name not in JOINED_ALLOWED
+    }
+    assert not joined, f"these read as phrases rather than names: {joined}"
+
+    # The allowlist is not a place names accumulate: every entry has to still exist, so
+    # deleting one of these functions deletes its exemption rather than leaving it here.
+    stale = sorted(set(JOINED_ALLOWED) - set(functions))
+    assert not stale, f"{stale} is exempt from a rule it no longer needs exempting from"

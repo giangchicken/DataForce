@@ -31,8 +31,8 @@ from dataforce.core.record import (
 from dataforce.profiles.tool_decision.schema import SourceContract
 from dataforce.profiles.tool_decision.utils import (
     answer_distance,
-    calls_by_name,
     catalog_names,
+    named_calls,
 )
 
 __all__ = [
@@ -184,7 +184,7 @@ def validity_checks(
         """
         offered = set(catalog_names(record, contract))
         try:
-            called = calls_by_name(record.label or [])
+            called = named_calls(record.label or [])
         except TypeError:
             return True
         return any(name not in offered for name in called)
@@ -211,7 +211,7 @@ def validity_checks(
         """
         label = record.label or []
         try:
-            called = calls_by_name(label)
+            called = named_calls(label)
         except TypeError:
             return False
         return len(called) != len(list(label))

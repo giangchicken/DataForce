@@ -35,7 +35,7 @@ def _percentile_value(ordered: list[int], quantile: float) -> int:
     return ordered[int(quantile * (len(ordered) - 1))]
 
 
-def _raw_with_records(
+def _raw_record_pairs(
     raw_items: Iterable[Mapping[str, Any]],
     modality: Modality,
     profile: ToolDecisionProfile,
@@ -123,7 +123,7 @@ def corpus_measurements(
     relabelled = 0
     relabelled_changed = 0
 
-    for raw, record in _raw_with_records(raw_items, modality, profile, digest):
+    for raw, record in _raw_record_pairs(raw_items, modality, profile, digest):
         records += 1
         label = record.label or []
         cardinality[len(label)] += 1

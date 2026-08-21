@@ -20,7 +20,7 @@ from typing import Any
 
 from dataforce.profiles.base import Answer
 from dataforce.profiles.tool_decision.schema import Catalog
-from dataforce.profiles.tool_decision.utils import calls_by_name
+from dataforce.profiles.tool_decision.utils import named_calls
 
 __all__ = ["vote_consensus"]
 
@@ -68,7 +68,7 @@ def vote_consensus(votes: list[Answer], catalog: Catalog) -> Answer | None:
     """
     if not votes:
         return None
-    read = [calls_by_name(vote) for vote in votes]
+    read = [named_calls(vote) for vote in votes]
     majority = len(votes) / 2
     required_by_name = {tool.name: set(tool.required) for tool in catalog.tools}
 

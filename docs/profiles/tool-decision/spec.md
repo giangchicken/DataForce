@@ -183,7 +183,7 @@ Nothing stores this. Core requirement 71 carries the measurement that settled it
 
 ```python
 def answer_distance(a: Answer, b: Answer) -> float:
-    left, right = calls_by_name(a), calls_by_name(b)     # a bare name is a call with {}
+    left, right = named_calls(a), named_calls(b)     # a bare name is a call with {}
     names = left.keys() | right.keys()
     if not names: return 0.0                             # two abstentions agree perfectly
     agreement = sum(_argument_agreement(left[n], right[n])

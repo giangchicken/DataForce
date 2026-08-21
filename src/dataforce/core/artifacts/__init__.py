@@ -6,7 +6,7 @@ artifact can quietly ship without one.
 
 The schemas themselves are one module per pipeline phase -- the boundary along
 which artifacts change and along which stages import -- so a stage depends on its
-own phase and not on the other three. `schema_for` is for the test that must
+own phase and not on the other three. `artifact_schema` is for the test that must
 iterate all of them; a stage never calls it.
 """
 
@@ -16,7 +16,7 @@ import pandera.pandas as pa
 
 from dataforce.core.artifacts import ai_review, data_quality, human_review, release
 
-__all__ = ["ARTIFACT_SCHEMAS", "schema_for"]
+__all__ = ["ARTIFACT_SCHEMAS", "artifact_schema"]
 
 ARTIFACT_SCHEMAS: dict[str, pa.DataFrameSchema] = {
     "loaded": data_quality.LOADED,
@@ -34,7 +34,7 @@ ARTIFACT_SCHEMAS: dict[str, pa.DataFrameSchema] = {
 }
 
 
-def schema_for(artifact: str) -> pa.DataFrameSchema:
+def artifact_schema(artifact: str) -> pa.DataFrameSchema:
     """The schema for one artifact, by name, with the known names on failure."""
     try:
         return ARTIFACT_SCHEMAS[artifact]

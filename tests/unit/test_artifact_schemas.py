@@ -15,7 +15,7 @@ import pandera.pandas as pa
 import pytest
 from agent_toolkit.file_utils import read_jsonlines, write_jsonlines
 
-from dataforce.core.artifacts import ARTIFACT_SCHEMAS, schema_for
+from dataforce.core.artifacts import ARTIFACT_SCHEMAS, artifact_schema
 
 RID = "0123456789abcdef"
 TEXT_PART = {"type": "text", "role": "user", "text": "Book me a flight"}
@@ -118,14 +118,14 @@ def test_round_trip_through_the_toolkit_and_back(artifact: str, tmp_path: Path) 
     path = tmp_path / f"{artifact}.jsonl"
     write_jsonlines(path, [SAMPLES[artifact]])
     rows = read_jsonlines(path)
-    schema_for(artifact).validate(pd.DataFrame(rows))
+    artifact_schema(artifact).validate(pd.DataFrame(rows))
 
 
 @pytest.mark.parametrize("artifact", CONTENT_ARTIFACTS)
 def test_an_audio_part_by_reference_passes_unchanged(artifact: str) -> None:
     """The seam: a non-text part changes nothing about the shape of an artifact."""
     row = dict(SAMPLES[artifact], content=[TEXT_PART, AUDIO_PART])
-    schema_for(artifact).validate(pd.DataFrame([row]))
+    artifact_schema(artifact).validate(pd.DataFrame([row]))
 
 
 @pytest.mark.parametrize("artifact", CONTENT_ARTIFACTS)
@@ -133,7 +133,7 @@ def test_no_artifact_admits_a_media_part_without_a_reference(artifact: str) -> N
     unreferenced = {"type": "audio", "role": "user", "uri": "media/ab/a.wav"}
     row = dict(SAMPLES[artifact], content=[unreferenced])
     with pytest.raises(pa.errors.SchemaError):
-        schema_for(artifact).validate(pd.DataFrame([row]))
+        artifact_schema(artifact).validate(pd.DataFrame([row]))
 
 
 @pytest.mark.parametrize("artifact", CONTENT_ARTIFACTS)
@@ -141,21 +141,21 @@ def test_no_artifact_admits_an_inlined_blob(artifact: str) -> None:
     inlined = dict(AUDIO_PART, base64="UklGRgAAAABXQVZF")
     row = dict(SAMPLES[artifact], content=[inlined])
     with pytest.raises(pa.errors.SchemaError):
-        schema_for(artifact).validate(pd.DataFrame([row]))
+        artifact_schema(artifact).validate(pd.DataFrame([row]))
 
 
 def test_usable_admits_no_record_that_failed_a_check() -> None:
     row = _record_row(failed_checks=["label_contradiction"])
     with pytest.raises(pa.errors.SchemaError):
-        schema_for("usable").validate(pd.DataFrame([row]))
+        artifact_schema("usable").validate(pd.DataFrame([row]))
 
 
 def test_an_unstamped_producer_is_rejected() -> None:
     row = _record_row(producer={"modality": "text", "profile": "tool_decision@1"})
     with pytest.raises(pa.errors.SchemaError):
-        schema_for("loaded").validate(pd.DataFrame([row]))
+        artifact_schema("loaded").validate(pd.DataFrame([row]))
 
 
 def test_an_unknown_artifact_names_the_known_ones() -> None:
     with pytest.raises(KeyError, match="loaded"):
-        schema_for("embeddings")
+        artifact_schema("embeddings")

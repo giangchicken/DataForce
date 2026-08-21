@@ -9,12 +9,12 @@ Pure. Raw items in, records out, and one gate over two digests. It opens nothing
 names no path, so reading the source and writing `loaded.jsonl` is `api/`'s job.
 
 **The ingest timestamp is not a clock reading, and that is a deliberate deviation.**
-Requirement 14 asks for one per record. Invariant 14 asks for two runs over one source to
-produce byte-identical artifacts, which is also T11's own criterion, and a per-record wall
-clock makes it impossible. So `ingested_at` is a required parameter, this module holds no
-clock at all, and `api/` supplies the source file's own last-modified time. What is given
-up is *when this run happened*, which the run's log records; what is kept is two artifacts
-that can be compared byte for byte.
+Requirement 14 asks for one per record; requirement 14's own reproducibility twin --
+invariant 14, and T11's criterion that two runs over one source write a byte-identical
+artifact -- forbids one. A wall clock cannot satisfy both. So `ingested_at` is a
+required parameter, this module holds no clock at all, and `api/` supplies the source
+file's own last-modified time. What is given up is *when this run happened*, which the
+run's log records; what is kept is an artifact two runs can be compared byte for byte.
 
 **`offset` is the element's index in the source array, not a byte offset.** Requirement
 14 says byte offset. `iter_json_array_file` yields values and not positions, so a byte
@@ -100,9 +100,7 @@ def _unreadable_record(
     )
 
 
-def _with_provenance(
-    raw: Any, *, source: Source, producer: Producer
-) -> Mapping[str, Any]:
+def _stamped_item(raw: Any, *, source: Source, producer: Producer) -> Mapping[str, Any]:
     """The item, plus the one key a profile lifts its provenance out of.
 
     A copy rather than a mutation: the caller streams the source and may hold the item
@@ -148,7 +146,7 @@ def loaded_records(
         try:
             parts = modality.content_parts(raw)
             yield profile.build_record(
-                _with_provenance(raw, source=source, producer=producer), parts
+                _stamped_item(raw, source=source, producer=producer), parts
             )
         except UNREADABLE as unreadable:
             log.warning("item %d is unreadable and is carried: %s", offset, unreadable)

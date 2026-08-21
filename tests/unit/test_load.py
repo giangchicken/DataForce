@@ -29,7 +29,7 @@ from conftest import CONFIG
 
 from dataforce import api
 from dataforce.cli import main
-from dataforce.core.artifacts import schema_for
+from dataforce.core.artifacts import artifact_schema
 from dataforce.core.errors import ConfigError
 from dataforce.core.gates import GateFailed
 from dataforce.core.record import PROVENANCE_KEY
@@ -160,7 +160,7 @@ def test_the_artifact_is_where_its_phase_says_and_validates_against_its_schema(
     assert api.interim_directory("data_quality", data_root=tmp_path) == (
         tmp_path / "interim" / STAGE_DIRECTORY
     )
-    schema_for("loaded").validate(pd.DataFrame(loaded_rows(written["loaded"])))
+    artifact_schema("loaded").validate(pd.DataFrame(loaded_rows(written["loaded"])))
 
 
 # --- nothing dropped -----------------------------------------------------------

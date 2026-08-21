@@ -97,7 +97,7 @@ def _canonical_call_text(calls: Sequence[Mapping[str, Any]]) -> str:
     )
 
 
-def _turn_as_part(turn: Mapping[str, Any]) -> TextPart:
+def _turn_part(turn: Mapping[str, Any]) -> TextPart:
     """One turn as one part, whether it carries a string or a call.
 
     A string is copied out byte-for-byte and never re-spelled -- only a turn
@@ -148,7 +148,7 @@ class TextModality:
         started reading arguments would have acquired an opinion about what an
         answer is.
         """
-        return [_turn_as_part(turn) for turn in raw["messages"]]
+        return [_turn_part(turn) for turn in raw["messages"]]
 
     def embedding(self, parts: list[Part]) -> Sequence[float]:
         """One vector over the conversation, for near-duplicate detection only."""
