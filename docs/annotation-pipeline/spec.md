@@ -38,9 +38,9 @@ documents and nothing else: standard OpenAI chat-completion records carrying the
 per label check — populated by the first run over whatever corpus is declared, which is what makes a
 later drift a decision rather than a surprise.
 
-**The style reference is a real codebase, not a preference.**
-`/mnt/e/FCI_PROJECT/agent-evaluation-dev` is the internal service this project's `agent-toolkit` was
-extracted from, and it settles four things this spec would otherwise invent:
+**The style reference is a real codebase, not a preference.** The internal `agent-evaluation` service
+this project's `agent-toolkit` was extracted from settles four things this spec would otherwise invent
+(it is not public, so it is cited by what it does rather than by where it lives):
 
 - `api/main.py` holds a `create_app()` factory; `api/routers/<domain>/<feature>.py` holds one
   `APIRouter(tags=[…])` per feature; `main.py` mounts each with a URL prefix.
@@ -273,8 +273,8 @@ Each is a statement a test can be pointed at.
     `params.yaml`, which makes the decision attributable.
 22. `label_check` runs the five declared checks, and each check's count is compared against
     `params.invalid_counts[<check>]`; a count that moves fails the run. Those numbers are populated by
-    the first run over a declared source. Until one is declared the key is empty, and the gate reports
-    its counts rather than comparing them.
+    the first run over a declared source, and the comparison is a line in `metrics.json` — a number a
+    human reads in a diff, not a stop.
 23. `duplicate_check` reports two groups per record: `duplicate_content_same_label` and
     `duplicate_content_diff_label`. Near-duplicates use the modality's `embedding`, which is static, so
     two runs give identical groups.
@@ -288,10 +288,13 @@ Each is a statement a test can be pointed at.
     agreement of the jury with the existing label. Re-running it costs nothing.
 26. `triage` turns those numbers into a bucket, a stratum and a quota using thresholds from
     `params.thresholds.triage`. Re-tuning thresholds re-runs `triage` alone (Decision 3).
-27. Thresholds live in configuration. `gates.py` and the triage logic contain no numeric literal other
-    than `0` and a display cap.
-28. No jury call is made to an offshore endpoint before the cross-border data-transfer review is
-    recorded in the run manifest. The gate reads a declared field; it does not perform the review.
+27. Thresholds live in configuration. The triage logic contains no numeric literal other than `0` and
+    a display cap, so changing a bucket boundary is a committed, attributable edit to `params.yaml`
+    whose digest the run manifest records.
+28. No jury call is made to an offshore endpoint unless the cross-border data-transfer review is
+    recorded in the declared policy. This one is a precondition on opening the engine, not on a
+    record: it is checked once at composition and raises `ConfigError`, because it is a fact about the
+    configuration rather than about any record.
 
 ### human_review
 
@@ -321,14 +324,23 @@ Each is a statement a test can be pointed at.
     registering a second implementation of one name is refused.
 40. Identity is never assigned in a class body. `name`, `version` and `modality` come from
     `config/<axis>/<name>.yaml`, whose **filename is its identity**, and `version` must be a string.
-41. Every stage runs the `conservation` gate: `output + quarantined + deduped_out == input`, exactly, no
-    tolerance. A failing gate writes `GATE_FAILED.json` with assertion, observed, expected and a capped
-    list of offending ids, and exits non-zero.
-42. No stage consumes an input whose upstream gate did not pass.
-43. A run records every policy file it read with its digest, both axis versions, and every artifact
+41. **No stage removes a record.** Quarantine is a value on the record, deduplication is a group
+    annotation, and a rejected record travels the whole flow carrying why. `output == input` at every
+    stage, structurally — not asserted, because there is nothing to assert against.
+42. **A service states its preconditions as the upstream keys it requires, and reads them off the
+    record.** `pii_check` requires `data_quality.label_check`; `export` requires
+    `data_quality.pii_check.decision == "redacted"`. A record that does not satisfy a precondition is
+    skipped and marked, never dropped and never a reason to stop the run.
+43. **A run always completes.** What went wrong is on the records and in the run's metrics; nothing
+    halts a batch of 20,000 because 3 records are bad. The only exceptions raised are `ConfigError` —
+    a declaration that is wrong or missing, raised before any record is read.
+44. Corpus-level numbers are a **fold at the edge, for reading** — written to `metrics.json` by
+    `api/artifacts.py`, never computed by a service and never compared against a threshold that stops
+    anything. A count that has moved is something a human sees in a diff, not a crash.
+45. A run records every policy file it read with its digest, both axis versions, and every artifact
     digest. Two runs of one unchanged configuration produce byte-identical run manifests; a changed
     policy file changes the manifest.
-44. HTTP and an in-process caller reach the same function, and produce the same record.
+46. HTTP and an in-process caller reach the same function, and produce the same record.
 
 ---
 
@@ -338,16 +350,15 @@ Each is a statement a test can be pointed at.
 
 `core/` is gone. It held five things and only `errors.py` earned the package: `flow.py` existed to be
 compared against a document by a test that no longer exists, `artifacts/` was the previous design's
-per-phase file shapes, and `record.py`, `manifest.py` and `gates.py` are used by every layer — which
+per-phase file shapes, and `record.py` and `manifest.py` are used by every layer — which
 makes them the package's own top level, not a sub-package. A package with one useful module is that
 module (AGENTS.md §6).
 
 ```
 src/dataforce/
-  errors.py          DEFINITION · ConfigError, GateFailed — the two every layer may raise
+  errors.py          DEFINITION · ConfigError — the one exception this codebase defines
   record.py          DEFINITION · Record and its parts — the bus
   manifest.py        DEFINITION · Manifest — one axis's declaration, already parsed
-  gates.py           LOGIC      · GateResult, conservation, assert_gates. No thresholds.
 
   pipeline/
     __init__.py      DEFINITION · PHASES and STAGES — the flow table, in code, once
@@ -370,8 +381,8 @@ src/dataforce/
     routers/         load_data.py, data_quality.py, ai_review.py, human_review.py
     schemas.py       DEFINITION · request and response bodies, every field described
     engine.py        LOGIC · Engine, Registry, open_engine — the composition root
-    policy.py        LOGIC · config/<axis>/*.yaml, config/gates.yaml, params.yaml, prompts -> declarations
-    artifacts.py     TOOL · the one place a record file, a metrics file or a run manifest is read/written
+    policy.py        LOGIC · config/<axis>/*.yaml, params.yaml, prompts -> declarations
+    artifacts.py     TOOL · the one place a record file, metrics.json or a run manifest is read/written
     store/           models.py, repository.py, session.py — the question store
   cli.py             TOOL · one subcommand per stage, JSONL in, JSONL out
 ```
@@ -427,7 +438,7 @@ prose, and nests `human_review` inside `ai_review`.
     "data_quality_config": { },       // the resolved config and its digest; written by the edge, read by services
     "label_check":     { "passed": true,          // did every check on the label hold
                          "failed_checks": [],     // which named checks did not, for triage
-                         "quarantined": false },  // is this record held back from downstream stages
+                         "quarantined": false },  // downstream services skip it; it is never removed
     "pii_check":       { "decision": "redacted",          // redacted | reported | withheld
                          "content_version_scanned": 1,    // which content the spans below index into
                          "spans": [ { "part": 3,          // index into `content`
@@ -437,7 +448,7 @@ prose, and nests `human_review` inside `ai_review`.
                                       "verified": true,             // did layer two confirm layer one's hit
                                       "placeholder": "<CUSTOMER_ID_1>" } ],
                          "classes": ["CUSTOMER_ID"],      // distinct classes found, for the corpus-level report
-                         "unverified": 0 },               // hits layer two could not confirm; the gate reads this
+                         "unverified": 0 },               // hits layer two could not confirm; export's precondition reads this
     "duplicate_check": { "duplicate_content_same_label": [],  // same content, same label: safe to drop one
                          "duplicate_content_diff_label": [] } // same content, different label: one of them is wrong
   },
@@ -452,7 +463,7 @@ prose, and nests `human_review` inside `ai_review`.
                                    "answer": [],            // its own answer, in the profile's answer shape
                                    "reasoning": "…",        // why, for the human who reads a disagreement
                                    "valid": true } ],       // did it validate against the answer schema
-                  "invalid_votes": 0,       // count of `valid: false`; the gate compares it to a ceiling
+                  "invalid_votes": 0,       // count of `valid: false`; a panel this noisy is visible in metrics.json
                   "plurality": [],          // the panel's most-common answer
                   "final_prediction": [] }, // what the panel is taken to have said; may differ from plurality
     "cohesion": { "self_agreement": 0.83,   // how much the jurors agree with each other
@@ -500,14 +511,14 @@ prose, and nests `human_review` inside `ai_review`.
 ### Per-service contracts
 
 **Reads** is the set of keys a service may look at; anything else is none of its business. **Writes** is
-the one key it owns. **Gate** fails the run rather than passing bad data on. `conservation` runs on
-every stage and is not repeated below.
+the one key it owns. **Skips when** is the precondition it reads off the record: a record that does not
+satisfy it is marked and passed on untouched, never dropped and never a reason to halt the run.
 
 #### `load_data` — stage 0
 
-| # | stage | reads | writes | gate |
+| # | stage | reads | writes | skips when |
 |---|---|---|---|---|
-| 0 | `load_data` | the raw item, under the declared label key | the whole record: identity, `branch`, `provenance`, `content`, `content_version = 1`, `label`, `meta` | source digest matches `params.source.sha256`; record count matches; no two distinct contents share a `record_id` |
+| 0 | `load_data` | the raw item, under the declared label key | the whole record: identity, `branch`, `provenance`, `content`, `content_version = 1`, `label`, `meta` | never — it is the first stage. A source digest that does not match `params.source.sha256` raises `ConfigError` before any record is read |
 
 The catalog is **not** copied onto the record as an answer space; `answer_schema` materialises it from
 the record when asked and never persists it. A stored space is a second thing that can disagree with the
@@ -515,11 +526,11 @@ first, and it is the copy that goes stale.
 
 #### `data_quality` — stages 1–3
 
-| # | stage | reads | writes | gate |
+| # | stage | reads | writes | skips when |
 |---|---|---|---|---|
-| 1 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | each check's count equals `params.invalid_counts[<check>]`, once declared |
-| 2 | `pii_check` | `content` | `data_quality.pii_check`, **and rewrites `content`, bumping `content_version`** | every high-recall hit verified or `decision == "withheld"`; zero literal personal data in `content` afterwards |
-| 3 | `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | group membership is symmetric and transitively closed |
+| 1 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
+| 2 | `pii_check` | `content` | `data_quality.pii_check`, **and rewrites `content`, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| 3 | `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 The five label checks are the profile's, not the engine's — `label_checks()` is a profile member:
 `label_assistant_mismatch` (the label contradicts the turn that restates it), `label_not_in_catalog`
@@ -538,11 +549,11 @@ The placeholder→original map is returned to the edge and written to a path the
 
 #### `ai_review` — stages 4–6
 
-| # | stage | reads | writes | gate |
+| # | stage | reads | writes | skips when |
 |---|---|---|---|---|
-| 4 | `jury` | `content`, `label`, materialised answer schema | `ai_review.jury` | panel size ≥ floor; invalid-vote rate ≤ ceiling; estimated tokens ≤ ceiling; cross-border review recorded |
-| 5 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | every record with a jury has both numbers |
-| 6 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | every record lands in exactly one bucket; quotas sum to the declared review budget |
+| 4 | `jury` | `content`, `label`, materialised answer schema | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
+| 5 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
+| 6 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
 Three stages rather than one, because they fail and re-run for different reasons: `jury` costs money and
 is cached, `cohesion` is pure arithmetic, and `triage` is re-run on **exactly one** threshold re-tuning
@@ -550,13 +561,13 @@ pass after the pilot. A bucket whose precision the pilot cannot establish gets *
 
 #### `human_review` — stages 7–11
 
-| # | stage | reads | writes | gate |
+| # | stage | reads | writes | skips when |
 |---|---|---|---|---|
-| 7 | `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | the payload holds no vote, no cohesion number, no bucket; the glossary exists |
-| 8 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | every question stored exactly once; the generated config validates |
-| 9 | `annotator_answers` | the store | `human_review.annotator_answers` | every response names a question that was published |
-| 10 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | overlap ≥ the rung's floor; α ≥ the declared floor |
-| 11 | `curate` | `human_review.aggregate`, `label` | `human_review.curate` | an `incorrect` verdict carries a corrected value |
+| 7 | `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | `triage.selected_for_review` is false. The glossary is a precondition on the *run*, checked at composition |
+| 8 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
+| 9 | `annotator_answers` | the store | `human_review.annotator_answers` | nothing in the store names this record's questions |
+| 10 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
+| 11 | `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
 
 Stage 7 reads `triage` **only to decide which records get a question**. Nothing it reads from `ai_review`
 reaches the payload, which is what Requirement 30 asserts.
@@ -584,9 +595,10 @@ Every service has one signature:
 def pii_check(engine: Engine, records: Iterable[Record]) -> ServiceResult: ...
 ```
 
-`ServiceResult` carries `records`, `gates: list[GateResult]`, and any **side output** the edge must
-persist — for `pii_check` the placeholder map, for `publish` the rows to store. The engine returns side
-output; it never writes it.
+`ServiceResult` carries `records` and any **side output** the edge must persist — for `pii_check` the
+placeholder map, for `publish` the rows to store. The engine returns side output; it never writes it.
+There is no third field: **the records are the report.** Anything corpus-level is a fold over them,
+computed at the edge when a human wants to read it.
 
 ### Request and response models
 
@@ -644,20 +656,19 @@ never opens it.
 
 ```jsonc
 {
-  "records": [ ],                                    // the bus, one key richer
-  "gates":   [ { "gate": "conservation", "ok": true, // which gate, and whether it held
-                 "assertion": "…",                   // the rule in words, so a failure explains itself
-                 "observed": { }, "expected": { } } ],
-  "run":     { "run_id": "…",                        // joins to every record's provenance
-               "producer": { },                      // both axis versions
-               "policy":   { } }                     // every policy file read, by digest
+  "records": [ ],                     // the bus, one key richer; always as many out as went in
+  "metrics": { "skipped": 0,          // how many records this service passed over untouched, and why
+               "counts":  { } },      // the fold a human reads; no threshold, no verdict
+  "run":     { "run_id": "…",         // joins to every record's provenance
+               "producer": { },       // both axis versions
+               "policy":   { } }      // every policy file read, by digest
 }
 ```
 
-**A failing gate is `422`**, body `{"error": "gate_failed", "gate": …, "assertion": …, "observed": …,
-"expected": …, "offending_record_ids": [...]}`, and the response carries **no records** — the point of a
-gate is that bad data does not pass on. `ConfigError` is `400`; an unknown profile or modality is `400`
-naming the ones that exist; anything else is `500`.
+**A service route returns `200` with every record it was given**, because a bad record is a marked
+record rather than a failed request. `ConfigError` is `400` — an unknown profile or modality, a
+declaration that is missing, a source digest that does not match — and it is raised before any record is
+touched. A malformed body is pydantic's `422`. Anything else is `500`.
 
 ### The question store
 
@@ -681,8 +692,10 @@ back out. Three tables, owned by `api/store/`, every column carrying its purpose
 
 ### Configuration
 
-`config/<axis>/<name>.yaml` for identity and declarations, `config/gates.yaml` for what each gate
-compares against, `config/prompts/…` for templates, `params.yaml` for every threshold.
+`config/<axis>/<name>.yaml` for identity and declarations, `config/prompts/…` for templates,
+`params.yaml` for every threshold. **`config/gates.yaml` is deleted** — the numbers it held were
+comparison targets for gates that no longer exist; the ones that survive are triage boundaries and
+panel settings, which belong in `params.yaml` with the rest.
 `config/modalities/text.yaml` becomes `config/modalities/text2text.yaml` — the filename is the identity,
 so the rename *is* the change. `params.invalid_counts` is re-keyed to the five label-check names and
 left empty until a corpus is declared.
@@ -748,11 +761,30 @@ key and a second `catalog_from_*` function, not a change to any service.
 Three renames with one reason: a name must say what it holds or what it returns. `core` said only "not
 elsewhere", and of its five modules `flow.py` existed for a deleted test and `artifacts/` for the
 previous design. `load` names an operation and no object. `validity` names a property so broad that
-every gate in the pipeline is one. *Cost:* `config/modalities/text.yaml` is renamed too, and
+every check in the pipeline is one. *Cost:* `config/modalities/text.yaml` is renamed too, and
 `params.invalid_counts` is re-keyed. *Reversible:* yes, but the record's `data_quality.label_check` key
 would move with it, so it is cheapest to settle now.
 
-**10 · The test suite is written fresh against this document.**
+**10 · There are no gates.**
+An earlier draft had a gate engine: every stage returned `GateResult`s, a failing one raised
+`GateFailed`, wrote `GATE_FAILED.json` and halted the run. It is deleted. *Why:* the record already
+carries every verdict a gate was checking — `label_check.quarantined`, `pii_check.unverified`,
+`jury.invalid_votes` — so the gate was a second computation of a number the record already held, and
+two computations of one number can disagree. The strongest argument for keeping them was
+`conservation`, which catches a stage that silently drops records; that argument does not survive
+Requirement 41, because **no stage removes a record**. Quarantine is a flag, deduplication is a group
+annotation, and a rejected record travels the whole flow carrying why — so `output == input` is
+structurally true and there is nothing left to assert. What a gate did that a record cannot, a
+*precondition* now does: a service reads the upstream key and skips. *Cost, stated plainly:* nothing
+halts a run any more. A declared count that moves is a line in a `metrics.json` diff rather than a
+crash, and it is now possible to run the whole flow over a corpus that should have stopped at stage 1
+and get an artifact at the end. The one place that must not be permissive is export, which is why
+`export` carries the precondition `pii_check.decision == "redacted"` — and export is out of scope, so
+that precondition is declared and unbuilt. *Reversible:* yes, and this is the direction to reverse it —
+reintroduce halting at the edge as a fold over record keys, never as a parallel computation inside a
+service.
+
+**11 · The test suite is written fresh against this document.**
 `tests/` is deleted rather than migrated. *Alternative:* keep the guard tests, which encoded
 `objective.md` §10 correctly. *Why this:* they also encoded a flat record, a `core/` package, a `load`
 stage and a stage-table-parsing contract against the spec file — keeping them would have let deleted
@@ -800,7 +832,7 @@ Each names the check that holds it, not a file that used to.
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |
 | I9 | `record_id` is stable across a shuffled re-ingest and sensitive to content | property test over a synthetic corpus |
 | I10 | No answer space is ever stored | `Record` has no such field; constructing one raises |
-| I11 | Conservation holds at every stage | the universal gate, asserted per stage |
+| I11 | No stage removes a record | run every service; assert `len(out) == len(in)` and that the id sets are equal |
 | I12 | No model output reaches an annotator | assert on the `publish` payload and the generated config |
 | I13 | The placeholder map is never read by a service and never committed | AST scan plus a `.gitignore` assertion |
 | I14 | Two runs of one unchanged configuration produce identical run manifests | run twice, compare bytes |
@@ -812,15 +844,16 @@ Each names the check that holds it, not a file that used to.
 
 | Situation | Behaviour |
 |---|---|
-| Source digest ≠ `params.source.sha256` | `load_data` hard-stops before reading a record |
+| Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
 | Profile and modality disagree | `ConfigError`: "composes with modality 'text2text'" |
-| A gate fails | `GateFailed` with every result attached, passing ones included; `GATE_FAILED.json` written by the edge; exit non-zero; HTTP `422` with no records |
-| Upstream `GATE_FAILED.json` present | the next stage refuses to start |
-| A jury vote does not validate | counted as an invalid vote, kept with `valid: false`, never silently dropped; the invalid-vote-rate gate decides whether the run continues |
-| A model call fails after retries | `agent-toolkit` owns retry and rate limiting; an exhausted call is one missing vote, and the panel-floor gate decides |
-| `enable_redact: false` and personal data found | `pii_check` reports, `content` untouched, `decision: "reported"`; the downstream scan gate fails so nothing ships |
+| A record fails a check | it is marked on its own key and travels on; the run continues and the count lands in `metrics.json` |
+| A record does not satisfy a service's precondition | that service skips it, writes no key for it, and counts it in `metrics.skipped`; every later service sees the same absence and skips too |
+| A declared count has moved | a line in the `metrics.json` diff. **Nothing stops.** This is the cost of Decision 10 |
+| A jury vote does not validate | counted as an invalid vote, kept with `valid: false`, never silently dropped; a noisy panel shows up as a high `invalid_votes` fold |
+| A model call fails after retries | `agent-toolkit` owns retry and rate limiting; an exhausted call is one missing vote, and `cohesion` computes over the votes that arrived |
+| `enable_redact: false` and personal data found | `pii_check` reports, `content` untouched, `decision: "reported"`. The run completes. `export`'s precondition is what keeps it out of a release — and export is not built yet, so **until it is, nothing prevents a reported-but-unredacted corpus reaching an artifact** |
 | Label Studio unreachable during sync | the sync fails; no record key changes, no `publication` row is written, every other endpoint is unaffected |
 | A question is synced twice | the unique constraint makes the second a no-op |
 
@@ -834,10 +867,12 @@ There is no test suite. It is written against this document, in this order, and 
 1. **The guards first (I1–I7)**, before any service. Each is an AST or introspection check proved against
    synthetic source, so the guard fails before it is ever needed. Writing them after the services is how
    a codebase acquires the thing the guard forbids.
-2. **One test module per stage**, asserting that stage's reads/writes/gate row: it writes its key, writes
-   nothing else, and its gate fails on the input it exists to catch.
-3. **The bus property (I8)**, once: build a record, run all twelve in-scope services, and assert each
-   step's diff is exactly one key.
+2. **One test module per stage**, asserting that stage's reads/writes/skips-when row: it writes its key,
+   writes nothing else, returns as many records as it was given, and skips exactly the records its
+   precondition excludes.
+3. **The bus property (I8) and the conservation property (I11)**, once and together: build a corpus,
+   run all twelve in-scope services, and assert that each step's diff is exactly one key and that the
+   set of `record_id`s is identical at every step.
 4. **Both shells (I15)**: the same input through `pii_check(engine, records)` and
    `POST /data-quality/pii-check`, asserted equal.
 5. **Fixtures are invented, never extracted from real data** (AGENTS.md §9), in `objective.md` §2's
@@ -867,5 +902,6 @@ There is no test suite. It is written against this document, in this order, and 
   Confident Learning**, and automatic write-back to any source file. Export produces an artifact; putting
   it anywhere is a human step.
 - **The two blocking prerequisites that are not code**: the cross-border data-transfer review before the
-  first offshore jury call, and the written glossary before the first generated question. This spec gates
-  on their being *recorded*; it does not perform them.
+  first offshore jury call, and the written glossary before the first generated question. Both are
+  preconditions on *opening the engine*, checked once at composition and raised as `ConfigError`; this
+  spec requires them to be *recorded* and does not perform them.

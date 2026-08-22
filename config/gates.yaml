@@ -1,6 +1,0 @@
-# What each gate compares against. src/dataforce/core/gates.py is an
-# engine: it reads this file and holds no number of its own. Keys are gate names.
-
-# Conservation is exact -- output + quarantined + deduped_out == input -- so it
-# declares no tolerance. It runs on every stage.
-conservation: {}
