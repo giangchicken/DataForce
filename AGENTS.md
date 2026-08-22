@@ -60,16 +60,8 @@ Three ways a name fails:
 
 - **A bare operation names no object.** `of`, `parse`, `load`, `render`, `adapt`,
   `measure`, `export`, `embed`, `drift` — *parse what, into what?* Name the result:
-  `read_manifest`, `catalog_to_tools`, `training_example`.
-- **A one-word abbreviation of the concept.** Too short to mean anything on its own:
-
-  | Don't | Do | Because it returns |
-  |---|---|---|
-  | `_leaves` | `leaf_values` | the leaf `(path, value)` pairs of a nested mapping |
-  | `_turn` | `turn_text` | the text of the turn with this role |
-  | `_percentile` | `value_at_quantile` | the value at a quantile, nearest-rank |
-  | `_tools` | `answer_tools` | the set of tool names an answer means |
-  | `_records` | `raw_with_records` | each raw item paired with the record it became |
+  `read_manifest`, `catalog_to_tools`, `create_training_example`.
+- **A one-word abbreviation of the concept.** Too short to mean anything on its own
 
 - **A name shared with a step, stage, command, or table in the system.** It makes every
   sentence about the code ambiguous. If `load` is a pipeline stage, no function is called

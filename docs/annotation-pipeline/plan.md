@@ -1,10 +1,14 @@
 # Annotation Pipeline — Implementation Plan
 
-**Source:** [`spec.md`](spec.md) (75 requirements, 19 invariants, 15 stages) and [`../profiles/tool-decision/spec.md`](../profiles/tool-decision/spec.md) (27 requirements, 5 invariants).
+**Orientation:** [`objective.md`](objective.md) — why this exists, what the input is, and the four phases with the logic in each. Read it first.
+
+**Source:** [`spec.md`](spec.md) (77 requirements, 19 invariants, 15 stages) and [`../profiles/tool-decision/spec.md`](../profiles/tool-decision/spec.md) (27 requirements, 5 invariants).
 
 **One plan, two specs.** They are not independently buildable. Fourteen of the fifteen stages are written against two protocols, and `tool_decision` is the only implementation of one of them — a plan for the core alone would produce tasks whose acceptance criteria cannot be verified, because you cannot test `jury` without an answer type, a δ, and a corpus. [`guided-validation`](../guided-validation/spec.md) gets no separate plan: the pipeline consumes its question model inside `generate_questions`, so its requirements appear as acceptance criteria on that stage. [`dataforce-platform`](../dataforce-platform/spec.md) gets a plan only if the Phase 5 pilot gate says Label Studio is the constraint.
 
-**Six phases and three revision passes, 46 tasks.** Phases are ordered by risk and learning value, not by layer, and every phase ends in something runnable. Task numbers are stable — they are cited in commit messages and in both specs — so no task is ever renumbered, and the two revision passes use R and E numbers so the tasks after them keep the numbers they were planned under. 2C is the third: the answer type changed, and requirements 70–75 are what it is being changed to.
+**Six phases and four revision passes, 52 tasks.** Phases are ordered by risk and learning value, not by layer, and every phase ends in something runnable. Task numbers are stable — they are cited in commit messages and in both specs — so no task is ever renumbered, and the revision passes use R, E, C and L numbers so the tasks after them keep the numbers they were planned under. **The count and the pass count are corrected here:** the header read *three revision passes, 46 tasks* while the table below listed four passes, and 2L's own table lists L1–L7 against a row that said 6. Counted straight — 32 T-tasks after this pass's cuts, plus R1–R3, E1–E6, C1–C4 and L1–L7 — it is 52. 2C is the third: the answer type changed, and requirements 70–75 are what it is being changed to.
+
+**One scope pass, and what it removed.** Four things were cut from this plan and from both specs, and one was added, on the reading that the pipeline had grown a release ceremony heavier than its consumer: byte-identical release reproducibility asserted in CI — **T33 keeps its number and its end-to-end run, and loses only that one assertion**, because without the run nothing exercises all fifteen stages together; core invariant 14 states what a release records instead, and what the strong claim had already cost the provenance model, the Croissant file and the standalone data statement (core requirement 62 — the data statement's *content* survives as sections of the datasheet), Dawid-Skene verdict aggregation (core requirement 54 — it is not identifiable at the overlap this pipeline runs, and requirement 50's gold set measures the same thing directly), and the two tasks whose only consumer was a proof of genericity, T16's stub audio modality and T32's second profile — the only two cut outright (core § *Testing Strategy* records both cuts and what each costs). **Added:** T34, `dataforce check` and `dataforce inspect` — core requirements 76 and 77 — because nothing in fifteen batch stages could answer *why did this one record end up this way*, and requirement 33 guarantees the annotation UI never can. Every cut is recorded in the spec that carried it rather than deleted from it, so the reversal path is written down where the requirement was.
 
 ## Where the work stands
 
@@ -15,11 +19,11 @@
 | 2R | Every name says what it returns, a module is one workflow step, and 49 files become 30 | 3 | **built** |
 | 2E | The engine touches no filesystem, `api/` is the surface every caller enters, and DVC versions data instead of orchestrating it | 6 | **built** |
 | 2C | An answer is a set of calls with arguments, a conversation is as many turns as it takes, and δ tells a wrong tool from a wrong argument | 4 | **built**, two criteria carried to Phase 5 — see C4 |
-| 2L | The tree mirrors the flow: `core/` is the base, every profile is the same seven files, and a name states what comes back | 6 | **built** |
+| 2L | The tree mirrors the flow: `core/` is the base, every profile is the same seven files, and a name states what comes back | 7 | **built** |
 | 3 | 21,172 records become a usable corpus with no personal data downstream | 6 | **T11 built** — stage 0 runs over the whole source and reproduces byte for byte |
 | 4 | 50 records voted by three jurors, ranked into a review queue, inside a token ceiling | 5 | |
 | 5 | Two annotators answer ~700 questions and the pilot gate passes on all five thresholds | 7 | |
-| 6 | A reproducible `release/v1` with a datasheet and a fully human-validated test split | 5 | |
+| 6 | A `release/v1` with a datasheet, a manifest that says how it was made, a fully human-validated test split, and all fifteen stages running end to end in CI | 4 | |
 
 Today: **360 tests** (326 under `make check`, 34 marked `integration`), **39 source modules**, **28 test modules**, and `dvc.yaml` declaring **zero stages** — and it will keep declaring none, because DVC versions data rather than orchestrating it. **One stage of the fifteen exists.** `dataforce run load` reads all 21,172 records of the declared source and writes them as canonical records, twice over, byte for byte — which is the first time any claim in this plan has been checked against the whole corpus by the pipeline rather than by the profiler. The three revision passes are what made that a small task: 2E fixed the layering it would otherwise have been written against, 2C settled the answer type so it is not written twice, and 2L made the tree mirror the flow, so `pipeline/data_quality/load.py` was a filename before it was a decision.
 
@@ -60,6 +64,8 @@ Settled by the specs. No task re-decides them, and a task that violates one is r
 
 16. **An answer is a set of calls, each with its arguments, and one call per tool name.** δ is name-first with per-argument agreement and reduces to Jaccard over names when arguments agree; consensus is majority per name then majority per argument, dropping a call it cannot assemble fully. A turn carrying a call is one canonically-rendered part, not a new part type. No task re-decides any of this — core requirements 70–75, core *Decisions*, built in Phase 2C. — the check on every task after 2C is that nothing under `pipeline/` or `core/` changed to accommodate it.
 
+17. **Every stage task adds its section to `record_report`.** A stage that lands without one is a stage whose per-record result nobody can read, and T34's report is what a person debugs the next stage through. One line and one test per stage — see T34. — core requirements 76, 77
+
 **Two prerequisites that are not code, and both blocking.** T21 (cross-border transfer review, before the first jury run against any offshore endpoint) and T27 (the marker-DSL glossary, before T23). They are numbered tasks rather than footnotes because skipping them silently is the failure mode.
 
 ---
@@ -74,7 +80,7 @@ Both phases are on `main`. What follows is what exists and the test that proves 
 | T2 | Canonical record and artifact schemas | Typed `Part` (`text \| image \| audio \| video`), `Record`, and `rid` from the content parts' digests — each part contributing `type:role:digest`, so identity is order-independent and modality-independent. One pandera schema per artifact. **R2 reduced 14 schema modules to 6: `base.py` plus one per pipeline phase** | `test_record.py`, `test_artifact_schemas.py` |
 | T3 | Gate runner | A gate is a named predicate over a stage's inputs and outputs with thresholds from `config/gates.yaml`. A failure writes `GATE_FAILED.json` carrying the assertion, observed, expected and up to 100 offending `rid`s, then exits non-zero. No numeric threshold in `runner.py` | `test_gate_runner.py` |
 | T4 | The two protocols and their registries | `Modality` with four members; `Profile` with twelve protocol attributes — the nine of requirement 2 plus `name`, `version`, `modality`. Both member sets are pinned as literals, so adding a member fails a test. A profile whose declared modality differs from `--modality` is a hard stop. **R1 renamed ten of them** | `test_protocols.py`, `test_registries.py` |
-| T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that T9 and **T32** each carry rule tests for their own profile | the spec section; T9's and T32's *Verify* lines |
+| T5 | The five profile rules, written down | Core spec § *Rules a profile must satisfy*: five rules, each with the pipeline behaviour that depends on it and the symptom when it breaks, plus the cost of not enforcing them in Decisions. **Not a code task.** The 392-line suite it replaces is still on disk — R3 deletes it. The standing check is that every profile carries rule tests for its own answer type; T9 is where `tool_decision` does it, and the next real profile is where the rule is tested again — T32, a trivial second profile built as a proof, was cut in the scope pass | the spec section; T9's *Verify* line |
 | T6 | Guard tests | Import graph (no concrete axis reaches `core/` or `pipeline/`); no re-implementation (no local hash, JSONL, atomic-write, JSON-extract, template or retry helper, and none of the four banned imports); toolkit boundary (the library's own `consumer_smoke.py`, cloned at the pinned tag because it is not in the wheel) | `test_import_graph.py`, `test_no_reimplementation.py`, `tests/integration/test_toolkit_boundary.py` |
 | T7 | `text` modality | Turns become text parts with roles preserved and text byte-identical; `model2vec potion-multilingual-128M` embeddings, deterministic across runs; an escaped display control that never interpolates corpus text into markup. `personal_data_detectors` returns nothing until T13 | `test_text_modality.py`, `tests/integration/test_text_retrieval.py` |
 | T8 | `tool_decision` catalog format, both directions | The `TOOLS:` block read into a tool name, **one verbatim `description`** and a JSON Schema of parameters, and rendered back — all 21,172 corpus catalogs round-trip byte-identically. Every marker token survives verbatim. `scenario_hash` is the catalog fingerprint, never `source_index`. A malformed block yields `empty_catalog`, not an exception | `test_catalog_format.py`, `test_build_record.py`, `tests/integration/test_tool_decision_corpus.py` |
@@ -245,7 +251,7 @@ Two test modules were renamed with the source modules they test: `test_catalog.p
 
 **Goal.** `profiles/conformance.py` is gone, `register()` resolves a name and nothing else, and the five rules live in the spec.
 
-**Context.** The suite was built to make "generic" a checked claim, and 95 of its 392 lines were machinery for inventing sample answers out of an arbitrary JSON Schema — written for profiles that do not exist. The review decision is that a rule the author is told to follow is the author's responsibility. **What this costs, stated once:** nothing now fails when `answer_distance` stops being a metric, and the symptom is cohesion numbers that look fine and mean nothing. `tool_decision` keeps that guarantee because `tests/unit/test_answers.py` already proves the metric axioms over random pairs directly — what is lost is the guarantee for the *next* profile, which is why T32 names its absence as the trigger to rebuild the suite.
+**Context.** The suite was built to make "generic" a checked claim, and 95 of its 392 lines were machinery for inventing sample answers out of an arbitrary JSON Schema — written for profiles that do not exist. The review decision is that a rule the author is told to follow is the author's responsibility. **What this costs, stated once:** nothing now fails when `answer_distance` stops being a metric, and the symptom is cohesion numbers that look fine and mean nothing. `tool_decision` keeps that guarantee because `tests/unit/test_answers.py` already proves the metric axioms over random pairs directly — what is lost is the guarantee for the *next* profile. T32 was to be that profile and was cut in the scope pass, so the trigger moved with it: **the next real profile arriving without its own rule tests is the signal to rebuild the suite**, and core § *Testing Strategy* is where that now stands.
 
 **Relevant files.** `src/dataforce/profiles/conformance.py`, `src/dataforce/profiles/registry.py`, `src/dataforce/profiles/base.py`, `src/dataforce/shared/errors.py`, `tests/conformance/`, `cli.py`.
 
@@ -688,8 +694,9 @@ identically, on the real corpus and on an invented fixture.
    profile's re-export stays; both importers keep working.
 3. **Three of requirement 14's five provenance fields are not what the requirement says**,
    and requirement 14 now records each: the ingest timestamp is the source file's own
-   mtime rather than a clock reading, because a per-record clock and invariant 14's
-   byte-identical artifact cannot both hold; the offset is the element's index, because
+   mtime rather than a clock reading, because it describes the source rather than the
+   run, and a per-record clock would make two ingests of one unchanged file disagree
+   about a file that did not change; the offset is the element's index, because
    the streaming reader yields values and not positions; and no field holds the raw record
    verbatim, because `file_sha256` and `offset` locate the original and a copy would double
    the artifact. An unparsable item is the exception — there, the verbatim text is the only
@@ -826,26 +833,35 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 **Verify.** `uv run dataforce run embed dedup && uv run pytest tests/integration/test_dedup.py`
 
-## T16 · Stub audio modality — the seam test
+## T34 · `dataforce check` and `dataforce inspect` — one record at a time
 
-**Goal.** Prove the modality seam holds without building an audio modality.
+**Goal.** One supplied record run through every check that can answer for a single record, and one corpus record's history joined out of whatever artifacts exist.
 
-**Context.** Typed content parts, media by reference, and the uniform privacy-span shape could not be retrofitted without touching all fifteen stages, so they are in now. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
+**Context.** Fifteen batch stages answer *what is this corpus like*. Nothing answers *why did this one record end up this way* — and requirement 33 guarantees the annotation UI never will, since no vote, cohesion, bucket or stratum may reach an annotator in any field. So the only place that question can be answered is a reader living outside Label Studio, and until it exists the answer is five JSONL files joined by hand, which in practice means nobody checks.
 
-**Blocked by.** T15.
+**Why this is in Phase 3 and not Phase 6.** It is the surface every later stage is debugged through. A jury that ranks a record oddly, a question that reads wrongly, an α that disagrees with someone's own reading of the same records — each is a one-record question before it is a corpus question. Landing it after two stages means each later stage adds one section to it; landing it at the end means writing fifteen at once against artifacts whose shapes are already fixed.
 
-**Relevant files.** `tests/integration/test_modality_seam.py`, `tests/fixtures/stub_audio/`.
+**Why it is cheap.** 2E already made every stage a pure function from records to records, and every artifact is JSONL behind a pandera schema. `check` is `loaded_records([item], …)` followed by the same stage functions the corpus runs; `inspect` is a join on `rid`. Neither needs a stage, a gate, a contract member, or a second implementation of any check.
 
-**Proposed approach.** A stub modality returning one audio part with a `uri` and `sha256` and no inline bytes, paired with a trivial profile. Run `load` → `remove_invalid` → `pii_check` → `embed` and assert the stages neither inline the media nor crash. The stub's `personal_data_detectors()` returns nothing for the audio part, which must make `pii_check` fail closed rather than pass the record through.
+**Blocked by.** T12 — two stages is the first point at which the report has more than one section, and stage 1's `failed_checks` is the first per-record field worth reading.
+
+**Relevant files.** `src/dataforce/api/inspect.py`, `src/dataforce/cli.py`.
+
+**Proposed approach.** One function, `record_report`, returning an object with one section per phase and, per section, an explicit `not_reached` or `not_applicable` marker — the two are different and the report says which. `cli.py` renders it as text, or dumps the object under `--json`, and holds no logic of its own. `--no-llm` on `check` skips the jury and the privacy verifier so the deterministic half runs offline and free. A corpus-relative result is never approximated from one record: `dedup`, α and the residual-error estimate report `not_applicable` with the reason, because a number invented from one record gets read as the real one.
+
+**Standing criterion on every later stage task.** A task that adds a stage adds that stage's section to `record_report` and one test asserting the section appears. That criterion is what keeps this from rotting into a report on the first two stages.
 
 **Acceptance criteria.**
-- The four stages complete or quarantine, and no artifact contains a base64 blob or a non-text part lacking `uri` and `sha256`.
-- `pii_check` quarantines the audio record rather than advancing it, because the stub cannot redact it.
-- No stage needed a change to accommodate the audio part.
+- `dataforce check <file.json>` on one raw item reports the built record with its `rid` and parts, every validity check with its verdict, and — against a stubbed LLM — the privacy spans, the jury votes with cohesion and corpus conflict, and the question. `--no-llm` runs the deterministic half with no network.
+- **`check` writes nothing**: a test runs it against a read-only data directory and asserts no artifact, no vault entry, no gate verdict and no run manifest was created.
+- `dataforce inspect <rid>` on a fixture where only stages 0 and 1 have run reports those two and marks every later phase `not reached` — not an error, and not an empty section that reads like a negative result.
+- An unknown `rid` exits non-zero naming the artifacts it looked in, not a traceback.
+- `--json` carries exactly the sections the text form shows, asserted by a test that compares the two.
+- A test asserts `dedup` and α report `not_applicable` under `check`, with the reason, rather than a computed value.
 
-**Source.** core requirements 8, 9, 11, 12; core invariant 4; core § Testing Strategy (Modality boundary).
+**Source.** core requirements 76, 77; core requirement 33 (why this lives outside the annotation UI); core *Decisions* (*`check` and `inspect` are readers on the CLI*).
 
-**Verify.** `uv run pytest tests/integration/test_modality_seam.py`
+**Verify.** `uv run dataforce check tests/fixtures/one_record.json --no-llm && uv run pytest tests/unit/test_inspect.py -v`
 
 ---
 
@@ -1054,7 +1070,7 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 **Relevant files.** `src/dataforce/pipeline/human_review/aggregate.py`, `lib/{alpha,gold}.py`.
 
-**Proposed approach.** Krippendorff's α on the verdict (nominal) across all overlapped records, per question focus and overall. Agreement on corrections as α with the profile's `answer_distance`. Where overlap ≥ 2, aggregate verdicts with Dawid-Skene, which estimates per-annotator reliability, rather than majority vote; aggregate corrections with the profile's `vote_consensus`. Score each annotator continuously against the gold set, and use the same gold set to calibrate juror weights as mean per-answer score against human-validated labels.
+**Proposed approach.** Krippendorff's α on the verdict (nominal) across all overlapped records, per question focus and overall. Agreement on corrections as α with the profile's `answer_distance`. Where overlap ≥ 2, aggregate verdicts by majority with ties broken by each annotator's gold accuracy; aggregate corrections with the profile's `vote_consensus`. **Dawid-Skene was specified here and cut** — core requirement 54 records why: two raters per item cannot identify a per-annotator confusion matrix, and the gold set already measures reliability directly. Score each annotator continuously against the gold set, and use the same gold set to calibrate juror weights as mean per-answer score against human-validated labels.
 
 **Acceptance criteria.**
 - Gate: α on verdict ≥ 0.667; α ≤ 0.95 or a recorded investigation; question flag rate ≤ 10%; per-annotator gold accuracy ≥ 0.85; `likely_label_error` bucket precision ≥ 0.30.
@@ -1134,7 +1150,7 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 # Phase 6 — Release
 
-**Goal:** a DVC-tracked `release/v1` reproducible from one git commit, with a fully human-validated test split, zero leakage, and documentation that states how the dataset was made.
+**Goal:** a DVC-tracked `release/v1` built from one git commit and one `dataforce run`, with a fully human-validated test split, zero leakage, a manifest naming every policy file and artifact digest behind it, and documentation that states how the dataset was made.
 
 ## T29 · `split` stage and decontamination
 
@@ -1181,7 +1197,7 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 **Verify.** `uv run dataforce run export && uv run pytest tests/integration/test_export.py -v`
 
-## T31 · `document` stage: datasheet, data statement, Croissant
+## T31 · `document` stage: one datasheet that carries the data statement
 
 **Goal.** Stage 14: a consumer can judge this dataset without reading the pipeline.
 
@@ -1189,12 +1205,12 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 **Blocked by.** T30.
 
-**Relevant files.** `src/dataforce/pipeline/release/document.py`, `lib/{datasheet,croissant}.py`.
+**Relevant files.** `src/dataforce/pipeline/release/document.py`, `lib/datasheet.py`.
 
-**Proposed approach.** A datasheet (Gebru et al.), a data statement (Bender & Friedman), and a Croissant file validated by `mlcroissant`. The datasheet states the machine-labelled share explicitly — 14,241 of 21,172, 67.3%, by `gemma-4-31B-it`, and 1,358 records already relabelled once — and names the jury panel with each juror's family and gold-calibrated weight. It carries the residual-error estimate from the audit sample, any α-above-0.95 review note, the `enable_redact` setting, and the cross-border determination reference from T21. Documentation is a gated stage: a missing required field fails the release.
+**Proposed approach.** One datasheet (Gebru et al.) carrying the data statement fields (Bender & Friedman) — language variety, speaker population, annotator recruitment and demographics — as sections of itself. **The Croissant file and the standalone data statement were cut**; core requirement 62 records why, and what would bring the Croissant file back. The datasheet states the machine-labelled share explicitly — 14,241 of 21,172, 67.3%, by `gemma-4-31B-it`, and 1,358 records already relabelled once — and names the jury panel with each juror's family and gold-calibrated weight. It carries the residual-error estimate from the audit sample, any α-above-0.95 review note, the `enable_redact` setting, and the cross-border determination reference from T21. Documentation is a gated stage: a missing required field fails the release.
 
 **Acceptance criteria.**
-- Gate: all required fields present; the Croissant file validates under `mlcroissant`.
+- Gate: all required fields present, the data-statement sections among them.
 - The datasheet names every juror with family and weight, and states the machine-labelled share.
 - The residual-error estimate is present, with the stratum and selection probability of every record it was computed from. — core invariant 15
 - A deliberately omitted required field fails the stage.
@@ -1203,48 +1219,36 @@ above are its result. `dvc.yaml` still declares zero stages, by shared decision 
 
 **Verify.** `uv run dataforce run document && uv run pytest tests/integration/test_document.py -v`
 
-## T32 · Second profile — the genericity guard
+**Blocks.** T33 — the end-to-end run needs a release to run to.
 
-**Goal.** A deliberately trivial single-label classification profile runs the whole graph end to end.
+---
 
-**Context.** Two profiles is the cheapest proof that the core is not secretly one profile's code. Everything before this task could pass while `pipeline/` quietly assumed set-valued answers. Since R3 deleted the conformance suite, this is also the first test of whether the five profile rules survive as prose: a second profile arriving without its own rule tests is the signal to rebuild the suite after all.
+## T33 · The pipeline runs end to end, in CI
+
+**Goal.** `dataforce run` from raw to release completes on a fixture, every gate passes, and the counts reconcile from the source count through each stage to the release line count. This passing is the definition of the pipeline being done.
+
+**Narrowed, not restored.** This task's goal was *two cold runs produce byte-identical artifacts*, and that assertion is what the scope pass cut — core invariant 14 records why, and what the strong claim had already cost the provenance model. The **run** was never the ceremony: without it nothing exercises all fifteen stages together, `tests/e2e/` has no occupant, and every stage is proved only against the fixture its own task chose. So the task keeps its number and loses one assertion.
 
 **Blocked by.** T31.
 
-**Relevant files.** `src/dataforce/profiles/simple_classification/`, `tests/e2e/test_second_profile.py`.
+**Relevant files.** `tests/e2e/test_smoke_pipeline.py`, `deploy/` CI config.
 
-**Proposed approach.** Single-label classification over a 30-record text fixture: the answer is one class, `answer_distance` is `0` if equal else `1`, `vote_consensus` is the mode. Run all fifteen stages with stubbed jurors, a stubbed generator and a containerized Label Studio. Follow the definition/step module rule from the start — this profile is small enough that it should be three files, not nine.
-
-**Acceptance criteria.**
-- All fifteen stages complete for the second profile with no change to any module under `pipeline/` or `core/`, and its own package is the same seven files.
-- Its own tests prove the five profile rules for a single-label answer. **If this profile arrives without them, that is the signal to build the suite after all** — see core Decisions.
-- Any change required in `pipeline/` to make this pass is itself a defect report against the core, recorded before the change is made.
-
-**Source.** core § Testing Strategy (Genericity); core invariant 16; core requirement 6.
-
-**Verify.** `uv run pytest tests/e2e/test_second_profile.py -v`
-
-## T33 · End-to-end reproducibility in CI
-
-**Goal.** Two `dataforce run` invocations from a clean checkout produce byte-identical artifacts. This passing is the definition of the pipeline being done.
-
-**Blocked by.** T32.
-
-**Relevant files.** `tests/e2e/test_smoke_reproducible.py`, `deploy/` CI config.
-
-**Proposed approach.** The smoke rung *is* the integration test: `dataforce run` from raw to release against stubbed jurors, a stubbed generator and a containerized Label Studio, asserting a byte-identical run manifest and `MANIFEST.sha256` on a second run.
+**Proposed approach.** The smoke rung *is* the integration test: `dataforce run` from raw to release against stubbed jurors, a stubbed generator and a containerized Label Studio. Assert the run completes, every gate reports a pass, and the conservation chain holds end to end — source count, per-stage in and out, quarantined, deduped out, split sizes, release lines — so a record lost between two stages fails here rather than being noticed in a release.
 
 **Acceptance criteria.**
-- Two cold runs from a clean checkout produce identical `MANIFEST.sha256`. — core invariant 14
-- The run is reproducible from one git commit plus one `dataforce run`.
+- All fifteen stages complete on the fixture, and every gate's verdict is a pass.
+- The conservation chain reconciles: every record is accounted for as kept, quarantined, or deduped out at each stage, and the release line count follows from the split sizes.
+- The release carries its run manifest and `MANIFEST.sha256`. — core invariant 14
+- The run is reproducible from one git commit plus one `dataforce run`. — core requirement 61
 - CI runs it on every push.
+- **Not asserted:** that two runs are byte-identical, or that a second run is fast. Core invariant 14 and § *Testing Strategy* both say why.
 
 **Source.** core requirement 61; core invariant 14; core § Testing Strategy (End to end).
 
-**Verify.** `uv run pytest tests/e2e/test_smoke_reproducible.py`
+**Verify.** `uv run pytest tests/e2e/test_smoke_pipeline.py`
 
 ---
 
 ## What this plan deliberately leaves out
 
-Taken from the specs' own Out of Scope sections, restated so no task quietly picks them up: real image / audio / video modalities beyond the T16 stub; model training and evaluation; actual-token accounting, which needs `usage` on `agent-toolkit`'s `Completion`; local patches to `agent-toolkit`, since gaps there are fixed by a release there; Confident Learning, which needs a fixed class space this corpus does not have; synthetic data generation; active learning; fine-tuning a juror; our own annotation service, which the T28 pilot gate decides; and automatic write-back to `fc_train_final.json`.
+Taken from the specs' own Out of Scope sections, restated so no task quietly picks them up: real image / audio / video modalities, and no stub test of the seam either — the seam is specified in the record schema and unenforced, which core § *Testing Strategy* says costs a silent rot nothing detects; a second profile built as a genericity proof, whose absence makes the next *real* profile the moment to re-read core requirement 6; byte-identical artifacts asserted across two cold runs, replaced by core invariant 14's claim about what a release records — the end-to-end CI run itself is T33 and stayed; a Croissant file and a standalone data statement, per core requirement 62; Dawid-Skene verdict aggregation, per core requirement 54; a web surface over T34's `record_report`, which is a router and a page over a function that already returns the whole object; model training and evaluation; actual-token accounting, which needs `usage` on `agent-toolkit`'s `Completion`; local patches to `agent-toolkit`, since gaps there are fixed by a release there; Confident Learning, which needs a fixed class space this corpus does not have; synthetic data generation; active learning; fine-tuning a juror; our own annotation service, which the T28 pilot gate decides; and automatic write-back to `fc_train_final.json`.

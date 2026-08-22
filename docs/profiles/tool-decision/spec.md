@@ -272,7 +272,7 @@ Every figure above is an estimate. `agent-toolkit`'s `Completion` carries no `us
 | agent-toolkit | `agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0` | Not on any registry; direct-URL dependency pinned to the tag. Needs `git` on the installing machine. |
 | model2vec | 0.9.0 | PyPI, 2026-08-12; model `potion-multilingual-128M` |
 
-Everything else — Label Studio, SemHash, crowd-kit, krippendorff, pandera, DVC, mlcroissant — is pinned in the [core spec](../../annotation-pipeline/spec.md).
+Everything else — Label Studio, SemHash, krippendorff, pandera, DVC — is pinned in the [core spec](../../annotation-pipeline/spec.md). `crowd-kit` and `mlcroissant` were pinned there and are gone with the requirements that wanted them: core requirements 54 and 62 record why, and what would bring each back.
 
 `agent-toolkit[llm]` brings `openai`, `tenacity`, `aiohttp`, `tiktoken`, and `jsonschema`; no module here imports them directly. `tiktoken` fetches its vocabulary over the network on first use, so CI sets `TIKTOKEN_CACHE_DIR` against a populated cache.
 

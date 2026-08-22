@@ -1,5 +1,7 @@
 # Annotation Pipeline — Gated Stages for Any SFT Dataset
 
+**Start with [`objective.md`](objective.md)** if you are new to this, rebuilding from scratch, or want the four phases and the input without the requirement numbers. This document is the contract; that one is the orientation.
+
 ## What
 
 A reproducible pipeline that turns a raw corpus into a versioned, documented, training-ready dataset. It is fifteen stages, each producing a checksummed artifact and each guarded by a machine-checked **gate** that fails the run rather than passing bad data downstream. The stages are sequenced in-process by `api/`, which is the surface every caller enters through; DVC versions the data at milestones and does not orchestrate. Several models answer the dataset's own task first, and their disagreement decides which records a human looks at.
@@ -50,11 +52,9 @@ Free-text generation is the honest exception. There is no defensible consensus o
 |---|---|---|
 | Annotation UI, users, task serving, locking, multi-annotator | **Label Studio** Community (Docker) + `label-studio-sdk` | 1.23.0 (2026-03-13); SDK 2.1.1 (2026-08-10) |
 | Near-duplicate detection over embeddings | **SemHash** | 0.4.1 (2026-01-20) |
-| Annotator verdict aggregation (Dawid-Skene, MACE) | **crowd-kit** | 1.4.2 (2025-10-13) |
 | Krippendorff's α, nominal | **krippendorff** | 0.8.2 (2025-11-03) |
 | Artifact schema validation | **pandera** | 0.32.1 (2026-06-29) |
 | Data versioning at milestones (`dvc add`) | **DVC** | 3.67.1 (2026-03-31) |
-| Dataset metadata | **mlcroissant** | 1.1.0 (2026-04-16) |
 | Streaming JSON, atomic I/O, hashing, templating, all LLM access | **[`agent-toolkit`](../agent-toolkit/spec.md)** 0.1.0 | released, `giangchicken/agent-toolkit` |
 
 **Argilla is rejected.** Last release 2.8.0, 2025-03-10; every commit to `main` since is a README or project-status edit. **Cleanlab is deferred** — Confident Learning needs a fixed class space, which some profiles have and others do not, so it belongs to a profile that wants it rather than to this core.
@@ -113,7 +113,7 @@ agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.
 2. A **profile** supplies exactly nine things, each named for what it returns: `build_record`, `answer_schema`, `answer_distance`, `vote_consensus`, `validity_checks`, `question_text`, `answer_config`, `scenario_hash`, and `training_example`. It declares which modality it composes with, and its own name and version. No member shares a name with a stage.
 3. The annotation-UI config is **composed, not owned**: the modality contributes the control that displays the content, the profile contributes the control that captures the answer. Neither may emit the other's half. This split is the reason a new modality does not multiply the profiles that already exist.
 4. `answer_distance` must satisfy four properties on the profile's answer type: `δ(a,a) = 0`, `δ(a,b) = δ(b,a)`, `δ ∈ [0,1]`, and never `NaN` — including on whatever the profile's empty or null answer is. This is profile rule 1, and the profile's own tests are what prove it; δ remains the symbol used in the α formulas of requirements 52–53. **The triangle inequality is deliberately not among the four**, because a compound answer's δ is a weighted average and weighted Jaccard does not satisfy it. Nothing in the pipeline needs it: cohesion, corpus conflict, the four buckets and α are all defined on pairwise distances, and no stage embeds an answer in a metric space or clusters answers by distance. A stage that ever wants to is the moment to revisit this, and it says so here so that moment is not a surprise.
-5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated with per-annotator reliability weighting in stage 10.
+5. `vote_consensus` is deterministic given a list of votes, and may return `None` to declare that the profile has no defensible consensus. A profile returning `None` is barred from the optional consensus tier of requirement 34 and is otherwise fully supported. Combining *people's* answers is a different operation and is not this member: annotators are aggregated by gold-weighted majority in stage 10.
 6. Every profile satisfies the five **profile rules** in § *Rules a profile must satisfy*, and **tests them itself**. The rules are stated once for every profile to follow; each profile's own test module proves them for its own answer type. There is no shared suite and no check at registration: a profile that breaks a rule is a profile whose author did not follow it, and the cost of that is stated with the rules rather than caught by machinery.
 7. Profiles and modalities are resolved from a registry by name, and the resolved pair, with each one's version, is recorded on every artifact and in the release manifest. A run cannot silently change which code produced a dataset.
 
@@ -134,7 +134,7 @@ Running it first is what makes the rest affordable. Every record it moves is one
 13. Ingest streams the source via `file_utils.iter_json_array_file` or the modality's loader. A source file is never loaded whole.
 14. Ingest records provenance per record: source file SHA-256, byte offset, the raw record verbatim, the modality and profile names with versions, and the ingest timestamp. Nothing is dropped; unparsable records are carried with `parse_status = "unparsed"` and their raw text.
 
-    **Three of those are not what they say, and stage 0 states each deviation where it stamps it.** The *ingest timestamp* is not a clock reading: invariant 14 asks two runs over one source for byte-identical artifacts, and a per-record wall clock makes that impossible, so `ingested_at` is a required parameter of the stage — which therefore holds no clock — and `api/` supplies the source file's own last-modified time. The *byte offset* is the element's index in the source array: `iter_json_array_file` yields values and not positions, so a byte offset would cost a second pass over 126 MiB to recover what the index already answers, which element of the array this record is. And *the raw record verbatim* is a field no record has: what is kept is every key the profile does not own, plus the turns as canonical parts, plus `file_sha256` and `offset`, which locate the original — a second verbatim copy would double a 141 MB artifact to say what those two already say. The exception is the one place it is the only evidence there is: an unparsable item **is** carried verbatim, as its own single content part. Each of the three is the same trade — a value derived from the input, so that two runs over one input agree.
+    **Three of those are not what they say, and stage 0 states each deviation where it stamps it.** The *ingest timestamp* is not a clock reading: it describes the source rather than the run, and a per-record wall clock would make two ingests of one unchanged file disagree about a file that did not change, so `ingested_at` is a required parameter of the stage — which therefore holds no clock — and `api/` supplies the source file's own last-modified time. The *byte offset* is the element's index in the source array: `iter_json_array_file` yields values and not positions, so a byte offset would cost a second pass over 126 MiB to recover what the index already answers, which element of the array this record is. And *the raw record verbatim* is a field no record has: what is kept is every key the profile does not own, plus the turns as canonical parts, plus `file_sha256` and `offset`, which locate the original — a second verbatim copy would double a 141 MB artifact to say what those two already say. The exception is the one place it is the only evidence there is: an unparsable item **is** carried verbatim, as its own single content part. Each of the three is the same trade — a value derived from the input, so that two runs over one input agree.
 15. The **source-integrity gate** runs the profile's validity checks, and each failure writes the record to `data/quarantine/invalid/<check>.jsonl` naming the check it failed, and removes it from the main path. Records are never silently deleted and never silently kept.
 16. Expected invalid counts per check are declared in `params.yaml`, and a count moving more than ±10% fails the gate. The source changed, and that must be a decision rather than a surprise. Re-admission is an explicit `dataforce requeue --check <name>` that versions the pipeline.
 17. Every artifact is written with `file_utils.write_jsonlines` or `write_json` and read with the matching reader. Both are atomic and create parent directories, so an interrupted stage leaves the previous artifact intact. No stage opens an artifact file directly.
@@ -208,7 +208,9 @@ Running it first is what makes the rest affordable. Every record it moves is one
 
 52. Krippendorff's α on the **verdict** (nominal) is computed across all overlapped records, per question focus and overall, with the `krippendorff` package.
 53. Agreement on **corrections** is computed as α with the profile's `answer_distance`, implemented here because the library covers only nominal, ordinal, interval, and ratio scales. Its nominal degenerate case is tested against the library's output.
-54. Where overlap ≥ 2, verdicts are aggregated with Dawid-Skene, which estimates per-annotator reliability, rather than majority vote. Corrections are aggregated with the profile's `vote_consensus`.
+54. Where overlap ≥ 2, verdicts are aggregated by **majority, with ties broken by the annotators' gold accuracy** from requirement 50. Corrections are aggregated with the profile's `vote_consensus`.
+
+    **Dawid-Skene was specified here and was removed on arithmetic.** It infers a per-annotator confusion matrix from the pattern of agreement across raters, and at the overlap this pipeline actually runs — 2 on the flagged and audit strata by requirement 49, 1 on the remainder — each item has two raters and no third to identify that matrix against, so the model is fitting a reliability parameter per annotator from a design that cannot distinguish *this annotator is wrong* from *this item is hard*. It becomes worth its dependency at overlap ≥ 3 over a few thousand items. The stronger objection is that it is not needed: requirement 50's gold set measures per-annotator reliability **directly**, against known answers, continuously, and that is the number requirement 64 already gates on. A profile that reaches overlap ≥ 3 revisits this requirement, and `crowd-kit` returns to the pins with it.
 55. Disagreements, and records below an aggregated-confidence threshold, go to a second **adjudication** project showing both answers and both notes, resolved by a reviewer who produced neither. Label Studio Community has no review workflow; this is that workflow.
 56. Curation records for every record whether its label is `original`, `corrected`, `jury_consensus`, or `unvalidated`, with the validator and the decision date.
 
@@ -219,7 +221,9 @@ Running it first is what makes the rest affordable. Every record it moves is one
 59. Decontamination verifies zero n-gram overlap between test and train, and zero shared `scenario_hash`. Either fails the gate.
 60. Export emits the profile's training format. Every exported record carries provenance: source SHA-256, pipeline version, modality and profile versions, `agent-toolkit` version, validation status, validator, dedup cluster, split, stratum, and the panel version where the jury touched it.
 61. The release is a DVC-tracked directory with a manifest listing every file's SHA-256, reproducible from one git commit plus one `dataforce run`.
-62. Each release ships a **datasheet** (Gebru et al.), a **data statement** (Bender & Friedman), and a **Croissant** file validated by `mlcroissant`. The datasheet states the machine-labelled share explicitly and names the jury panel with each juror's family and gold-calibrated weight, because which records humans looked at is part of how the dataset was made. Documentation is a gated stage; a missing required field fails the release.
+62. Each release ships **one datasheet** (Gebru et al.) that carries the **data statement** fields (Bender & Friedman) — language variety, speaker population, annotator recruitment and demographics — as sections of itself rather than as a second document. It states the machine-labelled share explicitly and names the jury panel with each juror's family and gold-calibrated weight, because which records humans looked at is part of how the dataset was made. Documentation is a gated stage; a missing required field fails the release.
+
+    **No Croissant file ships, and the data statement stopped being its own document.** `mlcroissant` validates a metadata format whose purpose is dataset *discovery* — search, public catalogues, automated loaders — and this release goes to named partners who are handed the datasheet directly, so the format would be validated against a consumer that does not exist. It is one function over fields the datasheet already has on the day a catalogue needs one. The data statement's *content* is what a partner receiving Vietnamese call-centre transcripts genuinely needs — which variety, whose speech, who annotated it — so none of it is cut; what is cut is a second gated file, a second required-field list, and a second place for the same fact to be stated differently.
 
 ### Proving it works before scaling
 
@@ -255,6 +259,18 @@ Where a source renders its catalog into *prose* the parse is real and is paid pe
 74. **Consensus is per name, then per argument.** A name is in the consensus when a strict majority of votes included it; each of that name's argument keys takes the value a strict majority of the votes naming it gave; a key with no majority is absent, and if a key the tool declares `required` has no majority the call is dropped from the consensus entirely. Never a partially-invented call: a consensus call that would fail requirement 71's validation is not a consensus.
 75. **Capturing a compound answer is a form, and the fallback is declared now.** The profile's `answer_config` emits the name control plus, per name, the argument fields generated from that tool's `parameters`. Where the annotation tool cannot express per-name conditional fields, the fallback is one text control capturing JSON, **validated at pull time against requirement 71's schema** — never accepted unvalidated, and the pull gate rejects an answer outside the space rather than truncating it. Which of the two shipped is recorded per project, because it changes what an annotator could physically express and therefore what their agreement means.
 
+### One record at a time
+
+Fifteen batch stages answer *what is this corpus like*. They answer *why did this one record end up this way* only by leaving five JSONL files a person can join by hand, and requirement 33 guarantees the annotation UI can never answer it either. These two requirements are that missing answer, and both are readers.
+
+76. **One supplied record runs through the checks on demand, and writes nothing.** `dataforce check <file.json>` takes one raw item in the source's own shape and reports what each phase concludes about it: the record `build_record` produced with its `rid` and parts, every validity check with its verdict, every privacy span with its class and its verifier's decision, each juror's vote with cohesion and `corpus_conflict` against the item's existing label, and the question `question_text` would ask. It is the single-item path through the same stage functions the corpus runs — every stage is already a pure function from records to records, so there is no second implementation of any check.
+
+    It **writes nothing**: no artifact, no vault entry, no Label Studio project, no gate verdict, no run manifest. A stage that cannot answer for one record in isolation is reported *not applicable* rather than approximated — `dedup` needs the other records, α needs a second annotator, and a residual-error estimate needs the sampling design — because a number invented from one record will be read as the real one. `--no-llm` skips the jury and the privacy verifier so the deterministic half runs offline and free.
+
+77. **One corpus record's whole history is readable from the artifacts.** `dataforce inspect <rid>` joins that record across every phase artifact present on disk and reports what the run actually concluded: its failed checks and quarantine verdict, its privacy spans by class and placeholder, its `conversation_cluster` and size, every juror's vote with cohesion and corpus conflict, its triage bucket and stratum with selection probability, its generated question, each annotator's verdict and correction, and its curation status with validator and date. A phase whose artifact does not exist yet is reported **not reached**, not as an error — the command is useful from the first stage onward, which is the only way it gets used.
+
+    `--json` on either command emits the same content as one object, and both are one function, `record_report`, in `api/inspect.py`. Neither is a stage: nothing sequences them, nothing gates on them, and no artifact records that they ran. **This is the surface requirement 33 makes necessary** — no model output may reach an annotator in any field, so nothing in the annotation UI can ever show a record's votes, cohesion, or bucket, and the only place a person can see why a record was queued is outside that UI.
+
 ## Design
 
 ### Stage graph
@@ -277,7 +293,7 @@ Fifteen stages: declared inputs, declared outputs, a gate. `api/` sequences them
 | 11 | human_review | `curate` | Apply the accepted corrections and record who decided what | `interim/3_human_review/curated.jsonl` | every correction inside the profile's answer space |
 | 12 | release | `split` | Divide into train / validation / test so no scenario appears on both sides | `processed/{train,val,test}.jsonl` | zero group leakage; zero n-gram overlap |
 | 13 | release | `export` | Write the training files in the shape a trainer expects | `release/v1/*.jsonl` | test 100% human-validated; counts reconcile |
-| 14 | release | `document` | Write down what this dataset is made of, so a consumer can judge it | `release/v1/{datasheet.md,croissant.json}` | all required fields present; Croissant validates |
+| 14 | release | `document` | Write down what this dataset is made of, so a consumer can judge it | `release/v1/datasheet.md` | all required fields present |
 
 Stages 8–10 loop: publish → annotate → pull → aggregate → adjudicate → publish again. Stage 5 re-runs when the panel changes, and its cache makes an unchanged juror free. `embed` precedes `dedup` because `dedup` consumes the embeddings, and all five sit in `data_quality` because each is a property you can check without an opinion: validity (`remove_invalid`), privacy (`pii_check`), uniqueness (`dedup`), with `load` and `embed` as what makes checking them possible. The phase ends with a corpus; `ai_review` is the first opinion about it.
 
@@ -296,13 +312,15 @@ dataforce/
 │   │   │                          cli.py included. Sequences the stages in-process,
 │   │   │                          persists artifacts, writes a gate's verdict
 │   │   ├── __init__.py          open_engine · build_records · profile_corpus
-│   │   │                        · stage_outputs
+│   │   │                        · stage_outputs · record_report
 │   │   ├── engine.py            Engine — a resolved (modality, profile, policy)
 │   │   ├── artifacts.py         the only place an artifact is read or written,
 │   │   │                        and where a run manifest is built
-│   │   └── run.py               the sequence: which stages are built, which phase
-│   │                            directory each writes into, and the wiring that
-│   │                            turns a pure stage function into files
+│   │   ├── run.py               the sequence: which stages are built, which phase
+│   │   │                        directory each writes into, and the wiring that
+│   │   │                        turns a pure stage function into files
+│   │   └── inspect.py           record_report — one rid joined across every phase
+│   │                            artifact that exists. Reads; never writes — 76-77
 │   │
 │   ├── declared/                ← the only package that reads config/
 │   │   ├── manifest.py          reads one from config/<axis>/<name>.yaml
@@ -366,9 +384,10 @@ dataforce/
 │   │   │   ├── labelstudio/{config,client}.py
 │   │   │   └── lib/{questions,alpha,gold,adjudicate}.py
 │   │   └── release/             split.py  export.py  document.py
-│   │       └── lib/{decontaminate,datasheet,croissant,manifest}.py
+│   │       └── lib/{decontaminate,datasheet,manifest}.py
 │   │
 │   └── cli.py                   dataforce run --modality M --profile P [stage ...]
+│                                dataforce check <file.json> · inspect <rid> [--json]
 │                                a shell over api/: argparse, exit codes, and the
 │                                only place logging handlers are configured
 │
@@ -483,7 +502,7 @@ class Profile(Protocol):
     # Stage 5 `jury`. The votes' consensus: several answers to one record -> one
     # answer, deterministically. Named for whose consensus it is, because the pipeline
     # also combines *people's* answers and that is a different operation -- annotators
-    # are aggregated with Dawid-Skene weighting in stage 10, never with this.
+    # are aggregated by gold-weighted majority in stage 10, never with this.
     # Over a compound answer it is majority per name and then majority per argument,
     # and a call it could only assemble partially is dropped rather than invented --
     # requirement 74.
@@ -576,13 +595,13 @@ release/v1/
 ├── MANIFEST.sha256                      every file above, digested
 ├── run_manifest.json                    every policy file read, both axes as
 │                                          name@version, every artifact written — req 69
-├── datasheet.md   data_statement.md     what this dataset is made of — req 62
-└── croissant.json                       validated by mlcroissant
+└── datasheet.md                         what this dataset is made of, data
+                                         statement fields included — req 62
 ```
 
 The profile supplies the body; `export` adds the per-record provenance of requirement 60. The record's internal blocks do **not** travel: votes, cohesion, the triage bucket, privacy counts and the duplicate cluster stay in `interim/`, where the pipeline's own reasoning belongs. A consumer gets what was decided and how the dataset was made, not the machinery that decided it.
 
-*Assumption:* a consumer's question is *can I train on this, and can I say where it came from* — and the three invariants that answer it are 13 (test is 100% human-validated), 12 (no group straddles a split) and 14 (two runs from a clean checkout are byte-identical). Anything the release cannot answer about itself is a documentation defect rather than a data one, which is why `document` is a gated stage and not a README.
+*Assumption:* a consumer's question is *can I train on this, and can I say where it came from* — and what answers it is invariant 13 (test is 100% human-validated), invariant 12 (no group straddles a split), and the run manifest of requirement 69, which names every policy file, both axes, and every artifact digest behind the release. Anything the release cannot answer about itself is a documentation defect rather than a data one, which is why `document` is a gated stage and not a README.
 
 **What the output is not.** Not a database, not an API response, and not one file per record. Fifteen stages produce JSONL and one release directory; the platform that would serve them is [`dataforce-platform`](../dataforce-platform/spec.md), deferred behind a Label Studio v0 until the first profile's pilot gate passes.
 
@@ -900,6 +919,8 @@ What the field cost instead: a second representation of the catalog that can dis
 
 **`api/` is a Python surface; HTTP is a later task over it.** *Alternatives:* FastAPI now. *Why:* an HTTP layer over a surface that does not exist yet fixes its request shapes before the surface is known, and forces an auth decision this spec has no input for. *Reversible:* n/a — it is additive, and the engine does not change when it arrives.
 
+**`check` and `inspect` are readers on the CLI, and the UI is a later task over the same function.** *Alternatives:* a web app for them now; showing the pipeline's own conclusions inside Label Studio; neither, and let a person open five JSONL files by hand. *Why:* requirement 33 rules the second out outright — a record's votes, cohesion and bucket may never appear in the annotation UI, and that ban is the reason an annotator's answer is independent evidence rather than a ratification — so this surface lives outside Label Studio or it does not exist. Between a web app now and a CLI now: every stage is already a pure function of records and every artifact is already JSONL behind a pandera schema, so the reader is a join on `rid` and a formatter, and `--json` means the eventual page calls `record_report` rather than growing a second implementation of it. The shape of that page is not invented here either — the `agent-evaluation` service this project's toolkit came out of pairs a FastAPI app under `api/routers/<domain>/<feature>.py` with a Vite + TypeScript SPA in `ui/`, nginx-served from the same compose file — so the later task is one router and one page against a function that already returns the whole object. *What it costs, stated once:* until that task lands, seeing one record's history means reading a terminal, and a non-engineer cannot do it at all. *Reversible:* n/a — additive. The CLI is first because it is the cheapest way to find out which of those fields anyone actually reads before a page is designed around them.
+
 **Label Studio, not Argilla, and not our own UI yet.** *Why:* Argilla has shipped no functional change in seventeen months. Building our own UI first inverts the order of risk — it spends a quarter before anyone has answered whether the questions are answerable. *Reversible:* yes; Label Studio is touched only by `human_review/labelstudio/`.
 
 **Assumption:** Label Studio Community honours `maximum_annotations`. The smoke rung verifies it before anything is built on it; if it does not hold, overlap comes from one project per annotator joined on `rid`.
@@ -913,7 +934,7 @@ Five properties the pipeline assumes of every profile. They are not checked by a
 | # | Rule | Why the pipeline needs it | Symptom when it is broken |
 |---|---|---|---|
 | 1 | **`answer_distance` is a metric.** `d(a,a) = 0`, symmetric, in `[0,1]`, never `NaN` — including on the empty answer, which for some corpora is a third of the corpus. | Cohesion, corpus conflict, the four triage buckets and α are all mean distances. A distance that is not a metric makes each of them a number with no meaning. | Nothing fails. Cohesion looks plausible, the review queue is ranked wrongly, and α is reported to three decimal places. This is the expensive one. |
-| 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs is not reproducible — invariant 14. | Two runs produce different datasets from one commit. |
+| 2 | **`vote_consensus` is deterministic**, and returns the unanimous answer when every vote agrees. | The optional consensus tier may write a label from it, and a label that changes between runs makes the run manifest of requirement 69 a record of something that did not happen. | Two runs produce different datasets from one commit. |
 | 3 | **An answer survives a JSON round trip.** `json.loads(json.dumps(a)) == a`, and `answer_distance` treats the result as equal to the original. | Every artifact is JSONL. An answer that is a `set` or a tuple comes back as something else, and every distance computed after the round trip is wrong. | Distances become non-zero between a vote and itself, one stage later. |
 | 4 | **`build_record` preserves every field it does not own.** Anything in the raw item that is not `content`, the answer, or the answer space lands in `meta` verbatim. | What looks like noise now is what a later question turns out to need; the corpus profiler counts fields nothing yet reads. | A field is silently gone, and only a re-ingest from the source recovers it. |
 | 5 | **`training_example` reproduces the answer the record carries.** The exported example states the same answer as `record.label`, in whatever place that profile's trainer expects it. | It is the last point at which the pipeline can notice it is shipping a different answer from the one people agreed on. | A release trains on the wrong labels. For `tool_decision` this fired on 48 records before the source was fixed. |
@@ -935,7 +956,9 @@ A profile with no defensible consensus returns `None` from `vote_consensus` for 
 11. **Corrections stay in the answer space.** *Check:* structurally where the UI can express it, and asserted again at pull time.
 12. **No group spans splits.** No `scenario_hash` in more than one of train/val/test, nor in a subsample absent from train. *Check:* set intersection in the split gate.
 13. **Test is fully human-validated.** Every test record has `validation.status ∈ {original, corrected}`. *Check:* export gate.
-14. **Releases are reproducible.** Two `dataforce run` invocations from a clean checkout produce byte-identical artifacts. *Check:* CI on the smoke fixture, diffing the run manifest and `MANIFEST.sha256`.
+14. **A release states how it was made.** Every release carries the run manifest of requirement 69 — every policy file's SHA-256, both axes as `name@version`, every artifact's SHA-256 — and a `MANIFEST.sha256` over the release files. *Check:* the `export` and `document` gates.
+
+    **This invariant read "two cold runs produce byte-identical artifacts", asserted in CI, and that is what was cut.** Not because it is untrue — stage 0 does reproduce byte for byte over all 21,172 records — but because holding it across all fifteen stages, a stubbed jury and a containerized Label Studio is a stronger claim than any consumer of this dataset asks for, and it had already started shaping the data model rather than describing it: three of requirement 14's five provenance fields are what they are partly because a per-record clock and a byte-identical artifact cannot both hold. Byte-identity is **kept where it is free and already built** — `tests/unit/test_load.py` pins `ingested_at` to a source mtime and diffs two runs, and the catalog round trip over every corpus catalog is byte-exact, because there both directions of one grammar have to agree. What is gone is the release-wide CI assertion. The number stays 14 because the plan and the tests cite invariants by number.
 15. **The sampling design is reconstructible.** Every annotated record records its stratum and selection probability. *Check:* the residual-error estimator refuses to run when any lacks one.
 16. **The core is task-agnostic and modality-agnostic.** No module under `pipeline/` or `core/` imports a concrete profile or modality. *Check:* an import-graph test over the source tree.
 17. **The library is not re-implemented.** No module defines a hash helper, a JSONL reader or writer, an atomic-write context manager, a JSON-from-text extractor, a template filler, or a retry wrapper; `openai`, `tenacity`, `tiktoken`, and `jsonschema` appear in no pipeline import. *Check:* a lint test over the source tree.
@@ -981,8 +1004,8 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 ## Testing Strategy
 
 - **Profile rules.** Not a shared suite — requirement 6 and *Decisions* say why, and what it costs. Each profile proves the five rules of § *Rules a profile must satisfy* in its own test module, over its own answer type: `answer_distance` a metric including on the empty answer, `vote_consensus` deterministic and honouring unanimity, an answer surviving a JSON round trip, `build_record` preserving every field it does not own, and `training_example` reproducing the record's answer. A profile arriving without them is the signal to build the suite after all.
-- **Genericity.** A second, deliberately trivial profile — single-label classification over a 30-record text fixture — runs the whole graph end to end. Two profiles is the cheapest proof that the core is not secretly one profile's code, and the classification profile is small enough to be worth it for that reason alone.
-- **Modality boundary.** A stub modality returning one audio part with a `uri` and no inline bytes runs `load` → `remove_invalid` → `pii_check` → `embed`, asserting the stages neither inline it nor crash. This is the seam's only test until a real audio modality exists, and it is what stops the seam rotting.
+- **Genericity, by guard rather than by second profile.** Invariant 16's import-graph test proves no module under `pipeline/` or `core/` imports a concrete profile or modality, and invariant 18's AST guard proves no engine module opens a file. A second, deliberately trivial profile running the whole graph was specified here as the stronger proof, and was cut: it is an entire profile — schema, δ, consensus, record builder, training example, its own five rule tests — whose only consumer is the proof, and the two guards already fail on the mistake it was written to catch. **What that costs, stated once:** a stage could still assume a set-valued answer in a way no import guard sees, and nothing would fail until a real second profile arrives. The real second profile is the next real dataset, and its first task is to re-read this line.
+- **Modality boundary, specified and unenforced.** Requirements 8, 9 and 11 fix the seam — typed parts, media by reference and checksum, one uniform span shape — and they are in the record schema and the contracts now, which is the half that could not be retrofitted later. A stub audio modality running four stages was specified here as the seam's only test, and was cut with the second profile for the same reason. **What that costs:** nothing fails when the seam rots, and the first real audio modality pays for it. It is one fixture and one test file on the day that trade stops looking right.
 - **Import graph.** No `pipeline/` or `core/` module imports a concrete profile or modality — invariant 16. No module re-implements a toolkit function — invariant 17. No engine module opens a file or imports `api/` or `declared/` — invariant 18, shown failing on the five I/O sites it was written against.
 - **Import purity, as a subprocess.** `python -c "import dataforce.profiles.tool_decision"` from a working directory that is not the repo root — invariant 19. This is the test that would have caught the problem the engine/api split exists to fix.
 - **Two registries in one process,** holding different profiles, neither seeing the other's.
@@ -995,11 +1018,11 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 - **Toolkit boundary.** One integration test running `agent-toolkit`'s own `tests/consumer_smoke.py` against the installed environment. The file is **not in the wheel** — the library builds `packages = ["src/agent_toolkit"]` — so CI fetches it with `git clone --depth 1 -b v0.1.0`. A bad git-dependency resolution is then caught here rather than at the first jury run.
 - **Label Studio.** The generated config validated against a live instance in CI via testcontainers — create project, push three tasks, pull back a submitted annotation. The allowlist test runs on the built payload without a server.
 - **Split.** A planted group spanning what would be a random split, and a planted n-gram overlap, each asserted caught.
-- **End to end.** The smoke rung *is* the integration test: `dataforce run` from raw to release against stubbed jurors, a stubbed generator, and a containerized Label Studio, asserting a byte-identical run manifest and `MANIFEST.sha256` on a second run. This passing is the definition of the pipeline being done. Nothing asserts a second run is *fast* — there is no stage cache to assert about.
+- **End to end.** The smoke rung *is* the integration test: `dataforce run` from raw to release against stubbed jurors, a stubbed generator, and a containerized Label Studio, asserting the run completes, every gate passes, and the counts reconcile from the source count through each stage to the release line count. This passing is the definition of the pipeline being done. It does **not** assert that two runs are byte-identical — invariant 14 says why that went — nor that a second run is fast; there is no stage cache to assert about.
 
 ## Out of Scope
 
-- **Image, audio, and video modalities.** The seam is specified and tested with a stub; no real implementation ships here. The platform spec's image controls are deferred with them.
+- **Image, audio, and video modalities.** The seam is specified; neither a real implementation nor a stub test ships here — see § *Testing Strategy* for what dropping the stub costs. The platform spec's image controls are deferred with them.
 - **Model training and evaluation.** This produces a dataset, a metric definition, the training subsamples, and a zero-shot jury baseline. Fine-tuning, learning-curve training runs, and any eval harness belong to a separate spec.
 - **Actual-token accounting.** Needs `usage` on `agent-toolkit`'s `Completion`. Filed against the library.
 - **Validating an answer already in hand against a schema.** Requirement 75 pairs the `JSON_TEXT` capture fallback with validation at pull time against requirement 71's schema, and requirement 74 needs the same primitive to assert that a consensus call is in the space. `agent-toolkit` owns schema validation and exposes only `complete_structured`, which makes an LLM request; `jsonschema` is in the no-direct-import set for exactly that reason, and hand-rolling a validator is the reimplementation that set exists to prevent. Needs one function on the library — a value, a schema, the list of faults — and until it lands the `JSON_TEXT` control is emitted and nothing accepts its output. Filed against the library. Tests validate directly, which they may.
@@ -1007,7 +1030,11 @@ Two failures have no automated detector. A **plausible but wrong question** — 
 - **Confident Learning and classifier-based label auditing.** Belongs to a profile with a fixed class space, not to this core.
 - **Synthetic data generation** and **active learning loops.** The jury is a one-shot ranking per release, not a model that retrains as annotations arrive.
 - **Fine-tuning a juror.** Jurors are off-the-shelf models behind API keys.
-- **Our own annotation service.** Deferred, not cancelled — the first profile's pilot decides whether it is worth building, and [`dataforce-platform`](../dataforce-platform/spec.md) remains its spec.
+- **Our own annotation service.** Deferred, not cancelled — the first profile's pilot decides whether it is worth building, and [`dataforce-platform`](../dataforce-platform/spec.md) remains its spec. The `check` and `inspect` commands of requirements 76-77 are **not** a step toward it and do not become it: they read what a run already produced and serve nobody a task.
+- **A web surface over `check` and `inspect`.** Requirements 76-77 are two CLI commands over one `record_report` function. A browser view is a later task calling that same function with no engine change, exactly as HTTP is; *Decisions* records why the CLI is first and what deferring the page costs.
+- **A Croissant file, and a standalone data statement.** Requirement 62 says why, and what would bring the Croissant file back.
+- **Dawid-Skene verdict aggregation.** Requirement 54 says why, and names the overlap at which it returns.
+- **A second profile and a stub modality built as proofs.** § *Testing Strategy* records both cuts and what each costs.
 - **Automatic write-back to any source file.** Export produces an artifact; putting it anywhere is a human step.
 - **Cross-border transfer review.** Real, and sharper because the jury sends content to external LLM endpoints. It is a legal review of where the data and those endpoints sit, not a pipeline stage, and it happens before the first jury run against any offshore endpoint.
 
