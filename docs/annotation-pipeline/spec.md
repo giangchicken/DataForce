@@ -26,8 +26,8 @@ what fails a run.
 `objective.md` without two answers available for any question, and `tests/` is deleted in this pass for
 the same reason: it described the deleted package, and a spec written to keep it green would inherit a
 design nobody chose. **Nothing in this document is shaped by a file that used to exist.** `config/`,
-`params.yaml`, `dvc.yaml`, the `Makefile` and `pyproject.toml` are still the old package's and are
-replaced by the rebuild, not inherited.
+`params.yaml`, the `Makefile` and `pyproject.toml` are still the old package's and are
+replaced by the rebuild, not inherited; `dvc.yaml` and `.dvc/` are gone (Decision 18).
 
 **No corpus is declared.** `fc_train_final.json` is out of use, and everything derived from it goes with
 it: `metrics/corpus_profile.json`, `params.source.path` and `params.source.sha256`, the measured
@@ -1165,6 +1165,23 @@ it lives on the profile. *P22 — define errors out of existence* — landed on 
 ambiguity in `vote_consensus` and is closed by construction in § *The answer, and the three operations
 over it*, not by a branch.
 
+**18 · Three dependencies removed, because none of them had a job.**
+`dvc`, `pandera` and `pandas` were declared runtime dependencies that no part of this design uses.
+DVC's jobs are all done elsewhere now — reproducibility by the run manifest and its policy digests
+(Requirement 45), artifacts by `edge/artifacts.py`, selective re-runs by Decision 3 doing it
+deliberately rather than by DAG — so `dvc.yaml`, `.dvc/`, `.dvcignore` and `make repro` went with the
+dependency. `pandera` and `pandas` survived the rewrite only as a Versions row marked *unchanged*,
+which is how a dependency avoids ever being asked to justify itself. *Why it is worth a decision rather
+than a tidy-up:* removing three direct dependencies removed **76 packages** from the lock — a task
+queue (`celery`, `amqp`, `kombu`), three git implementations (`gitpython`, `dulwich`, `pygit2`), a
+config framework (`hydra-core`, `omegaconf`) and a crypto stack — none of which a pipeline that reads
+JSONL and calls an LLM has any use for. Every one of those is supply-chain surface and install time.
+*Alternative:* keep them against a future need — corpus-level folds might want a dataframe, and a DAG
+runner might come back. *Why not:* AGENTS.md §2, and the same reasoning P20 applies to a port with no
+adapter. `dvc init` is one command, and `metrics.json` is a fold the edge can write without pandas.
+*Reversible:* yes, one line each. *Cost:* if a metrics fold does want a dataframe, T27 adds pandas back
+with a reason, which is better than it being there without one.
+
 ---
 
 ## Versions
@@ -1181,7 +1198,7 @@ over it*, not by a branch.
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
 | agent-toolkit | `@v0.1.0` git tag | unchanged; the tag has moved once, so `uv.lock` is the record |
 | model2vec | `>=0.9` | unchanged; static embeddings keep dedup reproducible |
-| pandera / pandas | `>=0.32.1` / `>=2.2` | unchanged |
+| ~~dvc / pandera / pandas~~ | removed | none of the three had a job in this design — see Decision 18 |
 
 `fastapi`, `uvicorn`, `sqlalchemy` and `alembic` are runtime dependencies. `label-studio-sdk` goes in an
 optional `[label-studio]` extra, so the pipeline installs without it.

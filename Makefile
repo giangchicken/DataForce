@@ -1,6 +1,6 @@
 # `make check` is what CI runs and what must pass before a commit. It excludes
 # tests marked `integration`, which need the network or a running service.
-.PHONY: check lint types test integration repro
+.PHONY: check lint types test integration
 
 check: lint types test
 
@@ -16,6 +16,3 @@ test:
 
 integration:
 	uv run pytest -q -m integration
-
-repro:
-	uv run dvc repro

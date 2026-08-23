@@ -1,7 +1,0 @@
-# The stage DAG. Each stage declares its inputs, its outputs and its params, so
-# `dvc repro` runs only what changed and a release is reproducible from one commit.
-#
-# Stages arrive with the tasks that implement them: load and remove_invalid in
-# Phase 3, jury and rank_for_review in Phase 4, the human_review loop in Phase 5,
-# split/export/document in Phase 6.
-stages: {}

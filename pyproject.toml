@@ -1,7 +1,7 @@
 [project]
 name = "dataforce"
 version = "0.1.0"
-description = "Gated DVC stages that turn a raw corpus into a versioned, documented, training-ready dataset."
+description = "Turns a raw, model-labelled corpus into a training-ready dataset plus the evidence for trusting it."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
@@ -11,12 +11,9 @@ dependencies = [
     # rather than as a release built from a tree nobody chose -- which matters,
     # because this tag has already been moved once.
     "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0",
-    "dvc>=3.67.1",
     # The text modality's embedder. Static embeddings, so a vector is a pure
     # function of its input and dedup is reproducible run to run.
     "model2vec>=0.9",
-    "pandera>=0.32.1",
-    "pandas>=2.2",
     "pydantic>=2.13",
 ]
 
@@ -39,12 +36,10 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.0.0",
     "ruff>=0.13.1",
-    "pandas-stubs",
-    # Proves `answer_schema_for` means what it says: a call in the record's space
-    # validates and one outside it does not. Tests only, and it stays that way: the
-    # library owns schema validation and `test_no_reimplementation.py` forbids any
-    # module under `src/` from importing this. See the core spec's § *Out of Scope*
-    # for the one function the library still needs.
+    # Proves `answer_schema` means what it says: a call in the record's space
+    # validates and one outside it does not. Tests only, and it stays that way --
+    # I6's guard forbids any module under `src/` from importing it, because
+    # `agent-toolkit` owns validation.
     "jsonschema>=4.26",
 ]
 
@@ -74,10 +69,6 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 warn_unreachable = true
-
-[[tool.mypy.overrides]]
-module = ["pandera.*", "dvc.*"]
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
