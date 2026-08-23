@@ -127,6 +127,14 @@ class Profile(Protocol):
     def question_text(self, record: Record) -> str:
         """What an annotator is asked, in their language. No model output may appear in it."""
 
+    def answer_from_response(self, result: Sequence[Mapping[str, Any]],
+                             record: Record) -> Answer | None:
+        """The corrected answer out of one annotation's control values; None if it does not
+        validate. Called only where the verdict is `incorrect`. The inverse of the capture half."""
+
+    def jury_slots(self, record: Record) -> Mapping[str, Any]:
+        """What the jury prompt's slots are filled with. The template is policy's, not this."""
+
     def scenario_hash(self, record: Record) -> str:
         """What must not straddle a split — two records of one scenario share it."""
 
@@ -134,7 +142,7 @@ class Profile(Protocol):
         """The record in the shape a trainer expects."""
 ```
 
-Twelve members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
+Fourteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`.
 
@@ -321,6 +329,13 @@ Each is a statement a test can be pointed at.
 
 17. `pii_check` replaces detected values with **stable typed placeholders** scoped per record
     (`<CUSTOMER_ID_1>`), never deletes them, and a value used twice keeps one placeholder.
+    **Content and label are rewritten together.** A value found in `content` is replaced everywhere it
+    also appears in `label`, through the profile's `redact_label(label, replacements)`, under the same
+    placeholder. Redacting one and not the other is worse than redacting neither: it manufactures a
+    `label_assistant_mismatch` failure downstream, and `export` emits a training example whose input
+    reads `<CUSTOMER_ID_1>` and whose target reads the original value — teaching a model to produce an
+    identifier that is absent from its input. That is a data-poisoning defect wearing a privacy
+    defect's clothes, and it is why this is one requirement and not two.
 18. Detection runs two layers: patterns tuned for recall (and permitted to be noisy), then a model pass
     over a bounded window that sets precision. Patterns run against the raw text **and** against a
     tone-stripped normalisation, so `khong chin` is caught while patterns stay written in correct
@@ -413,6 +428,24 @@ Each is a statement a test can be pointed at.
     the order `pipeline/flow.py` declares, folded by `pipeline/runner.py`. No router names a stage
     sequence, and `cli.py` dispatches over the same table rather than hand-writing one subcommand body
     per stage.
+49. **`answer_from_response` is the only place an annotation tool's shape is read**, the way
+    `build_record` is the only place a source shape is read. It takes one annotation's `result` list and
+    the record, and returns an answer that validates against that record's `answer_schema` or `None`. A
+    corrected value that does not validate is recorded as `malformed` on the record and never coerced —
+    the same treatment `jury` gives an invalid vote, because a human's malformed answer is evidence
+    about the question and not noise to discard.
+50. **A skip is not an answer and not a missing row.** Label Studio's `was_cancelled` is stored as
+    `was_skipped`, counted, and excluded from `aggregate`'s overlap. An annotator declining a question
+    is evidence about that question.
+51. **The jury's task statement is a policy file, filled by the profile.** The template lives in
+    `config/prompts/` so its digest reaches the run manifest (Requirement 45); the profile supplies the
+    values through `jury_slots(record)` and `agent-toolkit`'s `slot_filling` does the filling. Prompt
+    text in code is a prompt change no manifest records.
+52. **The composed annotation config uses only community-edition tags.** `<Chat>` renders a
+    conversation the way `text2text` wants and is Enterprise-only, so the display half emits
+    `<Paragraphs layout="dialogue">`. A per-record catalog is a dynamic choice list, because a project
+    has one config for every task.
+
 
 ---
 
@@ -640,7 +673,7 @@ first, and it is the copy that goes stale.
 | # | stage | reads | writes | skips when |
 |---|---|---|---|---|
 | 1 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
-| 2 | `pii_check` | `content` | `data_quality.pii_check`, **and rewrites `content`, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| 2 | `pii_check` | `content`, `label` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
 | 3 | `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 The five label checks are the profile's, not the engine's — `label_checks()` is a profile member:
@@ -662,7 +695,7 @@ The placeholder→original map is returned to the edge and written to a path the
 
 | # | stage | reads | writes | skips when |
 |---|---|---|---|---|
-| 4 | `jury` | `content`, `label`, materialised answer schema | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
+| 4 | `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
 | 5 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
 | 6 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
@@ -676,7 +709,7 @@ pass after the pilot. A bucket whose precision the pilot cannot establish gets *
 |---|---|---|---|---|
 | 7 | `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | `triage.selected_for_review` is false. The glossary is a precondition on the *run*, checked at composition |
 | 8 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
-| 9 | `annotator_answers` | the store | `human_review.annotator_answers` | nothing in the store names this record's questions |
+| 9 | `annotator_answers` | the store, through `answer_from_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
 | 10 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
 | 11 | `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
 
@@ -793,7 +826,7 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
 |---|---|
 | `question` | `question_id` pk · `record_id` · `run_id` · `modality` · `profile` · `payload` json · `config_digest` · `created_at` |
 | `publication` | `question_id` fk · `external_system` · `external_project_id` · `external_task_id` · `status` · `pushed_at` · unique (`question_id`, `external_system`) |
-| `annotator_answer` | `answer_id` pk · `question_id` fk · `annotator_id` · `verdict` · `corrected_value` json · `note` · `submitted_at` · `external_annotation_id` unique |
+| `annotator_answer` | `answer_id` pk · `question_id` fk · `annotator_id` · `verdict` · `corrected_value` json · `note` · `was_skipped` · `lead_time_seconds` · `submitted_at` · `external_annotation_id` unique |
 
 - The engine knows none of this. `publish` returns rows; `edge/store/repository.py` writes them behind
   the `QuestionStore` port — declared in `dataforce/ports.py`, because a port is what the engine
@@ -804,6 +837,100 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
   `annotator_answer`. It is idempotent in both directions: the two unique constraints are what make it
   so.
 - Running the sync is optional. Every other endpoint works with no Label Studio anywhere.
+- `was_skipped` is Label Studio's `was_cancelled`: the annotator saw the question and declined it.
+  That is not a verdict and not a missing row — a skip is evidence about the *question*, and the pilot
+  reads the skip rate to decide whether a question is answerable at all. `lead_time_seconds` is its
+  `lead_time`, kept for the same reason: both are instruments, and Phase 8 measures the instruments.
+
+### The annotation config, and what comes back
+
+Requirement 31 says the config is composed from the modality's display half and the profile's capture
+half. This is what those halves must emit, because the tool on the other end is real and its input is
+not ours to choose. Everything below is community-edition Label Studio; nothing here needs Enterprise.
+
+**The display half is `<Paragraphs>`, not `<Chat>`.** The `<Chat>` tag renders a conversation exactly
+the way `text2text` wants and is **Enterprise and Starter Cloud only**, so it cannot be the community
+path. `<Paragraphs layout="dialogue" nameKey="role" textKey="content">` takes the same JSON array of
+message objects and is a first-class community tag. A media modality replaces this one tag and nothing
+else, which is the seam working.
+
+**The capture half is one required verdict and a gated correction.** A composed config:
+
+```xml
+<View>
+  <!-- display half — the modality's -->
+  <Paragraphs name="conversation" value="$conversation"
+              layout="dialogue" nameKey="role" textKey="content"/>
+  <Header value="$question"/>
+
+  <!-- capture half — the profile's -->
+  <Choices name="verdict" toName="conversation" choice="single-radio"
+           required="true" requiredMessage="Answer the question before submitting.">
+    <Choice value="correct"/><Choice value="incorrect"/><Choice value="unsure"/>
+  </Choices>
+
+  <View visibleWhen="choice-selected" whenTagName="verdict" whenChoiceValue="incorrect">
+    <Choices name="corrected_names" toName="conversation" choice="multiple"
+             value="$tool_names" required="true"/>
+    <TextArea name="corrected_arguments" toName="conversation" rows="4"/>
+  </View>
+
+  <TextArea name="note" toName="conversation" rows="2"/>
+</View>
+```
+
+`visibleWhen` + `required` is how *"answering incorrect requires the corrected value"* (Requirement 29)
+becomes a thing the tool enforces rather than a thing we hope for. `value="$tool_names"` is a **dynamic
+choice list**: the catalog is per record and a Label Studio project has one config for every task, so a
+static `<Choice>` list cannot express it. `randomize="true"` is available on `<Choices>` and is worth
+setting where an option's position could bias an answer.
+
+**The task payload** is the basic Label Studio JSON format — one `data` dict whose keys are the `$`
+names above, and nothing else:
+
+```json
+{"data": {
+  "question_id": "q_7f3a…",
+  "question": "Câu hỏi cho người gán nhãn…",
+  "conversation": [{"role": "user", "content": "…"}, {"role": "assistant", "content": "…"}],
+  "tool_names": [{"value": "LookupBalance"}, {"value": "SendStatement"}, {"value": "OpenTicket"}]
+}}
+```
+
+Dynamic choices read *objects*, not strings — `{"value": "LookupBalance"}` — which is the kind of
+detail a parser written from memory gets wrong. `question_id` rides inside `data` because Label Studio
+assigns its own task ids and we must map an annotation back to the question that produced it;
+`publication` records the pair, and `data.question_id` is what makes the mapping survive a project
+rebuild. Requirement 30 is asserted on this dict: no vote, no cohesion number, no bucket appears in it.
+
+**What comes back** is `annotation.result`, a list of one object per control that was answered:
+
+```json
+[
+ {"from_name": "verdict", "to_name": "conversation", "type": "choices",
+  "value": {"choices": ["incorrect"]}},
+ {"from_name": "corrected_names", "to_name": "conversation", "type": "choices",
+  "value": {"choices": ["SendStatement"]}},
+ {"from_name": "corrected_arguments", "to_name": "conversation", "type": "textarea",
+  "value": {"text": ["{\"SendStatement\": {\"ma_khach\": \"<CUSTOMER_ID_1>\", \"ky\": \"thang_nay\"}}"]}}
+]
+```
+
+A `textarea` value is `{"text": [...]}` — **a list**, because `maxSubmissions` permits more than one.
+A control the annotator never touched is absent from the list rather than present and empty. The
+annotation also carries `completed_by`, `lead_time` and `was_cancelled`; a `was_cancelled` annotation
+is a skip and carries no verdict.
+
+**The rungs are project settings, not prose.** Smoke is `maximum_annotations: 1`. Pilot is
+`maximum_annotations: 2` with `overlap_cohort_percentage: 100` — that *is* "two annotators at 100%
+overlap", and `aggregate`'s overlap floor reads the same number so the two cannot drift.
+
+**The cost, stated.** A set of calls with typed arguments has no widget in community Label Studio, so
+`corrected_arguments` is a JSON object an annotator types. That is a real burden on the person doing
+the work and a real source of malformed input, which is why `answer_from_response` validates against
+the record's own `answer_schema` and returns `None` rather than a half-parsed answer. It is also the
+strongest argument for the annotation platform `objective.md` §9 defers — recorded here so the pilot's
+skip rate and lead time are read as evidence about *that* decision, not only about the questions.
 
 ### Configuration
 
@@ -970,6 +1097,28 @@ at any corpus size this pipeline sees, and named so nobody re-optimises it. *Rev
 number the pipeline produces is written on δ, so changing it invalidates every threshold measured
 against it — which is the argument for settling it in Phase 0 rather than Phase 5.
 
+**16 · The three unowned pieces get owners, and the annotation tool's format is a constraint, not a
+detail.** Three stages could not be built as written. *Stage 9 had no parser:* `build_record` is "the
+only place a source shape is read", but `annotator_answers` reads a second external shape, and without
+a named owner that parse would have been invented inside the store adapter where no test of the answer
+space can see it — so `answer_from_response` is a profile member, the inverse of the capture half that
+produced the response. *Stage 2 rewrote content and left the label:* `redact_label` closes it, and the
+reasoning is in Requirement 17 because that is where the next reader will hit it. *Nothing stated the
+task to a model:* policy owns the template and the profile owns the slots, chosen over the profile
+owning the string because a prompt in code is a prompt change the run manifest cannot see.
+*Alternative for all three:* leave them to the implementing task. *Why not:* each is a decision about
+which axis owns a piece of knowledge, and an implementer under a deadline resolves that by putting it
+where it is easiest to write.
+
+The annotation format is the same kind of fact. Label Studio's config grammar, its task JSON and its
+`result` list are not ours to design, and two of their properties change what we build rather than how
+we write it: `<Chat>` is Enterprise-only, so the community display half is `<Paragraphs>`; and a
+project has one config for every task, so a per-record catalog must be a dynamic choice list read from
+task data. *Cost:* a set of calls with typed arguments has no community widget, so an annotator types
+JSON for the arguments. That is recorded in § *The annotation config, and what comes back* rather than
+discovered in the pilot. *Reversible:* the capture half is one profile member and one config fragment,
+so replacing the widget — or the tool — is a change in two places.
+
 ---
 
 ## Versions
@@ -982,7 +1131,7 @@ against it — which is the argument for settling it in Phase 0 rather than Phas
 | SQLAlchemy | `>=2.0.52,<2.1` | current 2.0.x, PyPI; 2.0 declarative style |
 | Alembic | `>=1.19.1` | current release, PyPI |
 | label-studio-sdk | `>=2.1.1` | current release, PyPI; used only by the sync |
-| Label Studio (server) | 1.23.0 | current release; pinned in `deploy/` compose, not a Python dependency |
+| Label Studio (server) | 1.23.0 | pinned in `deploy/` compose, not a Python dependency. **Community edition** — Requirement 52 is what that costs |
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
 | agent-toolkit | `@v0.1.0` git tag | unchanged; the tag has moved once, so `uv.lock` is the record |
 | model2vec | `>=0.9` | unchanged; static embeddings keep dedup reproducible |
@@ -1016,6 +1165,7 @@ Each names the check that holds it, not a file that used to.
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
 | I16 | No axis `base.py` imports an implementation of its own axis | AST scan over `modalities/base.py` and `profiles/base.py` |
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `cli.py` names two stages in sequence; both call `run_phase` |
+| I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
 
 ---
 

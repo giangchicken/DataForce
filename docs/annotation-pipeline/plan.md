@@ -328,7 +328,7 @@ declares.
 
 **Goal.** Every architectural invariant is a test that has been observed to fail.
 
-**Context.** Nine of the seventeen invariants are checkable before any service exists: I1 (engine opens
+**Context.** Nine of the eighteen invariants are checkable before any service exists: I1 (engine opens
 no file), I2 (`pipeline/` imports no concrete axis), I3 (names match the flow table), I4 (axis
 implementation shape), I5 (identity never in a class body), I6 (nothing re-implements
 `agent-toolkit`), I7 (every field described), I16 (no axis `base.py` imports its own
