@@ -270,7 +270,7 @@ spec line resolving it.
 
 | Path | State | Action |
 |---|---|---|
-| `metrics/corpus_profile.json` | Tracked, 6,165 bytes, describes the retired corpus — 21,172 records, its SHA-256, `distinct_tool_names: 14411`, real tool names. A fingerprint of an internal dataset in a public repo. | Delete. |
+| `metrics/corpus_profile.json` | **Done.** It was tracked, and it fingerprinted the retired corpus — record count, SHA-256, distinct tool names, and the tool names themselves — in a public repo. | Deleted. |
 | `params.yaml` | `source.path`/`source.sha256` point at the retired corpus; `invalid_counts`, `gold.records: 951` and `max_answer_cardinality: 3` are measured from it. | Empty `source`, re-key `invalid_counts` to the five label-check names with no values, drop `gold` and `max_answer_cardinality` until a corpus is declared. |
 | `config/modalities/text.yaml` | Identity is `text`; the spec's pair is `text2text`, and the filename *is* the identity. | Rename to `text2text.yaml`, `name: text2text`. The rename is the change. |
 | `dvc.yaml` | `stages: {}` under a comment naming `load`, `remove_invalid`, `rank_for_review`, `document` and an obsolete phase numbering. | Rewrite the comment against this plan, or delete the file until a stage exists to declare. |
