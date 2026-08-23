@@ -1,11 +1,11 @@
-# The privacy tier. Outside DVC entirely, never committed: the source's identity
-# is a SHA-256 in params.yaml, and the PII vault lives here.
+# The privacy tier. Never committed: the source's identity is a SHA-256 in
+# params.yaml, and the PII placeholder map lives here (I13).
 data/raw/
 
-# Artifacts. DVC tracks what is under data/ apart from raw/; git tracks neither.
-# Listed per tier rather than as `data/`, so a `.dvc` pointer file beside an artifact
-# can still be committed. `run.json` is a file rather than a tier -- one run, one
-# manifest, at the root of what it wrote.
+# Artifacts. Git tracks none of them; the run manifest records their digests, which
+# is what makes a release identifiable without committing what it wrote. Listed per
+# tier rather than as `data/`, so a tier can be un-ignored on its own. `run.json` is
+# a file rather than a tier -- one run, one manifest, at the root of what it wrote.
 data/interim/
 data/processed/
 data/release/

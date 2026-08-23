@@ -939,9 +939,18 @@ skip rate and lead time are read as evidence about *that* decision, not only abo
 `params.yaml` for every threshold. **`config/gates.yaml` is deleted** — the numbers it held were
 comparison targets for gates that no longer exist; the ones that survive are triage boundaries and
 panel settings, which belong in `params.yaml` with the rest.
-`config/modalities/text.yaml` becomes `config/modalities/text2text.yaml` — the filename is the identity,
-so the rename *is* the change. `params.invalid_counts` is re-keyed to the five label-check names and
-left empty until a corpus is declared.
+`config/modalities/text2text.yaml` carries the modality's identity in its filename, so the pair's name is
+not assigned anywhere else; the profile manifest's `modality:` names the same string.
+`params.invalid_counts` lists the five label-check names with no values, and `params.source` is empty —
+both stay that way until a corpus is declared.
+
+The profile manifest also declares **`answer_control`**, which decides what an annotator can physically
+express and therefore what a measured agreement figure means. It is `names_and_json_arguments`: the
+names come from a dynamic choice list over this record's catalog, so they cannot be mistyped, and only
+the arguments are typed by hand. `per_name_arguments` — a rendered argument form per chosen tool — is
+what we would want and cannot have, because a Label Studio project holds one config for every task
+while our catalog is per record. Stamping the value here is what lets a later agreement number be read
+against the surface it was measured on.
 
 ---
 
@@ -1004,15 +1013,17 @@ Standard OpenAI chat-completion records with `tools` as data — what `objective
 nothing else. *Alternative:* also read a catalog rendered as prose into the system prompt, which is what
 the deleted `legacy_system_prompt` reader did for `fc_train_final.json`. *Why this:* that corpus is out
 of use, so the second reader has no caller, and AGENTS.md §2 forbids flexibility nobody asked for.
-*Reversible:* yes — the reader is recoverable at `ed84417^`, and re-admitting it means a declared `shape`
-key and a second `catalog_from_*` function, not a change to any service.
+*Reversible:* yes — the reader is recoverable at `ed84417^`, and re-admitting it means a second
+`catalog_from_*` function behind the manifest's `shape` key, not a change to any service. That key now
+reads `openai_chat_completion`; it declared the retired shape until `T4`, which is why the profile read
+a declared-input record as an empty catalog.
 
 **9 · `core/` is dissolved; `load` becomes `load_data`; `validity` becomes `label_check`.**
 Three renames with one reason: a name must say what it holds or what it returns. `core` said only "not
 elsewhere", and of its five modules `flow.py` existed for a deleted test and `artifacts/` for the
 previous design. `load` names an operation and no object. `validity` names a property so broad that
-every check in the pipeline is one. *Cost:* `config/modalities/text.yaml` is renamed too, and
-`params.invalid_counts` is re-keyed. *Reversible:* yes, but the record's `data_quality.label_check` key
+every check in the pipeline is one. *Cost:* `config/modalities/text.yaml` was renamed too, and
+`params.invalid_counts` re-keyed. *Reversible:* yes, but the record's `data_quality.label_check` key
 would move with it, so it is cheapest to settle now.
 
 **10 · There are no gates.**
@@ -1194,7 +1205,7 @@ with a reason, which is better than it being there without one.
 | SQLAlchemy | `>=2.0.52,<2.1` | current 2.0.x, PyPI; 2.0 declarative style |
 | Alembic | `>=1.19.1` | current release, PyPI |
 | label-studio-sdk | `>=2.1.1` | current release, PyPI; used only by the sync |
-| Label Studio (server) | 1.23.0 | pinned in `deploy/` compose, not a Python dependency. **Community edition** — Requirement 52 is what that costs |
+| Label Studio (server) | 1.23.0 | the release the sync is written against, not a Python dependency. **Community edition** — Requirement 52 is what that costs. `deploy/` gets the compose file with T26, the first task that needs an instance |
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
 | agent-toolkit | `@v0.1.0` git tag | unchanged; the tag has moved once, so `uv.lock` is the record |
 | model2vec | `>=0.9` | unchanged; static embeddings keep dedup reproducible |

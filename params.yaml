@@ -1,48 +1,36 @@
-# Every threshold the pipeline reads at runtime. A number here is a decision that
-# is committed, reviewable, and a declared DVC dependency -- so changing it
-# re-runs the stages that depend on it. Code holds no thresholds.
+# Every threshold the pipeline reads at runtime. A number here is a decision that is
+# committed, reviewable, and recorded by digest in the run manifest -- so a change to
+# it is attributable and a run that used the old value is still identifiable. Code
+# holds no thresholds.
+#
+# No corpus is declared. Every value below that a corpus would supply is empty on
+# purpose: the shape is the contract, and the first run over a declared source fills
+# it. An empty key here is not an oversight, it is a question nobody has answered yet.
 
 source:
-  # Repo-relative. data/raw/ is not DVC-tracked and not committed; the SHA-256 is
-  # the source's identity, and `load` hard-stops when the file does not match it.
-  path: data/raw/fc_train_final.json
-  sha256: 0899b9ce88c2d2b4d3f6cad1bb9f2fcb7fc20e3016e21adafd37cd4e5282f0ec
+  # Repo-relative. data/raw/ is not committed; the SHA-256 is the source's identity,
+  # and `load_data` hard-stops when the file does not match it.
+  path: ""
+  sha256: ""
 
-# False by default. False means pii_check reports and leaves content untouched,
-# and the downstream personal-data scan then fails, so nothing ships. Turning it
-# on is a change to this file, which makes the decision attributable.
+# False by default. False means pii_check reports and leaves content untouched, and
+# the downstream personal-data scan then fails, so nothing ships. Turning it on is a
+# change to this file, which makes the decision attributable.
 enable_redact: false
 
-# Expected count per validity check, declared so a source change is a decision
-# rather than a surprise. Populated from the adapter's own run over the declared
-# source. Three read 0 because the adapter's name convention resolves every name the
-# corpus uses: the 841 and 722 in the profile spec are what a stricter name pattern
-# reports about names carrying a dot, hyphen, space or tab. A check reading 0 is
-# what tells you when it stops reading 0.
-#
-# `label_names_one_tool_twice` is requirement 73, and 10 is measured rather than
-# assumed -- this number was first declared 0 on the reasoning that a set of names
-# cannot repeat one, which a JSON array plainly can. All 10 are the same name stated
-# literally twice with no arguments, so they are duplications rather than the parallel
-# calls the requirement was written for, and they are the ten records the other four
-# checks do not see: a target of ["X", "X"] trains a model to call X twice.
+# Expected count per label check, declared so a source change is a decision rather
+# than a surprise. The five names are the profile's `label_checks()`, and they are
+# listed with no values because the counts are a property of a corpus, not of the
+# pipeline. The first run over a declared source populates them; from then on a count
+# that has moved is a line a human reads in a diff (Requirement 22, Requirement 44).
 invalid_counts:
-  label_assistant_mismatch: 0
-  label_not_in_catalog: 0
-  empty_catalog: 0
-  label_cardinality_anomaly: 0
-  label_names_one_tool_twice: 10
-
-# The gold set, declared as a count so it drifts loudly. The profile manifest's
-# `gold.from` says which field identifies it; this says how many records it selects.
-gold:
-  records: 951
-
-# The largest answer this source contains. A record above it means a catalog or a
-# parser change inflated answer size, which is a decision rather than data.
-max_answer_cardinality: 3
+  label_assistant_mismatch:
+  label_not_in_catalog:
+  empty_catalog:
+  label_cardinality_anomaly:
+  label_names_one_tool_twice:
 
 thresholds:
-  jury: {}          # panel floor, invalid-vote rate, estimated-token ceiling (T18)
-  triage: {}        # bucket boundaries, stratum quotas, audit sizing (T20)
-  pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T25)
+  jury: {}          # panel floor, invalid-vote rate, estimated-token ceiling (T19)
+  triage: {}        # bucket boundaries, stratum quotas, audit sizing (T21)
+  pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T31)

@@ -1,0 +1,24 @@
+# The `text2text` modality's identity and the two choices that decide what its
+# vectors mean.
+#
+# The filename is the identity (Requirement 40): this file is `text2text.yaml`, so
+# the pair is `text2text`, and `name` below must agree. `version` is stamped into
+# every record's provenance, so it is a reviewed line rather than a class attribute
+# someone edits in passing -- and it is a string.
+name: text2text
+version: "1"
+
+embedding:
+  # Static embeddings, so a vector is a pure function of its input and two runs over
+  # one corpus dedup identically (Requirement 23).
+  model: minishlab/potion-multilingual-128M
+  # Roles left out of the vector. Provisional. The measurement that chose this was
+  # taken on a corpus that is no longer declared, where the tool catalog arrived as a
+  # ~4,000-character instruction block in the system turn and swamped a ~780-character
+  # conversation. The input shape this spec declares carries the catalog as `tools`
+  # data (Requirement 13), so that system turn no longer exists in the form the
+  # measurement was about. The setting is kept because excluding an instruction turn
+  # from a content vector is defensible on its own; the number behind it is not
+  # inherited. What re-measures it: retrieval of known near-duplicate pairs, with and
+  # without the system role, over a declared corpus.
+  exclude_roles: [system]

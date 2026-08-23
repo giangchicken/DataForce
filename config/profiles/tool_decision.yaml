@@ -1,20 +1,36 @@
 name: tool_decision
 version: "1"
-modality: text
+modality: text2text
 
 prompts:
   question: profiles/tool_decision/question.v1
 
 # Which control captures the answer. Declared rather than detected, because it changes
-# what an annotator can physically express and therefore what their agreement means:
-# `per_name_arguments` is a form -- a name control plus each chosen tool's own argument
-# fields -- and `json_text` is the fallback for an annotation tool that cannot show a
-# field conditionally, where the annotator writes the calls by hand. Which one this
-# project shipped is stamped from here, so a measured agreement figure can be read
-# against the surface it was measured on. Requirement 75.
-answer_control: per_name_arguments
+# what an annotator can physically express and therefore what their agreement means.
+# Which one this project shipped is stamped from here, so a measured agreement figure
+# can be read against the surface it was measured on.
+#
+#   names_and_json_arguments  a name control over this record's catalog, plus one text
+#                             field holding the chosen calls' arguments as JSON
+#   json_text                 one text field; the annotator writes the whole answer
+#   per_name_arguments        a name control plus each chosen tool's own argument
+#                             fields, rendered per tool
+#
+# `per_name_arguments` is the one we would want and cannot have: a Label Studio project
+# holds one labelling config for every task in it, and our catalog is per record, so
+# per-tool argument fields cannot be expressed. `names_and_json_arguments` is what
+# § *The annotation config, and what comes back* specifies -- names come from a dynamic
+# choice list so they cannot be mistyped, which is the half δ weights first, and only
+# the arguments are typed by hand.
+answer_control: names_and_json_arguments
 
-shape: legacy_system_prompt
+# How a source item is read. One shape is declared (Requirement 13): standard
+# OpenAI chat-completion records carrying the tool catalog as `tools` data. A record
+# with no `tools` key is an empty catalog, which is a quarantine for triage -- never a
+# reason to parse a catalog out of the prose. The previous value here declared a
+# retired corpus's shape, where the catalog *was* prose in the system turn, which made
+# this profile read a declared-input record as an empty catalog.
+shape: openai_chat_completion
 
 roles:
   instruction: system

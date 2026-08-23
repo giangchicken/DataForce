@@ -242,10 +242,11 @@ every question.
    ever needed. Written after the services, a guard only ratifies whatever was already done.
 2. **The shared vocabulary.** `errors.py`, `record.py`, `manifest.py` — three modules every layer uses,
    which is why they are the package's own top level rather than anyone's private code.
-3. **The two axes, as contracts.** `Modality` (six members) and `Profile` (twelve), plus the registry
+3. **The two axes, as contracts.** `Modality` (six members) and `Profile` (fourteen), plus the registry
    both arrive through. Then one implementation of each: `text2text` and `tool_decision`.
-4. **The edge.** `api/policy.py` reads config into declarations; `api/engine.py` composes a run;
-   `api/artifacts.py` is the one place a file is read or written. After this the engine can be built with
+4. **The edge.** `edge/policy.py` reads config into declarations; `edge/bootstrap.py` composes a run —
+   `Engine` itself is the engine's, at `dataforce/engine.py`, because every stage names it;
+   `edge/artifacts.py` is the one place a file is read or written. After this the engine can be built with
    no filesystem anywhere, which is the assertion everything else depends on.
 5. **Stage 0, then a phase at a time.** `load_data`, then `data_quality`, then `ai_review` with a stubbed
    panel, then `human_review` as far as `publish`. One test module per stage, asserting its row above.
