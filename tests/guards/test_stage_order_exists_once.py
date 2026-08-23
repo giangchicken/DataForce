@@ -40,14 +40,12 @@ def stage_order_findings(module: Module) -> list[str]:
     for node in ast.walk(module.tree):
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        called = sorted(
-            {
-                called_name(inner).split(".")[-1]
-                for inner in ast.walk(node)
-                if isinstance(inner, ast.Call)
-                and called_name(inner).split(".")[-1] in STAGE_NAMES
-            }
+        reached = (
+            called_name(inner).split(".")[-1]
+            for inner in ast.walk(node)
+            if isinstance(inner, ast.Call)
         )
+        called = sorted({name for name in reached if name in STAGE_NAMES})
         if len(called) > 1:
             found.append(
                 (node.lineno, f"{node.name}() calls {', '.join(called)} itself")

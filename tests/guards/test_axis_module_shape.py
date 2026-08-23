@@ -7,14 +7,15 @@ name AGENTS.md §6 exempts, and only under exactly this condition; a fourth modu
 that exemption starting to spread.
 
 This guard reads directories rather than the parsed tree, because the rule is about which files
-exist. The synthetic violation is therefore a directory too.
+exist. The synthetic violation is therefore a directory too. Only the import half takes P30's
+exemption -- an annotation lives on a line, and "there is a fourth module here" has none.
 """
 
 from pathlib import Path
 
 import pytest
 
-from .tree import axis_implementations, imports, module_from_source
+from .tree import axis_implementations, imports, module_from_source, not_exempt
 
 SHAPE = frozenset({"__init__.py", "schema.py", "utils.py"})
 
@@ -30,11 +31,15 @@ def axis_shape_findings(package: Path) -> list[str]:
     if schema.exists():
         dotted = f"dataforce.{package.parent.name}.{package.name}.schema"
         module = module_from_source(schema.read_text(encoding="utf-8"), dotted)
-        found += [
-            f"{dotted}:{reached.line} imports its own utils"
-            for reached in imports(module)
-            if reached.module.split(".")[-1] == "utils"
-        ]
+        found += not_exempt(
+            module,
+            "I4",
+            [
+                (reached.line, "imports its own utils")
+                for reached in imports(module)
+                if reached.module.split(".")[-1] == "utils"
+            ],
+        )
     return found
 
 
