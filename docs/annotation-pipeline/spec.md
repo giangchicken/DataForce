@@ -43,7 +43,8 @@ this project's `agent-toolkit` was extracted from settles four things this spec 
 (it is not public, so it is cited by what it does rather than by where it lives):
 
 - `api/main.py` holds a `create_app()` factory; `api/routers/<domain>/<feature>.py` holds one
-  `APIRouter(tags=[…])` per feature; `main.py` mounts each with a URL prefix.
+  `APIRouter(tags=[…])` per feature; `main.py` mounts each with a URL prefix. Those are the reference's
+  own paths; here the same shape sits under `edge/`, for the reason given in Decision 12.
 - **URLs are kebab-case** (`/evaluate-function-calling`), module names snake_case.
 - **Every field of every request, response and record model carries `Field(..., description=…)`**, and
   related fields are grouped under `# --- Section ---` comments. This is Requirement 1 below.
@@ -87,7 +88,10 @@ class Modality(Protocol):
         """The *display* half of the annotation config. Never the capture half."""
 ```
 
-Six members, closed.
+Six members, closed. `Detector` and `DisplayConfig` are opaque here and concrete in
+`text2text/schema.py` (Requirement 47). `Part` is not the modality's to define — a part is a piece of
+record content, and `build_record` on the *other* axis takes a `Sequence[Part]` too, so it lives in
+`record.py` where both protocols can reach it.
 
 ### Profile — what an answer is
 
@@ -130,8 +134,12 @@ class Profile(Protocol):
         """The record in the shape a trainer expects."""
 ```
 
-Twelve members, closed. The two contracts overlap on `name` and `version` and nothing else — neither
-axis may drift into the other's job.
+Twelve members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
+behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
+is `tool_decision/utils.py`.
+
+The two contracts share three names and nothing else: `name`, `version`, and `Part`, which is the
+record's and is only borrowed by both. Neither axis may drift into the other's job.
 
 ---
 
@@ -143,7 +151,7 @@ Both take and return the same body, so they compose.
 
 ### The flow
 
-`src/dataforce/pipeline/__init__.py` is the one place this table exists in code.
+`src/dataforce/pipeline/flow.py` is the one place this table exists in code.
 
 | # | phase | stage | what it does |
 |---|---|---|---|
@@ -314,8 +322,9 @@ Each is a statement a test can be pointed at.
 
 ### Running it
 
-36. No engine module opens a file, names a path, or imports the edge. `api/` and `cli.py` are the edge;
-    **everything else is the engine**, and the arrow points one way.
+36. No engine module opens a file, names a path, or imports the edge. `edge/` and `cli.py` are the edge;
+    **everything else is the engine**, and the arrow points one way. `Engine` is a type the engine owns;
+    `open_engine`, which reads the files that fill it, is not.
 37. Importing `dataforce.modalities.text2text` and `dataforce.profiles.tool_decision` from a directory
     holding no `config/` succeeds and writes nothing.
 38. No module under `pipeline/` imports a concrete modality or profile. Both axes arrive through a
@@ -335,12 +344,22 @@ Each is a statement a test can be pointed at.
     halts a batch of 20,000 because 3 records are bad. The only exceptions raised are `ConfigError` —
     a declaration that is wrong or missing, raised before any record is read.
 44. Corpus-level numbers are a **fold at the edge, for reading** — written to `metrics.json` by
-    `api/artifacts.py`, never computed by a service and never compared against a threshold that stops
+    `edge/artifacts.py`, never computed by a service and never compared against a threshold that stops
     anything. A count that has moved is something a human sees in a diff, not a crash.
 45. A run records every policy file it read with its digest, both axis versions, and every artifact
     digest. Two runs of one unchanged configuration produce byte-identical run manifests; a changed
     policy file changes the manifest.
 46. HTTP and an in-process caller reach the same function, and produce the same record.
+47. **A type named in an axis protocol is opaque at the base and concrete in the implementation.**
+    `Answer`, `AnswerConfig` and `LabelCheck` are aliases in `profiles/base.py`; `Detector` and
+    `DisplayConfig` are aliases in `modalities/base.py`; the pydantic models that satisfy them live in
+    that axis implementation's `schema.py`. Neither `base.py` imports a concrete implementation. `Part`
+    belongs to neither axis — it is a piece of record content — so it is defined in `record.py`, which
+    both protocols may import.
+48. **The order of a phase's stages is engine knowledge.** `POST /data-quality` runs three services in
+    the order `pipeline/flow.py` declares, folded by `pipeline/runner.py`. No router names a stage
+    sequence, and `cli.py` dispatches over the same table rather than hand-writing one subcommand body
+    per stage.
 
 ---
 
@@ -348,53 +367,92 @@ Each is a statement a test can be pointed at.
 
 ### Package layout
 
-`core/` is gone. It held five things and only `errors.py` earned the package: `flow.py` existed to be
-compared against a document by a test that no longer exists, `artifacts/` was the previous design's
-per-phase file shapes, and `record.py` and `manifest.py` are used by every layer — which
-makes them the package's own top level, not a sub-package. A package with one useful module is that
-module (AGENTS.md §6).
+`core/` is gone. It held five things and only `errors.py` earned the package: `artifacts/` was the
+previous design's per-phase file shapes, and `record.py` and `manifest.py` are used by every layer —
+which makes them the package's own top level, not a sub-package. A package with one useful module is
+that module (AGENTS.md §6). `flow.py` comes back, not because the test that read it comes back, but
+because a deleted test is no verdict on a module.
+
+**The edge is called `edge/`.** It was called `api/`, which was a lie: the package also held
+`policy.py`, `artifacts.py` and `store/` — every file, socket and clock in the system — and `cli.py`
+importing from something named `api` was the proof. "Edge" is the word this document already reasons
+in. HTTP keeps the style reference's shape inside it.
+
+**`Engine` is a type; `open_engine` is a reader.** Putting both at the edge forced every service —
+`def pii_check(engine: Engine, …)` — to import the edge, which Requirement 36 forbids and I1 catches on
+the first run. The abstraction belongs to the inner layer, so `Engine` and `Registry` are
+`dataforce/engine.py`, holding a resolved pair and no I/O; the composition root that reads config to
+build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `QuestionStore` and
+`MediaResolver` are what the *engine* demands of the edge, so an adapter cannot be where they are
+declared.
 
 ```
 src/dataforce/
   errors.py          DEFINITION · ConfigError — the one exception this codebase defines
-  record.py          DEFINITION · Record and its parts — the bus
+  record.py          DEFINITION · Record, and Part — the bus, and the content it carries
   manifest.py        DEFINITION · Manifest — one axis's declaration, already parsed
+  engine.py          DEFINITION · Engine and Registry — a resolved pair, held; no I/O
+  ports.py           DEFINITION · QuestionStore, MediaResolver — what the engine demands of the edge
 
   pipeline/
-    __init__.py      DEFINITION · PHASES and STAGES — the flow table, in code, once
+    __init__.py      façade · re-exports flow.py and runner.py; holds nothing of its own
+    flow.py          DEFINITION · PHASES and STAGES — the flow table, in code, once
+    runner.py        LOGIC · run_phase — a phase's stages folded over records, in the table's order
     load_data.py     STEP · load_data (stage 0)
     data_quality/    STEP modules: label_check.py, pii_check.py, duplicate_check.py
     ai_review/       STEP modules: jury.py, cohesion.py, triage.py
     human_review/    STEP modules: question_generate.py … curate.py
 
   modalities/
-    base.py          DEFINITION · the Modality protocol
+    base.py          DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque
     text2text/       __init__.py, schema.py, utils.py
-    speech2text/     declared seam; not built
 
   profiles/
-    base.py          DEFINITION · the Profile protocol
+    base.py          DEFINITION · the Profile protocol; Answer, AnswerConfig, LabelCheck, opaque
     tool_decision/   __init__.py, schema.py, utils.py
 
-  api/                                    # the edge: everything that touches a file, a socket, a clock
+  edge/                                   # everything that touches a file, a socket, a clock
     main.py          TOOL · create_app(), CORS, one include_router per main endpoint
-    routers/         load_data.py, data_quality.py, ai_review.py, human_review.py
-    schemas.py       DEFINITION · request and response bodies, every field described
-    engine.py        LOGIC · Engine, Registry, open_engine — the composition root
+    bootstrap.py     LOGIC · open_engine — the composition root; the only builder of an Engine
+    routers/         load_data/, data_quality/, ai_review/, human_review/ — router + its own schemas.py
     policy.py        LOGIC · config/<axis>/*.yaml, params.yaml, prompts -> declarations
     artifacts.py     TOOL · the one place a record file, metrics.json or a run manifest is read/written
     store/           models.py, repository.py, session.py — the question store
-  cli.py             TOOL · one subcommand per stage, JSONL in, JSONL out
+  cli.py             TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, out
+
+tests/
+  guards/            I1–I7 and I16–I17, written before any service, against synthetic source
+  stages/            one module per stage: its reads, its writes, the records it skips
+  properties/        I8 and I11 together, over one corpus, through all twelve in-scope services
+  shells/            I15: the same input in-process and over HTTP
+  integration/       -m integration: a live panel, a real store, a declared corpus
 ```
 
 A phase with one stage is one module (`load_data.py`); a phase with several is a directory. Nothing is
 split until a second consumer needs half of it.
 
+**Three files are split at the boundary consumers import along, from the first line written.**
+`routers/<domain>/schemas.py` rather than one `schemas.py`, because four routers each need a quarter of
+it and AGENTS.md §6 forbids making a consumer depend on what it does not use — this is also the style
+reference's own `routers/<domain>/<feature>.py` shape. `cli.py` is a dispatch over `flow.py`, not
+fifteen hand-written subcommand bodies: every service has one signature and Requirement 46 makes the
+in-process call the same call, so the CLI stays roughly one screen however many stages exist.
+`record.py` does not split at all — there is no boundary in it; it is one type, and it is long because
+Requirement 1 puts a description on every field, which is the file doing its job.
+
+**There is no empty `speech2text/` directory.** The seam is real and specified — `modalities/base.py`,
+the `MediaResolver` port, and the pair naming — and a directory holding nothing adds none of it, which
+is the flexibility-nobody-asked-for that AGENTS.md §2 forbids. What is out of scope is listed in *Out of
+Scope*, not mimed in the tree.
+
 Every implementation of either axis is `__init__.py`, `schema.py` (`DEFINITION ·`) and `utils.py`
 (`LOGIC ·`). A shape is a shape and a conversion over it is logic — they change for different reasons,
-so `schema.py` does not import `utils.py`.
+so `schema.py` does not import `utils.py`. `utils.py` is the one module name AGENTS.md §6 exempts by
+name, and only under exactly this condition: conversions over the shapes in the `schema.py` beside it.
+So `answer_schema` — a record turned into a JSON Schema — is `utils.py`, while the answer models it
+constrains are `schema.py`.
 
-**Import direction, stated once in the package docstring:** `api/` and `cli.py` may import the engine;
+**Import direction, stated once in the package docstring:** `edge/` and `cli.py` may import the engine;
 the engine may not import them.
 
 ### The record
@@ -581,9 +639,11 @@ engine = open_engine(profile="tool_decision", modality="text2text",
                      config_root=Path("config"), params=Path("params.yaml"))
 ```
 
-`open_engine` reads the two manifests, the thresholds and the prompt templates through `api/policy.py`,
-registers both axes, and returns an `Engine` holding the resolved pair, the registry, and the tuple of
-policy files it read. Naming no modality takes the profile at its word; naming a different one raises
+`Engine` is `dataforce/engine.py` — a resolved pair, a registry, thresholds, and the digests of the
+policy files that produced them. It opens nothing. `open_engine` is `edge/bootstrap.py`: it reads the
+two manifests, the thresholds and the prompt templates through `edge/policy.py`, registers both axes,
+and returns one. The type is the engine's because every service names it; the reader is the edge's
+because it reads. Naming no modality takes the profile at its word; naming a different one raises
 `ConfigError` saying which modality the profile composes with.
 
 An engine can also be built with **no filesystem anywhere** — both axes handed `Manifest` objects and a
@@ -602,8 +662,9 @@ computed at the edge when a human wants to read it.
 
 ### Request and response models
 
-`api/schemas.py`, in the style reference's shape. Every field described, because that description is
-what a caller reads in `/docs`.
+`edge/routers/<domain>/schemas.py`, in the style reference's shape — one per router, because each
+router needs a quarter of what a single module would hold. Every field described, because that
+description is what a caller reads in `/docs`.
 
 ```python
 class RecordsRequest(BaseModel):
@@ -673,7 +734,7 @@ touched. A malformed body is pydantic's `422`. Anything else is `500`.
 ### The question store
 
 `publish` writes to a database we own; a separate sync moves questions into Label Studio and answers
-back out. Three tables, owned by `api/store/`, every column carrying its purpose in the model.
+back out. Three tables, owned by `edge/store/`, every column carrying its purpose in the model.
 
 | table | columns |
 |---|---|
@@ -681,8 +742,9 @@ back out. Three tables, owned by `api/store/`, every column carrying its purpose
 | `publication` | `question_id` fk · `external_system` · `external_project_id` · `external_task_id` · `status` · `pushed_at` · unique (`question_id`, `external_system`) |
 | `annotator_answer` | `answer_id` pk · `question_id` fk · `annotator_id` · `verdict` · `corrected_value` json · `note` · `submitted_at` · `external_annotation_id` unique |
 
-- The engine knows none of this. `publish` returns rows; `api/store/repository.py` writes them behind a
-  `QuestionStore` port, and the DSN is read at the edge from `DATAFORCE_DATABASE_URL`.
+- The engine knows none of this. `publish` returns rows; `edge/store/repository.py` writes them behind
+  the `QuestionStore` port — declared in `dataforce/ports.py`, because a port is what the engine
+  demands, not what an adapter offers — and the DSN is read at the edge from `DATAFORCE_DATABASE_URL`.
 - **SQLite by default, Postgres by URL.** SQLAlchemy 2.0 declarative models, Alembic migrations.
 - `POST /human-review/publish/sync` pushes unpublished questions into Label Studio through
   `label-studio-sdk`, writes the returned task ids into `publication`, then pulls new annotations into
@@ -708,7 +770,7 @@ left empty until a corpus is declared.
 Four routers, one route per service, over the record-in/record-out functions an in-process caller uses.
 *Alternative:* functions and a CLI only, with HTTP later — which `objective.md` §9 leans toward when it
 calls the web view "a later task". *Why this:* §9 defers the *view*, not the API, and §8 already requires
-two shells over one implementation. *Reversible:* yes — deleting `api/routers/` and `main.py` leaves the
+two shells over one implementation. *Reversible:* yes — deleting `edge/routers/` and `main.py` leaves the
 engine intact.
 
 **2 · A modality is the input→output pair, named as one string.**
@@ -793,6 +855,51 @@ design decide live naming, which is the failure mode `da50d46` was avoiding. *Co
 no identity in a class body) must be re-written before the first service, not after; each is ~40 lines
 and each is recoverable at `ed84417^` as a starting point.
 
+**12 · `Engine` moves into the engine; `api/` becomes `edge/`; ports get a home.**
+One bug and two consequences of it. The bug: `Engine` was defined at the edge and named in every
+service signature, so `pipeline/pii_check.py` had to import `api/` — Requirement 36 forbids it and I1
+fails on it. The fix is the Dependency Inversion Principle: the abstraction belongs to the inner layer,
+so `Engine` is `dataforce/engine.py` and only `open_engine` stays outside, in `edge/bootstrap.py`.
+`QuestionStore` and `MediaResolver` had the same shape of problem in a quieter form — named as ports
+"supplied at the edge" and defined nowhere, they would have been born inside `store/`, which is an
+adapter declaring its own port. They are `dataforce/ports.py`. And once `Engine` left, the package
+called `api/` was left holding `policy.py`, `artifacts.py` and `store/` under a name that describes one
+of the four; `edge/` is the word the rest of this document uses.
+*Alternative considered:* the full hexagonal tree — `adapters/{http,persistence,config}/`. *Why not:*
+three nested directories for eight modules, each with a single consumer, is the split AGENTS.md §6
+tells you not to make until a second consumer needs half. The lie was in the name, not the shape.
+*Also added, for the same reason:* `pipeline/runner.py`, because `POST /data-quality` runs three
+services in order and nothing owned that order — a router composing them would put a piece of the flow
+table at the edge and keep a second copy of it. *Reversible:* yes, all of it; these are moves, not
+rewrites.
+
+**13 · One `Record`, with profile-shaped slots — not one record type per profile.**
+`build_record` is a profile member, so the profile *constructs* the record; that is not the same as
+owning its shape. *Why one:* Requirement 38 says no module under `pipeline/` imports a concrete axis,
+and a per-profile record type would put one in all twelve service signatures. Twelve of the record's
+top-level keys are the engine's — identity, `branch`, `provenance`, `content`, `content_version`,
+`meta`, and the phase keys — and only four slots are the profile's: `label`, each vote's `answer`,
+`aggregate.corrected_value`, and `curate.label`. *Cost, stated plainly:* `Answer` is opaque, so
+`mypy --strict` cannot check what goes in those four slots. What replaces the type check is
+`answer_schema` at runtime — the profile validates its own answers, and I10 already forbids storing the
+space it validates against. *Alternative:* make the record generic, `Record[A]`. *Why not:* every
+service is profile-blind, so all twelve signatures would read `Record[Any]` and the parameter would buy
+nothing at fifteen call sites. *The long-term risk, named:* one type touched by every stage is a god
+type, and at fifty stages it would hurt. It is tolerable at fifteen because the coupling is on the type
+and not on the fields — one writer per key (I8) plus a declared `reads` column means a change to a
+stage-11 key reaches stage 0 only if stage 0 reads it, and the contract table says it does not. The way
+out, if that day comes: one table per phase, joined on `record_id`.
+
+**14 · `utils.py` stays.**
+It was challenged as violating the naming law — *"utils of what?"* — the same objection AGENTS.md §5
+makes against `load`. It does not, and the distinction is worth recording because it will be raised
+again. §5 governs *function* names and is tested by reading a call site. §6 governs *module* names, and
+exempts this one by name: "`utils.py` is the one allowed exception, and only for conversions over the
+shapes in the `schema.py` beside it." That is exactly its use here, one per axis implementation, with
+I4 enforcing the direction. *Alternative:* split each into `parts.py`, `embedding.py`, `detectors.py`.
+*Why not:* three modules with one consumer each — the `__init__.py` that assembles the axis — which the
+sentence above the exemption forbids. *Reversible:* trivially, if a second consumer ever appears.
+
 ---
 
 ## Versions
@@ -824,7 +931,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|---|
 | I1 | The engine opens no file and names no path | AST scan over every engine module, plus a subprocess import from an empty directory |
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
-| I3 | Code's phase and stage names are the flow's | `pipeline/__init__.py` is the single source; module filenames and docstrings are compared to it |
+| I3 | Code's phase and stage names are the flow's | `pipeline/flow.py` is the single source; module filenames and docstrings are compared to it |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names and the four owned roots |
@@ -837,6 +944,8 @@ Each names the check that holds it, not a file that used to.
 | I13 | The placeholder map is never read by a service and never committed | AST scan plus a `.gitignore` assertion |
 | I14 | Two runs of one unchanged configuration produce identical run manifests | run twice, compare bytes |
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
+| I16 | No axis `base.py` imports an implementation of its own axis | AST scan over `modalities/base.py` and `profiles/base.py` |
+| I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `cli.py` names two stages in sequence; both call `run_phase` |
 
 ---
 
@@ -864,7 +973,10 @@ Each names the check that holds it, not a file that used to.
 There is no test suite. It is written against this document, in this order, and `make check` (ruff,
 `mypy --strict`, pytest) must pass before each step lands.
 
-1. **The guards first (I1–I7)**, before any service. Each is an AST or introspection check proved against
+**The suite mirrors the layout** — `tests/guards/`, `tests/stages/`, `tests/properties/`,
+`tests/shells/`, `tests/integration/`. Steps 1–4 below are those first four directories, in order.
+
+1. **The guards first (I1–I7, I16–I17)**, before any service. Each is an AST or introspection check proved against
    synthetic source, so the guard fails before it is ever needed. Writing them after the services is how
    a codebase acquires the thing the guard forbids.
 2. **One test module per stage**, asserting that stage's reads/writes/skips-when row: it writes its key,
