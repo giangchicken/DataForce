@@ -321,9 +321,10 @@ Each is a statement a test can be pointed at.
 15. One tool call spelled three ways — arguments as a JSON string, the same string with keys reordered
     and whitespace added, and the object form — is one part and one `record_id`.
 16. Text content is loaded byte-identical to the source; no normalisation at load. For a media modality,
-    `load_data` resolves each item's URI through a resolver supplied at the edge, records `uri` +
-    `sha256` + modality metadata, and never opens a file from engine code. A media part without a
-    reference cannot be constructed.
+    `load_data` resolves each item's URI through a resolver **that the media modality declares when it
+    is built**, records `uri` + `sha256` + modality metadata, and never opens a file from engine code. A
+    media part without a reference cannot be constructed. No such port is declared today, because no
+    media modality exists to demand one (Decision 17).
 
 ### data_quality
 
@@ -468,9 +469,9 @@ in. HTTP keeps the style reference's shape inside it.
 `def pii_check(engine: Engine, …)` — to import the edge, which Requirement 36 forbids and I1 catches on
 the first run. The abstraction belongs to the inner layer, so `Engine` and `Registry` are
 `dataforce/engine.py`, holding a resolved pair and no I/O; the composition root that reads config to
-build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `QuestionStore` and
-`MediaResolver` are what the *engine* demands of the edge, so an adapter cannot be where they are
-declared.
+build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `QuestionStore` is what the
+*engine* demands of the edge, so an adapter cannot be where it is declared. It holds one port, because
+a port with no adapter is a guess about a future caller — see Decision 17.
 
 ```
 src/dataforce/
@@ -478,7 +479,7 @@ src/dataforce/
   record.py          DEFINITION · Record, and Part — the bus, and the content it carries
   manifest.py        DEFINITION · Manifest — one axis's declaration, already parsed
   engine.py          DEFINITION · Engine and Registry — a resolved pair, held; no I/O
-  ports.py           DEFINITION · QuestionStore, MediaResolver — what the engine demands of the edge
+  ports.py           DEFINITION · QuestionStore — what the engine demands of the edge
 
   pipeline/
     __init__.py      façade · re-exports flow.py and runner.py; holds nothing of its own
@@ -527,7 +528,7 @@ in-process call the same call, so the CLI stays roughly one screen however many 
 Requirement 1 puts a description on every field, which is the file doing its job.
 
 **There is no empty `speech2text/` directory.** The seam is real and specified — `modalities/base.py`,
-the `MediaResolver` port, and the pair naming — and a directory holding nothing adds none of it, which
+the media part shape, and the pair naming — and a directory holding nothing adds none of it, which
 is the flexibility-nobody-asked-for that AGENTS.md §2 forbids. What is out of scope is listed in *Out of
 Scope*, not mimed in the tree.
 
@@ -796,8 +797,8 @@ the shape of the request:
 `items` and `source` are mutually exclusive and one is required. **For `text2text`, `items` inline is
 the normal case** — the content is already in the body and nothing needs reading. For `speech2text`,
 `image2text` and `video2text`, each item references its media by URI; `load_data` resolves it through a
-`MediaResolver` supplied at the edge, records `uri` + `sha256` + duration or dimensions, and the engine
-never opens it.
+resolver the modality declares, records `uri` + `sha256` + duration or dimensions, and the engine never
+opens it. That port arrives with the first media modality and not before.
 
 **Response:**
 
@@ -987,9 +988,16 @@ testable with no instance, and `annotator_answers` reads one shape whatever the 
 *Cost:* task state in two places, so the sync must be idempotent in both directions — which the two
 unique constraints enforce. *Reversible:* yes; the store is behind a port.
 
-**7 · SQLite by default, Postgres by URL, SQLAlchemy + Alembic.**
-*Why this:* a developer running the pilot should not need a database server, and the schema is small
-enough that the two behave identically. *Reversible:* yes — one DSN.
+**7 · SQLite by default, Postgres by URL — and the difference is carried as a risk, not argued away.**
+*Why this:* a developer should not need a database server to run `make check`. *What it costs:* an
+earlier draft of this decision said "the schema is small enough that the two behave identically",
+which is the exact assumption a backing-service substitution is never allowed to make. SQLite and
+Postgres disagree about type affinity, about what a JSON column is, about concurrent writers, and
+about which constraint violations surface as which error — and this schema leans on two unique
+constraints for the sync's idempotency, which is precisely the behaviour that differs. *So:* the store
+tests run **twice** — SQLite in `tmp_path` inside `make check`, and the same tests against a real
+Postgres under `-m integration`, which is the gate the rungs run behind. A store test that passes on
+SQLite and has never run on Postgres is not evidence. *Reversible:* yes — one DSN.
 
 **8 · One input shape.**
 Standard OpenAI chat-completion records with `tools` as data — what `objective.md` §2 documents, and
@@ -1040,9 +1048,9 @@ One bug and two consequences of it. The bug: `Engine` was defined at the edge an
 service signature, so `pipeline/pii_check.py` had to import `api/` — Requirement 36 forbids it and I1
 fails on it. The fix is the Dependency Inversion Principle: the abstraction belongs to the inner layer,
 so `Engine` is `dataforce/engine.py` and only `open_engine` stays outside, in `edge/bootstrap.py`.
-`QuestionStore` and `MediaResolver` had the same shape of problem in a quieter form — named as ports
-"supplied at the edge" and defined nowhere, they would have been born inside `store/`, which is an
-adapter declaring its own port. They are `dataforce/ports.py`. And once `Engine` left, the package
+`QuestionStore` had the same shape of problem in a quieter form — named as a port
+"supplied at the edge" and defined nowhere, it would have been born inside `store/`, which is an
+adapter declaring its own port. It is `dataforce/ports.py`. And once `Engine` left, the package
 called `api/` was left holding `policy.py`, `artifacts.py` and `store/` under a name that describes one
 of the four; `edge/` is the word the rest of this document uses.
 *Alternative considered:* the full hexagonal tree — `adapters/{http,persistence,config}/`. *Why not:*
@@ -1119,6 +1127,44 @@ JSON for the arguments. That is recorded in § *The annotation config, and what 
 discovered in the pilot. *Reversible:* the capture half is one profile member and one config fragment,
 so replacing the widget — or the tool — is a change in two places.
 
+**17 · The four standing principle conflicts, settled — and one kept as an exception.**
+An audit of `AGENTS.md` P0–P31 against this document left four disagreements. AGENTS.md §8 says two
+rules that disagree in one place is a fact about the design and belongs written down, so here they are
+with what each cost.
+
+*P20 — a port with zero adapters is deleted.* `MediaResolver` had none: no media modality is built, so
+nothing implements it and nothing calls it. **Deleted.** It was a guess about what a future caller will
+need, written before that caller exists, and a wrong guess would have been discovered by the first
+media modality having to work around it. The seam survives without it — `modalities/base.py`, the media
+part shape, the pair naming, and Requirement 16's description of what a media `load_data` does. The
+port arrives with the modality that demands it. *Cost:* the tree no longer shows where media plugs in;
+Requirement 16 and *Out of Scope* say it in words instead.
+
+*P26 — dev and production run the same implementations.* Two substitutions, both kept, both now paid
+for. Decision 7 carries the SQLite/Postgres one as a risk rather than an argument, and the store tests
+run against both. The stubbed jury is the second and is not removable — `make check` cannot call a
+model — so the parity gate is the Smoke rung, which is the first time the real panel runs at all.
+Testing Strategy item 9 names both.
+
+*P27 — logs are an event stream, observability from the start.* The spec contained no logging: every
+match for "log" in it was a substring of `catalog` or `LOGIC`. **Fixed**, in § *Observability*. The
+engine emits through stdlib `logging` and the edge installs the one handler, which keeps Requirement 36
+intact — a logger call opens no file and names no path.
+
+*P31 — a document fact the code also states is compared by a test.* I3 promised the comparison but
+described `flow.py` as the single source and compared only code to code, which leaves this document
+free to drift from it. **Fixed:** I3 now parses the § *The flow* table out of this file and compares
+its triples against `PHASES` and `STAGES`. Changing either side alone fails the build.
+
+Two more from the same audit needed a line rather than a change. *P1 — do not decompose along the flow
+of processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
+`AGENTS.md`'s own conflicts section resolves it: step modules stand, but a decision spanning steps is
+extracted under P2 and the steps call it. This design has exactly one such decision, and it is
+extracted: the answer type, which stages 4, 5, 10 and 11 all reason about and none of them owns —
+it lives on the profile. *P22 — define errors out of existence* — landed on the `[]`-versus-`None`
+ambiguity in `vote_consensus` and is closed by construction in § *The answer, and the three operations
+over it*, not by a branch.
+
 ---
 
 ## Versions
@@ -1150,7 +1196,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|---|
 | I1 | The engine opens no file and names no path | AST scan over every engine module, plus a subprocess import from an empty directory |
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
-| I3 | Code's phase and stage names are the flow's | `pipeline/flow.py` is the single source; module filenames and docstrings are compared to it |
+| I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(number, phase, stage)` triples compared against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names and the four owned roots |
@@ -1188,6 +1234,38 @@ Each names the check that holds it, not a file that used to.
 
 ---
 
+## Observability
+
+A run over twenty thousand records that reports nothing until it finishes is a run nobody can
+supervise, and the first thing anyone asks of it — *where is it, and is it going wrong* — has no
+answer. So the events are part of the design, not something added when a run first hangs.
+
+**The engine emits; the edge decides where.** Every module uses the standard library's
+`logging.getLogger(__name__)` and nothing else. That writes to a stream the application does not own,
+open or rotate, which is what keeps it inside Requirement 36: a logger call opens no file and names no
+path. I1's scan permits `logging` by name and forbids what it always forbade — `open`, `Path`,
+`os.environ`, a socket, a clock.
+
+**Every event carries the same three keys**, because an event that cannot be joined to a run and a
+record is a sentence in a log file rather than data: `run_id`, `record_id` (absent only for
+composition-time events), and the stage that emitted it. `edge/main.py` and `cli.py` each install one
+handler on stdout at start-up; nothing else configures logging, and no module writes to a file.
+
+**What is worth an event, and at what level.** `INFO` once per stage per batch — started, finished, how
+many records, how many skipped by precondition. `WARNING` per record for the things a human must
+eventually look at: a record quarantined, a precondition unmet, a vote that did not validate, a
+corrected value that did not parse, a PII hit layer two could not confirm. `ERROR` only for the one
+exception this codebase raises, `ConfigError`, which happens before any record is read. There is no
+`DEBUG` per record — twenty thousand records times fifteen stages is three hundred thousand lines, and
+a log nobody reads is not observability.
+
+**Events are not the report.** `ServiceResult` still carries records and side output and nothing else:
+what happened is on the records, and `metrics.json` is a fold over them at the edge. The event stream
+is for watching a run *while it runs*; the records are for reading it afterwards. Conflating the two is
+how a log becomes a database.
+
+---
+
 ## Testing Strategy
 
 There is no test suite. It is written against this document, in this order, and `make check` (ruff,
@@ -1217,6 +1295,11 @@ There is no test suite. It is written against this document, in this order, and 
    Label Studio client.
 8. **No network in `make check`.** Every jury test uses a stubbed panel; the live panel is the Smoke rung,
    under `-m integration`.
+9. **What is stubbed is run for real somewhere.** `make check` substitutes two backing services — SQLite
+   for Postgres and a stub for the panel — and both substitutions are where a dev/production divergence
+   would hide. `make integration` runs the store tests against a real Postgres, the sync against a real
+   Label Studio, and the panel against real models. Neither suite is optional: the fast one is the one
+   that runs on every commit, and the slow one is the one that is allowed to be believed.
 
 ---
 
@@ -1227,8 +1310,9 @@ There is no test suite. It is written against this document, in this order, and 
   shape.
 - **The web view.** One Vite + TypeScript SPA over these same endpoints, on the style reference's
   pattern — `objective.md` §9 calls it a later task, and this spec keeps it one.
-- **Real `speech2text`, `image2text`, `video2text`.** The seam is specified — media parts, the
-  `MediaResolver` port, the pair naming — and unenforced. Only `text2text` is built.
+- **Real `speech2text`, `image2text`, `video2text`.** The seam is specified — media parts, the pair
+  naming, and Requirement 16's resolver behaviour — and unenforced. The resolver *port* is deliberately
+  not declared until a modality demands one (Decision 17). Only `text2text` is built.
 - **Our own annotation platform.** Deferred, not cancelled; the pilot decides.
 - **Model training and evaluation, synthetic data generation, active learning, fine-tuning a juror,
   Confident Learning**, and automatic write-back to any source file. Export produces an artifact; putting
