@@ -6,15 +6,17 @@ not restate it. Where the two disagree, the spec wins and this file is wrong.
 **Source:** `docs/annotation-pipeline/spec.md` @ `9b9a3fe`, `AGENTS.md` §1–§9 and P0–P31 @ `a61f8cb`,
 `docs/annotation-pipeline/objective.md`.
 
-**State at the time of writing.** `src/` and `tests/` do not exist — both were deleted deliberately so
-the rebuild has one answer to every question. `make check` is therefore red: it runs
+**State at the time of writing.** `src/` and `tests/` did not exist — both were deleted deliberately so
+the rebuild has one answer to every question. `make check` was therefore red: it runs
 `mypy --strict src/dataforce` and pytest against nothing. `config/` holds two axis manifests and one
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phase 0 is done.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`) and T4 (`7fa0432`, `f7f30f4`,
-`89292ce`) have landed. What each changed is recorded at the end of the task below it. **Phase 1 is
-next, and nothing in it has been started.**
+**Phases 0 and 1 are done.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`) and T4 (`7fa0432`,
+`f7f30f4`, `89292ce`) closed Phase 0; T5 (`64edb99`), T7 (`b1c49b6`) and T6 (`c72e5a6`) closed
+Phase 1. `make check` is green over 57 modules holding no behaviour and 276 tests, all of them
+guards. What each task changed is recorded at the end of the task below it. **Phase 2 is next, and
+nothing in it has been started.**
 
 **Scope.** Stages 0–11 and both shells. `release` — stages 12–14 — is declared in the flow so
 `record.release` has an owner and is specified in a follow-up. Nothing here may assume its shape.
@@ -91,9 +93,9 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T2 | Assign the three unowned responsibilities | 0 | | M | ✓ `a2fc1df` |
 | T3 | Settle the four standing principle conflicts | 0 | | M | ✓ `9b9a3fe` |
 | T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | ✓ `89292ce` |
-| T5 | The package skeleton and the import direction | 1 | | M | |
-| T6 | The guards | 1 | T5 | L | |
-| T7 | The flow-table drift test | 1 | T3, T5 | S | |
+| T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
+| T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
+| T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
 | T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | |
 | T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M | |
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
@@ -377,6 +379,18 @@ declares.
 
 **Out of scope.** Any function body.
 
+**Landed — `64edb99`.** Fifty-seven modules: 15 `DEFINITION`, 12 `STEP`, 8 `TOOL`, 6 `LOGIC` — and 15
+that are none of the four.
+
+Requirement 2 names four kinds and none of them describes an `__init__.py` that re-exports and holds
+nothing of its own. The spec's own § *Package layout* had already written a fifth, `façade ·`, over
+`pipeline/__init__.py`, so §8 applies rather than bending one of the four: the break is now recorded
+in Requirement 2 and in the top-level package docstring, which is also where the import direction is
+stated once.
+
+The half of I1 that needs no AST scan came with it — a subprocess importing both axes from a directory
+with no `config/`, which is Requirement 37 as something a machine runs.
+
 ---
 
 ### T6 · The guards
@@ -406,6 +420,26 @@ LLM client surface.
 
 **Out of scope.** I8, I11, I15 — they need running services.
 
+**Landed — `c72e5a6`,** as eight guards rather than nine; I3 went with T7, which had to come first.
+
+A synthetic violation proves the rule and not the wiring — a scan can reject a source string and still
+be pointed at nothing — so each rule was *also* run against a real violation written into the real tree
+and reverted. Twelve mutations, twelve reds.
+
+Three rules needed their scope argued. **I5** flags only a *constant* assignment: a pydantic model
+declaring `name: str` is a field, not a class claiming an identity, and a guard that could not tell them
+apart would be switched off by the first model written. **I17** counts stages *called from one function*,
+not named in a module — a `data_quality` router must mention three stages, one sub-endpoint each, so
+counting mentions would forbid the routes the spec requires; the other half of I17, that a phase endpoint
+reaches `run_phase`, has no handler to be asserted of yet and is left stated rather than pretended.
+**I7** is vacuous over today's tree, which is the argument for writing it now rather than after
+`record.py`.
+
+I6's owned-name list is parsed out of the spec sentence that states it, not copied from it (P31).
+
+P30's escape hatch arrived with the guards rather than after the first argument about one: a line names
+an invariant, a reason, an owner and a date, and `test_exemptions.py` is the review. The list is empty.
+
 ---
 
 ### T7 · The flow-table drift test
@@ -427,6 +461,20 @@ row and which side.
 
 **Verify.** `uv run pytest tests/guards/test_flow_table.py -q`, then edit one stage name in the spec
 and confirm red.
+
+**Landed — `b1c49b6`, and taken before T6.** I17 needs the list of stage names and `flow.py` is the only
+place allowed to hold it, so the table had to exist before the guard that reads it. T7's stated
+dependencies are T3 and T5, not T6, so the swap cost nothing.
+
+Written in P29's order: the test first, red on an ImportError — a weak red, since a missing symbol proves
+nothing about the comparison — then `flow.py`, then seven mutations, one per way the two sides can drift.
+Six went red first time. Rewording a summary in `flow.py` did not, because only the `(number, phase,
+stage)` triple was compared, which made `summary` a fourth statement of the flow that nothing checked.
+The row is now compared whole.
+
+`PHASES` is derived from `STAGES` rather than listed beside it (P16). Deriving a stage's module path
+stayed in the test: nothing in the engine dispatches over the table yet, and a function with no caller
+in `flow.py` would make a `DEFINITION` module hold logic.
 
 ---
 
