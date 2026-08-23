@@ -287,7 +287,10 @@ Each is a statement a test can be pointed at.
    record it is the only place a key's meaning is written down next to the key.
 2. Every module opens with a docstring whose first word declares its kind: `DEFINITION ·` one noun and
    its shape, `LOGIC ·` conversions over that noun, `STEP ·` serves exactly one stage of the flow,
-   `TOOL ·` not in the flow at all.
+   `TOOL ·` not in the flow at all. A fifth word, `façade ·`, marks an `__init__.py` that re-exports and
+   holds nothing of its own: none of the four describes a module with no content, and § *Package layout*
+   below already writes it over `pipeline/__init__.py`. AGENTS.md §8 — the break is recorded rather than
+   resolved silently, here and in the top-level package docstring.
 3. A service module's docstring names its stage and number: `STEP · pii_check (stage 2) · …`.
 4. A name states what it returns, not the operation that produced it, and no function shares a name
    with a stage.
