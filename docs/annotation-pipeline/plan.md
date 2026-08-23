@@ -3,14 +3,18 @@
 Tasks for building what `spec.md` specifies. Read that first; this document schedules it and does
 not restate it. Where the two disagree, the spec wins and this file is wrong.
 
-**Source:** `docs/annotation-pipeline/spec.md` @ `6a091df`, `AGENTS.md` §1–§9 and P0–P31 @ `a61f8cb`,
+**Source:** `docs/annotation-pipeline/spec.md` @ `9b9a3fe`, `AGENTS.md` §1–§9 and P0–P31 @ `a61f8cb`,
 `docs/annotation-pipeline/objective.md`.
 
 **State at the time of writing.** `src/` and `tests/` do not exist — both were deleted deliberately so
 the rebuild has one answer to every question. `make check` is therefore red: it runs
 `mypy --strict src/dataforce` and pytest against nothing. `config/` holds two axis manifests and one
-prompt. Four things in the tree contradict the spec; they are Phase 0 rather than discoveries made
+prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
+
+**Phase 0 is done except for T4.** T1 (`2c41599`), T2 (`a2fc1df`) and T3 (`9b9a3fe`) have landed, and
+T4's first row — the tracked corpus fingerprint — went with them in `7fa0432`. What each changed is in
+the task below it. Nothing in Phases 1–8 has been started.
 
 **Scope.** Stages 0–11 and both shells. `release` — stages 12–14 — is declared in the flow so
 `record.release` has an owner and is specified in a follow-up. Nothing here may assume its shape.
@@ -81,42 +85,42 @@ them is independent once its upstream key exists. Phase 7 can start as soon as P
 **Size** is a shape, not an estimate — **S** one module and its test · **M** several modules, or one
 algorithm to get right · **L** more than one sitting, so split it if it grows while you work.
 
-| # | Task | Phase | Needs | Size |
-|---|---|---|---|---|
-| T1 | Correct the answer type, and the three operations over it | 0 | | M |
-| T2 | Assign the three unowned responsibilities | 0 | | M |
-| T3 | Settle the four standing principle conflicts | 0 | | M |
-| T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S |
-| T5 | The package skeleton and the import direction | 1 | | M |
-| T6 | The guards | 1 | T5 | L |
-| T7 | The flow-table drift test | 1 | T3, T5 | S |
-| T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M |
-| T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M |
-| T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S |
-| T11 | The two protocols | 3 | T8 | S |
-| T12 | `text2text` | 3 | T4, T11 | M |
-| T13 | `tool_decision` | 3 | T1, T11 | L |
-| T14 | `load_data` — stage 0 | 4 | T10, T12, T13 | M |
-| T15 | `label_check` — stage 1 | 4 | T13, T14 | S |
-| T16 | `pii_check` — stage 2 | 4 | T2, T14 | L |
-| T17 | `duplicate_check` — stage 3 | 4 | T12, T14 | M |
-| T18 | The bus and conservation properties | 4 | T14–T17 | S |
-| T19 | `jury` — stage 4 | 5 | T2, T13, T15 | M |
-| T20 | `cohesion` — stage 5 | 5 | T19 | S |
-| T21 | `triage` — stage 6 | 5 | T20 | S |
-| T22 | `question_generate` — stage 7 | 6 | T21 | M |
-| T23 | The question store | 6 | T3, T9 | M |
-| T24 | `publish` and `annotator_answers` — stages 8 and 9 | 6 | T2, T22, T23 | M |
-| T25 | `aggregate` and `curate` — stages 10 and 11 | 6 | T24 | M |
-| T26 | The Label Studio sync | 6 | T23 | M |
-| T27 | The edge | 7 | T9, T12, T13 | M |
-| T28 | The routers | 7 | T10, T27 | M |
-| T29 | The CLI and the event stream | 7 | T3, T27 | M |
-| T30 | Smoke | 8 | T29 · **a declared corpus** | M |
-| T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L |
+| # | Task | Phase | Needs | Size | Landed |
+|---|---|---|---|---|---|
+| T1 | Correct the answer type, and the three operations over it | 0 | | M | ✓ `2c41599` |
+| T2 | Assign the three unowned responsibilities | 0 | | M | ✓ `a2fc1df` |
+| T3 | Settle the four standing principle conflicts | 0 | | M | ✓ `9b9a3fe` |
+| T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | |
+| T5 | The package skeleton and the import direction | 1 | | M | |
+| T6 | The guards | 1 | T5 | L | |
+| T7 | The flow-table drift test | 1 | T3, T5 | S | |
+| T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | |
+| T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M | |
+| T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
+| T11 | The two protocols | 3 | T8 | S | |
+| T12 | `text2text` | 3 | T4, T11 | M | |
+| T13 | `tool_decision` | 3 | T1, T11 | L | |
+| T14 | `load_data` — stage 0 | 4 | T10, T12, T13 | M | |
+| T15 | `label_check` — stage 1 | 4 | T13, T14 | S | |
+| T16 | `pii_check` — stage 2 | 4 | T2, T14 | L | |
+| T17 | `duplicate_check` — stage 3 | 4 | T12, T14 | M | |
+| T18 | The bus and conservation properties | 4 | T14–T17 | S | |
+| T19 | `jury` — stage 4 | 5 | T2, T13, T15 | M | |
+| T20 | `cohesion` — stage 5 | 5 | T19 | S | |
+| T21 | `triage` — stage 6 | 5 | T20 | S | |
+| T22 | `question_generate` — stage 7 | 6 | T21 | M | |
+| T23 | The question store | 6 | T3, T9 | M | |
+| T24 | `publish` and `annotator_answers` — stages 8 and 9 | 6 | T2, T22, T23 | M | |
+| T25 | `aggregate` and `curate` — stages 10 and 11 | 6 | T24 | M | |
+| T26 | The Label Studio sync | 6 | T23 | M | |
+| T27 | The edge | 7 | T9, T12, T13 | M | |
+| T28 | The routers | 7 | T10, T27 | M | |
+| T29 | The CLI and the event stream | 7 | T3, T27 | M | |
+| T30 | Smoke | 8 | T29 · **a declared corpus** | M | |
+| T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L | |
 
 The four **L** tasks are where a plan usually goes wrong. T6 is nine guards each proved against a
-synthetic violation; T13 is twelve members of which four are real algorithms; T16 is two detection
+synthetic violation; T13 is fourteen members of which four are real algorithms; T16 is two detection
 layers over a language most scrubbers do not cover; T31 is a measurement campaign, not code.
 
 ---
@@ -128,6 +132,9 @@ fixed or accepted in writing.
 
 Doing this first is the whole point of a spec-driven rebuild. Every item below is a place where an
 agent reading the spec would write code the repository then contradicts.
+
+**Status: T1, T2 and T3 have landed; T4 is partly done.** Each task keeps its original text so the
+reason it existed stays legible, and closes with what actually changed.
 
 ### T1 · Correct the answer type, and the three operations over it
 
@@ -180,6 +187,11 @@ still claims the old shape; the flow table still parses (15 contiguous rows, 5 p
 
 **Out of scope.** Implementing any of it. This task edits one document.
 
+**Landed — `2c41599`.** All six, plus Decision 15 citing both commits. The `[]`-versus-`None`
+ambiguity is closed by construction rather than documented: a majority-empty check runs first, so `[]`
+is returned only when a majority voted for it. § *The answer, and the three operations over it* is
+where the type now lives.
+
 ---
 
 ### T2 · Assign the three unowned responsibilities
@@ -221,6 +233,20 @@ members listed.
 
 **Out of scope.** The PII detector patterns themselves — those are T16.
 
+**Landed — `a2fc1df`,** and it grew. `answer_from_response` and `jury_slots` are profile members
+(Profile is now fourteen, not twelve); `redact_label` is written into Requirement 17 with the
+data-poisoning reasoning, because that is where the next reader hits it; policy owns the jury template
+and the profile owns the slots, so a prompt change reaches the run manifest.
+
+Naming stage 9's parser forced the question the task had not asked: *what shape, exactly?* Read against
+the Label Studio server source, two of its properties change what gets built. `<Chat>` renders a
+conversation the way `text2text` wants and is **Enterprise-only**, so the community display half is
+`<Paragraphs layout="dialogue">`. And a project has **one config for every task** while our catalog is
+per record, so the tool list must be a dynamic choice list read from task data — objects, not strings.
+§ *The annotation config, and what comes back* now specifies the config, the task payload and the
+`result` list, with Requirements 49–52 and I18 behind them. The cost is recorded there too: a set of
+calls with typed arguments has no community widget, so an annotator types JSON.
+
 ---
 
 ### T3 · Settle the four standing principle conflicts
@@ -258,6 +284,13 @@ reason. No conflict is resolved silently (§8).
 **Verify.** Walk P0–P31 against the spec and produce the verdict table. Every `conflict` row has a
 spec line resolving it.
 
+**Landed — `9b9a3fe`,** as Decision 17. P20: the port is deleted, and the seam survives in the protocol,
+the media part shape and Requirement 16. P26: Decision 7 rewritten to carry the difference as a risk —
+the sync's idempotency rests on two unique constraints, which is exactly where SQLite and Postgres
+differ — and the store tests now run under both. P27: § *Observability*, with levels specified so the
+stream stays readable and I1 told to permit `logging` by name. P31: I3 now parses the flow table out of
+`spec.md` itself rather than comparing code to code. P1 and P22 got the line each they needed.
+
 ---
 
 ### T4 · Clear the retired-corpus residue and the stale scaffolding
@@ -288,6 +321,11 @@ that does not exist in the flow table.
 
 **Verify.** `git ls-files | xargs grep -l "fc_train_final"` is empty. `make check` is unchanged
 (still red for the missing `src/` — that is Phase 1).
+
+**Partly landed — `7fa0432`** cleared the first row, which was the one with teeth. The other five —
+`params.yaml`, the modality manifest rename, `dvc.yaml`, `pyproject.toml`, `workflow.md` — are still
+open, and `deploy/` holds only a `.gitkeep` while § *Versions* says the Label Studio server version is
+pinned in a compose file there. Add that file or stop claiming it.
 
 ---
 
@@ -408,7 +446,7 @@ raises.
 
 **Context.** Decision 12 — the abstraction belongs to the layer that consumes it (P18). `Engine` and
 `Registry` are `dataforce/engine.py`; `open_engine` is Phase 7. `ports.py` holds `QuestionStore`;
-`MediaResolver` is deleted under T3.
+`MediaResolver` was deleted under T3, so `ports.py` holds one port.
 
 **Approach.** `Engine` is a frozen dataclass: the resolved pair, the registry, thresholds, and the
 digests of the policy files that produced them. A registry is instance state (Requirement 39) — two
@@ -452,7 +490,7 @@ names two stages in sequence.
 
 ### T11 · The two protocols
 
-**Goal.** `Modality` (six members) and `Profile` (twelve) exist, with their types opaque at the base.
+**Goal.** `Modality` (six members) and `Profile` (fourteen) exist, with their types opaque at the base.
 
 **Context.** Requirement 47 — a protocol that names a type forces it to be defined at or above the
 protocol, so `Answer`, `AnswerConfig` and `LabelCheck` are aliases in `profiles/base.py` and the
@@ -501,7 +539,7 @@ imports no `utils`. The same input produces the same vector across two processes
 
 **Goal.** One profile implementation, and the four operations over its answer type.
 
-**Context.** T1 settled what an answer is. This is the largest single task in the plan: twelve
+**Context.** T1 settled what an answer is. This is the largest single task in the plan: fourteen
 members, of which four carry real algorithms — `answer_schema` (`oneOf` per tool), `answer_distance`
 (name-first and soft), `vote_consensus` (per name, then per argument), and `label_checks` (five
 checks). Everything a stage knows about the task comes from here.
@@ -746,10 +784,14 @@ Every task here follows § *Shared decisions*.
 output may reach an annotator — no vote, no cohesion number, no bucket in the payload. The written
 glossary is a precondition on the *run*, checked once at composition and raised as `ConfigError`.
 
-**Acceptance criteria.** I12 passes on the payload and the generated config. Answering *incorrect*
-requires the corrected value. The answer set is enumerated; free text is not one of them.
+**Acceptance criteria.** I12 passes on the payload and the generated config — no vote, no cohesion
+number, no bucket in `data`. Answering *incorrect* requires the corrected value, enforced by
+`visibleWhen` + `required` rather than by hope. The tool list is a **dynamic** choice list, because a
+Label Studio project has one config for every task and our catalog is per record. `question_id` rides
+inside `data`, because Label Studio assigns its own task ids.
 
-**Source.** `spec.md` § *Per-service contracts* row 7, Requirements 29 and 30; I12.
+**Source.** `spec.md` § *Per-service contracts* row 7, § *The annotation config, and what comes
+back*, Requirements 29, 30 and 52; I12.
 
 **Verify.** `uv run pytest tests/stages/test_question_generate.py -q`.
 
@@ -764,8 +806,11 @@ carrying its purpose in the model. SQLAlchemy 2.0 declarative, Alembic migration
 Postgres by URL, DSN read at the edge from `DATAFORCE_DATABASE_URL`. The two unique constraints —
 `(question_id, external_system)` and `external_annotation_id` — are what make the sync idempotent.
 
-**Acceptance criteria.** Migrations apply cleanly to an empty database. Per T3/P26, an
-`-m integration` suite runs the same tests against Postgres.
+**Acceptance criteria.** Migrations apply cleanly to an empty database. The same store tests run
+twice — SQLite in `make check`, Postgres under `-m integration` — because the sync's idempotency rests
+on two unique constraints, which is exactly the behaviour the two engines disagree about (Decision 7,
+rewritten under T3). The three tables carry `was_skipped` and `lead_time_seconds`: both are instruments
+the pilot reads, not bookkeeping.
 
 **Source.** `spec.md` § *The question store*; Decisions 6 and 7; T3's P26 row.
 
@@ -783,9 +828,14 @@ neither may emit the other's. Stage 9 parses responses through `answer_from_resp
 
 **Acceptance criteria.** Both stages run to completion against a store with no Label Studio
 configured. Stage 8 records the receipt on the record; stage 9 skips a record the store names no
-questions for.
+questions for. **I18 round-trips the format:** compose the config and payload for a fixture, feed back
+a synthetic `result` in Label Studio's shape, and assert the answer that comes out is the one that went
+in — and that a `textarea` value given as a string rather than a list fails. A corrected value that
+does not validate against `answer_schema` is recorded `malformed`, never coerced; `was_cancelled` is
+stored as a skip and excluded from `aggregate`'s overlap.
 
-**Source.** `spec.md` § *Per-service contracts* rows 8–9, Requirements 31, 32 and 33; Decision 6.
+**Source.** `spec.md` § *Per-service contracts* rows 8–9, § *The annotation config, and what comes
+back*, Requirements 31, 32, 33, 49 and 50; Decision 6; I18.
 
 **Verify.** `uv run pytest tests/stages/test_publish.py tests/stages/test_annotator_answers.py -q`.
 
@@ -878,14 +928,17 @@ runs.
 
 **Context.** The CLI is a dispatch over `flow.py`, not fifteen hand-written subcommand bodies —
 every stage has one signature and Requirement 46 makes the in-process call the same call, so it stays
-roughly one screen however many stages exist. The event stream is T3/P27: the engine returns what
-happened, the edge writes it, and every event carries `run_id`, `record_id` and stage.
+roughly one screen however many stages exist. The event stream is now specified in § *Observability*:
+the engine emits through stdlib `logging`, `edge/main.py` and `cli.py` each install one stdout handler,
+and every event carries `run_id`, `record_id` and stage. Levels are part of the contract — INFO per
+stage per batch, WARNING per record for what a human must look at, ERROR only for `ConfigError`, and no
+DEBUG per record, because twenty thousand records times fifteen stages is a log nobody reads.
 
 **Acceptance criteria.** I15: the same input through `pii_check(engine, records)` and
 `POST /data-quality/pii-check` produces equal records. Adding a stage to `flow.py` adds a subcommand
 with no edit to `cli.py`. A long run emits progress while running, not only after it stops.
 
-**Source.** `spec.md` § *Running it*, Requirement 46; I15; `AGENTS.md` P27 and T3's P27 row.
+**Source.** `spec.md` § *Running it*, § *Observability*, Requirement 46; I15; `AGENTS.md` P27.
 
 **Verify.** `uv run pytest tests/shells -q`; run the CLI over a fixture and watch the output.
 
