@@ -107,7 +107,7 @@ class Profile(Protocol):
     modality: str   # "text2text" — the pair this profile composes with; a mismatch hard-stops
 
     def answer_schema(self, record: Record) -> dict:
-        """The permitted answers, materialised from *this record's* catalog. Never persisted."""
+        """This record's permitted answers: `oneOf` per offered tool. Never persisted."""
 
     def answer_config(self) -> AnswerConfig:
         """How an answer is controlled: cardinality ceiling, argument handling."""
@@ -119,10 +119,10 @@ class Profile(Protocol):
         """The checks that need no opinion, each named for the defect it finds."""
 
     def answer_distance(self, a: Answer, b: Answer) -> float:
-        """0.0 identical, 1.0 unrelated. What `cohesion` averages over."""
+        """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""
 
-    def vote_consensus(self, votes: Sequence[Answer]) -> Answer | None:
-        """The panel's answer, or None where this profile has no defensible consensus."""
+    def vote_consensus(self, votes: Sequence[Answer], record: Record) -> Answer | None:
+        """The panel's answer; `[]` where it agreed on none; None where none is defensible."""
 
     def question_text(self, record: Record) -> str:
         """What an annotator is asked, in their language. No model output may appear in it."""
@@ -137,6 +137,59 @@ class Profile(Protocol):
 Twelve members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`.
+
+#### The answer, and the three operations over it
+
+**An answer is a set of calls.** A call is a tool's name *and* its arguments, because `SendStatement`
+alone cannot distinguish `ky: "thang_nay"` from `ky: "thang_truoc"`, and a dataset that cannot
+distinguish them teaches a model that the argument does not matter. The empty answer — call nothing —
+is a member of the type, not a missing value. **At most one call per tool name:** two calls to one tool
+make the answer a multiset and force δ to pairwise-match them silently, so `label_names_one_tool_twice`
+quarantines instead. **A bare name string reads as the call with no arguments**, which is what makes a
+names-only source a special case of this type rather than a second type.
+
+**`answer_schema(record)` is `oneOf` per offered tool** — the name a single-value `const`, the arguments
+that tool's own `parameters`, constrained *together*. `OpenTicket` carrying `LookupBalance`'s argument
+is two valid halves and one invalid call, which an `enum` of names beside a free-form object cannot
+say. An empty catalog materialises `maxItems: 0`: there was nothing to choose from, so the empty answer
+is the only valid one.
+
+**δ is name-first and soft.** Over the union of names: a name in both contributes the share of argument
+keys present in both and equal; a name in one contributes zero; δ is one minus the mean. Argument
+agreement is over the **union** of keys, never the left side — `len(shared) / len(left)` would call a
+one-argument call a perfect match for the same call carrying five. `δ(∅, ∅) = 0` by definition, and
+that is load-bearing rather than tidy: the empty answer is a large share of a real corpus, and a δ that
+returns `NaN` there takes every cohesion figure, every bucket and every α with it.
+
+Hand-worked, and asserted as an **ordering** rather than three separate numbers:
+
+```text
+δ(same call) = 0  <  δ(same tool, one of two arguments differs) = 0.5  <  δ(different tools) = 1
+```
+
+**The reduction is exact, not approximate.** With every matched call argument-less, each argument
+agreement is 1 and the expression collapses to `1 − |A∩B| / |A∪B|` — plain Jaccard over names. Every
+number measured before arguments existed still describes this δ, and a names-only source is the special
+case rather than a different formula.
+
+**`vote_consensus(votes, record)` is per name, then per argument.** It takes the record because
+`required` is the tool's own declaration and nothing else can answer it:
+
+1. If a strict majority of *all* votes is the empty answer, the consensus **is** the empty answer.
+2. Otherwise a name is in when a strict majority of *all* votes included it.
+3. Each of that call's argument keys takes the value a strict majority of the votes **naming that
+   tool** gave — naming it, not voting at all, because a juror who did not call the tool has no opinion
+   about its arguments. Values are compared through canonical JSON, because an argument may itself be
+   an object or an array.
+4. A key with no majority is absent. A call missing a key the tool declares `required` is **dropped,
+   not completed**: half-building one puts a value no juror proposed into a ranking signal, and it
+   would fail this record's own `answer_schema`.
+5. If no call survives, the result is `None`.
+
+Step 1 is what keeps `[]` and `None` apart. `[]` is returned only when a majority voted for it, so *the
+panel agreed to call nothing* and *the panel produced nothing defensible* are two values rather than one
+value read two ways. A consensus answer validates against the record's `answer_schema`, asserted
+directly.
 
 The two contracts share three names and nothing else: `name`, `version`, and `Part`, which is the
 record's and is only borrowed by both. Neither axis may drift into the other's job.
@@ -899,6 +952,23 @@ shapes in the `schema.py` beside it." That is exactly its use here, one per axis
 I4 enforcing the direction. *Alternative:* split each into `parts.py`, `embedding.py`, `detectors.py`.
 *Why not:* three modules with one consumer each — the `__init__.py` that assembles the axis — which the
 sentence above the exemption forbids. *Reversible:* trivially, if a second consumer ever appears.
+
+**15 · An answer is a set of calls, and δ is soft — recovered, not re-derived.**
+This document first described an answer as a set of names, δ as `1 − |A∩B| / |A∪B|`, and consensus as a
+strict majority per element. A prior iteration of this project settled it differently, with
+measurements, and the reasoning survives in the history: `1bdc63f` *"C2: the answer is calls with
+arguments, and no record stores a space"* and `d368afd` *"C3: δ is soft and consensus is per argument"*.
+It is restated in § *The answer, and the three operations over it* so it is not re-derived a third time.
+*Why calls:* δ over names alone scores a jury that called the right tool with one argument wrong
+identically to a jury that called the wrong tool — and every triage bucket, every cohesion figure and
+every α is written on δ, so the two would rank the same. *Why the reduction is asserted to the bit:*
+with argument-less calls the soft form collapses to Jaccard exactly, so the numbers measured before
+arguments existed still describe this δ. *The contract change:* `vote_consensus` takes the record,
+because `required` is the tool's own declaration and step 4 is unimplementable without it. *Cost:*
+`answer_distance` is now O(union of names × union of keys) rather than two set operations; irrelevant
+at any corpus size this pipeline sees, and named so nobody re-optimises it. *Reversible:* no. Every
+number the pipeline produces is written on δ, so changing it invalidates every threshold measured
+against it — which is the argument for settling it in Phase 0 rather than Phase 5.
 
 ---
 
