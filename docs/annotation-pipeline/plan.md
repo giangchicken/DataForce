@@ -1,0 +1,812 @@
+# Build plan
+
+Tasks for building what `spec.md` specifies. Read that first; this document schedules it and does
+not restate it. Where the two disagree, the spec wins and this file is wrong.
+
+**Source:** `docs/annotation-pipeline/spec.md` @ `6a091df`, `AGENTS.md` §1–§9 and P0–P31 @ `a61f8cb`,
+`docs/annotation-pipeline/objective.md`.
+
+**State at the time of writing.** `src/` and `tests/` do not exist — both were deleted deliberately so
+the rebuild has one answer to every question. `make check` is therefore red: it runs
+`mypy --strict src/dataforce` and pytest against nothing. `config/` holds two axis manifests and one
+prompt. Four things in the tree contradict the spec; they are Phase 0 rather than discoveries made
+in Phase 4.
+
+**Scope.** Stages 0–11 and both shells. `release` — stages 12–14 — is declared in the flow so
+`record.release` has an owner and is specified in a follow-up. Nothing here may assume its shape.
+
+**Assumption:** no corpus is declared, and none is needed until Phase 8. The engine is source-agnostic
+by design, every fixture is invented (AGENTS.md §9), and `params.source.*` stays empty until someone
+declares one. Only the Smoke and Pilot rungs block on it, and both say so.
+
+---
+
+## Phases
+
+| # | Phase | Goal — the outcome that ends it |
+|---|---|---|
+| 0 | The document and the repository agree | Nothing in the tree contradicts `spec.md`, and the four standing principle conflicts are fixed or accepted in writing |
+| 1 | A guard fails before there is anything to guard | `make check` is green over an empty engine, and every architectural rule is a red test first |
+| 2 | The shared vocabulary exists | A record can be constructed, typed and hashed. Nothing runs |
+| 3 | Both axes answer their contracts | `text2text` and `tool_decision` resolve from config and satisfy their protocols |
+| 4 | One record makes the round trip | Stages 0–3 run in process over invented fixtures |
+| 5 | The panel scores a record | Stages 4–6 run against a stubbed panel |
+| 6 | The loop through people closes | A question reaches a store, an answer comes back, a label is curated |
+| 7 | Two shells, one implementation | HTTP and an in-process caller produce the same record |
+| 8 | The rungs | Provisional thresholds become measured ones |
+
+Phases 1–3 are strictly sequential. Phases 4–6 are sequential in the flow but each stage task inside
+them is independent once its upstream key exists. Phase 7 can start as soon as Phase 4 lands.
+
+---
+
+## Phase 0 · The document and the repository agree
+
+**Goal:** nothing in the tree contradicts `spec.md`, and the four standing principle conflicts are
+fixed or accepted in writing.
+
+Doing this first is the whole point of a spec-driven rebuild. Every item below is a place where an
+agent reading the spec would write code the repository then contradicts.
+
+### T1 · Correct the answer type, and the three operations over it
+
+**Goal.** `spec.md` states what a `tool_decision` answer is, and the three profile members that
+operate on one match it.
+
+**Context.** The spec's `Profile` protocol implies an answer is a set of names — `answer_distance`
+is documented as "0.0 identical, 1.0 unrelated" with no mention of arguments, and
+`vote_consensus(votes)` takes no record. A prior iteration of this project settled this differently,
+with measurements, and the reasoning is recoverable: commit `1bdc63f` *"C2: the answer is calls with
+arguments, and no record stores a space"* and `d368afd` *"C3: δ is soft and consensus is per
+argument"*. An answer is a set of **calls** — a name *and* its arguments — because `SendStatement`
+alone cannot distinguish `ky: "thang_nay"` from `ky: "thang_truoc"`.
+
+**Relevant.** `spec.md` § *Profile*, § *Per-service contracts*, § *Decisions*.
+`git show 1bdc63f`, `git show d368afd`.
+
+**Approach.** Six changes, one commit:
+
+1. The answer is a set of calls; the empty answer is first-class, not a missing value.
+2. At most one call per tool name. Two calls to one tool make the answer a multiset and force δ to
+   pairwise-match them silently; `label_names_one_tool_twice` quarantines instead.
+3. `answer_schema` emits `oneOf` per offered tool — the name a single-value `const`, the arguments
+   that tool's own `parameters`. Together, because `OpenTicket` carrying `LookupBalance`'s argument
+   is two valid halves and one invalid call. Empty catalog → `maxItems: 0`.
+4. δ is name-first and soft: over the union of names, a name in both contributes the share of
+   argument keys present in both and equal, a name in one contributes zero, δ is one minus the mean.
+   `δ(∅, ∅) = 0` by definition. It reduces exactly to `1 − |A∩B| / |A∪B|` when every matched call has
+   identical arguments, so every number measured before arguments existed still describes it.
+5. `vote_consensus(votes, record)` — the record is a parameter because a call missing a `required`
+   argument is dropped rather than completed, and `required` is the tool's own declaration.
+6. A bare name string reads as the call with no arguments, which is what makes a names-only source a
+   special case of this type rather than a second type.
+
+Add a Decision recording the answer type and citing both commits, so this is not re-derived a third
+time.
+
+**Acceptance criteria.**
+- Reading only `spec.md`, an implementer can tell that an answer carries arguments and that δ is not
+  Jaccard.
+- The worked ordering appears in the spec: `δ(same call) = 0 < δ(same tool, one of two arguments
+  differs) = 0.5 < δ(different tools) = 1`.
+- `vote_consensus` takes the record, and the spec says why.
+- The ambiguity is either resolved or recorded: dropping every call yields `[]`, which is the same
+  value as a panel agreeing on the empty answer. Two different facts, one representation. P22 says
+  fix the type rather than the branch.
+
+**Verify.** `grep -n "Jaccard\|set of names" docs/annotation-pipeline/spec.md` returns nothing that
+still claims the old shape; the flow table still parses (15 contiguous rows, 5 phases).
+
+**Out of scope.** Implementing any of it. This task edits one document.
+
+---
+
+### T2 · Assign the three unowned responsibilities
+
+**Goal.** Every stage in the flow has an owner for every piece of work it does.
+
+**Context.** Three stages cannot be built as specified because nobody owns a required piece.
+
+**Approach.**
+
+1. **Stage 9 has no parser.** `build_record` is declared "the only place a source shape is read", but
+   `annotator_answers` reads a second external shape — whatever the annotation tool hands back. The
+   profile defined the capture half that produced it. Add `answer_from_response(payload) -> Answer`,
+   the inverse of `answer_config`. Without it the parse gets invented in the store adapter, where no
+   test of the answer space can see it.
+2. **Stage 2 rewrites content and leaves the label behind.** A worked case: content reads
+   `Mã của mình là 480215.` and the label carries `arguments: {"ma_khach": "480215"}`. `pii_check`
+   replaces the content with `<CUSTOMER_ID_1>` and bumps `content_version`; nothing rewrites the
+   label. Two results — `label_assistant_mismatch` starts failing on a false positive an earlier
+   stage manufactured, and `export` emits a training example whose input says `<CUSTOMER_ID_1>` and
+   whose target says `480215`, teaching a model to produce a customer id absent from its input. That
+   is a data-poisoning bug wearing a privacy bug's clothes. Add
+   `redact_label(label, replacements) -> Label`, or state that labels never quote content. The
+   spec's own record example already shows `"ma_khach": "<CUSTOMER_ID_1>"`, so it depicts the
+   redacted label and assigns no stage to produce it.
+3. **Nothing states the task to a model.** `question_text` is explicitly human-facing — "in their
+   language, no model output may appear in it". The jury panel needs its own statement, and today it
+   lives in a policy template with no declared slots. Decide: the profile fills the template
+   (`jury_slots(record)`), or policy owns the string and the profile owns only the schema. Both work;
+   stage 4 cannot be built until one is chosen.
+
+**Acceptance criteria.** Each of stages 2, 4 and 9 has, in its row of § *Per-service contracts*, a
+named owner for the piece that was missing. The `Profile` member count in the spec matches the
+members listed.
+
+**Source.** `spec.md` § *Per-service contracts*; the record example under § *The record*.
+
+**Verify.** For each of the three, the spec answers "which module produces this?" in one sentence.
+
+**Out of scope.** The PII detector patterns themselves — those are T16.
+
+---
+
+### T3 · Settle the four standing principle conflicts
+
+**Goal.** Every P0–P31 principle either holds against the spec or is recorded as a knowing exception
+with a reason.
+
+**Context.** An audit of all 32 principles against the spec leaves four conflicts. Four earlier ones
+dissolved when `AGENTS.md` was rewritten at `a61f8cb` — the `utils.py` exemption now stands
+explicitly, naming stays with §5, and P21's check (*no non-HTTP entry point imports from the HTTP
+package*) is satisfied by a flat `edge/`, which is not named for the HTTP layer.
+
+**Approach.**
+
+| Principle | Conflict | Resolution |
+|---|---|---|
+| **P20** | *A port with zero adapters is deleted.* `MediaResolver` has none — no media modality is built. | Delete the port. Keep the *Out of Scope* entry describing the seam; the modality protocol and the media part shape are the seam. |
+| **P26** | *Dev and production run the same implementations.* SQLite stands in for Postgres and a stubbed panel for the jury, and Decision 7 waves the first through on "the schema is small enough that the two behave identically" — the exact assumption P26 refuses. | Declare an `-m integration` suite against Postgres, and rewrite Decision 7 to carry the difference as a known risk rather than an argument. |
+| **P27** | *Logs are an event stream, observability built in from the start.* The spec contains no logging at all — every match for "log" in it is a substring of `catalog` or `LOGIC`. A 20,000-record run is unobservable until it finishes. | Add a § *Observability*: each stage returns what happened, the edge writes it, every event carries `run_id`, `record_id` and stage. Logging is I/O, so it stays outside under P17. Implementation is T29. |
+| **P31** | *A document fact the code also states is compared by a test.* Nothing compares the flow table to the code. | Declare the guard. Implementation is T7. |
+
+Two further principles from the rewrite need a line each. **P1** — *do not decompose along the flow of
+processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
+`AGENTS.md`'s own conflicts section resolves it (*step modules stand, but a decision spanning steps is
+extracted under P2 and the steps call it*); the spec should record that resolution and name the one
+such decision it already has: the answer type, which stages 4, 5, 10 and 11 all reason about. **P22** —
+*define errors out of existence* — lands on the `[]`-versus-`None` ambiguity in T1.
+
+**Acceptance criteria.** All 32 principles hold, or the exception is written in the spec with its
+reason. No conflict is resolved silently (§8).
+
+**Verify.** Walk P0–P31 against the spec and produce the verdict table. Every `conflict` row has a
+spec line resolving it.
+
+---
+
+### T4 · Clear the retired-corpus residue and the stale scaffolding
+
+**Goal.** Nothing in the tree still describes `fc_train_final`, gates, or the pre-`edge/` layout.
+
+**Context.** The spec says these are cleared. They are not.
+
+**Approach.** Six deletions and renames, one commit:
+
+| Path | State | Action |
+|---|---|---|
+| `metrics/corpus_profile.json` | Tracked, 6,165 bytes, describes the retired corpus — 21,172 records, its SHA-256, `distinct_tool_names: 14411`, real tool names. A fingerprint of an internal dataset in a public repo. | Delete. |
+| `params.yaml` | `source.path`/`source.sha256` point at the retired corpus; `invalid_counts`, `gold.records: 951` and `max_answer_cardinality: 3` are measured from it. | Empty `source`, re-key `invalid_counts` to the five label-check names with no values, drop `gold` and `max_answer_cardinality` until a corpus is declared. |
+| `config/modalities/text.yaml` | Identity is `text`; the spec's pair is `text2text`, and the filename *is* the identity. | Rename to `text2text.yaml`, `name: text2text`. The rename is the change. |
+| `dvc.yaml` | `stages: {}` under a comment naming `load`, `remove_invalid`, `rank_for_review`, `document` and an obsolete phase numbering. | Rewrite the comment against this plan, or delete the file until a stage exists to declare. |
+| `pyproject.toml` | `description` reads "Gated DVC stages…" — gates were deleted in `fa32ec1`. The `jsonschema` dev-dep comment cites `test_no_reimplementation.py` and "the core spec", both gone. | Rewrite both. |
+| `docs/annotation-pipeline/workflow.md` | Step 4 of its build order names `api/policy.py` and `api/engine.py`, renamed to `edge/` in `6a091df`. | Reconcile with this plan, or reduce it to the diagrams and point at this file for order. |
+
+`data/raw/`'s symlinks target an absolute internal path but are covered by `.gitignore`, so they are
+not in the repository. Leave them.
+
+**Acceptance criteria.** `grep -ri "fc_train_final\|corpus_profile" .` returns hits only in
+`spec.md`'s § *Context*, where the retirement is recorded on purpose. No tracked file names a stage
+that does not exist in the flow table.
+
+**Verify.** `git ls-files | xargs grep -l "fc_train_final"` is empty. `make check` is unchanged
+(still red for the missing `src/` — that is Phase 1).
+
+---
+
+## Phase 1 · A guard fails before there is anything to guard
+
+**Goal:** `make check` is green over an empty engine, and every architectural rule is a red test
+first.
+
+P29: *write the guard before the code it constrains, and prove it fails.* Written after the services,
+a guard only ratifies whatever was already done.
+
+### T5 · The package skeleton and the import direction
+
+**Goal.** `make check` passes over a package containing no behaviour.
+
+**Context.** `src/dataforce/` does not exist. `make check` runs `ruff check`, `ruff format --check`,
+`mypy --strict src/dataforce`, and `pytest -q -m "not integration"`.
+
+**Approach.** Create the tree from `spec.md` § *Package layout* with every module present, each
+carrying its docstring — first word `DEFINITION ·`, `LOGIC ·`, `STEP ·` or `TOOL ·` — and nothing
+else. State the import direction in the top-level package docstring: *`edge/` and `cli.py` may import
+the engine; the engine may not import them.* Create `tests/` with the five directories the spec
+declares.
+
+**Acceptance criteria.** `make check` is green. Importing `dataforce.modalities.text2text` and
+`dataforce.profiles.tool_decision` from a directory holding no `config/` succeeds and writes nothing
+(Requirement 37).
+
+**Source.** `spec.md` § *Package layout*, Requirements 36–37.
+
+**Verify.** `make check`; then `cd $(mktemp -d) && python -c "import dataforce.profiles.tool_decision"`.
+
+**Out of scope.** Any function body.
+
+---
+
+### T6 · The guards
+
+**Goal.** Every architectural invariant is a test that has been observed to fail.
+
+**Context.** Ten of the seventeen invariants are checkable before any service exists: I1 (engine opens
+no file), I2 (`pipeline/` imports no concrete axis), I3 (names match the flow table), I4 (axis
+implementation shape), I5 (identity never in a class body), I6 (nothing re-implements
+`agent-toolkit`), I7 (every field described), I16 (no axis `base.py` imports its own
+implementation), I17 (stage order exists once). I8 and I11 need services and are Phase 4.
+
+**Approach.** One module per guard in `tests/guards/`, each an AST scan or model introspection.
+Each is proved against a *synthetic* violation — a small source string the guard is run over — so it
+is known to go red. P30: permit an annotated exemption naming a reason and an owner; keep the list
+short and dated.
+
+**Acceptance criteria.** Each guard has a companion assertion that it rejects a synthetic violation.
+`make check` green. The `agent-toolkit` guard names all of `compute_hash`, `normalize_text`,
+`slot_filling`, `extract_json_from_text`, `read_jsonlines`, `write_jsonlines`, `read_yaml`, and the
+LLM client surface.
+
+**Source.** `spec.md` § *Invariants*; AGENTS.md P28–P30.
+
+**Verify.** `uv run pytest tests/guards -q`. Then temporarily add a violating import to a
+`pipeline/` module and confirm I2 fails; revert.
+
+**Out of scope.** I8, I11, I15 — they need running services.
+
+---
+
+### T7 · The flow-table drift test
+
+**Goal.** The flow table in `spec.md` and `pipeline/flow.py` cannot disagree without CI saying so.
+
+**Context.** P31 requires it; I3 already promises it. An earlier version of this test existed and was
+deleted with the rest of `tests/` under Decision 11 — the reason was that the old suite encoded a
+design that no longer holds, which was true of what it asserted and not of the idea.
+
+**Approach.** Parse the table out of `spec.md` — 15 rows, `| # | phase | stage | what it does |` —
+and compare its `(number, phase, stage)` triples against `PHASES` and `STAGES` in
+`pipeline/flow.py`. Compare module filenames and `STEP ·` docstrings against the same source.
+
+**Acceptance criteria.** Changing either side alone fails the build. The failure message names which
+row and which side.
+
+**Source.** `spec.md` § *The flow*, I3; AGENTS.md P31.
+
+**Verify.** `uv run pytest tests/guards/test_flow_table.py -q`, then edit one stage name in the spec
+and confirm red.
+
+---
+
+## Phase 2 · The shared vocabulary exists
+
+**Goal:** a record can be constructed, typed and hashed. Nothing runs.
+
+### T8 · `errors.py`, `record.py`, `manifest.py`
+
+**Goal.** The three modules every layer uses.
+
+**Context.** `record.py` holds `Record` *and* `Part` — a part is a piece of record content, and
+`build_record` on the profile axis takes a `Sequence[Part]` too, so it belongs to neither axis
+(Requirement 47). `ConfigError` is the one exception this codebase defines.
+
+**Approach.** Pydantic models following `spec.md` § *The record*, which carries a comment on every
+key. Requirement 1 and I7: `Field(..., description=…)` on every field, grouped under
+`# --- Section ---`. `record_id` is 16 hex over canonicalised content via `agent-toolkit`'s
+`compute_hash` — never re-implemented.
+
+**Acceptance criteria.** I7 passes over the whole module. I9: `record_id` is stable across a shuffled
+re-ingest and sensitive to content. I10: `Record` has no answer-space field, and constructing one
+raises.
+
+**Source.** `spec.md` § *The record*, Requirements 1, 47; I7, I9, I10.
+
+**Verify.** `make check`; `uv run pytest tests/stages -q -k record`.
+
+---
+
+### T9 · `engine.py`, `ports.py`, and the registry
+
+**Goal.** An `Engine` exists inside the engine and holds no I/O.
+
+**Context.** Decision 12 — the abstraction belongs to the layer that consumes it (P18). `Engine` and
+`Registry` are `dataforce/engine.py`; `open_engine` is Phase 7. `ports.py` holds `QuestionStore`;
+`MediaResolver` is deleted under T3.
+
+**Approach.** `Engine` is a frozen dataclass: the resolved pair, the registry, thresholds, and the
+digests of the policy files that produced them. A registry is instance state (Requirement 39) — two
+registries in one process hold different implementations, and registering a second implementation of
+one name is refused.
+
+**Acceptance criteria.** I1 passes over `engine.py`. Two registries in one process are independent.
+A duplicate registration raises `ConfigError`.
+
+**Source.** `spec.md` § *Engine and edge*, Requirements 36, 39; Decision 12.
+
+**Verify.** `uv run pytest tests/guards -q && uv run pytest tests/stages -q -k registry`.
+
+---
+
+### T10 · `pipeline/flow.py` and `pipeline/runner.py`
+
+**Goal.** The flow table exists once in code, and something owns the order a phase runs in.
+
+**Context.** `POST /data-quality` runs three stages in order; nothing owned that order, so a router
+composing them would put a piece of the flow table at the edge and keep a second copy of it
+(Requirement 48). `pipeline/__init__.py` is a façade that re-exports both, consistent with the axis
+packages.
+
+**Approach.** `flow.py` is `DEFINITION ·` — `PHASES` and `STAGES`. `runner.py` is `LOGIC ·` —
+`run_phase(engine, phase, records)`, folding that phase's stages over the records in the table's
+order.
+
+**Acceptance criteria.** T7's drift test passes. I17: no module under `edge/routers/` or `cli.py`
+names two stages in sequence.
+
+**Source.** `spec.md` § *Package layout*, Requirement 48; I3, I17.
+
+**Verify.** `uv run pytest tests/guards -q`.
+
+---
+
+## Phase 3 · Both axes answer their contracts
+
+**Goal:** `text2text` and `tool_decision` resolve from config and satisfy their protocols.
+
+### T11 · The two protocols
+
+**Goal.** `Modality` (six members) and `Profile` (twelve) exist, with their types opaque at the base.
+
+**Context.** Requirement 47 — a protocol that names a type forces it to be defined at or above the
+protocol, so `Answer`, `AnswerConfig` and `LabelCheck` are aliases in `profiles/base.py` and the
+concrete models live in the implementation's `schema.py`. Otherwise `base.py` imports a concrete
+axis, which I16 forbids.
+
+**Acceptance criteria.** I16 passes. Requirement 40: `name`, `version` and `modality` are never
+assigned in a class body — they come from `config/<axis>/<name>.yaml`, whose filename is the
+identity, and `version` is a string.
+
+**Source.** `spec.md` § *Modality*, § *Profile*, Requirements 40, 47; I5, I16.
+
+**Verify.** `uv run pytest tests/guards -q`.
+
+---
+
+### T12 · `text2text`
+
+**Goal.** One modality implementation, resolvable from `config/modalities/text2text.yaml`.
+
+**Context.** Six members: `content_parts`, `embedding`, `personal_data_detectors`, `display_config`,
+plus `name` and `version`. The embedder is `model2vec` with static embeddings, so a vector is a pure
+function of its input and two runs dedup identically. `exclude_roles: [system]` is a measured choice
+recorded in the manifest.
+
+**Acceptance criteria.** I4: the implementation is `__init__`, `schema`, `utils`, and `schema`
+imports no `utils`. The same input produces the same vector across two processes.
+
+**Source.** `spec.md` § *Modality*; `config/modalities/text2text.yaml` after T4.
+
+**Verify.** `uv run pytest tests/stages -q -k text2text`.
+
+**Out of scope.** `speech2text`, `image2text`, `video2text` — the seam is specified and unbuilt.
+
+---
+
+### T13 · `tool_decision`
+
+**Goal.** One profile implementation, and the four operations over its answer type.
+
+**Context.** T1 settled what an answer is. This is the largest single task in the plan: twelve
+members, of which four carry real algorithms — `answer_schema` (`oneOf` per tool), `answer_distance`
+(name-first and soft), `vote_consensus` (per name, then per argument), and `label_checks` (five
+checks). Everything a stage knows about the task comes from here.
+
+**Approach.** `schema.py` holds the answer models — a call is a name and its arguments.
+`utils.py` holds the conversions over them, which is exactly the exemption §6 grants and
+`AGENTS.md`'s conflicts section confirms. The five checks are `label_assistant_mismatch`,
+`label_not_in_catalog`, `empty_catalog`, `label_cardinality_anomaly`, `label_names_one_tool_twice`.
+
+**Acceptance criteria.**
+- δ's worked ordering holds to the bit: `δ(same call) = 0 < δ(same tool, one of two arguments
+  differs) = 0.5 < δ(different tools) = 1`, and `δ(∅, ∅) = 0`.
+- With every matched call argument-less, δ equals `1 − |A∩B| / |A∪B|` exactly.
+- `vote_consensus` drops a call missing a `required` argument rather than completing it.
+- `answer_schema` rejects `OpenTicket` carrying `LookupBalance`'s argument, which an `enum` of names
+  beside a free-form object could not do.
+- No record stores an answer space (I10).
+
+**Source.** `spec.md` § *Profile*, the Decision added in T1; `git show 1bdc63f`, `git show d368afd`.
+
+**Verify.** `uv run pytest tests/stages -q -k tool_decision`. The δ ordering is a hand-worked
+assertion, not a property test.
+
+---
+
+## Shared decisions for every stage task in Phases 4–6
+
+Stated once so eleven task descriptions do not repeat them.
+
+- **One signature.** `def <stage>(engine: Engine, records: Iterable[Record]) -> ServiceResult`.
+  `ServiceResult` carries `records` and any side output the edge must persist. The engine returns
+  side output; it never writes it. There is no third field — **the records are the report**.
+- **Record in, record out.** Each stage writes exactly one key (I8) and returns as many records as it
+  was given (I11). No stage removes a record; quarantine is a value and deduplication is a group
+  annotation.
+- **Preconditions, not gates.** A stage declares the upstream keys it needs and *skips* a record that
+  lacks them, marking it. A run always completes. The only exception raised anywhere is
+  `ConfigError`, before any record is read.
+- **Preconditions live in code** (P12) — beside the signature, not only in the spec's *skips when*
+  column.
+- **One test module per stage** in `tests/stages/`, asserting that stage's row: it writes its key,
+  writes nothing else, returns as many records as it got, and skips exactly the records its
+  precondition excludes.
+- **Fixtures are invented, never extracted from real data** (AGENTS.md §9), in `objective.md` §2's
+  shape.
+- **No network in `make check`.** Every jury test uses a stubbed panel.
+- **Nothing re-implements `agent-toolkit`** (I6).
+
+---
+
+## Phase 4 · One record makes the round trip
+
+**Goal:** stages 0–3 run in process over invented fixtures.
+
+### T14 · `load_data` — stage 0
+
+**Goal.** Every source item becomes one record with identity, content, provenance and label.
+
+**Context.** The only place a source shape is read. The input is standard OpenAI chat-completion
+records with `tools` as data. `meta.label` is the answer and nothing else is — a conversation may
+contain completed `tool_calls` from earlier turns, and an extractor scraping those produces the wrong
+answer. Which key holds the label is declared in the profile manifest, not assumed.
+
+**Approach.** `content_parts` from the modality, `build_record` from the profile. Stamp `provenance`
+— Decision 4 — with `run_id` supplied by the edge, because the engine has no clock. The catalog is
+**not** copied onto the record as an answer space.
+
+**Acceptance criteria.** A fixture whose conversation contains a prior `tool_call` and whose
+`meta.label` names a different tool produces a record whose `label` is the declared key's value.
+An undeclared label key raises `ConfigError` naming the manifest, the key, and what *is* declared.
+
+**Source.** `spec.md` § *Per-service contracts* row 0; `objective.md` § *`meta.label` is the answer*.
+
+**Verify.** `uv run pytest tests/stages/test_load_data.py -q`.
+
+---
+
+### T15 · `label_check` — stage 1
+
+**Goal.** The five checks that need no opinion run, and a failing record is marked rather than
+removed.
+
+**Context.** The checks are the profile's, delivered by T13. `params.invalid_counts` is empty until a
+corpus is declared; a check reading 0 is what tells you when it stops reading 0.
+
+**Acceptance criteria.** A record failing any check carries `quarantined: true` and travels on.
+`failed_checks` names which. `len(out) == len(in)`.
+
+**Verify.** `uv run pytest tests/stages/test_label_check.py -q`.
+
+---
+
+### T16 · `pii_check` — stage 2
+
+**Goal.** Personal data is found in Vietnamese text and replaced with stable typed placeholders,
+content and label together.
+
+**Context.** Two layers. Layer one is patterns over the raw text *and* over
+`normalize_text(text, remove_tone_marks=True)`, covering the spoken forms an off-the-shelf scrubber
+misses: digits as words (`không`…`chín`, plus `mốt`, `tư`, `lăm`), `@` as `a còng`, `.` as `chấm`. It
+is tuned for recall and is *allowed* to be noisy — a digit run is also a price, a date, an order
+reference. Layer two is a model pass over a bounded window marking each hit verified or not. Legal
+basis: Law 91/2025/QH15 and Decree 356/2025/ND-CP.
+
+Redaction rewrites `content` **and** the label (T2), bumping `content_version`. The placeholder map
+is side output returned to the edge, never written by the engine and never committed.
+
+**Acceptance criteria.**
+- Adversarial fixtures pass: spoken digits with and without tone marks, `a còng`, `chấm`, one value
+  used twice in one record yielding one placeholder, and a digit run that is a price — layer one
+  flags it, layer two clears it.
+- A value appearing in both content and a label argument is replaced in both with the same
+  placeholder, and `label_assistant_mismatch` still passes afterwards.
+- `enable_redact: false` reports and leaves content untouched, `decision: "reported"`. The run
+  completes.
+- I13: the placeholder map is never read by a stage and is covered by `.gitignore`.
+
+**Source.** `spec.md` § *PII, in two layers*; T2 item 2.
+
+**Verify.** `uv run pytest tests/stages/test_pii_check.py -q`.
+
+---
+
+### T17 · `duplicate_check` — stage 3
+
+**Goal.** Near-duplicates are grouped on the record and never removed.
+
+**Context.** The modality's embedding is the content side. Whether two records are duplicates *for
+this task* also depends on the answer — two identical prompts with different catalogs are not
+duplicates in `tool_decision`. Decide whether `scenario_hash` is already that function under a
+split-shaped name, or whether the profile contributes a separate answer-side key. Settle before
+writing either.
+
+**Acceptance criteria.** `duplicate_content_same_label` and `duplicate_content_diff_label` are
+populated as group annotations. No record is dropped. Two runs over one corpus group identically.
+
+**Verify.** `uv run pytest tests/stages/test_duplicate_check.py -q`.
+
+---
+
+### T18 · The bus and conservation properties
+
+**Goal.** I8 and I11 hold across every stage built so far.
+
+**Approach.** Build one corpus, run every in-scope stage, and assert that each step's diff is exactly
+one key and that the set of `record_id`s is identical at every step. One test, both properties, in
+`tests/properties/`. Re-run it as each later phase lands.
+
+**Acceptance criteria.** Over a corpus containing at least one quarantined record, one duplicate pair
+and one record that fails every precondition downstream of stage 1: each step's diff is exactly one
+key, and the `record_id` set is identical at every step including the last. A stage that drops a
+record fails this test rather than the reviewer noticing.
+
+**Source.** `spec.md` I8, I11, Requirement 41.
+
+**Verify.** `uv run pytest tests/properties -q`. Then make one stage return `records[:-1]` and
+confirm red; revert.
+
+**Out of scope.** I15 — that needs both shells and is T29.
+
+---
+
+## Phase 5 · The panel scores a record
+
+**Goal:** stages 4–6 run against a stubbed panel. The live panel is Smoke.
+
+### T19 · `jury` — stage 4
+
+**Goal.** A panel of models answers the record's own task, and every vote is kept.
+
+**Context.** Costs money per record, so it is cached. Skips a record whose
+`label_check.quarantined` is true — no point paying a panel to judge a record already known broken.
+The model-facing task statement is whatever T2 item 3 decided. `agent-toolkit` owns retry and rate
+limiting; an exhausted call is one missing vote.
+
+**Acceptance criteria.** A vote that does not validate against `answer_schema` is kept with
+`valid: false` and counted in `invalid_votes`, never silently dropped. `prompt_version` and
+`panel_version` are on the record, because a change to either invalidates comparison.
+
+**Verify.** `uv run pytest tests/stages/test_jury.py -q` — stubbed panel, no network.
+
+---
+
+### T20 · `cohesion` — stage 5
+
+**Goal.** Two numbers per record: how much the jurors agree with each other, and with the existing
+label.
+
+**Context.** Pure arithmetic over what `jury` wrote, using the profile's δ. Separate from `jury`
+because it re-runs for free while the panel does not.
+
+**Acceptance criteria.** `method` is recorded so the two numbers are comparable across runs.
+`δ(∅, ∅) = 0` does not produce `NaN` on the empty-answer population.
+
+**Verify.** `uv run pytest tests/stages/test_cohesion.py -q`.
+
+---
+
+### T21 · `triage` — stage 6
+
+**Goal.** Each record lands in a bucket, and some are selected for a human.
+
+**Context.** Thresholds come from `params.thresholds.triage` and are provisional until the pilot
+measures them. This stage gets **exactly one** re-tuning pass after the pilot. A bucket whose
+precision the pilot cannot establish gets **no quota**.
+
+**Acceptance criteria.** `reason` names which rule selected the record, so a quota can be audited.
+No numeric literal in the module (P25).
+
+**Verify.** `uv run pytest tests/stages/test_triage.py -q`.
+
+---
+
+## Phase 6 · The loop through people closes
+
+**Goal:** a question reaches a store, an answer comes back, a label is curated.
+
+### T22 · `question_generate` — stage 7
+
+**Goal.** One question at a time about one record, in the annotator's language.
+
+**Context.** Reads `triage` **only** to decide which records get a question. Requirement 30: no model
+output may reach an annotator — no vote, no cohesion number, no bucket in the payload. The written
+glossary is a precondition on the *run*, checked once at composition and raised as `ConfigError`.
+
+**Acceptance criteria.** I12 passes on the payload and the generated config. Answering *incorrect*
+requires the corrected value. The answer set is enumerated; free text is not one of them.
+
+**Verify.** `uv run pytest tests/stages/test_question_generate.py -q`.
+
+---
+
+### T23 · The question store
+
+**Goal.** Three tables behind the `QuestionStore` port.
+
+**Context.** `question`, `publication`, `annotator_answer`, owned by `edge/store/`, every column
+carrying its purpose in the model. SQLAlchemy 2.0 declarative, Alembic migrations. SQLite by default,
+Postgres by URL, DSN read at the edge from `DATAFORCE_DATABASE_URL`. The two unique constraints —
+`(question_id, external_system)` and `external_annotation_id` — are what make the sync idempotent.
+
+**Acceptance criteria.** Migrations apply cleanly to an empty database. Per T3/P26, an
+`-m integration` suite runs the same tests against Postgres.
+
+**Verify.** `uv run pytest tests/stages -q -k store` (SQLite in `tmp_path`); `make integration`.
+
+---
+
+### T24 · `publish` and `annotator_answers` — stages 8 and 9
+
+**Goal.** Questions reach the store and answers come back, with no Label Studio anywhere.
+
+**Context.** Decision 6 — `publish` writes to a database we own; the sync is separate (T26). The
+annotation config is composed from the modality's display half and the profile's capture half, and
+neither may emit the other's. Stage 9 parses responses through `answer_from_response` (T2 item 1).
+
+**Acceptance criteria.** Both stages run to completion against a store with no Label Studio
+configured. Stage 8 records the receipt on the record; stage 9 skips a record the store names no
+questions for.
+
+**Verify.** `uv run pytest tests/stages/test_publish.py tests/stages/test_annotator_answers.py -q`.
+
+---
+
+### T25 · `aggregate` and `curate` — stages 10 and 11
+
+**Goal.** One verdict per record, then the final label.
+
+**Context.** `aggregate` uses Krippendorff's α for incomplete overlap and skips a record with fewer
+responses than the rung's overlap floor — that record keeps its answers and gets no verdict.
+`curate` writes `status`, the validators, and where they disagreed, who adjudicated. A verdict of
+*incorrect* with no corrected value is recorded as `status: "unresolved"`.
+
+**Acceptance criteria.** The final label validates against `answer_schema`. Agreement uses the
+profile's δ, not string equality.
+
+**Verify.** `uv run pytest tests/stages/test_aggregate.py tests/stages/test_curate.py -q`.
+
+---
+
+### T26 · The Label Studio sync
+
+**Goal.** `POST /human-review/publish/sync` moves questions out and annotations back, idempotently.
+
+**Context.** `label-studio-sdk`, optional extra. Label Studio server 1.23.0. Running the sync is
+optional; every other endpoint works with no instance anywhere.
+
+**Acceptance criteria.** Running it twice in each direction is a no-op the second time — the two
+unique constraints are what make it so. Label Studio unreachable fails the sync, changes no record
+key, writes no `publication` row, and leaves every other endpoint unaffected.
+
+**Verify.** `uv run pytest tests/stages -q -k sync` against a fake client; `make integration`
+against a real instance.
+
+---
+
+## Phase 7 · Two shells, one implementation
+
+**Goal:** HTTP and an in-process caller produce the same record.
+
+### T27 · The edge
+
+**Goal.** `open_engine` composes a run, and one module is the only place a file is read or written.
+
+**Context.** `edge/bootstrap.py` is the composition root (P19) — the only builder of an `Engine`.
+`edge/policy.py` turns `config/<axis>/*.yaml`, `params.yaml` and prompts into declarations.
+`edge/artifacts.py` is the one place a record file, `metrics.json` or a run manifest is touched.
+Corpus-level numbers are a fold here, for reading — never computed by a stage, never compared against
+a threshold that stops anything.
+
+**Acceptance criteria.** An engine builds with **no filesystem anywhere** — both axes handed
+`Manifest` objects and a template string. Naming no modality takes the profile at its word; naming a
+different one raises `ConfigError` saying which modality the profile composes with. I14: two runs of
+one unchanged configuration produce byte-identical run manifests.
+
+**Verify.** `uv run pytest tests/shells -q`; `make check`.
+
+---
+
+### T28 · The routers
+
+**Goal.** Four main endpoints and their sub-endpoints, on the style reference's pattern.
+
+**Context.** `create_app()` factory, one `APIRouter(tags=[…])` per domain, kebab-case URLs, thin
+handlers mapping `ValueError` → 400 and anything else → 500. Request and response models live in
+`edge/routers/<domain>/schemas.py`, one per router, every field described. A phase route calls
+`run_phase`; it never names a stage sequence (I17).
+
+**Acceptance criteria.** A stage route returns `200` with every record it was given, because a bad
+record is a marked record rather than a failed request. `ConfigError` is 400, a malformed body is
+pydantic's 422. `GET /branches` lists registered modalities and profiles with versions.
+
+**Verify.** `uv run pytest tests/shells -q`.
+
+---
+
+### T29 · The CLI and the event stream
+
+**Goal.** One subcommand per stage, dispatched over the flow table; and a run can be watched while it
+runs.
+
+**Context.** The CLI is a dispatch over `flow.py`, not fifteen hand-written subcommand bodies —
+every stage has one signature and Requirement 46 makes the in-process call the same call, so it stays
+roughly one screen however many stages exist. The event stream is T3/P27: the engine returns what
+happened, the edge writes it, and every event carries `run_id`, `record_id` and stage.
+
+**Acceptance criteria.** I15: the same input through `pii_check(engine, records)` and
+`POST /data-quality/pii-check` produces equal records. Adding a stage to `flow.py` adds a subcommand
+with no edit to `cli.py`. A long run emits progress while running, not only after it stops.
+
+**Verify.** `uv run pytest tests/shells -q`; run the CLI over a fixture and watch the output.
+
+---
+
+## Phase 8 · The rungs
+
+**Goal:** provisional thresholds become measured ones.
+
+**Blocked on a declared corpus.** Both tasks. Everything above runs on invented fixtures; these do
+not. Also blocked on the two prerequisites that are not code: the cross-border data-transfer review
+before the first offshore jury call, and the written glossary before the first generated question.
+Both are preconditions on opening the engine, checked once and raised as `ConfigError`; this plan
+requires them recorded and does not perform them.
+
+### T30 · Smoke
+
+**Goal.** One annotator, a stubbed panel and then a live one, end to end.
+
+**Acceptance criteria.** A record travels stages 0–11 and reaches a human. Costs and latencies are
+recorded so the pilot can be sized.
+
+**Verify.** `make integration`.
+
+---
+
+### T31 · Pilot
+
+**Goal.** Two annotators at 100% overlap against a real jury, measuring the instruments.
+
+**Context.** The pilot answers four questions: is the question answerable, is the guideline right, do
+two people agree, does each bucket predict what humans find. It is what turns `params.thresholds`
+from provisional into measured, and `triage` gets exactly one re-tuning pass on the result. A bucket
+whose precision the pilot cannot establish gets no quota.
+
+**Acceptance criteria.** `params.thresholds.pilot` is populated from measurement — α, flag rate, gold
+accuracy, bucket precision — and the re-tuning pass is a single committed diff to `params.yaml`.
+
+**Verify.** `make integration`; the threshold diff is one commit with the measurement in its message.
+
+---
+
+## Not planned here
+
+- **`release` — stages 12–14** (`split`, `export`, `datasheet`). Declared in the flow so
+  `record.release` has an owner; specified in a follow-up. Nothing in stages 0–11 may assume its
+  shape. Note that `export` carries the precondition that keeps an unredacted corpus out of a
+  release, so **until it exists, nothing prevents a reported-but-unredacted corpus reaching an
+  artifact** — the stated cost of Decision 10.
+- **The web view.** One Vite + TypeScript SPA over these same endpoints, on the style reference's
+  pattern. A later task by `objective.md` §9, and this plan keeps it one.
+- **Real `speech2text`, `image2text`, `video2text`.** The seam is specified and unenforced.
+- **Our own annotation platform.** Deferred, not cancelled; the pilot decides.
