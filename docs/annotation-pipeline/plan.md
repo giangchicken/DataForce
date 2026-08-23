@@ -12,9 +12,9 @@ the rebuild has one answer to every question. `make check` is therefore red: it 
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phase 0 is done except for T4.** T1 (`2c41599`), T2 (`a2fc1df`) and T3 (`9b9a3fe`) have landed, and
-T4's first row — the tracked corpus fingerprint — went with them in `7fa0432`. What each changed is in
-the task below it. Nothing in Phases 1–8 has been started.
+**Phase 0 is done.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`) and T4 (`7fa0432`, `f7f30f4`,
+`89292ce`) have landed. What each changed is recorded at the end of the task below it. **Phase 1 is
+next, and nothing in it has been started.**
 
 **Scope.** Stages 0–11 and both shells. `release` — stages 12–14 — is declared in the flow so
 `record.release` has an owner and is specified in a follow-up. Nothing here may assume its shape.
@@ -90,7 +90,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T1 | Correct the answer type, and the three operations over it | 0 | | M | ✓ `2c41599` |
 | T2 | Assign the three unowned responsibilities | 0 | | M | ✓ `a2fc1df` |
 | T3 | Settle the four standing principle conflicts | 0 | | M | ✓ `9b9a3fe` |
-| T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | |
+| T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | ✓ `89292ce` |
 | T5 | The package skeleton and the import direction | 1 | | M | |
 | T6 | The guards | 1 | T5 | L | |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | |
@@ -133,8 +133,9 @@ fixed or accepted in writing.
 Doing this first is the whole point of a spec-driven rebuild. Every item below is a place where an
 agent reading the spec would write code the repository then contradicts.
 
-**Status: T1, T2 and T3 have landed; T4 is partly done.** Each task keeps its original text so the
-reason it existed stays legible, and closes with what actually changed.
+**Status: all four have landed.** Each task keeps its original text so the reason it existed stays
+legible, and closes with what actually changed — including where the task turned out to be
+under-scoped, which two of them were.
 
 ### T1 · Correct the answer type, and the three operations over it
 
@@ -306,7 +307,7 @@ stream stays readable and I1 told to permit `logging` by name. P31: I3 now parse
 | `metrics/corpus_profile.json` | **Done.** It was tracked, and it fingerprinted the retired corpus — record count, SHA-256, distinct tool names, and the tool names themselves — in a public repo. | Deleted. |
 | `params.yaml` | `source.path`/`source.sha256` point at the retired corpus; `invalid_counts`, `gold.records: 951` and `max_answer_cardinality: 3` are measured from it. | Empty `source`, re-key `invalid_counts` to the five label-check names with no values, drop `gold` and `max_answer_cardinality` until a corpus is declared. |
 | `config/modalities/text.yaml` | Identity is `text`; the spec's pair is `text2text`, and the filename *is* the identity. | Rename to `text2text.yaml`, `name: text2text`. The rename is the change. |
-| `dvc.yaml` | `stages: {}` under a comment naming `load`, `remove_invalid`, `rank_for_review`, `document` and an obsolete phase numbering. | Rewrite the comment against this plan, or delete the file until a stage exists to declare. |
+| `dvc.yaml` | `stages: {}` under a comment naming `load`, `remove_invalid`, `rank_for_review`, `document` and an obsolete phase numbering — and behind it a whole toolchain: a `dvc` runtime dependency nothing imports, a mypy override for it, `make repro` over an empty DAG, `.dvc/` and `.dvcignore`. | Deleted, with `pandera` and `pandas`, which had no job either. |
 | `pyproject.toml` | `description` reads "Gated DVC stages…" — gates were deleted in `fa32ec1`. The `jsonschema` dev-dep comment cites `test_no_reimplementation.py` and "the core spec", both gone. | Rewrite both. |
 | `docs/annotation-pipeline/workflow.md` | Step 4 of its build order names `api/policy.py` and `api/engine.py`, renamed to `edge/` in `6a091df`. | Reconcile with this plan, or reduce it to the diagrams and point at this file for order. |
 
@@ -322,10 +323,26 @@ that does not exist in the flow table.
 **Verify.** `git ls-files | xargs grep -l "fc_train_final"` is empty. `make check` is unchanged
 (still red for the missing `src/` — that is Phase 1).
 
-**Partly landed — `7fa0432`** cleared the first row, which was the one with teeth. The other five —
-`params.yaml`, the modality manifest rename, `dvc.yaml`, `pyproject.toml`, `workflow.md` — are still
-open, and `deploy/` holds only a `.gitkeep` while § *Versions* says the Label Studio server version is
-pinned in a compose file there. Add that file or stop claiming it.
+**Landed — `7fa0432`, `f7f30f4`, `89292ce`,** and it was the most under-scoped task in the plan.
+
+Two rows were bigger than they read. *`dvc.yaml`* was not a stale comment but a vestigial toolchain, and
+checking the rest of the dependency list for the same shape found two more: `pandera` and `pandas`
+appeared in the spec only as a *Versions* row marked "unchanged", which is how a dependency avoids ever
+being asked to justify itself. Removing three direct dependencies removed **76 packages** from the lock
+— a task queue, three git implementations, a config framework, a crypto stack. Decision 18.
+
+And two contradictions were hiding under "rename the manifest". `answer_control` read
+`per_name_arguments`, which `a2fc1df` had contradicted three commits earlier: a Label Studio project
+holds one config for every task while our catalog is per record, so per-tool argument fields cannot be
+expressed. It is `names_and_json_arguments`. `shape` read `legacy_system_prompt` — the retired corpus's
+shape — against Requirement 13, which declares one input shape and forbids parsing a catalog out of
+prose; left standing, this profile read a declared-input record as an empty catalog.
+
+`exclude_roles: [system]` is kept and its justification is not: the measurement behind it was taken on a
+corpus where the catalog *was* the system turn. Marked provisional, with what would re-measure it.
+
+`deploy/` still holds only a `.gitkeep`, and § *Versions* no longer claims otherwise — the compose file
+arrives with T26, the first task that needs an instance.
 
 ---
 
