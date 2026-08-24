@@ -17,8 +17,8 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-Phase 4 is in progress: T14, T15 and T16 have landed.
-`make check` is green over 56 modules and 691 tests, 218 of which are not guards — but **T34 is open
+Phase 4 is in progress: T14, T15, T16 and T17 have landed.
+`make check` is green over 56 modules and 708 tests, 235 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **T34 is still the oldest thing on this list.**
 
@@ -129,7 +129,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T14 | `load_data` | 4 | T10, T12, T13 | M | ✓ |
 | T15 | `label_check` | 4 | T13, T14 | S | ✓ |
 | T16 | `pii_check` | 4 | T2, T14 | L | ✓ |
-| T17 | `duplicate_check` | 4 | T12, T14 | M | |
+| T17 | `duplicate_check` | 4 | T12, T14 | M | ✓ |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | |
 | T19 | `jury` | 5 | T2, T13, T15 | M | |
 | T20 | `cohesion` | 5 | T19 | S | |
@@ -1811,6 +1811,37 @@ populated as group annotations. No record is dropped. Two runs over one corpus g
 **Source.** `spec.md` § *Per-service contracts* row 3, Requirement 23.
 
 **Verify.** `uv run pytest tests/stages/test_duplicate_check.py -q`.
+
+**Landed.** Seventeen tests, and the question this task said to settle first is settled three ways.
+
+**The answer side is δ, and no new member was needed.** `answer_distance(a, b) == 0` is *the same
+answer* by the profile's own definition, which is not the same as `==` on the stored form: a bare name
+and the same call with no arguments are one answer, and a `==` would put that pair in the
+*disagreeing* group and report that one of them is wrong. There is a test for exactly that pair.
+
+**`scenario_hash` is neither side — it is the blocking key.** The task asked whether it is already the
+answer-side function under a split-shaped name. It is not: it names *the task a record poses*, which
+is the third thing, and that makes it the right key for deciding which pairs are *compared* at all.
+Two identical prompts offering different tools are not duplicates for this task, because the answer
+space differs and a model choosing between them is being asked two different questions.
+
+**And it is the only thing keeping the comparison affordable, which is stated rather than hidden.**
+Pairwise cosine over a batch is quadratic; the block is what a real corpus divides it by. A corpus
+where every record offers one catalog is one block and the quadratic is back, and the exit named in
+the module is a signature to block on or an index — not a smaller batch, which would change the
+groups and quietly break Requirement 23.
+
+An exact-content pair is compared regardless of scenario, because `record_id` is over content alone
+and two records sharing one is already a fact the corpus has to answer for. That has a consequence
+worth writing down rather than tidying away: such a record lists **its own id** in one of the two
+groups, since the other record's id *is* its own. Excluding an id equal to one's own would hide
+exactly the pair that most needs finding.
+
+`params.thresholds.duplicate_check.near_duplicate_cosine` is the first threshold in `params.yaml` with
+a value. A similarity has no defensible default — 0 groups everything, 1 groups nothing — so the
+reader refuses to guess and the number is provisional with its re-measurement named beside it, the way
+`max_calls` is. The test encoder is a lookup table of hand-written unit vectors: a real model's numbers
+would make every assertion a measurement of the model rather than of the grouping.
 
 ---
 

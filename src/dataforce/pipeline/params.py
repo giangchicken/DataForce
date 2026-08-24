@@ -57,6 +57,27 @@ def declared_switch(engine: Engine, *path: str) -> bool:
     return value
 
 
+def declared_ratio(engine: Engine, *path: str) -> float:
+    """One declared number from 0 to 1, or a `ConfigError` naming what is there instead.
+
+    Absent is **not** ordinary here, unlike a digest or a switch: a similarity threshold has no
+    defensible default -- 0 groups every record with every other and 1 groups nothing -- so the
+    reader that needs one says so rather than picking. `bool` is excluded before `int` because
+    `True` *is* an `int` in Python, which is how a mistyped ceiling got through in T46.
+    """
+    value = declaration(engine, *path)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not 0.0 <= value <= 1.0
+    ):
+        raise ConfigError(
+            f"params.yaml declares {'.'.join(path)} as {value!r}, which is not a "
+            "number from 0 to 1"
+        )
+    return float(value)
+
+
 def declared_digest(engine: Engine, *path: str) -> str:
     """The digest `params.yaml` declares at that path, or `""` where no corpus is declared yet.
 

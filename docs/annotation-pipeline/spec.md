@@ -397,7 +397,11 @@ Each is a statement a test can be pointed at.
     human reads in a diff, not a stop.
 23. `duplicate_check` reports two groups per record: `duplicate_content_same_label` and
     `duplicate_content_diff_label`. Near-duplicates use the modality's `embedding`, which is static, so
-    two runs give identical groups.
+    two runs give identical groups. **Two records are compared for near-duplication only where they
+    pose the same task** — the same `scenario_hash` — because two identical prompts offering different
+    tools are not duplicates *for this task*: the answer space differs, so a model choosing between
+    them is being asked two different questions. An *exact*-content pair is compared regardless, since
+    `record_id` is over content alone and a shared one is already a fact about the corpus.
 
 ### ai_review
 
@@ -846,7 +850,7 @@ know is per item, so per item is the scope it reports.
 |---|---|---|---|
 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
 | `pii_check` | `content`, `label`, `data_quality.label_check` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | `data_quality.label_check` is absent — Requirement 42's precondition, and the only thing it skips. A **quarantined** record is still scanned: personal data in a record that failed a label check is still personal data, and this cell said "never" because no *verdict* is a reason to skip. A hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
-| `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
+| `duplicate_check` | `content`, `label`, and the catalog in `meta` through `scenario_hash` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 The five label checks are the profile's, not the engine's — `label_checks()` is a profile member:
 `label_assistant_mismatch` (the label contradicts the turn that restates it), `label_not_in_catalog`
@@ -854,6 +858,16 @@ The five label checks are the profile's, not the engine's — `label_checks()` i
 `label_cardinality_anomaly` (it names more tools than the profile permits), `label_names_one_tool_twice`
 (a target of `["X", "X"]` trains a model to call X twice). Each carries a declared expected count in
 `params.invalid_counts`, and a check reading 0 is what tells you when it stops reading 0.
+
+**A duplicate needs both axes, and neither needed a new member.** The content side is the
+modality's — a shared `record_id` for identical content, the static `embedding` for near-identical —
+and the answer side is the profile's δ: `answer_distance(a, b) == 0` is *the same answer* by the
+profile's own definition, which a `==` on the stored form would get wrong for a bare name and for the
+same call with reordered argument keys. `scenario_hash` is neither side: it names the task a record
+poses, which is why it is the blocking key for the near pass. **The cost of that block, stated:**
+pairwise cosine over one batch is quadratic and the block is what a real corpus divides it by, so a
+corpus where every record offers one catalog is one block and the quadratic comes back. The exit then
+is a signature to block on or an index — not a smaller batch, which would change the groups.
 
 **PII, in two layers.** Layer one is patterns over the raw text and over a tone-stripped
 normalisation, covering the Vietnamese spoken forms an off-the-shelf scrubber misses: digits as words
@@ -1163,7 +1177,11 @@ panel settings, which belong in `params.yaml` with the rest.
 `config/modalities/text2text.yaml` carries the modality's identity in its filename, so the pair's name is
 not assigned anywhere else; the profile manifest's `modality:` names the same string.
 `params.invalid_counts` lists the five label-check names with no values, and `params.source` is empty —
-both stay that way until a corpus is declared.
+both stay that way until a corpus is declared. `params.thresholds` is the same shape with one
+exception: `duplicate_check.near_duplicate_cosine` carries a value, because a similarity has no
+defensible default — 0 groups every record with every other and 1 groups nothing — so the stage
+refuses to guess and the number is provisional with its re-measurement named beside it, the way the
+profile manifest's `max_calls` is. The three empty blocks belong to stages that are not built yet.
 
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
 `embedding.model` and `embedding.exclude_roles`; the profile's are `shape`, `answer_control`,

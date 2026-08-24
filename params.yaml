@@ -34,3 +34,12 @@ thresholds:
   jury: {}          # panel floor, invalid-vote rate, estimated-token ceiling (T19)
   triage: {}        # bucket boundaries, stratum quotas, audit sizing (T21)
   pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T31)
+
+  # The one threshold with a value, because a similarity has no defensible default: 0 groups
+  # every record with every other and 1 groups nothing, so `duplicate_check` refuses to guess
+  # and reads this. Provisional -- 0.95 over a static multilingual embedding is tight enough
+  # that two turns differing by a greeting group and two different requests do not.
+  # What re-measures it: the distribution of pairwise cosine *within one scenario* over a
+  # declared corpus, which the first run reports.
+  duplicate_check:
+    near_duplicate_cosine: 0.95
