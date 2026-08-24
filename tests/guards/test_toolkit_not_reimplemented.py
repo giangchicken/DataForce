@@ -10,6 +10,14 @@ them is how the re-implementation starts: `yaml` because it reads the manifests,
 dev dependency here and is used by the tests that prove `answer_schema` means what it says -- this
 guard is what keeps it out of `src/`.
 
+`hashlib` is on a second list, and deliberately not on the first: it is the standard library, not
+a root `agent-toolkit` owns, and the library reaches for it itself. It is scanned because it is the
+one import that makes a second `compute_hash` possible without naming one -- and since T8 that
+function *is* the definition of a `record_id`, so a digest computed any other way is a second answer
+to what a record is called. A digest over **bytes** is a real need the first media modality will
+have, since `compute_hash` takes a `str`; that is what P30's hatch is for, annotated on the line
+rather than by widening the rule for everyone.
+
 Importing the library is not a finding. Naming one of its functions as a `def` is.
 """
 
@@ -34,6 +42,7 @@ OWNED_FUNCTIONS = (
     "write_jsonlines",
 )
 OWNED_ROOTS = ("jsonschema", "openai", "tiktoken", "yaml")
+RE_IMPLEMENTATION_ROOTS = ("hashlib",)
 
 SPEC = Path(__file__).resolve().parents[2] / "docs" / "annotation-pipeline" / "spec.md"
 OWNERSHIP = re.compile(
@@ -54,6 +63,11 @@ def toolkit_findings(module: Module) -> list[str]:
         (reached.line, f"imports {reached.module}, which agent-toolkit owns")
         for reached in imports(module)
         if reached.module.split(".")[0] in OWNED_ROOTS
+    ]
+    found += [
+        (reached.line, f"imports {reached.module}: a second compute_hash starts here")
+        for reached in imports(module)
+        if reached.module.split(".")[0] in RE_IMPLEMENTATION_ROOTS
     ]
     return not_exempt(module, "I6", found)
 
@@ -76,6 +90,9 @@ def test_no_module_re_implements_the_library(module: Module) -> None:
         "import jsonschema",
         "from openai import OpenAI",
         "import tiktoken",
+        "import hashlib",
+        "from hashlib import sha256",
+        "import hashlib\n\n\ndef record_digest(text):\n    return hashlib.sha256(text).hexdigest()[:16]",
     ],
     ids=[
         "compute_hash",
@@ -87,6 +104,9 @@ def test_no_module_re_implements_the_library(module: Module) -> None:
         "jsonschema",
         "openai",
         "tiktoken",
+        "hashlib",
+        "from-hashlib",
+        "a-second-record-id",
     ],
 )
 def test_the_scan_rejects_a_module_that_does_the_library_s_job(violation: str) -> None:
@@ -106,6 +126,16 @@ def test_the_scan_rejects_a_module_that_does_the_library_s_job(violation: str) -
 def test_the_scan_permits_using_the_library(permitted: str) -> None:
     """The rule is against a second implementation, not against the dependency."""
     assert toolkit_findings(module_from_source(permitted)) == []
+
+
+def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
+    """P30: `compute_hash` takes a `str`, so the first media part's sha256 has nowhere else to go."""
+    excused = (
+        "import hashlib"
+        "  # guard-exempt: I6 · a media digest is over bytes · the modality · 2026-08-24"
+    )
+
+    assert toolkit_findings(module_from_source(excused)) == []
 
 
 def test_the_owned_names_are_the_ones_the_document_lists() -> None:

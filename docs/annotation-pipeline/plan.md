@@ -15,8 +15,9 @@ in Phase 4.
 **Phases 1 and 2 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
-Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols.
-`make check` is green over 55 modules and 326 tests, 34 of which are not guards — but **T34 is open
+Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
+second review round — T39.
+`make check` is green over 55 modules and 335 tests, 34 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
 the oldest thing on this list.**
@@ -106,6 +107,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T36 | One shared request body, and `cli.py` inside `edge/` | 1 | T5 | M | ✓ |
 | T37 | Give the event stream an owner | 1 | T5 | S | ✓ |
 | T38 | Why `publish` and `annotator_answers` are two | 1 | T5 | S | ✓ |
+| T39 | Two guards that pass what they exist to catch | 1 | T6 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -772,6 +774,47 @@ what was missing was the sentence saying so.
 
 **Landed** as two paragraphs and Decision 22. No module moved, no test changed, and the flow still has
 fifteen rows.
+
+---
+
+### T39 · Two guards that pass what they exist to catch
+
+**Goal.** I5 sees an identity pinned through a `Field`, and I6 sees the import a second `record_id`
+would come through.
+
+**Context.** A review of the Phase 2 tree, and both holes are aimed at the next two tasks.
+`_assigned_constants` read only `ast.Constant`, so `name: str = Field("text2text", …)` and
+`Field(default="text2text", …)` both passed — the two spellings a pydantic model is actually written
+with, and T12 and T13 are where an implementation acquires a `name` and a `version`. `hashlib` was in
+neither I6's owned roots nor I1's forbidden roots, so `import hashlib` and a `sha256(…)[:16]` passed
+both scans; since T8, `compute_hash` *is* the definition of a `record_id`.
+
+**Approach.** Read a `Field` call's first positional argument and its `default=` keyword. `hashlib`
+goes on a second list with its own message rather than into `OWNED_ROOTS`, which the guard's own
+sentence defines as `agent-toolkit`'s dependencies.
+
+**Acceptance criteria.** Both `Field` spellings go red, and `Field(..., description=…)`,
+`Field(default=None, …)` and `Field(default_factory=…, …)` stay green. `import hashlib` goes red and
+an annotated exemption is honoured. The whole tree still passes both scans.
+
+**Source.** Requirement 40, I5, I6; AGENTS.md P29, P30.
+
+**Verify.** `uv run pytest tests/guards -q`.
+
+**Landed, with two changes to what the review proposed.** The fix offered was the `default=` keyword;
+the *positional* spelling `Field("text2text", …)` is the more common one in pydantic code and would
+have stayed green, so both are read. And `None` had to stop being a pin, or
+`Manifest.modality: str | None = Field(default=None, …)` fails the build — a guard that goes red on
+the tree it was written against is a guard someone deletes rather than fixes.
+
+`name = str("text2text")` is still permitted, on purpose and in the docstring: any call can produce a
+constant, and special-casing `str(` reads like coverage while providing one name's worth of it.
+
+`hashlib` is a second list because the first one has a stated meaning. I6's docstring says the owned
+roots are `agent-toolkit`'s own dependencies; `hashlib` is the standard library and the library reaches
+for it itself, so putting it there would make the guard's own reason false. The spec's I6 row says so
+too now. P30's hatch is proved for the case that is coming: a media part's `sha256` is over bytes and
+`compute_hash` takes a `str`.
 
 ---
 
