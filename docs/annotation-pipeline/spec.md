@@ -523,7 +523,7 @@ src/dataforce/              the package; its docstring states the import directi
   ports.py                  DEFINITION · QuestionStore — what the engine demands of the edge.
 
   pipeline/                 the flow: one module per stage, and the fold that runs a phase's stages in order
-    __init__.py             façade · re-exports flow.py and runner.py; holds nothing of its own.
+    __init__.py             façade · the flow's table, its fold, and the phases under it; holds nothing of its own.
     flow.py                 DEFINITION · PHASES and STAGES — the flow table, in code, once.
     runner.py               LOGIC · run_phase — a phase's stages folded over records, in the table's order.
     load_data.py            STEP · load_data · every source item becomes one record with identity, content and provenance.

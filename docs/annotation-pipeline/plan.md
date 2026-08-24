@@ -16,7 +16,7 @@ in Phase 4.
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
-second review round — T39 to T42.
+second review round — T39 to T43.
 `make check` is green over 55 modules and 483 tests, 38 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
@@ -111,6 +111,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T40 | The two shapes the document states and nothing compared | 1 | T8, T11 | M | ✓ |
 | T41 | Two promises that were discipline | 1 | T8, T10 | S | ✓ |
 | T42 | The two requirements with no guard | 1 | T6, T10 | S | ✓ |
+| T43 | The pipeline façade re-exports nothing | 2 | T10 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1090,6 +1091,40 @@ as the order.
 
 `side_output` is keyed by the stage that produced it, because that is what tells the edge where to
 write it. T16 is the first stage that has any, and it either follows the key or changes it.
+
+---
+
+### T43 · The pipeline façade re-exports nothing
+
+**Goal.** `pipeline/__init__.py` holds a docstring and no re-exports.
+
+**Context.** T10 gave it six names on the grounds that it would be "consistent with the axis
+packages". It is not: the three phase façades under it — `data_quality/`, `ai_review/` and
+`human_review/` — are one-line docstrings that re-export nothing, and **nothing in `src/` or `tests/`
+imports through `dataforce.pipeline` at all**. So the re-export bought nothing and cost a third
+statement of the public surface, since a name added to `flow.py` also has to be added to `__all__` and
+nothing compares the two (P8's deletion test, and P5). The axis façades are a different thing: they
+hide implementations and I16 is the guard that makes that real.
+
+**Approach.** Delete the imports and the `__all__`. The docstring says what is under the package
+instead of what it forwards, and the layout row moves with it (I19).
+
+**Acceptance criteria.** `make check` is green and no import changed anywhere, because there was
+nothing importing it.
+
+**Source.** AGENTS.md P5, P8; Requirement 2, which already names `pipeline/__init__.py` as the module
+with no content of its own; I19.
+
+**Verify.** `make check`.
+
+**Landed.** Requirement 2 settles it more directly than P8 does. The fifth kind, `façade ·`, exists
+because "none of the four describes a module with **no content**, and § *Package layout* below already
+writes it over `pipeline/__init__.py`" — so the document's own example of a contentless module was the
+one T10 filled with six names. Emptying it makes the module agree with the sentence that justified its
+docstring's existence.
+
+If T28 or T29 wants `from dataforce.pipeline import run_phase`, that is two lines and an `__all__`
+assertion, added when the consumer exists rather than in anticipation of it.
 
 ---
 
