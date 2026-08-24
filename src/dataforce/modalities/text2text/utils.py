@@ -9,6 +9,20 @@ conversions -- an item into parts, parts into a vector, a record into a display 
 ``__init__.py`` is a ``façade ·`` that holds nothing of its own (Requirement 2). So the object lives
 beside the conversions it is made of and the façade re-exports it.
 
+**An item this cannot read raises, and Requirement 43 says nothing may.** ``content_parts``
+returns ``list[Part]`` and the signature is § *Modality*'s, so there is no value channel for *this
+item is unreadable* -- the options are to raise or to fabricate a turn. Two things raise
+``ConfigError``: an item whose ``messages`` is not a list, and a turn that declares no ``role``.
+Requirement 43 permits a ``ConfigError`` only *before any record is read* and both of these fire
+while records are being read, so the rule is broken here on purpose (§8): ``load_data`` is the only
+caller and the only thing that can turn an unreadable item into a counted skip, and it cannot even
+say *which* item from here -- ``content_parts`` is handed the item and no offset. T14 settles it,
+and ``profiles/tool_decision/utils.py`` carries the same note for the same reason.
+
+A non-string ``content`` is **not** in that category and does not raise: the content-block form is
+the same standard Requirement 13 declares, so such an item is a declared item and has to become a
+record.
+
 **A tool-call turn is rendered here, and that is content rather than an answer.** ``messages`` holds
 the conversation and *nothing in it is an answer* (Requirement 13); an assistant turn that already
 called a tool is context like any other. Requirement 15 asks that one call spelled three ways --
@@ -48,6 +62,7 @@ TOOL_CALLS = "tool_calls"
 FUNCTION = "function"
 ARGUMENTS = "arguments"
 NAME = "name"
+TEXT = "text"
 
 # The key `<Paragraphs>` reads its turns from, and the one key this half of the config owns.
 CONVERSATION = "conversation"
@@ -153,6 +168,47 @@ def text_parts(parts: Sequence[Part]) -> tuple[Part, ...]:
     return tuple(parts)
 
 
+def canonical_json(value: Any) -> str:
+    """One JSON value as the one string that means it: keys sorted, no incidental whitespace.
+
+    Duplicated from `tool_decision/utils.py` on the same terms as `declaration` below -- the two
+    axes share `name`, `version`, `Part` and one separator, and nothing else. A third shared helper
+    would be a fourth, and the first key one axis needed and the other did not would put a
+    profile's vocabulary in a module the modality imports.
+    """
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def spoken_text(content: Any) -> str:
+    """What a turn said, whatever shape its `content` arrived in.
+
+    A string is copied verbatim (Requirement 16) and a null turn said nothing. A **list** is the
+    content-block form the same OpenAI shape declares -- `[{"type": "text", "text": "…"}]` -- and
+    Requirement 13 declares that shape, so an item carrying one is a declared item and becomes a
+    record. A text block contributes its text; any other block contributes its canonical JSON,
+    which keeps it inside `record_id` instead of dropping it, and puts it where `label_check` and
+    triage can see it. No separator is inserted between blocks, because any choice of one would be
+    invented here and would change what a `record_id` covers.
+
+    Blocks are joined rather than refused even where one of them is an image: a media block in a
+    text2text run is a mis-composed pair, and the place that says so is `text_parts`, on a part
+    whose *type* is not text -- refusing here would be a per-record raise on a readable item.
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(one_block(block) for block in content)
+    return canonical_json(content)
+
+
+def one_block(block: Any) -> str:
+    """One content block's text, or the block itself where it holds none."""
+    spoken = block.get(TEXT) if isinstance(block, Mapping) else None
+    return spoken if isinstance(spoken, str) else canonical_json(block)
+
+
 def stated_calls(calls: Sequence[Mapping[str, Any]]) -> str:
     """The calls a turn made, canonically, so Requirement 15's three spellings are one string.
 
@@ -160,17 +216,12 @@ def stated_calls(calls: Sequence[Mapping[str, Any]]) -> str:
     refused: a malformed turn is evidence for `label_check` to find, and a run always completes
     (Requirement 43).
     """
-    return json.dumps(
+    return canonical_json(
         [
-            {
-                NAME: (call.get(FUNCTION) or {}).get(NAME, ""),
-                ARGUMENTS: call_arguments((call.get(FUNCTION) or {}).get(ARGUMENTS)),
-            }
+            {NAME: named.get(NAME, ""), ARGUMENTS: call_arguments(named.get(ARGUMENTS))}
             for call in calls
-        ],
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+            for named in [call.get(FUNCTION) or {}]
+        ]
     )
 
 
@@ -191,7 +242,7 @@ def a_turn(turn: Mapping[str, Any]) -> Part:
             f"a text2text turn declares no {ROLE!r}; this one holds {sorted(turn)}"
         )
     calls = turn.get(TOOL_CALLS)
-    written = [turn.get(CONTENT), stated_calls(calls) if calls else None]
+    written = [spoken_text(turn.get(CONTENT)), stated_calls(calls) if calls else None]
     return Part(
         type="text",
         role=str(turn[ROLE]),

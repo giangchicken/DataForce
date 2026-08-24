@@ -14,6 +14,17 @@ because no engine module opens a file (I1), and handed over the way ``text2text`
 encoder. That is Requirement 51's split applied one member earlier: policy owns the text, the
 profile owns what goes in it.
 
+**An item this cannot read raises, and Requirement 43 says nothing may.** ``build_record`` returns
+``Record`` and the signature is § *Profile*'s, so there is no value channel for *this item is
+unreadable* -- and ``Record.label`` is required precisely so that a missing label is not defaulted
+to *call nothing*. Two things raise ``ConfigError``: an item whose ``meta`` lacks the declared label
+key, and an item that arrived without the provenance ``load_data`` is supposed to add. The second is
+a caller's mistake and belongs nowhere else; the first is a defect in one item out of twenty
+thousand, and Requirement 43 permits a ``ConfigError`` only *before any record is read*. The rule is
+broken here on purpose (§8): ``load_data`` is the only caller and the only thing that can turn an
+unreadable item into a counted skip. T14 settles it, and ``modalities/text2text/utils.py`` carries
+the same note for its own two.
+
 **The manifest reader is duplicated from ``text2text/utils.py`` on purpose.** § *Package layout*
 says the two axes share ``name``, ``version`` and ``Part`` *and nothing else*; a shared
 ``declared()`` helper would be a fourth thing, and the first key one axis needed and the other did

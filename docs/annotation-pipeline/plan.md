@@ -17,7 +17,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-`make check` is green over 55 modules and 581 tests, 136 of which are not guards — but **T34 is open
+`make check` is green over 55 modules and 588 tests, 143 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
 list.**
@@ -112,6 +112,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T41 | Two promises that were discipline | 1 | T8, T10 | S | ✓ |
 | T42 | The two requirements with no guard | 1 | T6, T10 | S | ✓ |
 | T43 | The pipeline façade re-exports nothing | 2 | T10 | S | ✓ |
+| T44 | An item that cannot be read is still an item | 3 | T12, T13 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1378,6 +1379,43 @@ task below adds an *Approach* of its own only where it departs from this.
 
 ---
 
+### T44 · An item that cannot be read is still an item
+
+**Goal.** No readable item raises, and every raise that remains is recorded where the next reader
+hits it.
+
+**Context.** A review of Phase 3 found `content_parts` raising `TypeError` on a turn whose `content`
+is a content-block array — `[{"type": "text", "text": "…"}]`. That is the same OpenAI shape
+Requirement 13 declares, so the item is a *declared* item; the join in `a_turn` assumed a string and
+halted a batch on the first one. It was also the one failure mode with no test.
+
+**Approach.** `spoken_text` reads whatever `content` arrived as: a string verbatim, a list as blocks,
+anything else as canonical JSON. Then the four item-scope raises that remain get the §8 treatment
+rather than a fix, because fixing them means designing `load_data`'s error path from inside its
+callees.
+
+**Acceptance criteria.** Every non-string `content` shape becomes a part, and a content-block turn
+hashes identically twice. The remaining raises are named in both axis module docstrings, in
+§ *Error Behavior*, and in T14's acceptance criteria.
+
+**Source.** Requirement 13, Requirement 16, Requirement 43, AGENTS.md §8.
+
+**Verify.** `uv run pytest tests/stages -q -k text2text`.
+
+**Landed.** Seven tests. A block carrying no `text` is written down as canonical JSON rather than
+dropped, which keeps it inside `record_id` and puts it where `label_check` and triage can see it; no
+separator is inserted between blocks, because any choice of one would be invented here and would
+change what a `record_id` covers. A media block is *not* refused: a mis-composed pair is what
+`text_parts` says no to, on a part whose type is not text, and refusing here would be a per-record
+raise on a readable item — the thing this task exists to remove.
+
+`canonical_json` is now duplicated in both axes, on the terms `declaration` already set: the two
+contracts share `name`, `version` and `Part`, and a third shared helper would make a fourth. The
+double `(call.get(FUNCTION) or {})` in `stated_calls` went at the same time, since that function was
+being edited anyway.
+
+---
+
 ## Phase 4 · One record makes the round trip
 
 **Goal:** `load_data` and all of `data_quality` run in process over invented fixtures.
@@ -1399,6 +1437,16 @@ answer. Which key holds the label is declared in the profile manifest, not assum
 **Acceptance criteria.** A fixture whose conversation contains a prior `tool_call` and whose
 `meta.label` names a different tool produces a record whose `label` is the declared key's value.
 An undeclared label key raises `ConfigError` naming the manifest, the key, and what *is* declared.
+
+**And it settles the item-scope raise.** Four things below this task raise `ConfigError` while
+records are being read, which Requirement 43 permits only before: an item whose `messages` is not a
+list, a turn with no `role`, an item whose `meta` lacks the declared label key, and an item that
+reached `build_record` without provenance. The last is a caller's mistake and stays a raise. The
+other three are one bad item out of twenty thousand, and neither `content_parts` nor `build_record`
+has a value channel for one — both signatures are the spec's. This task is the only caller and the
+only place that knows the offset, so it is the only place that can count an unreadable item instead
+of halting on it. T44 recorded the break in both axis modules and in § *Error Behavior*; deciding it
+is here.
 
 **Source.** `spec.md` § *Per-service contracts* row 0; `objective.md` § *`meta.label` is the answer*.
 

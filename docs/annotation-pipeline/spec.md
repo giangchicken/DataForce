@@ -1451,6 +1451,8 @@ Each names the check that holds it, not a file that used to.
 |---|---|
 | Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
+| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*; `load_data` is the only caller that could turn one into a counted skip. Recorded in both axis modules (§8) and settled in T14 |
+| A turn's `content` is a content-block array, or any other non-string | read, never refused: a text block contributes its text and any other block its canonical JSON, so nothing leaves `record_id`. Requirement 13 declares the OpenAI chat-completion shape and this is that shape, so such an item is a declared item and becomes a record |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
 | Profile and modality disagree | `ConfigError`: "composes with modality 'text2text'" |
 | A record fails a check | it is marked on its own key and travels on; the run continues and the count lands in `metrics.json` |

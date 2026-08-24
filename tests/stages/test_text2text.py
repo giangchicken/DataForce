@@ -220,6 +220,77 @@ def test_a_malformed_arguments_string_is_written_down_rather_than_refused() -> N
     assert "{not json" in (a_modality().content_parts(broken)[0].text or "")
 
 
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ([{"type": "text", "text": "Cho mình xem số dư."}], "Cho mình xem số dư."),
+        (
+            [
+                {"type": "text", "text": "Số dư "},
+                {"type": "text", "text": "là bao nhiêu?"},
+            ],
+            "Số dư là bao nhiêu?",
+        ),
+        (
+            [{"type": "image_url", "image_url": {"url": "s3://b/one.png"}}],
+            '{"image_url":{"url":"s3://b/one.png"},"type":"image_url"}',
+        ),
+        (5, "5"),
+        (None, ""),
+    ],
+    ids=["one-block", "two-blocks", "a-block-with-no-text", "not-a-string", "null"],
+)
+def test_a_content_block_item_becomes_a_record_rather_than_an_exception(
+    content: Any, expected: str
+) -> None:
+    """Requirement 13 declares the OpenAI shape, and the content-block form is that shape.
+
+    So this is a declared item and has to become a record -- Requirement 43's *a run always
+    completes* is what a `TypeError` on item 3 of 20,000 would have broken. A block carrying no text
+    is written down as canonical JSON rather than dropped, which keeps it inside `record_id`.
+    """
+    item = {"messages": [{"role": "user", "content": content}]}
+
+    assert a_modality().content_parts(item)[0].text == expected
+
+
+def test_a_mixed_content_block_turn_keeps_both_halves() -> None:
+    """Nothing is dropped, and no separator is invented between blocks."""
+    mixed = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Ảnh sao kê đây:"},
+                    {"type": "image_url", "image_url": {"url": "s3://b/one.png"}},
+                ],
+            }
+        ]
+    }
+
+    text = a_modality().content_parts(mixed)[0].text or ""
+
+    assert text.startswith("Ảnh sao kê đây:")
+    assert "s3://b/one.png" in text
+
+
+def test_a_content_block_turn_hashes_the_same_way_twice() -> None:
+    """The rendering is canonical, so two runs over one item give one `record_id`."""
+    item = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "image_url", "image_url": {"b": 2, "a": 1}}],
+            }
+        ]
+    }
+    modality = a_modality()
+
+    assert record_id_for(modality.content_parts(item)) == record_id_for(
+        modality.content_parts(item)
+    )
+
+
 def test_an_item_with_no_turns_names_the_key_it_wanted() -> None:
     """A source whose turns are somewhere else is a wrong declaration, not a bad record."""
     with pytest.raises(ConfigError, match="messages"):
