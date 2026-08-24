@@ -15,12 +15,12 @@ in Phase 4.
 **Phases 1 and 2 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
-Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
-second review round — T39 to T43.
-`make check` is green over 55 modules and 483 tests, 38 of which are not guards — but **T34 is open
+Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
+second review round — T39 to T43 — and then T12.
+`make check` is green over 55 modules and 513 tests, 68 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
-at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
-the oldest thing on this list.**
+at the end of the task below it. **T13 is the last of Phase 3, and T34 is still the oldest thing on
+this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -119,7 +119,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8, T11 | M | ✓ |
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | ✓ |
 | T11 | The two protocols | 3 | T8 | S | ✓ |
-| T12 | `text2text` | 3 | T4, T11 | M | |
+| T12 | `text2text` | 3 | T4, T11 | M | ✓ |
 | T13 | `tool_decision` | 3 | T1, T11 | L | |
 | T14 | `load_data` | 4 | T10, T12, T13 | M | |
 | T15 | `label_check` | 4 | T13, T14 | S | |
@@ -1192,6 +1192,57 @@ imports no `utils`. The same input produces the same vector across two processes
 **Verify.** `uv run pytest tests/stages -q -k text2text`.
 
 **Out of scope.** `speech2text`, `image2text`, `video2text` — the seam is specified and unbuilt.
+
+**Landed — and the *Approach* above is wrong on where the implementation goes.** It says
+"`__init__.py` is the implementation and its six members"; § *Package layout* writes that module's
+docstring as `façade ·`, and Requirement 2 defines that word as an `__init__.py` that re-exports and
+*holds nothing of its own*. The spec wins, so `Text2Text` is in `utils.py` and the façade re-exports
+it — which is also the truer reading: all four operations are conversions (an item into parts, parts
+into a vector, a record into a fragment), and a conversion over the shapes in `schema.py` is exactly
+what `utils.py` is for. The façade forwards three names and not five: `Detector` and `DisplayConfig`
+stay unexported because a stage reads one structurally — `pipeline/` may not import this package at
+all (I2) — and re-exporting them would make that import look permitted.
+
+**The encoder is handed in, not loaded.** `StaticModel.from_pretrained` opens files and a socket, and
+no engine module may (I1); the previous tree loaded it at import and the module-level
+`TEXT = TextModality(manifest.load(...))` beside it is what Requirement 37 now forbids. So the
+modality is *built with* the thing that turns a document into a vector — which is Requirement 16's own
+sentence for a media modality's URI resolver, "declared when it is built", applied to the one
+world-reading thing `text2text` needs. `embedding_model(manifest)` stays here, because the
+implementation that reads a key is the one that knows what it means (`manifest.py`); `edge/bootstrap.py`
+calls it, loads the model, and hands the `Encoder` over in T27.
+
+**So the acceptance criterion splits, and only half of it is this module's.** *The same input produces
+the same vector across two processes* is proved for the **document** — the turns kept, in order,
+joined one way — in two subprocesses under two hash seeds, which is where a set iteration or an
+unsorted `json.dumps` would show. The vector's own reproducibility is the static model's property and
+therefore the edge's; § *Versions* pins `model2vec` for it and no test in `make check` can reach the
+weights without the network the suite forbids.
+
+**A tool-call turn is content, and it is canonicalised here.** Requirement 15 — one call spelled three
+ways is one part and one `record_id` — lands in the modality rather than the profile because
+`messages` *is* content and nothing in it is an answer (Requirement 13). The rendering is canonical
+JSON over the parsed arguments, so the JSON-string, reordered-and-re-spaced and object forms produce
+one part; a turn that both speaks and calls carries both, because dropping either loses content
+`record_id` has to cover. What a call *means* is still the profile's (Requirement 47).
+
+**One pattern, written once.** Requirement 18 scans the raw text *and* a tone-stripped
+normalisation, so a pattern in correct Vietnamese cannot match the stripped half of its own scan.
+Writing both by hand is two strings that drift, so `Detector` carries both and `utils.py` derives the
+second with `normalize_text(pattern, remove_tone_marks=True)` — which leaves a regular expression's
+metacharacters alone, because `\s` is a backslash and an `s`. Six detectors over three classes:
+`PHONE`, `CUSTOMER_ID`, `EMAIL`, each in a written and a spoken spelling. The digit patterns overlap
+on purpose — a phone number matches both — because layer one is tuned for recall and layer two is
+what sets precision.
+
+**A protocol conformance check that runs in the build.** `mypy --strict` reads `src/` alone, so an
+annotation in a test proves nothing, and the registry that would type the pair is filled by a
+composition root that lands in T27. So `utils.py` carries a `TYPE_CHECKING` function returning
+`Modality`, watched red by renaming `personal_data_detectors` — mypy named the missing member. The
+test module asserts the same list at runtime, which is what catches a rename from the outside.
+
+513 tests, 30 of them new; `mypy --strict` clean over 55 modules. The fixtures are `objective.md`
+§2's item, invented, and the spoken-digit ones are the forms an off-the-shelf scrubber misses.
 
 ---
 
