@@ -68,9 +68,11 @@ never fight over one field, and a record carries its own history rather than nee
 A service copies the record with its one key set. It does not mutate, and it does not build a record
 from scratch — only `load_data` does that.
 
-**The one exception is `pii_check`**, which also rewrites `content` and bumps `content_version`. That is
-why its spans record which version they were found in: after the rewrite, the offsets no longer point
-where they did.
+**The one exception is `pii_check`**, which also rewrites `content` **and the `label`** together and
+bumps `content_version`. That is why its spans record which version they were found in: after the
+rewrite, the offsets no longer point where they did. Content and label move together because rewriting
+one of them alone manufactures a `label_assistant_mismatch` and makes `export` emit an example whose
+input reads `<CUSTOMER_ID_1>` and whose target reads the original (Requirement 17).
 
 ---
 
@@ -117,7 +119,7 @@ records `uri` + `sha256`, never bytes.
 
 | stage | reads | writes | skips when |
 |---|---|---|---|
-| `load_data` | the raw item, under the declared label key | the whole record | never — it is the first stage. A source digest that does not match raises `ConfigError` before any record is read |
+| `load_data` | the raw item, under the declared label key | the whole record | never — it is the first stage. A source digest that does not match raises `ConfigError` before any record is read, and an item that cannot be read at all is counted against its offset and handed to the edge for the quarantine tier |
 
 The catalog is never copied onto the record as an answer space. It is materialised from the record when
 a service asks, and never persisted — a stored copy is a second thing that can disagree with the first,
@@ -130,8 +132,8 @@ Everything checkable without an opinion.
 | stage | reads | writes | skips when |
 |---|---|---|---|
 | `label_check` | content, label, meta | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
-| `pii_check` | content | `data_quality.pii_check`, **and rewrites content** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
-| `duplicate_check` | content, label | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
+| `pii_check` | content, label, `data_quality.label_check` | `data_quality.pii_check`, **and rewrites content and label together** | `data_quality.label_check` is absent. No *verdict* is a reason to skip — a quarantined record is still scanned — and a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| `duplicate_check` | content, label, and the catalog through `scenario_hash` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 **Redaction runs in two layers with opposite jobs.** Patterns go first and are *allowed* to be noisy —
 they run against the raw text and against a tone-stripped copy, so a customer saying `khong chin` is
