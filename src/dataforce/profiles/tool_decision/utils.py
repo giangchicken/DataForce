@@ -131,7 +131,7 @@ CAPTURE_TAGS = (
 SCENARIO_LENGTH = 16
 
 
-def canonical(value: Any) -> str:
+def canonical_json(value: Any) -> str:
     """One JSON value as the one string that means it.
 
     Argument values are compared through this rather than with `==` because an argument may itself
@@ -140,7 +140,7 @@ def canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def listed(value: Any) -> tuple[Any, ...]:
+def entries_in(value: Any) -> tuple[Any, ...]:
     """The entries a value holds, where a string holds none.
 
     `tuple("SendStatement")` is a tuple of thirteen characters, and every place below that reads a
@@ -177,11 +177,6 @@ def calls_in(stored: StoredAnswer) -> Calls:
     return tuple(read)
 
 
-def stored_calls(answer: Calls) -> StoredAnswer:
-    """The answer in the shape a record holds: one plain dict per call, in order."""
-    return tuple({NAME: call.name, ARGUMENTS: dict(call.arguments)} for call in answer)
-
-
 def catalog_of(record: Record) -> tuple[Tool, ...]:
     """What this record offered, out of the `tools` its source carried verbatim.
 
@@ -190,7 +185,7 @@ def catalog_of(record: Record) -> tuple[Tool, ...]:
     `answer_schema` materialises one from this when asked.
     """
     read = []
-    for entry in listed(record.meta.get(TOOLS)):
+    for entry in entries_in(record.meta.get(TOOLS)):
         function = entry.get(FUNCTION) if isinstance(entry, Mapping) else None
         if not isinstance(function, Mapping) or not isinstance(function.get(NAME), str):
             continue
@@ -279,7 +274,7 @@ def argument_agreement(left: Mapping[str, Any], right: Mapping[str, Any]) -> flo
         for key in keys
         if key in left
         and key in right
-        and canonical(left[key]) == canonical(right[key])
+        and canonical_json(left[key]) == canonical_json(right[key])
     )
     return shared / len(keys)
 
@@ -325,7 +320,9 @@ def agreed_arguments(called: Sequence[Call]) -> dict[str, Any]:
     agreed = {}
     for key in sorted({key for call in called for key in call.arguments}):
         stated = [
-            canonical(call.arguments[key]) for call in called if key in call.arguments
+            canonical_json(call.arguments[key])
+            for call in called
+            if key in call.arguments
         ]
         top = max(sorted(set(stated)), key=stated.count)
         if stated.count(top) > floor:
@@ -366,17 +363,21 @@ def vote_consensus(
         if len(called) <= floor or tool is None:
             continue
         arguments = agreed_arguments(called)
-        if any(key not in arguments for key in listed(tool.parameters.get(REQUIRED))):
+        if any(
+            key not in arguments for key in entries_in(tool.parameters.get(REQUIRED))
+        ):
             continue
         agreed.append(Call(name=name, arguments=arguments))
 
-    answer = stored_calls(tuple(agreed))
+    answer = tuple(
+        {NAME: call.name, ARGUMENTS: dict(call.arguments)} for call in agreed
+    )
     if not answer or not answer_is_permitted(record, answer, max_calls):
         return None
     return answer
 
 
-def declared(manifest: Manifest, *path: str) -> Any:
+def declaration(manifest: Manifest, *path: str) -> Any:
     """One value the manifest declares, or a `ConfigError` naming the path and what is there."""
     reached: Any = manifest.declarations
     for key in path:
@@ -397,7 +398,7 @@ def declared_text(manifest: Manifest, *path: str) -> str:
     carries, and the run then failed once per record with a message about the *item* rather than
     about the line that was wrong.
     """
-    value = declared(manifest, *path)
+    value = declaration(manifest, *path)
     if not isinstance(value, str) or not value:
         raise ConfigError(
             f"config/profiles/{manifest.name}.yaml declares {'.'.join(path)} as "
@@ -415,7 +416,7 @@ def declared_count(manifest: Manifest, *path: str) -> int:
     before `int` because `True` *is* an `int` in Python, which is exactly how the `true` case got
     through.
     """
-    value = declared(manifest, *path)
+    value = declaration(manifest, *path)
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ConfigError(
             f"config/profiles/{manifest.name}.yaml declares {'.'.join(path)} as "
@@ -426,7 +427,7 @@ def declared_count(manifest: Manifest, *path: str) -> int:
 
 def one_role(manifest: Manifest, part: str) -> str:
     """What this source calls one of the pipeline's roles, where a list means its first entry."""
-    named = declared(manifest, ROLES, part)
+    named = declaration(manifest, ROLES, part)
     first = named[0] if isinstance(named, list) and named else named
     if not isinstance(first, str) or not first:
         raise ConfigError(
@@ -479,20 +480,6 @@ def restated_answer(record: Record, role: str) -> StoredAnswer | None:
     return tuple(stated) if isinstance(stated, list) else None
 
 
-def readable_catalog(catalog: Sequence[Tool]) -> str:
-    """The catalog as a person or a juror reads it: one line per tool, arguments named."""
-    return "\n".join(
-        f"- {tool.name}({', '.join(sorted(tool.parameters.get(PROPERTIES) or {}))})"
-        f"{': ' + tool.description if tool.description else ''}"
-        for tool in catalog
-    )
-
-
-def readable_conversation(content: Sequence[Part]) -> str:
-    """The turns as a juror reads them: whose turn it was, and what was in it."""
-    return "\n".join(f"{part.role}: {part.text or ''}" for part in content)
-
-
 def typed_arguments(written: Sequence[Any]) -> dict[str, Any] | None:
     """The arguments an annotator typed, keyed by tool name, or None if any of it is malformed.
 
@@ -515,21 +502,6 @@ def typed_arguments(written: Sequence[Any]) -> dict[str, Any] | None:
     return keyed
 
 
-def control_values(result: Sequence[Mapping[str, Any]]) -> dict[str, Mapping[str, Any]]:
-    """One annotation's `result` list as the controls it answered, by control name.
-
-    A control the annotator never touched is absent from the list rather than present and empty,
-    which is why this is a mapping and not a tuple of positions.
-    """
-    return {
-        str(entry[FROM_NAME]): value
-        for entry in result
-        if isinstance(entry, Mapping) and FROM_NAME in entry
-        for value in [entry.get(VALUE)]
-        if isinstance(value, Mapping)
-    }
-
-
 @final
 class ToolDecision:
     """Tool selection over Vietnamese call-centre text, composed with `text2text`.
@@ -541,13 +513,13 @@ class ToolDecision:
     """
 
     def __init__(self, manifest: Manifest, question_template: str) -> None:
-        shape = declared(manifest, SHAPE)
+        shape = declaration(manifest, SHAPE)
         if shape not in SHAPES:
             raise ConfigError(
                 f"config/profiles/{manifest.name}.yaml declares shape {shape!r}, "
                 f"which is not one of {list(SHAPES)}"
             )
-        control = declared(manifest, ANSWER_CONTROL)
+        control = declaration(manifest, ANSWER_CONTROL)
         if control not in CONTROLS:
             raise ConfigError(
                 f"config/profiles/{manifest.name}.yaml declares answer_control "
@@ -588,6 +560,12 @@ class ToolDecision:
     def build_record(self, item: Mapping[str, Any], parts: Sequence[Part]) -> Record:
         """One source item into one record. The only place a source shape is read.
 
+        That sentence is § *Profile*'s and it is not quite true: `content_parts` reads the item's
+        `messages` too, because turns are content. What is exclusive is the *validation* -- `shape:`
+        is checked here and nowhere else -- and every key other than `messages`. The correction is in
+        § *Profile* and in `modalities/text2text/utils.py` rather than edited into this line, which
+        I19 and I21 compare against the document (§8).
+
         `meta` keeps every key the source presented (Requirement 9), the label included: nothing
         writes to `meta`, so the copy cannot go stale, and `training_example` puts the record back
         into the shape it arrived in. What `load_data` knows and this does not -- the file's digest,
@@ -622,7 +600,7 @@ class ToolDecision:
             branch=Branch(modality=self.modality, profile=self.name),
             provenance=provenance,
             content=tuple(parts),
-            label=listed(source_meta[self._label_at]),
+            label=entries_in(source_meta[self._label_at]),
             meta={
                 **{
                     key: value
@@ -710,7 +688,15 @@ class ToolDecision:
         one; either way a corrected value that does not validate against this record's own
         `answer_schema` is `None` and never coerced.
         """
-        answered = control_values(result)
+        # By control name, because a control the annotator never touched is absent from the
+        # list rather than present and empty -- there are no positions to read.
+        answered = {
+            str(entry[FROM_NAME]): value
+            for entry in result
+            if isinstance(entry, Mapping) and FROM_NAME in entry
+            for value in [entry.get(VALUE)]
+            if isinstance(value, Mapping)
+        }
         chosen = answered.get(VERDICT, {}).get(CHOICES)
         if not isinstance(chosen, list) or INCORRECT not in chosen:
             return None
@@ -732,9 +718,16 @@ class ToolDecision:
     def jury_slots(self, record: Record) -> Mapping[str, Any]:
         """What the jury prompt's slots are filled with. The template is policy's, not this."""
         return {
-            "conversation": readable_conversation(record.content),
-            "catalog": readable_catalog(catalog_of(record)),
-            "label": canonical(list(record.label)),
+            # The turns as a juror reads them, and the catalog with each tool's arguments named.
+            "conversation": "\n".join(
+                f"{part.role}: {part.text or ''}" for part in record.content
+            ),
+            "catalog": "\n".join(
+                f"- {tool.name}({', '.join(sorted(tool.parameters.get(PROPERTIES) or {}))})"
+                f"{': ' + tool.description if tool.description else ''}"
+                for tool in catalog_of(record)
+            ),
+            "label": canonical_json(list(record.label)),
         }
 
     def scenario_hash(self, record: Record) -> str:

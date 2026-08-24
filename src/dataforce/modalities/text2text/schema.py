@@ -13,10 +13,13 @@ second from the first and this shape carries both, each named for the text it ru
 pattern holds no tone mark at all the two are equal and the scan sees one hit twice: layer one is
 tuned for recall and is *allowed* to be noisy, and layer two is what sets precision.
 
-**A display config is a fragment and the task data that fragment reads.** Neither half of the
-annotation config may emit the other's (Requirement 31), so what is here is this modality's half of
-both: the ``<Paragraphs>`` tag, and the one ``conversation`` key it reads. The verdict controls and
-the ``question`` string beside them are ``tool_decision``'s, and neither model can see the other.
+**A display config is a fragment and the task data this half owns.** Neither half of the annotation
+config may emit the other's (Requirement 31), so what is here is the ``<Paragraphs>`` tag and the one
+``conversation`` key that feeds it. The fragment *reads* one key it does not own -- ``$question`` --
+because rendering the question is the display half's job and writing it is
+``tool_decision.question_text``'s; ``$tool_names`` is the capture half's on both counts. So neither
+config half carries a complete payload, and the module that assembles one out of both is ``publish``
+(T24).
 """
 
 from typing import Any
@@ -73,7 +76,9 @@ class DisplayConfig(BaseModel):
     data: dict[str, Any] = Field(
         ...,
         description=(
-            "The task-payload keys this fragment reads, and no others: the "
-            "conversation, as the array of message objects `<Paragraphs>` expects."
+            "The task-payload keys this half *owns*: the conversation, as the array of "
+            "message objects `<Paragraphs>` expects. The fragment also reads "
+            "`$question`, which is the profile's string — the tag that shows it belongs "
+            "to the display half and the words in it do not (Requirement 31)."
         ),
     )

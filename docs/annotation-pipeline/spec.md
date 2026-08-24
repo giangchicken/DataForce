@@ -146,6 +146,16 @@ Fourteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque h
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`.
 
+**`build_record` is the only place a source shape is *validated*, and not the only place one is
+read.** `content_parts` reads `messages`, and inside it `role`, `content`, `tool_calls` and a call's
+`function` and `arguments` — it has to, because turns are content and reading content is what a
+modality is for. What the profile owns is every other key *and the `shape:` declaration itself*: it is
+the only side that refuses an undeclared shape, and the modality assumes a chat item unconditionally.
+So the declared input spans both axes with one end unvalidated, and since neither axis may hold the
+other's vocabulary there is nowhere to move the check to. The member docstring above says *the only
+place*, which is what a reader will hit first, so the correction is written here rather than resolved
+silently (§8).
+
 #### The answer, and the three operations over it
 
 **An answer is a set of calls.** A call is a tool's name *and* its arguments, because `SendStatement`

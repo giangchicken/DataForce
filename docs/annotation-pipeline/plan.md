@@ -116,6 +116,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T45 | The rendering convention has a name, and a test that crosses it | 3 | T12, T13 | S | ✓ |
 | T46 | The manifest is validated where it is read | 3 | T12, T13 | S | ✓ |
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
+| T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1332,10 +1333,14 @@ still would not validate. Half-building one puts a value no juror proposed into 
    Not added here: `pii_check` is its only consumer and lands in T16, and a fifteenth member with no
    caller is the guess P20 refuses — the same argument that deleted `MediaResolver`. **T16 adds it to
    the protocol, the count in both places I21 reads, and this implementation.**
-6. **`answer_config()` has no per-record half, so `$tool_names` has no producer.** The capture half's
-   dynamic choice list is per record and `answer_config()` takes none. `publish` can read the names
-   off `answer_schema(record)`'s `oneOf`, which is one source of truth rather than two — **T24
-   decides, and if it needs a member instead, that is a fifteenth one to argue for there.**
+6. **Two payload keys have no assembler, and one of them has no producer either.** The capture
+   half's dynamic choice list is per record and `answer_config()` takes none, so `$tool_names` has
+   nobody to write it; `publish` can read the names off `answer_schema(record)`'s `oneOf`, which is
+   one source of truth rather than two. `$question` is the other, and it is only wiring —
+   `question_text(record)` produces it and § *Per-service contracts* already hands `publish` both
+   halves, so what is missing is the module that puts the two together. **T24 decides both, and if
+   `$tool_names` needs a member instead, that is a fifteenth one to argue for there** (T48 corrected
+   `DisplayConfig.data`'s description, which used to claim its fragment read no key it did not own).
 7. **A missing label raises, and Requirement 14 and Requirement 43 disagree about that.**
    Requirement 14: "An undeclared key raises, naming the manifest and what *is* declared."
    Requirement 43: the only exception is a `ConfigError` raised *before any record is read*. An item
@@ -1548,6 +1553,50 @@ façade exporting a second class a finding too.
 
 The two runtime tests keep their place beside it and now assert equality: a member arriving through a
 decorator or a base class would show up on a live instance and not in an AST scan.
+
+---
+
+### T48 · Three sentences the code does not support
+
+**Goal.** No docstring or field description claims something the code does not do, and §4 and §5 hold
+over both axes.
+
+**Context.** Three claims, found in the same review. `DisplayConfig.data` said it held "the
+task-payload keys this fragment reads, and no others" — the fragment references `$conversation` *and*
+`$question`, and `data` carries one of them, with a test freezing the gap. `build_record`'s docstring
+says it is "the only place a source shape is read" while `content_parts` reads `messages`, `role`,
+`content`, `tool_calls` and a call's `function` and `arguments`. And `ports.py` said "one port,
+because a port with no adapter is a guess" — true of `QuestionStore`, no longer the whole of what the
+engine demands of the edge, since T12 made an axis implementation something you *build with* an
+encoder and a template.
+
+Plus §4 and §5: five functions were one expression with one caller and none of §4's six exemptions,
+and `declared`, `listed` and `canonical` read as adjectives rather than as what comes back.
+
+**Approach.** Correct the three claims where the next reader hits them — the second one in
+§ *Profile* and both axis modules, because the sentence is the document's own and I19 and I21 compare
+the copies against it. Then inline four functions and rename three.
+
+**Acceptance criteria.** `$question`'s owner is named in the field description and in T13's note 6.
+§ *Profile* says which reader validates the shape. `ports.py` says why an encoder is not a port. No
+function in either axis is one expression with one caller and no exemption.
+
+**Source.** Requirement 31, Requirement 47, § *Profile*; AGENTS.md §4, §5, §8, P20.
+
+**Verify.** `make check`.
+
+**Landed.** No test count change: every claim corrected was a claim, and the inlining is behaviour-
+preserving — which is the point of doing it in its own commit, where the diff is readable as *nothing
+happened*.
+
+`stated_calls` kept its name against §4's letter, with two exemptions from its own table: it holds
+Requirement 15's rule, and T45's crossing test calls it directly. `one_block` — written two commits
+ago and never reviewed — went the other way and was inlined, because the rule has to apply to what I
+wrote last as much as to what I wrote first.
+
+**`$question` is wiring, not a missing owner**, and that distinction is what the note now records:
+`question_text(record)` produces it and `publish` is already handed both halves, so T24 has one key to
+assemble and one — `$tool_names` — to decide the producer for.
 
 ---
 

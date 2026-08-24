@@ -132,8 +132,15 @@ DETECTORS = (
 )
 
 
-def declared(manifest: Manifest, *path: str) -> Any:
-    """One value the manifest declares, or a `ConfigError` naming the path and what is there."""
+def declaration(manifest: Manifest, *path: str) -> Any:
+    """One value the manifest declares, or a `ConfigError` naming the path and what is there.
+
+    Duplicated in `tool_decision/utils.py` on purpose, and the note is here as well as there because
+    whichever module a reader lands in first is the one that has to explain it: § *Package layout*
+    says the two axes share `name`, `version`, `Part` and one separator *and nothing else*, so a
+    shared reader would be a fifth, and the first key one axis needed and the other did not would put
+    a profile's vocabulary in a module the modality imports.
+    """
     reached: Any = manifest.declarations
     for key in path:
         if not isinstance(reached, Mapping) or key not in reached:
@@ -154,7 +161,7 @@ def declared_name(manifest: Manifest, *path: str) -> str:
     a name belongs becomes `"['a']"`, which is a model nobody has and an error a hundred records
     later.
     """
-    value = declared(manifest, *path)
+    value = declaration(manifest, *path)
     if not isinstance(value, str) or not value:
         raise ConfigError(
             f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
@@ -172,7 +179,7 @@ def declared_roles(manifest: Manifest, *path: str) -> frozenset[str]:
     Wrong vectors are invisible and a refused run is not, which is why this raises rather than
     reading a lone string as a one-role list.
     """
-    value = declared(manifest, *path)
+    value = declaration(manifest, *path)
     if not isinstance(value, list) or any(not isinstance(role, str) for role in value):
         raise ConfigError(
             f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
@@ -237,14 +244,13 @@ def spoken_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return "".join(one_block(block) for block in content)
+        return "".join(
+            block[TEXT]
+            if isinstance(block, Mapping) and isinstance(block.get(TEXT), str)
+            else canonical_json(block)
+            for block in content
+        )
     return canonical_json(content)
-
-
-def one_block(block: Any) -> str:
-    """One content block's text, or the block itself where it holds none."""
-    spoken = block.get(TEXT) if isinstance(block, Mapping) else None
-    return spoken if isinstance(spoken, str) else canonical_json(block)
 
 
 def stated_calls(calls: Sequence[Mapping[str, Any]]) -> str:
@@ -310,6 +316,14 @@ class Text2Text:
 
         Byte-identical to the source (Requirement 16): normalising here would change what
         `record_id` is computed over and what an annotator is shown.
+
+        **This is the second reader of the item.** `build_record`'s own docstring calls itself the
+        only place a source shape is read, and this reads `messages` and, inside a turn, `role`,
+        `content`, `tool_calls` and a call's `function` and `arguments`. It has to: turns are content.
+        What it does *not* do is validate which shape the item is in -- the profile's `shape:`
+        declaration is the only check, and this side assumes a chat item unconditionally. § *Profile*
+        carries the correction; neither axis may hold the other's vocabulary, so there is nowhere to
+        move the check to (§8).
         """
         turns = item.get(MESSAGES)
         if not isinstance(turns, list):
