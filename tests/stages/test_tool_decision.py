@@ -191,15 +191,19 @@ def a_record(
 
 
 def an_item(**overrides: Any) -> dict[str, Any]:
-    """One source item in the declared shape, with what `load_data` adds to it."""
+    """One source item in the declared shape, as the source wrote it."""
     return {
         "id": "s4471",
         "messages": [{"role": role, "content": text} for role, text in TURNS],
         "tools": CATALOG,
         "meta": {"label": [SENT], "human_checked": True, "llm_model": "a-model"},
-        "__provenance__": PROVENANCE,
         **overrides,
     }
+
+
+def a_provenance() -> Provenance:
+    """What `load_data` hands over: the file, the offset, the clock, the pair and the run."""
+    return Provenance(**PROVENANCE)
 
 
 def checks_that_fire(record: Record, profile: ToolDecision | None = None) -> set[str]:
@@ -335,7 +339,7 @@ def test_an_empty_catalog_permits_only_the_empty_answer() -> None:
 def test_the_space_is_materialised_and_never_written_down() -> None:
     """I10: the catalog is the source's own key, kept verbatim; the space is derived on request."""
     profile = a_profile()
-    record = profile.build_record(an_item(), parts())
+    record = profile.build_record(an_item(), parts(), a_provenance())
 
     assert "answer_space" not in record.model_dump()
     assert record.meta["tools"] == CATALOG
@@ -546,7 +550,7 @@ def test_an_earlier_tool_call_turn_is_history_and_not_a_restatement() -> None:
 
 def test_the_record_carries_what_the_item_and_load_data_gave_it() -> None:
     """`build_record` is the only place a source shape is read."""
-    record = a_profile().build_record(an_item(), parts())
+    record = a_profile().build_record(an_item(), parts(), a_provenance())
 
     assert record.record_id == record_id_for(parts())
     assert record.source_id == "s4471"
@@ -558,14 +562,15 @@ def test_the_record_carries_what_the_item_and_load_data_gave_it() -> None:
 
 def test_meta_keeps_every_key_the_source_presented() -> None:
     """Requirement 9, verbatim -- including the keys no code recognises."""
-    record = a_profile().build_record(an_item(unrecognised={"x": 1}), parts())
+    record = a_profile().build_record(
+        an_item(unrecognised={"x": 1}), parts(), a_provenance()
+    )
 
     assert record.meta["unrecognised"] == {"x": 1}
     assert record.meta["human_checked"] is True
     assert record.meta["tools"] == CATALOG
     assert record.meta["id"] == "s4471"
     assert "messages" not in record.meta
-    assert "__provenance__" not in record.meta
 
 
 def test_the_answer_is_read_from_the_key_the_manifest_declares() -> None:
@@ -573,7 +578,7 @@ def test_the_answer_is_read_from_the_key_the_manifest_declares() -> None:
     renamed = a_profile(label={"at": "gold"})
     item = an_item(meta={"gold": [TICKETED]})
 
-    assert renamed.build_record(item, parts()).label == (TICKETED,)
+    assert renamed.build_record(item, parts(), a_provenance()).label == (TICKETED,)
 
 
 def test_an_item_with_no_answer_under_the_declared_key_names_both() -> None:
@@ -581,31 +586,14 @@ def test_an_item_with_no_answer_under_the_declared_key_names_both() -> None:
     item = an_item(meta={"target": [SENT]})
 
     with pytest.raises(ConfigError, match="meta.label"):
-        a_profile().build_record(item, parts())
-
-
-@pytest.mark.parametrize(
-    "given",
-    [None, {"offset": 41}],
-    ids=["absent", "incomplete"],
-)
-def test_provenance_the_stage_did_not_supply_is_refused(given: Any) -> None:
-    """Requirement 12: a record without provenance cannot be constructed at all."""
-    item = an_item()
-    if given is None:
-        del item["__provenance__"]
-    else:
-        item["__provenance__"] = given
-
-    with pytest.raises(ConfigError, match="__provenance__"):
-        a_profile().build_record(item, parts())
+        a_profile().build_record(item, parts(), a_provenance())
 
 
 def test_a_label_that_is_one_string_is_not_thirteen_calls() -> None:
     """`tuple("SendStatement")` is a tuple of characters, which is the shape of a real defect."""
     item = an_item(meta={"label": "SendStatement"})
 
-    record = a_profile().build_record(item, parts())
+    record = a_profile().build_record(item, parts(), a_provenance())
 
     assert record.label == ()
     assert "empty_catalog" not in checks_that_fire(record)
@@ -623,7 +611,7 @@ def test_an_item_with_no_id_traces_back_through_its_offset() -> None:
     item = an_item()
     del item["id"]
 
-    assert a_profile().build_record(item, parts()).source_id == "41"
+    assert a_profile().build_record(item, parts(), a_provenance()).source_id == "41"
 
 
 # --- what a person is asked, and what comes back ---
@@ -768,7 +756,7 @@ def test_the_jury_s_slots_are_the_record_and_nothing_from_a_model() -> None:
 def test_a_training_example_is_the_shape_the_record_arrived_in() -> None:
     """So an export is re-readable by the same loader, with the answer back where it was."""
     profile = a_profile()
-    record = profile.build_record(an_item(), parts())
+    record = profile.build_record(an_item(), parts(), a_provenance())
 
     example = profile.training_example(record)
 

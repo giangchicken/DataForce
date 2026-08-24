@@ -8,7 +8,7 @@ own axis (I16).
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from dataforce.record import Part, Record
+from dataforce.record import Part, Provenance, Record
 
 # Opaque on purpose, for the reason `modalities/base.py` states: the base names the type so a
 # signature can use it, and `tool_decision/schema.py` says what is inside one. `Answer` is the
@@ -34,8 +34,10 @@ class Profile(Protocol):
         """How an answer is controlled: cardinality ceiling, argument handling."""
         ...
 
-    def build_record(self, item: Mapping[str, Any], parts: Sequence[Part]) -> Record:
-        """One source item into one record. The only place a source shape is read."""
+    def build_record(
+        self, item: Mapping[str, Any], parts: Sequence[Part], provenance: Provenance
+    ) -> Record:
+        """One source item into one record. The only place a source shape is *validated*."""
         ...
 
     def label_checks(self) -> list[LabelCheck]:

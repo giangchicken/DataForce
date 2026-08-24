@@ -95,6 +95,12 @@ STAGES: tuple[Stage, ...] = (
 # phase written down twice is a phase that can disagree with itself (P16: one key, one writer).
 PHASES: tuple[str, ...] = tuple(dict.fromkeys(stage.phase for stage in STAGES))
 
+# The one phase whose stage does not read the bus. `load_data` is handed source items and mints
+# the records every other stage folds over, so there is nothing for `run_phase` to give it and its
+# signature is not § *Shared decisions*' one signature. `POST /load-data` is its own route for the
+# same reason, and § *Per-service contracts* records the break where a reader hits it (§8).
+FROM_SOURCE: tuple[str, ...] = ("load_data",)
+
 # The phases that are in the flow and have no module -- declared so the record's key has an owner,
 # specified in a follow-up. Every other phase's stages are built. The guard reads the same names
 # out of the spec's own "Declared, not built" sentence and compares the two.

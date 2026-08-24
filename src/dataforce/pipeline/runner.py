@@ -24,7 +24,7 @@ from dataforce.engine import Engine, ServiceResult
 from dataforce.errors import ConfigError
 from dataforce.record import Record
 
-from .flow import DECLARED_ONLY, PHASES, STAGES
+from .flow import DECLARED_ONLY, FROM_SOURCE, PHASES, STAGES
 
 # The one signature every service has (Requirement 46), named here because the runner is the only
 # module that has to say it out loud -- a stage just is a function of this shape.
@@ -57,6 +57,11 @@ def run_phase(engine: Engine, phase: str, records: Iterable[Record]) -> ServiceR
         raise ConfigError(f"unknown phase {phase!r}; the flow has {', '.join(PHASES)}")
     if phase in DECLARED_ONLY:
         raise ConfigError(f"{phase!r} is declared in the flow and has no module yet")
+    if phase in FROM_SOURCE:
+        raise ConfigError(
+            f"{phase!r} reads source items rather than records, so there is nothing to "
+            "fold; call it directly with the items and the run's own stamp"
+        )
 
     running = tuple(records)
     side_output: dict[str, Any] = {}

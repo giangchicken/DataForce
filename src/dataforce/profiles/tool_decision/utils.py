@@ -17,13 +17,17 @@ profile owns what goes in it.
 **An item this cannot read raises, and Requirement 43 says nothing may.** ``build_record`` returns
 ``Record`` and the signature is § *Profile*'s, so there is no value channel for *this item is
 unreadable* -- and ``Record.label`` is required precisely so that a missing label is not defaulted
-to *call nothing*. Two things raise ``ConfigError``: an item whose ``meta`` lacks the declared label
-key, and an item that arrived without the provenance ``load_data`` is supposed to add. The second is
-a caller's mistake and belongs nowhere else; the first is a defect in one item out of twenty
-thousand, and Requirement 43 permits a ``ConfigError`` only *before any record is read*. The rule is
-broken here on purpose (§8): ``load_data`` is the only caller and the only thing that can turn an
-unreadable item into a counted skip. T14 settles it, and ``modalities/text2text/utils.py`` carries
-the same note for its own two.
+to *call nothing*. One thing raises ``ConfigError``: an item whose ``meta`` lacks the declared label
+key. That is a defect in one item out of twenty thousand, and Requirement 43 permits a
+``ConfigError`` only *before any record is read*, so the rule is broken here on purpose (§8) --
+``load_data`` is the only caller, it is the only thing that knows the offset, and T14 settled it
+there: the raise is caught, counted against the item's offset and handed to the edge as side output,
+so a run still completes. ``modalities/text2text/utils.py`` carries the same note for its own two.
+
+A second raise stood here until T14 and is gone rather than caught: provenance arrived under a
+magic ``__provenance__`` key on the item and was validated on the way in, which is connascence of
+meaning between a stage and one axis (P13). It is a parameter now, so *an item with no provenance*
+is unrepresentable and mypy checks what a message used to explain (P22).
 
 **The manifest reader is duplicated from ``text2text/utils.py`` on purpose.** § *Package layout*
 says the two axes share ``name``, ``version`` and ``Part`` *and nothing else*; a shared
@@ -37,7 +41,6 @@ from typing import TYPE_CHECKING, Any, final
 
 import jsonschema  # type: ignore[import-untyped]  # guard-exempt: I6 · answer validation with no model call has no owner in the library · the profile · 2026-08-24
 from agent_toolkit.string_utils import compute_hash
-from pydantic import ValidationError
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
@@ -79,13 +82,12 @@ SHAPES = ("openai_chat_completion",)
 # so a measured agreement figure can be read against the surface it was measured on.
 CONTROLS = ("names_and_json_arguments", "json_text", "per_name_arguments")
 
-# The source item's own keys, and the one key `load_data` adds to it.
+# The source item's own keys. What `load_data` knows and the item does not is a parameter.
 ID = "id"
 META = "meta"
 TOOLS = "tools"
 MESSAGES = "messages"
 FUNCTION = "function"
-PROVENANCE = "__provenance__"
 
 # A tool's JSON Schema, by key, and the two keys a call is made of.
 NAME = "name"
@@ -557,35 +559,21 @@ class ToolDecision:
             tags=CAPTURE_TAGS,
         )
 
-    def build_record(self, item: Mapping[str, Any], parts: Sequence[Part]) -> Record:
-        """One source item into one record. The only place a source shape is read.
+    def build_record(
+        self, item: Mapping[str, Any], parts: Sequence[Part], provenance: Provenance
+    ) -> Record:
+        """One source item into one record. The only place a source shape is *validated*.
 
-        That sentence is § *Profile*'s and it is not quite true: `content_parts` reads the item's
-        `messages` too, because turns are content. What is exclusive is the *validation* -- `shape:`
-        is checked here and nowhere else -- and every key other than `messages`. The correction is in
-        § *Profile* and in `modalities/text2text/utils.py` rather than edited into this line, which
-        I19 and I21 compare against the document (§8).
+        § *Profile* used to say *read* and that was not quite true: `content_parts` reads the item's
+        `messages` too, because turns are content. What is exclusive is the validation -- `shape:`
+        is checked here and nowhere else -- and every key other than `messages`.
 
         `meta` keeps every key the source presented (Requirement 9), the label included: nothing
         writes to `meta`, so the copy cannot go stale, and `training_example` puts the record back
         into the shape it arrived in. What `load_data` knows and this does not -- the file's digest,
-        the offset, the clock, the run -- arrives under one key it adds to the item.
+        the offset, the clock, the run -- is the third argument, already validated by being a
+        `Provenance` at all.
         """
-        given = item.get(PROVENANCE)
-        try:
-            provenance = Provenance(**given) if isinstance(given, Mapping) else None
-        except ValidationError as incomplete:
-            raise ConfigError(
-                f"a source item reached build_record with an incomplete "
-                f"{PROVENANCE}: {incomplete.error_count()} field(s) wrong. `load_data` "
-                "supplies the source digest, the offset, the ingest time, both axis "
-                "versions and the run id"
-            ) from None
-        if provenance is None:
-            raise ConfigError(
-                f"a source item reached build_record with no {PROVENANCE}; that key is "
-                "what `load_data` puts the things only it knows into"
-            )
         carried = item.get(META)
         source_meta = dict(carried) if isinstance(carried, Mapping) else {}
         if self._label_at not in source_meta:
@@ -605,7 +593,7 @@ class ToolDecision:
                 **{
                     key: value
                     for key, value in item.items()
-                    if key not in (MESSAGES, META, PROVENANCE)
+                    if key not in (MESSAGES, META)
                 },
                 **source_meta,
             },

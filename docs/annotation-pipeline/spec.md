@@ -112,8 +112,9 @@ class Profile(Protocol):
     def answer_config(self) -> AnswerConfig:
         """How an answer is controlled: cardinality ceiling, argument handling."""
 
-    def build_record(self, item: Mapping[str, Any], parts: Sequence[Part]) -> Record:
-        """One source item into one record. The only place a source shape is read."""
+    def build_record(self, item: Mapping[str, Any], parts: Sequence[Part],
+                     provenance: Provenance) -> Record:
+        """One source item into one record. The only place a source shape is *validated*."""
 
     def label_checks(self) -> list[LabelCheck]:
         """The checks that need no opinion, each named for the defect it finds."""
@@ -152,9 +153,16 @@ read.** `content_parts` reads `messages`, and inside it `role`, `content`, `tool
 modality is for. What the profile owns is every other key *and the `shape:` declaration itself*: it is
 the only side that refuses an undeclared shape, and the modality assumes a chat item unconditionally.
 So the declared input spans both axes with one end unvalidated, and since neither axis may hold the
-other's vocabulary there is nowhere to move the check to. The member docstring above says *the only
-place*, which is what a reader will hit first, so the correction is written here rather than resolved
-silently (§8).
+other's vocabulary there is nowhere to move the check to. The member docstring said *the only place a
+source shape is read* until T14 and now says *validated*, which is the half that is true; this
+paragraph is the other half, where a reader following the member lands (§8).
+
+**Provenance is a parameter and not a key on the item.** It was ``item["__provenance__"]`` for one
+phase -- ``load_data`` put the file's digest, the offset, the clock and the run there, and this member
+validated them on the way in. That is connascence of meaning between a stage and one axis (P13), and
+it cost two ``ConfigError`` branches to police. As a third argument the case *an item with no
+provenance* cannot be spelled, so both branches are gone rather than caught: the cheapest error is
+the one the interface makes unrepresentable (P22).
 
 #### The answer, and the three operations over it
 
@@ -548,6 +556,7 @@ src/dataforce/              the package; its docstring states the import directi
     __init__.py             façade · the flow's table, its fold, and the phases under it; holds nothing of its own.
     flow.py                 DEFINITION · PHASES and STAGES — the flow table, in code, once.
     runner.py               LOGIC · run_phase — a phase's stages folded over records, in the table's order.
+    params.py               LOGIC · the params.yaml declarations a stage reads, checked where they are read.
     load_data.py            STEP · load_data · every source item becomes one record with identity, content and provenance.
 
     data_quality/           three stages, so a directory rather than a module
@@ -806,6 +815,25 @@ satisfy it is marked and passed on untouched, never dropped and never a reason t
 The catalog is **not** copied onto the record as an answer space; `answer_schema` materialises it from
 the record when asked and never persists it. A stored space is a second thing that can disagree with the
 first, and it is the copy that goes stale.
+
+**`load_data` is the one stage whose input is not the bus**, so it is the one exception to the single
+signature § *Engine and edge* states below. A source item is not a record, and there is no record to
+hand the stage that makes them, so it takes the items plus the three things only the edge can know --
+the digest of the file they came out of, the ingest clock, and the run id (Decision 4). `POST
+/load-data` is its own route for the same reason, `pipeline/flow.py`'s `FROM_SOURCE` is where
+`run_phase` reads it, and asking a phase endpoint to fold this one is a `ConfigError` rather than a
+`TypeError` about keyword arguments. Handing the three in rather than reading them is also what makes
+both shells produce one record (Requirement 46, I15): nothing in the engine has a clock.
+
+**An item that cannot be read is counted, not raised.** Three things below this stage raise
+`ConfigError` while records are being read — see § *Error Behavior* — and this is the only caller of
+either axis, the only place that knows an item's offset, and therefore the only place that can turn
+one into data. It catches, records the offset and the message, and hands them to the edge as side
+output for the quarantine tier; the run completes (Requirement 43). What that gives up is stated:
+where the *declaration* is wrong rather than the item, P23 would call it configuration scope and
+stop, and a manifest naming a label key no item carries instead produces twenty thousand counted
+items and no records. This stage cannot tell those apart at item 1 and does not guess — what it can
+know is per item, so per item is the scope it reports.
 
 #### `data_quality`
 
@@ -1485,7 +1513,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|
 | Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
-| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*; `load_data` is the only caller that could turn one into a counted skip. Recorded in both axis modules (§8) and settled in T14 |
+| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break (§8) and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed (P22) |
 | A turn's `content` is a content-block array, or any other non-string | read, never refused: a text block contributes its text and any other block its canonical JSON, so nothing leaves `record_id`. Requirement 13 declares the OpenAI chat-completion shape and this is that shape, so such an item is a declared item and becomes a record |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
 | Profile and modality disagree | `ConfigError`: "composes with modality 'text2text'" |

@@ -17,10 +17,10 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-`make check` is green over 55 modules and 615 tests, 164 of which are not guards — but **T34 is open
+Phase 4 is in progress: T14 has landed.
+`make check` is green over 57 modules and 635 tests, 184 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
-at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
-list.**
+at the end of the task below it. **T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -126,7 +126,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T11 | The two protocols | 3 | T8 | S | ✓ |
 | T12 | `text2text` | 3 | T4, T11 | M | ✓ |
 | T13 | `tool_decision` | 3 | T1, T11 | L | ✓ |
-| T14 | `load_data` | 4 | T10, T12, T13 | M | |
+| T14 | `load_data` | 4 | T10, T12, T13 | M | ✓ |
 | T15 | `label_check` | 4 | T13, T14 | S | |
 | T16 | `pii_check` | 4 | T2, T14 | L | |
 | T17 | `duplicate_check` | 4 | T12, T14 | M | |
@@ -1635,6 +1635,38 @@ is here.
 **Source.** `spec.md` § *Per-service contracts* row 0; `objective.md` § *`meta.label` is the answer*.
 
 **Verify.** `uv run pytest tests/stages/test_load_data.py -q`.
+
+**Landed.** Sixteen tests, and three decisions this task existed to make.
+
+**The signature is not § *Shared decisions*' signature, and it could not be.** A source item is not a
+record, so `(engine, records)` has nothing to pass. It takes the items and three keyword arguments —
+the file's digest, the ingest clock, the run id — which are exactly the things Decision 4 says the
+edge generates because the engine has no clock. *The alternative:* have the edge stamp each item and
+keep the two-argument shape. Rejected because it puts record-shaping at the edge and contradicts
+Requirement 12, which says `load_data` writes provenance. The cost is that `run_phase` can be handed
+a phase it cannot fold, so `flow.py` names it — `FROM_SOURCE` — and refuses with a `ConfigError`
+naming why rather than a `TypeError` about keyword arguments.
+
+**Provenance became a parameter of `build_record`, which deleted two raises.** It arrived as
+`item["__provenance__"]`, a magic key one axis validated and one stage filled: connascence of meaning
+across a boundary neither side may import (P13), policed by two `ConfigError` branches and a test for
+each. As a third argument the bad case cannot be spelled and mypy checks what a message used to
+explain (P22). This is a change to T13's landed surface, made here because T14 is the first caller and
+the interface was wrong in a way only a caller could see.
+
+**And the item-scope raise is settled: counted, not raised.** The three raises T44 recorded are caught
+per item, and the offset and the message go to the edge as side output for the quarantine tier. What
+it gives up is written into § *Per-service contracts* rather than left implicit: where the
+*declaration* is wrong rather than the item — a manifest naming a label key no item carries — P23
+would call that configuration scope and stop the run, and this instead reports twenty thousand counted
+items and no records. The stage cannot distinguish the two at item 1, so it reports the scope it can
+actually know. Requirement 43 holds at the level it is written about: **a run always completes.**
+
+`pipeline/params.py` lands with one caller. P5 asks for two or a written reason the second is
+imminent: T16 reads `enable_redact` and T17 reads a similarity threshold, both in this phase, and what
+the module holds is one rule — *a wrong declaration is a `ConfigError` before any record is read* —
+which is the rule both axes already keep their own copies of, for a reason that does not apply between
+two modules under `pipeline/`.
 
 ---
 
