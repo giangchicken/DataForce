@@ -12,12 +12,12 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phase 1 is done. Phase 0 has one task left.** Phase 0: T1 (`2c41599`), T2 (`a2fc1df`),
-T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5 (`64edb99`),
-T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. `make check` is green over
-55 modules holding no behaviour and 292 tests, all of them guards — but **T34 is open and CI is red
-on a line neither `make check` nor any guard reads.** What each task changed is recorded at the end of
-the task below it. **Phase 2 is next, and nothing in it has been started.**
+**Phase 1 is done. Phase 0 has one task left, and Phase 2 has started.** Phase 0: T1 (`2c41599`),
+T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
+(`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. Phase 2: T8.
+`make check` is green over 55 modules and 313 tests, 21 of which are the first in the tree that are not
+guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
+each task changed is recorded at the end of the task below it. **T9 is next.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -105,7 +105,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
-| T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | |
+| T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | ✓ |
 | T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M | |
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
 | T11 | The two protocols | 3 | T8 | S | |
@@ -795,6 +795,39 @@ raises.
 **Source.** `spec.md` § *The record*, Requirements 1, 47; I7, I9, I10.
 
 **Verify.** `make check`; `uv run pytest tests/stages -q -k record`.
+
+**Landed.** The whole drawing, not only the keys `load_data` writes: 23 models and 101 described
+fields, because § *The record* carries a comment on every key and Requirement 1 says the record is the
+place a key's meaning is written down next to the key. A record holding only the load-time half would
+leave the other eleven keys with no home, and no later task claims them. I7 stopped being vacuous on
+the same commit — it had nothing to find until this module existed, which is what P29 asked of it. The
+tests are `tests/stages/test_record.py` and `test_manifest.py`: a record is not a stage, but it is what
+every stage reads and returns, and this task's *Verify* already pointed there.
+
+Four shape decisions, each with a cost. **Every model is frozen and every sequence is a tuple**, which
+is Requirement 41's `output == input` *structurally* before there is a second stage to assert it
+against: a stage returns `model_copy(update=…)` or it returns nothing. The guarantee stops at the
+record's own shape — `meta`, `label` and the resolved configs are free-form JSON, and a dict inside one
+of them is still a dict. **`record_id` is a field and not a validator over `content`:** `pii_check`
+rewrites content, so an id recomputed on construction would change under redaction and take every join
+in the corpus with it. **A key's model is named for what the key holds, never for the stage that writes
+it** (§5) — `data_quality.label_check` holds a `LabelVerdict`, because `LabelCheck` is already the
+profile's word for one of the five checks (Requirement 47), and two of those in one import is the
+ambiguity §5 is about. **`class` is a keyword here and a key there**, so a span's field is
+`personal_data_class` aliased to `class`, serialised by alias in both directions and proved through one
+JSON round trip.
+
+Two gaps in the drawing, found by typing it and not closed here. `annotator_answers.responses` has no
+`was_skipped`, but Requirement 50 says a skip is stored, counted and excluded from `aggregate`'s
+overlap, and the store's `annotator_answer` table already has the column — so either the record grows
+the key or `aggregate` reads the store, which it may not. Requirement 49's `malformed` corrected value
+has no key at all. Both belong to T24 and T25, recorded here so they are decided rather than discovered.
+
+One consequence of Requirement 6, written down because it is easy to miss: `record_id` is over content
+and nothing else, so two records with identical content are one id. That is exactly what
+`duplicate_content_diff_label` is for — same content, different label — and it cannot name the other
+record by an id the two share. T17 settles it: either a duplicate group references `source_id`, or the
+id takes something more than content and Requirement 6 changes.
 
 ---
 

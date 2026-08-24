@@ -5,10 +5,10 @@ that text is the OpenAPI a caller reads in `/docs`; for the record it is the onl
 meaning is written down next to the key. A field with no description is a key whose meaning lives
 in someone's head.
 
-**This guard is vacuous over the tree today** -- no module defines a model yet -- and that is the
-point of writing it now rather than after `record.py`. What is not vacuous is the proof below: the
-rule is run over synthetic models, and over a synthetic module, so it is known to work before it
-has anything to find.
+**It was vacuous when it was written** -- no module defined a model yet -- and that was the point
+of writing it before `record.py` rather than after. What was not vacuous then is the proof below:
+the rule is run over synthetic models, and over a synthetic module, so it was known to work before
+it had anything to find. `record.py` and `manifest.py` gave it something to find.
 """
 
 import importlib
