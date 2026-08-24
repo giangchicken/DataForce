@@ -17,8 +17,8 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-Phase 4 is in progress: T14 has landed.
-`make check` is green over 57 modules and 635 tests, 184 of which are not guards — but **T34 is open
+Phase 4 is in progress: T14 and T15 have landed.
+`make check` is green over 56 modules and 643 tests, 186 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **T34 is still the oldest thing on this list.**
 
@@ -127,7 +127,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T12 | `text2text` | 3 | T4, T11 | M | ✓ |
 | T13 | `tool_decision` | 3 | T1, T11 | L | ✓ |
 | T14 | `load_data` | 4 | T10, T12, T13 | M | ✓ |
-| T15 | `label_check` | 4 | T13, T14 | S | |
+| T15 | `label_check` | 4 | T13, T14 | S | ✓ |
 | T16 | `pii_check` | 4 | T2, T14 | L | |
 | T17 | `duplicate_check` | 4 | T12, T14 | M | |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | |
@@ -1684,6 +1684,27 @@ corpus is declared; a check reading 0 is what tells you when it stops reading 0.
 **Source.** `spec.md` § *Per-service contracts* row 1, Requirement 22.
 
 **Verify.** `uv run pytest tests/stages/test_label_check.py -q`.
+
+**Landed.** Eight tests, and the stage is thirty lines because the five checks are the profile's.
+Two things were decided rather than assumed.
+
+**Requirement 22 and Requirement 44 disagree about who compares a count, and 44 wins.** Requirement
+22 reads as though this stage checks each check's count against `params.invalid_counts` and *a count
+that moves fails the run*; Requirement 44 says a corpus-level number is a fold at the edge and a
+moved count is a line in a diff, and Decision 10 deleted the gates that would have stopped anything.
+So nothing here counts and nothing here compares — and there is a test for exactly that, because *the
+run completes over a corpus that should have stopped* is the cost Decision 10 states and an untested
+cost is a claim.
+
+**`passed` and `quarantined` are one boolean written twice, and they stay two fields.** They answer
+different questions — did the label hold, and do the stages after this one skip it — and they coincide
+only because all five defects are disqualifying. The day an advisory check is added they part company
+and nothing else moves; collapsing them now would be the record that cannot express that.
+
+`written_paths` lands in this task's test module rather than in a `conftest.py`, on the precedent
+`test_runner.py` set: two consumers is when a thing moves, and T16, T17 and T18 are the next three.
+It compares two record dumps and reports the dotted path of every leaf that differs, which is how
+"exactly one key" (I8) is asserted per stage rather than only in `tests/properties/`.
 
 ---
 
