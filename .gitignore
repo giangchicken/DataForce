@@ -14,6 +14,14 @@ data/run.json
 *.jsonl
 !tests/fixtures/**/*.jsonl
 
+# Per-model LLM settings, read at the edge through `agent-toolkit`'s
+# `JsonDirConfigResolver` (`<model>.json`, the convention it preserves). Never committed:
+# a file naming an endpoint and holding a key is what AGENTS.md section 9 forbids, and the
+# library's own YAML resolver refuses both keys for the same reason. `LLM_API_KEY` and
+# `LLM_BASE_URL` are the environment's; what a model *does* -- temperature, ceilings --
+# belongs in a committed policy file whose digest reaches the run manifest.
+config/model/
+
 .env
 .venv/
 __pycache__/
