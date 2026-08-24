@@ -12,13 +12,15 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phases 0 and 1 are done.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`) and T4 (`7fa0432`,
-`f7f30f4`, `89292ce`) closed Phase 0; T5 (`64edb99`), T7 (`b1c49b6`) and T6 (`c72e5a6`) closed
-Phase 1. `make check` is green over 57 modules holding no behaviour and 276 tests, all of them
-guards. What each task changed is recorded at the end of the task below it. **Phase 2 is next, and
-nothing in it has been started.**
+**Phase 1 is done. Phase 0 has one task left.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`),
+T4 (`7fa0432`, `f7f30f4`, `89292ce`) and T32 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
+(`c72e5a6`) closed Phase 1. `make check` is green over 57 modules holding no behaviour and 283
+tests, all of them guards — but **T33 is open and CI is red on a line neither `make check` nor any
+guard reads.** What each task changed is recorded at the end of the task below it. **Phase 2 is
+next, and nothing in it has been started.**
 
-**Scope.** Stages 0–11 and both shells. `release` — stages 12–14 — is declared in the flow so
+**Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
+shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
 `record.release` has an owner and is specified in a follow-up. Nothing here may assume its shape.
 
 **Assumption:** no corpus is declared, and none is needed until Phase 8. The engine is source-agnostic
@@ -52,13 +54,13 @@ depart from it.
 
 | Written | Lives in |
 |---|---|
-| `Requirement 47` | `spec.md` § *Requirements* — 48 of them |
-| `I8` | `spec.md` § *Invariants* — 17 of them |
-| `Decision 12` | `spec.md` § *Decisions* — 14 of them |
-| `stage 2` | `spec.md` § *The flow* — 15 rows, numbered 0–14 |
+| `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
+| `I8` | `spec.md` § *Invariants* — I1 to I19 |
+| `Decision 12` | `spec.md` § *Decisions* — 19 of them |
+| `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
 | `§6` | a numbered section of `AGENTS.md` § *Conventions* |
-| `T16` | a task in this file |
+| `T16` | a task in this file. The number is its name, not its place in the order — inserting T32 renumbered nothing |
 
 ---
 
@@ -70,8 +72,8 @@ depart from it.
 | 1 | A guard fails before there is anything to guard | `make check` is green over an empty engine, and every architectural rule is a red test first |
 | 2 | The shared vocabulary exists | A record can be constructed, typed and hashed. Nothing runs |
 | 3 | Both axes answer their contracts | `text2text` and `tool_decision` resolve from config and satisfy their protocols |
-| 4 | One record makes the round trip | Stages 0–3 run in process over invented fixtures |
-| 5 | The panel scores a record | Stages 4–6 run against a stubbed panel |
+| 4 | One record makes the round trip | `load_data` and all of `data_quality` run in process over invented fixtures |
+| 5 | The panel scores a record | All of `ai_review` runs against a stubbed panel |
 | 6 | The loop through people closes | A question reaches a store, an answer comes back, a label is curated |
 | 7 | Two shells, one implementation | HTTP and an in-process caller produce the same record |
 | 8 | The rungs | Provisional thresholds become measured ones |
@@ -93,6 +95,8 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T2 | Assign the three unowned responsibilities | 0 | | M | ✓ `a2fc1df` |
 | T3 | Settle the four standing principle conflicts | 0 | | M | ✓ `9b9a3fe` |
 | T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | ✓ `89292ce` |
+| T32 | Un-number the stages | 0 | T5 | M | ✓ |
+| T33 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -102,18 +106,18 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T11 | The two protocols | 3 | T8 | S | |
 | T12 | `text2text` | 3 | T4, T11 | M | |
 | T13 | `tool_decision` | 3 | T1, T11 | L | |
-| T14 | `load_data` — stage 0 | 4 | T10, T12, T13 | M | |
-| T15 | `label_check` — stage 1 | 4 | T13, T14 | S | |
-| T16 | `pii_check` — stage 2 | 4 | T2, T14 | L | |
-| T17 | `duplicate_check` — stage 3 | 4 | T12, T14 | M | |
+| T14 | `load_data` | 4 | T10, T12, T13 | M | |
+| T15 | `label_check` | 4 | T13, T14 | S | |
+| T16 | `pii_check` | 4 | T2, T14 | L | |
+| T17 | `duplicate_check` | 4 | T12, T14 | M | |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | |
-| T19 | `jury` — stage 4 | 5 | T2, T13, T15 | M | |
-| T20 | `cohesion` — stage 5 | 5 | T19 | S | |
-| T21 | `triage` — stage 6 | 5 | T20 | S | |
-| T22 | `question_generate` — stage 7 | 6 | T21 | M | |
+| T19 | `jury` | 5 | T2, T13, T15 | M | |
+| T20 | `cohesion` | 5 | T19 | S | |
+| T21 | `triage` | 5 | T20 | S | |
+| T22 | `question_generate` | 6 | T21 | M | |
 | T23 | The question store | 6 | T3, T9 | M | |
-| T24 | `publish` and `annotator_answers` — stages 8 and 9 | 6 | T2, T22, T23 | M | |
-| T25 | `aggregate` and `curate` — stages 10 and 11 | 6 | T24 | M | |
+| T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | |
+| T25 | `aggregate` and `curate` | 6 | T24 | M | |
 | T26 | The Label Studio sync | 6 | T23 | M | |
 | T27 | The edge | 7 | T9, T12, T13 | M | |
 | T28 | The routers | 7 | T10, T27 | M | |
@@ -205,12 +209,12 @@ where the type now lives.
 
 **Approach.**
 
-1. **Stage 9 has no parser.** `build_record` is declared "the only place a source shape is read", but
-   `annotator_answers` reads a second external shape — whatever the annotation tool hands back. The
-   profile defined the capture half that produced it. Add `answer_from_response(payload) -> Answer`,
-   the inverse of `answer_config`. Without it the parse gets invented in the store adapter, where no
+1. **`annotator_answers` has no parser.** `build_record` is declared "the only place a source shape
+   is read", but `annotator_answers` reads a second external shape — whatever the annotation tool
+   hands back. The profile defined the capture half that produced it. Add
+   `answer_from_response(payload) -> Answer`, the inverse of `answer_config`. Without it the parse gets invented in the store adapter, where no
    test of the answer space can see it.
-2. **Stage 2 rewrites content and leaves the label behind.** A worked case: content reads
+2. **`pii_check` rewrites content and leaves the label behind.** A worked case: content reads
    `Mã của mình là 480215.` and the label carries `arguments: {"ma_khach": "480215"}`. `pii_check`
    replaces the content with `<CUSTOMER_ID_1>` and bumps `content_version`; nothing rewrites the
    label. Two results — `label_assistant_mismatch` starts failing on a false positive an earlier
@@ -224,11 +228,11 @@ where the type now lives.
    language, no model output may appear in it". The jury panel needs its own statement, and today it
    lives in a policy template with no declared slots. Decide: the profile fills the template
    (`jury_slots(record)`), or policy owns the string and the profile owns only the schema. Both work;
-   stage 4 cannot be built until one is chosen.
+   `jury` cannot be built until one is chosen.
 
-**Acceptance criteria.** Each of stages 2, 4 and 9 has, in its row of § *Per-service contracts*, a
-named owner for the piece that was missing. The `Profile` member count in the spec matches the
-members listed.
+**Acceptance criteria.** Each of `pii_check`, `jury` and `annotator_answers` has, in its row of
+§ *Per-service contracts*, a named owner for the piece that was missing. The `Profile` member count
+in the spec matches the members listed.
 
 **Source.** `spec.md` § *Per-service contracts*; the record example under § *The record*.
 
@@ -241,14 +245,15 @@ members listed.
 data-poisoning reasoning, because that is where the next reader hits it; policy owns the jury template
 and the profile owns the slots, so a prompt change reaches the run manifest.
 
-Naming stage 9's parser forced the question the task had not asked: *what shape, exactly?* Read against
-the Label Studio server source, two of its properties change what gets built. `<Chat>` renders a
-conversation the way `text2text` wants and is **Enterprise-only**, so the community display half is
-`<Paragraphs layout="dialogue">`. And a project has **one config for every task** while our catalog is
-per record, so the tool list must be a dynamic choice list read from task data — objects, not strings.
-§ *The annotation config, and what comes back* now specifies the config, the task payload and the
-`result` list, with Requirements 49–52 and I18 behind them. The cost is recorded there too: a set of
-calls with typed arguments has no community widget, so an annotator types JSON.
+Naming `annotator_answers`'s parser forced the question the task had not asked: *what shape,
+exactly?* Read against the Label Studio server source, two of its properties change what gets built.
+`<Chat>` renders a conversation the way `text2text` wants and is **Enterprise-only**, so the
+community display half is `<Paragraphs layout="dialogue">`. And a project has **one config for every
+task** while our catalog is per record, so the tool list must be a dynamic choice list read from
+task data — objects, not strings. § *The annotation config, and what comes back* now specifies the
+config, the task payload and the `result` list, with Requirements 49–52 and I18 behind them. The
+cost is recorded there too: a set of calls with typed arguments has no community widget, so an
+annotator types JSON.
 
 ---
 
@@ -275,7 +280,8 @@ Two further principles from the rewrite need a line each. **P1** — *do not dec
 processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
 `AGENTS.md`'s own conflicts section resolves it (*step modules stand, but a decision spanning steps is
 extracted under P2 and the steps call it*); the spec should record that resolution and name the one
-such decision it already has: the answer type, which stages 4, 5, 10 and 11 all reason about. **P22** —
+such decision it already has: the answer type, which `jury`, `cohesion`, `aggregate` and `curate` all
+reason about. **P22** —
 *define errors out of existence* — lands on the `[]`-versus-`None` ambiguity in T1.
 
 **Acceptance criteria.** All 32 principles hold, or the exception is written in the spec with its
@@ -345,6 +351,89 @@ corpus where the catalog *was* the system turn. Marked provisional, with what wo
 
 `deploy/` still holds only a `.gitkeep`, and § *Versions* no longer claims otherwise — the compose file
 arrives with T26, the first task that needs an instance.
+
+---
+
+### T32 · Un-number the stages
+
+**Goal.** No stage has a number, anywhere.
+
+**Context.** The flow table numbered its rows 0–14, every `STEP ·` docstring repeated its number, four
+contract tables carried an index column, `workflow.md` numbered its diagram nodes and its headings, and
+scope was written as *stages 0–11*. None of that is a property of a stage — it is a position in a list,
+and `STAGES` is a tuple that already holds it. It is also a **shared** index: inserting one stage into
+`human_review` renumbers every stage after it, so a one-row change becomes a diff across `flow.py`, five
+docstrings, eight tables, three documents and the drift guard — and every one of those files goes red
+having done nothing wrong. The cost lands on the day someone is inserting a stage, which is the day they
+should be thinking about the stage instead.
+
+**Approach.** Drop `Stage.number`. Replace `LAST_IN_SCOPE_STAGE = 11` with `DECLARED_ONLY`, the phases
+that are in the flow and have no module — a named phase does not move when something above it does.
+Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name the stage: `question_generate`,
+not *stage 7*.
+
+**Acceptance criteria.** Nothing in `spec.md`, `plan.md` or `workflow.md` numbers a stage, and I3 still
+fails when either side of the table moves alone — including when a row only moves *position*, which the
+number used to catch for free.
+
+**Source.** `spec.md` Decision 19, Requirement 3, I3; AGENTS.md P16, P31.
+
+**Verify.** `grep -in "stage [0-9]" docs/annotation-pipeline/*.md` is empty. `make check` green.
+
+**Landed.** Nine mutations, nine reds: a summary reworded in the table, two rows swapped in `flow.py`, a
+table row deleted, a stage module renamed on disk, `DECLARED_ONLY` emptied, `DECLARED_ONLY` naming a
+phase that is not in the flow at all, the scope sentence deleted, a `STEP ·` docstring reworded, and a
+`STEP ·` docstring given its number back.
+
+Removing the number removed the thing that had made the row comparison order-insensitive, so I3 now
+compares list against list rather than set against set. That is the one job the number did that had to be
+rebuilt rather than dropped, and it is the argument against the cheaper version of this change — deleting
+the column and leaving the comparison keyed on stage name would have silently stopped checking order.
+
+`workflow.md`'s mermaid node ids were `S0`–`S14`, which is the same index in a third place; they are the
+stage names now. Its four contract tables lost the same column `spec.md`'s did. Full reconciliation of
+that document against this plan is still T4 residue and still open.
+
+---
+
+### T33 · The CI workflow runs what `make check` runs
+
+**Goal.** CI passes on a tree where `make check` passes, and fails on one where it does not.
+
+**Context.** `.github/workflows/ci.yml` is Phase 0 residue that T4's table never listed, so T4 closed
+without it. Three steps are wrong.
+
+1. `uv run dvc repro` — `f7f30f4` deleted DVC along with the dependency, the mypy override and the
+   empty DAG.
+2. `from dataforce.modalities.text import EMBEDDING_MODEL, _model` — `89292ce` renamed the manifest to
+   `text2text`, and neither symbol exists until T12 in any case.
+3. `make integration` runs in the same job as `make check`, on a public runner with no secrets. It
+   wants a live panel, a real store and a Label Studio. `make check` exists precisely so that the
+   commit gate needs none of those.
+
+So CI has been red since Phase 0 while `make check` has been green locally since Phase 1, which is the
+worst arrangement: the signal everyone reads is the one that is wrong.
+
+**Approach.** Delete the `dvc repro` step: there is no DAG and no tool. The embedder cache is a
+decision, not a rename — it pre-warms a sentence-transformer for `duplicate_check`, and the module it
+warms does not exist until T12. Prefer dropping it and letting T17 add caching when it needs it: a
+cache warm for code nobody has written is the flexibility AGENTS.md §2 forbids, and T17 is where the
+need would actually be felt. Move `make integration` out of the commit gate into a job of its own,
+gated on the secrets it needs, so a missing credential reads as *not run* rather than *failed*.
+
+**Acceptance criteria.** The commit gate runs `make check` and nothing that names a deleted tool, an
+unwritten module, or a service the runner has no credential for. A pushed commit that fails
+`make check` fails CI, and one that passes passes.
+
+**Source.** `Makefile`; the workflow file itself.
+
+**Blocked by.** Nothing. It is open because T4 never listed the file.
+
+**Verify.** `grep -c "dvc\|modalities\.text\b" .github/workflows/ci.yml` is 0. A pushed branch is
+green.
+
+**Out of scope.** Adding jobs — a matrix, coverage, a release step. This task makes the existing job
+true, and no more.
 
 ---
 
@@ -450,9 +539,9 @@ an invariant, a reason, an owner and a date, and `test_exemptions.py` is the rev
 deleted with the rest of `tests/` under Decision 11 — the reason was that the old suite encoded a
 design that no longer holds, which was true of what it asserted and not of the idea.
 
-**Approach.** Parse the table out of `spec.md` — 15 rows, `| # | phase | stage | what it does |` —
-and compare its `(number, phase, stage)` triples against `PHASES` and `STAGES` in
-`pipeline/flow.py`. Compare module filenames and `STEP ·` docstrings against the same source.
+**Approach.** Parse the table out of `spec.md` — `| phase | stage | what it does |` — and compare
+its rows, in order, against `PHASES` and `STAGES` in `pipeline/flow.py`. Compare module filenames and
+`STEP ·` docstrings against the same source.
 
 **Acceptance criteria.** Changing either side alone fails the build. The failure message names which
 row and which side.
@@ -468,9 +557,10 @@ dependencies are T3 and T5, not T6, so the swap cost nothing.
 
 Written in P29's order: the test first, red on an ImportError — a weak red, since a missing symbol proves
 nothing about the comparison — then `flow.py`, then seven mutations, one per way the two sides can drift.
-Six went red first time. Rewording a summary in `flow.py` did not, because only the `(number, phase,
-stage)` triple was compared, which made `summary` a fourth statement of the flow that nothing checked.
-The row is now compared whole.
+Six went red first time. Rewording a summary in `flow.py` did not, because only the `(phase, stage)`
+pair was compared — the row also carried a number then — which made `summary` a fourth statement of the
+flow that nothing checked. The row is now compared whole. T32 later took the number off both sides, and
+the ordering the number used to assert became a list-against-list comparison.
 
 `PHASES` is derived from `STAGES` rather than listed beside it (P16). Deriving a stage's module path
 stayed in the test: nothing in the engine dispatches over the table yet, and a function with no caller
@@ -658,10 +748,10 @@ task below adds an *Approach* of its own only where it departs from this.
 
 ## Phase 4 · One record makes the round trip
 
-**Goal:** stages 0–3 run in process over invented fixtures.
+**Goal:** `load_data` and all of `data_quality` run in process over invented fixtures.
 Every task here follows § *Shared decisions*.
 
-### T14 · `load_data` — stage 0
+### T14 · `load_data`
 
 **Goal.** Every source item becomes one record with identity, content, provenance and label.
 
@@ -684,7 +774,7 @@ An undeclared label key raises `ConfigError` naming the manifest, the key, and w
 
 ---
 
-### T15 · `label_check` — stage 1
+### T15 · `label_check`
 
 **Goal.** The five checks that need no opinion run, and a failing record is marked rather than
 removed.
@@ -701,7 +791,7 @@ corpus is declared; a check reading 0 is what tells you when it stops reading 0.
 
 ---
 
-### T16 · `pii_check` — stage 2
+### T16 · `pii_check`
 
 **Goal.** Personal data is found in Vietnamese text and replaced with stable typed placeholders,
 content and label together.
@@ -732,7 +822,7 @@ is side output returned to the edge, never written by the engine and never commi
 
 ---
 
-### T17 · `duplicate_check` — stage 3
+### T17 · `duplicate_check`
 
 **Goal.** Near-duplicates are grouped on the record and never removed.
 
@@ -765,7 +855,7 @@ one key and that the set of `record_id`s is identical at every step. One test, b
 `tests/properties/`. Re-run it as each later phase lands.
 
 **Acceptance criteria.** Over a corpus containing at least one quarantined record, one duplicate pair
-and one record that fails every precondition downstream of stage 1: each step's diff is exactly one
+and one record that fails every precondition downstream of `label_check`: each step's diff is exactly one
 key, and the `record_id` set is identical at every step including the last. A stage that drops a
 record fails this test rather than the reviewer noticing.
 
@@ -780,10 +870,10 @@ confirm red; revert.
 
 ## Phase 5 · The panel scores a record
 
-**Goal:** stages 4–6 run against a stubbed panel. The live panel is Smoke.
+**Goal:** all of `ai_review` runs against a stubbed panel. The live panel is Smoke.
 Every task here follows § *Shared decisions*.
 
-### T19 · `jury` — stage 4
+### T19 · `jury`
 
 **Goal.** A panel of models answers the record's own task, and every vote is kept.
 
@@ -802,7 +892,7 @@ limiting; an exhausted call is one missing vote.
 
 ---
 
-### T20 · `cohesion` — stage 5
+### T20 · `cohesion`
 
 **Goal.** Two numbers per record: how much the jurors agree with each other, and with the existing
 label.
@@ -819,7 +909,7 @@ because it re-runs for free while the panel does not.
 
 ---
 
-### T21 · `triage` — stage 6
+### T21 · `triage`
 
 **Goal.** Each record lands in a bucket, and some are selected for a human.
 
@@ -841,7 +931,7 @@ No numeric literal in the module (P25).
 **Goal:** a question reaches a store, an answer comes back, a label is curated.
 Every task here follows § *Shared decisions*.
 
-### T22 · `question_generate` — stage 7
+### T22 · `question_generate`
 
 **Goal.** One question at a time about one record, in the annotator's language.
 
@@ -883,21 +973,22 @@ the pilot reads, not bookkeeping.
 
 ---
 
-### T24 · `publish` and `annotator_answers` — stages 8 and 9
+### T24 · `publish` and `annotator_answers`
 
 **Goal.** Questions reach the store and answers come back, with no Label Studio anywhere.
 
 **Context.** Decision 6 — `publish` writes to a database we own; the sync is separate (T26). The
 annotation config is composed from the modality's display half and the profile's capture half, and
-neither may emit the other's. Stage 9 parses responses through `answer_from_response` (T2 item 1).
+neither may emit the other's. `annotator_answers` parses responses through `answer_from_response`
+(T2 item 1).
 
 **Acceptance criteria.** Both stages run to completion against a store with no Label Studio
-configured. Stage 8 records the receipt on the record; stage 9 skips a record the store names no
-questions for. **I18 round-trips the format:** compose the config and payload for a fixture, feed back
-a synthetic `result` in Label Studio's shape, and assert the answer that comes out is the one that went
-in — and that a `textarea` value given as a string rather than a list fails. A corrected value that
-does not validate against `answer_schema` is recorded `malformed`, never coerced; `was_cancelled` is
-stored as a skip and excluded from `aggregate`'s overlap.
+configured. `publish` records the receipt on the record; `annotator_answers` skips a record the
+store names no questions for. **I18 round-trips the format:** compose the config and payload for a
+fixture, feed back a synthetic `result` in Label Studio's shape, and assert the answer that comes
+out is the one that went in — and that a `textarea` value given as a string rather than a list
+fails. A corrected value that does not validate against `answer_schema` is recorded `malformed`,
+never coerced; `was_cancelled` is stored as a skip and excluded from `aggregate`'s overlap.
 
 **Source.** `spec.md` § *Per-service contracts* rows 8–9, § *The annotation config, and what comes
 back*, Requirements 31, 32, 33, 49 and 50; Decision 6; I18.
@@ -906,7 +997,7 @@ back*, Requirements 31, 32, 33, 49 and 50; Decision 6; I18.
 
 ---
 
-### T25 · `aggregate` and `curate` — stages 10 and 11
+### T25 · `aggregate` and `curate`
 
 **Goal.** One verdict per record, then the final label.
 
@@ -1029,7 +1120,7 @@ size the pilot and to find what only breaks outside a fixture.
 
 **Blocked by.** T29, and a declared corpus.
 
-**Acceptance criteria.** A record travels stages 0–11 and reaches a human. Costs and latencies are
+**Acceptance criteria.** A record travels every built stage and reaches a human. Costs and latencies are
 recorded so the pilot can be sized.
 
 **Source.** `spec.md` § *Testing Strategy* — the three rungs.
@@ -1061,8 +1152,8 @@ accuracy, bucket precision — and the re-tuning pass is a single committed diff
 
 ## Not planned here
 
-- **`release` — stages 12–14** (`split`, `export`, `datasheet`). Declared in the flow so
-  `record.release` has an owner; specified in a follow-up. Nothing in stages 0–11 may assume its
+- **`release`** — `split`, `export`, `datasheet`. Declared in the flow so
+  `record.release` has an owner; specified in a follow-up. Nothing before it may assume its
   shape. Note that `export` carries the precondition that keeps an unredacted corpus out of a
   release, so **until it exists, nothing prevents a reported-but-unredacted corpus reaching an
   artifact** — the stated cost of Decision 10.

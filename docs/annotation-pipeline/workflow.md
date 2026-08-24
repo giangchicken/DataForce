@@ -14,41 +14,41 @@ Two ways to drive it, one implementation: **over HTTP** (one route per service, 
 
 ```mermaid
 flowchart LR
-  RAW[("source items")] --> S0
+  RAW[("source items")] --> load_data
 
-  subgraph P0["load_data · stage 0"]
-    S0["load_data"]
+  subgraph P0["load_data"]
+    load_data
   end
 
-  subgraph P1["data_quality · stages 1-3"]
+  subgraph P1["data_quality"]
     direction LR
-    S1["label_check"] --> S2["pii_check"] --> S3["duplicate_check"]
+    label_check --> pii_check --> duplicate_check
   end
 
-  subgraph P2["ai_review · stages 4-6"]
+  subgraph P2["ai_review"]
     direction LR
-    S4["jury"] --> S5["cohesion"] --> S6["triage"]
+    jury --> cohesion --> triage
   end
 
-  subgraph P3["human_review · stages 7-11"]
+  subgraph P3["human_review"]
     direction LR
-    S7["question_generate"] --> S8["publish"]
-    S9["annotator_answers"] --> S10["aggregate"] --> S11["curate"]
+    question_generate --> publish
+    annotator_answers --> aggregate --> curate
   end
 
-  subgraph P4["release · stages 12-14 · declared, not built"]
+  subgraph P4["release · declared, not built"]
     direction LR
-    S12["split"] --> S13["export"] --> S14["datasheet"]
+    split --> export --> datasheet
   end
 
-  S0 --> S1
-  S3 --> S4
-  S6 --> S7
-  S8 -->|"questions"| STORE[("question store")]
+  load_data --> label_check
+  duplicate_check --> jury
+  triage --> question_generate
+  publish -->|"questions"| STORE[("question store")]
   STORE -->|"sync"| LS["Label Studio"]
   LS -->|"annotations"| STORE
-  STORE -->|"responses"| S9
-  S11 --> S12
+  STORE -->|"responses"| annotator_answers
+  curate --> split
 ```
 
 Records move left to right, and **every record that goes in comes out** — a record that fails a check is
@@ -109,29 +109,29 @@ again under *What a bad record does now*.
 **Skips when** is the precondition each service reads off the record. A record that does not satisfy it
 is passed through untouched, with no key written for that service.
 
-### `load_data` — stage 0 · `POST /load-data`
+### `load_data` · `POST /load-data`
 
 Turns each source item into a record: identity, content, provenance. Text arrives inline in the request
 body — for `text2text` that is the whole job. A media modality resolves each item's URI at the edge and
 records `uri` + `sha256`, never bytes.
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 0 | `load_data` | the raw item, under the declared label key | the whole record | never — it is the first stage. A source digest that does not match raises `ConfigError` before any record is read |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `load_data` | the raw item, under the declared label key | the whole record | never — it is the first stage. A source digest that does not match raises `ConfigError` before any record is read |
 
 The catalog is never copied onto the record as an answer space. It is materialised from the record when
 a service asks, and never persisted — a stored copy is a second thing that can disagree with the first,
 and it is the copy that goes stale.
 
-### `data_quality` — stages 1–3 · `POST /data-quality`
+### `data_quality` · `POST /data-quality`
 
 Everything checkable without an opinion.
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 1 | `label_check` | content, label, meta | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
-| 2 | `pii_check` | content | `data_quality.pii_check`, **and rewrites content** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
-| 3 | `duplicate_check` | content, label | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `label_check` | content, label, meta | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
+| `pii_check` | content | `data_quality.pii_check`, **and rewrites content** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| `duplicate_check` | content, label | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 **Redaction runs in two layers with opposite jobs.** Patterns go first and are *allowed* to be noisy —
 they run against the raw text and against a tone-stripped copy, so a customer saying `khong chin` is
@@ -140,15 +140,15 @@ sets precision. Values are replaced with typed placeholders scoped per record, n
 value turns a correct call into what looks like a correct *"required value was missing"*, inverting the
 label on exactly the records this project exists to get right.
 
-### `ai_review` — stages 4–6 · `POST /ai-review`
+### `ai_review` · `POST /ai-review`
 
 The first opinion about the corpus.
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 4 | `jury` | content, label, the materialised answer schema | `ai_review.jury` | `label_check.quarantined` — no point paying a panel to judge a record already known broken |
-| 5 | `cohesion` | `ai_review.jury`, label | `ai_review.cohesion` | `ai_review.jury` is absent |
-| 6 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `jury` | content, label, the materialised answer schema | `ai_review.jury` | `label_check.quarantined` — no point paying a panel to judge a record already known broken |
+| `cohesion` | `ai_review.jury`, label | `ai_review.cohesion` | `ai_review.jury` is absent |
+| `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
 **Three stages, not one, because they fail for different reasons.** The jury costs money per record and
 is cached. Cohesion is arithmetic over what the jury already wrote — two numbers, how much the panel
@@ -156,17 +156,17 @@ agrees with itself and how much it agrees with the existing label. Triage reads 
 provisional until the pilot measures them and get exactly one re-tuning pass. Folded together, moving a
 bucket boundary would re-run the panel.
 
-### `human_review` — stages 7–11 · `POST /human-review`
+### `human_review` · `POST /human-review`
 
 Where the project learns whether the questions are answerable.
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 7 | `question_generate` | content, label, `triage` *(selection only)* | `human_review.question_generate` | `triage.selected_for_review` is false |
-| 8 | `publish` | the questions, the display half, the capture half | `human_review.publish` | there is no question to publish |
-| 9 | `annotator_answers` | the store | `human_review.annotator_answers` | nothing in the store names this record's questions |
-| 10 | `aggregate` | the responses | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
-| 11 | `curate` | the verdict, label | `human_review.curate` | there is no verdict, or an `incorrect` verdict has no corrected value — recorded as `status: "unresolved"` |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `question_generate` | content, label, `triage` *(selection only)* | `human_review.question_generate` | `triage.selected_for_review` is false |
+| `publish` | the questions, the display half, the capture half | `human_review.publish` | there is no question to publish |
+| `annotator_answers` | the store | `human_review.annotator_answers` | nothing in the store names this record's questions |
+| `aggregate` | the responses | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
+| `curate` | the verdict, label | `human_review.curate` | there is no verdict, or an `incorrect` verdict has no corrected value — recorded as `status: "unresolved"` |
 
 **The phase endpoint stops after `publish`, on purpose.** Stages 9–11 cannot run until people have
 answered. An endpoint that ran all five would either block or quietly produce empty verdicts.

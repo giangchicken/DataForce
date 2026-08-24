@@ -11,8 +11,8 @@ DataForce turns a raw, model-labelled corpus into a training-ready dataset plus 
 trusting it. This spec fixes the buildable surface of that pipeline: **two axes** (a *modality* —
 `text2text`, `speech2text`, … — and a *profile* — function calling), **four main endpoints**
 (`load_data`, `data_quality`, `ai_review`, `human_review`) each exposing its services as sub-endpoints,
-and **fifteen services** that all have one signature — records in, records out — driven two ways from
-one implementation: over HTTP, and in-process.
+and **one service per stage of the flow**, all with the same signature — records in, records out —
+driven two ways from one implementation: over HTTP, and in-process.
 
 `objective.md` says *why* and *what one record looks like*. This document says *what to build*: the
 flow, the two protocols, the package layout, the request and response shapes, the question store, and
@@ -204,7 +204,7 @@ record's and is only borrowed by both. Neither axis may drift into the other's j
 
 ---
 
-## The surface: four main endpoints, fifteen services
+## The surface: four main endpoints, and the services under them
 
 **A main endpoint is a phase; a sub-endpoint is one service.** `POST /data-quality` runs that phase's
 three services in flow order over the posted records. `POST /data-quality/pii-check` runs exactly one.
@@ -214,26 +214,33 @@ Both take and return the same body, so they compose.
 
 `src/dataforce/pipeline/flow.py` is the one place this table exists in code.
 
-| # | phase | stage | what it does |
-|---|---|---|---|
-| 0 | load_data | `load_data` | every source item becomes one record with identity, content and provenance |
-| 1 | data_quality | `label_check` | the five checks on the label that need no opinion |
-| 2 | data_quality | `pii_check` | two-layer detection, typed placeholders, `content` rewritten |
-| 3 | data_quality | `duplicate_check` | exact and near-duplicate groups, split by label agreement |
-| 4 | ai_review | `jury` | N independent models answer the record's own task |
-| 5 | ai_review | `cohesion` | how much the jury agrees with itself, and with the existing label |
-| 6 | ai_review | `triage` | the two numbers become a bucket, a stratum and a review quota |
-| 7 | human_review | `question_generate` | one answerable question per flagged record, with its evidence |
-| 8 | human_review | `publish` | questions written to the question store, ready for the annotation tool |
-| 9 | human_review | `annotator_answers` | responses read back out of the store onto the record |
-| 10 | human_review | `aggregate` | overlap becomes one verdict with a confidence and an agreement statistic |
-| 11 | human_review | `curate` | the verdict becomes the record's final label, or an adjudication |
-| 12 | release | `split` | train / validation / test, with no scenario on both sides |
-| 13 | release | `export` | the trainer-shaped artifact, per profile |
-| 14 | release | `datasheet` | one document stating how the dataset was made |
+| phase | stage | what it does |
+|---|---|---|
+| load_data | `load_data` | every source item becomes one record with identity, content and provenance |
+| data_quality | `label_check` | the five checks on the label that need no opinion |
+| data_quality | `pii_check` | two-layer detection, typed placeholders, `content` rewritten |
+| data_quality | `duplicate_check` | exact and near-duplicate groups, split by label agreement |
+| ai_review | `jury` | N independent models answer the record's own task |
+| ai_review | `cohesion` | how much the jury agrees with itself, and with the existing label |
+| ai_review | `triage` | the two numbers become a bucket, a stratum and a review quota |
+| human_review | `question_generate` | one answerable question per flagged record, with its evidence |
+| human_review | `publish` | questions written to the question store, ready for the annotation tool |
+| human_review | `annotator_answers` | responses read back out of the store onto the record |
+| human_review | `aggregate` | overlap becomes one verdict with a confidence and an agreement statistic |
+| human_review | `curate` | the verdict becomes the record's final label, or an adjudication |
+| release | `split` | train / validation / test, with no scenario on both sides |
+| release | `export` | the trainer-shaped artifact, per profile |
+| release | `datasheet` | one document stating how the dataset was made |
 
-**Stages 0–11 are in scope.** `release` is declared here so the flow is complete and the record's
-`release` key has an owner, and is specified in a follow-up — see *Out of Scope*.
+**A stage has a name, not a number.** Order is the order of these rows and nothing else states it:
+`STAGES` in `flow.py` is a tuple, and a tuple already knows its order. Inserting a stage costs one row
+here and one row there and renumbers nothing, because there is nothing to renumber — Decision 19 says
+what that buys and what it costs.
+
+**Declared, not built: `release`.** Its three stages are in the table so the flow is complete and the
+record's `release` key has an owner; they are specified in a follow-up — see *Out of Scope*. Every other
+stage in the table has a module. Scope is a named phase rather than a cut at a number for the same
+reason: a cut moves when anything above it moves.
 
 **`load_data`, not `load`.** AGENTS.md §5 forbids a bare operation that names no object: *load what?* The
 stage reads a source item and returns record data, and its name says so.
@@ -269,8 +276,9 @@ GET  /branches                           -> registered modalities and profiles, 
 GET  /healthz                            -> liveness; no engine, no store
 ```
 
-`POST /human-review` stops after `publish` on purpose: stages 9–11 cannot run until people have
-answered, so a phase endpoint that ran all five would either block or silently produce empty verdicts.
+`POST /human-review` stops after `publish` on purpose: `annotator_answers`, `aggregate` and `curate`
+cannot run until people have answered, so a phase endpoint that ran all five would either block or
+silently produce empty verdicts.
 
 ---
 
@@ -291,7 +299,9 @@ Each is a statement a test can be pointed at.
    holds nothing of its own: none of the four describes a module with no content, and § *Package layout*
    below already writes it over `pipeline/__init__.py`. AGENTS.md §8 — the break is recorded rather than
    resolved silently, here and in the top-level package docstring.
-3. A service module's docstring names its stage and number: `STEP · pii_check (stage 2) · …`.
+3. A service module's docstring is its row of the flow table — `STEP · <stage> · <what it does>`, with
+   the stage name and the summary matching § *The flow* word for word. I3 compares them. There is no
+   number in it: see Decision 19.
 4. A name states what it returns, not the operation that produced it, and no function shares a name
    with a stage.
 
@@ -488,7 +498,7 @@ src/dataforce/
     __init__.py      façade · re-exports flow.py and runner.py; holds nothing of its own
     flow.py          DEFINITION · PHASES and STAGES — the flow table, in code, once
     runner.py        LOGIC · run_phase — a phase's stages folded over records, in the table's order
-    load_data.py     STEP · load_data (stage 0)
+    load_data.py     STEP · load_data
     data_quality/    STEP modules: label_check.py, pii_check.py, duplicate_check.py
     ai_review/       STEP modules: jury.py, cohesion.py, triage.py
     human_review/    STEP modules: question_generate.py … curate.py
@@ -513,7 +523,7 @@ src/dataforce/
 tests/
   guards/            I1–I7 and I16–I17, written before any service, against synthetic source
   stages/            one module per stage: its reads, its writes, the records it skips
-  properties/        I8 and I11 together, over one corpus, through all twelve in-scope services
+  properties/        I8 and I11 together, over one corpus, through every built service
   shells/            I15: the same input in-process and over HTTP
   integration/       -m integration: a live panel, a real store, a declared corpus
 ```
@@ -524,8 +534,8 @@ split until a second consumer needs half of it.
 **Three files are split at the boundary consumers import along, from the first line written.**
 `routers/<domain>/schemas.py` rather than one `schemas.py`, because four routers each need a quarter of
 it and AGENTS.md §6 forbids making a consumer depend on what it does not use — this is also the style
-reference's own `routers/<domain>/<feature>.py` shape. `cli.py` is a dispatch over `flow.py`, not
-fifteen hand-written subcommand bodies: every service has one signature and Requirement 46 makes the
+reference's own `routers/<domain>/<feature>.py` shape. `cli.py` is a dispatch over `flow.py`, not one
+hand-written subcommand body per stage: every service has one signature and Requirement 46 makes the
 in-process call the same call, so the CLI stays roughly one screen however many stages exist.
 `record.py` does not split at all — there is no boundary in it; it is one type, and it is long because
 Requirement 1 puts a description on every field, which is the file doing its job.
@@ -581,7 +591,7 @@ prose, and nests `human_review` inside `ai_review`.
                               "ky": "thang_nay" } } ],
   "meta":  { "human_checked": true }, // the source's own keys, verbatim; read only where declared
 
-  // --- data_quality (stages 1-3) ---
+  // --- data_quality ---
   "data_quality": {
     "data_quality_config": { },       // the resolved config and its digest; written by the edge, read by services
     "label_check":     { "passed": true,          // did every check on the label hold
@@ -601,7 +611,7 @@ prose, and nests `human_review` inside `ai_review`.
                          "duplicate_content_diff_label": [] } // same content, different label: one of them is wrong
   },
 
-  // --- ai_review (stages 4-6) ---
+  // --- ai_review ---
   "ai_review": {
     "ai_review_config": { },          // resolved panel config and its digest; written by the edge
     "jury":     { "panel_version": 2,               // which panel composition produced these votes
@@ -623,7 +633,7 @@ prose, and nests `human_review` inside `ai_review`.
                   "reason": "…" }           // which rule selected it, so a quota can be audited
   },
 
-  // --- human_review (stages 7-11) ---
+  // --- human_review ---
   "human_review": {
     "human_config":      { },         // annotators and the question generator; written by the edge
     "question_generate": [ { "question_id": "…",    // stable id; the join key to the store and to answers
@@ -651,7 +661,7 @@ prose, and nests `human_review` inside `ai_review`.
                            "decided_at": "…" }
   },
 
-  // --- release (stages 12-14; declared, not yet specified) ---
+  // --- release (declared, not yet specified) ---
   "release": { }
 }
 ```
@@ -662,23 +672,23 @@ prose, and nests `human_review` inside `ai_review`.
 the one key it owns. **Skips when** is the precondition it reads off the record: a record that does not
 satisfy it is marked and passed on untouched, never dropped and never a reason to halt the run.
 
-#### `load_data` — stage 0
+#### `load_data`
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 0 | `load_data` | the raw item, under the declared label key | the whole record: identity, `branch`, `provenance`, `content`, `content_version = 1`, `label`, `meta` | never — it is the first stage. A source digest that does not match `params.source.sha256` raises `ConfigError` before any record is read |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `load_data` | the raw item, under the declared label key | the whole record: identity, `branch`, `provenance`, `content`, `content_version = 1`, `label`, `meta` | never — it is the first stage. A source digest that does not match `params.source.sha256` raises `ConfigError` before any record is read |
 
 The catalog is **not** copied onto the record as an answer space; `answer_schema` materialises it from
 the record when asked and never persists it. A stored space is a second thing that can disagree with the
 first, and it is the copy that goes stale.
 
-#### `data_quality` — stages 1–3
+#### `data_quality`
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 1 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
-| 2 | `pii_check` | `content`, `label` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
-| 3 | `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
+| `pii_check` | `content`, `label` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 The five label checks are the profile's, not the engine's — `label_checks()` is a profile member:
 `label_assistant_mismatch` (the label contradicts the turn that restates it), `label_not_in_catalog`
@@ -695,30 +705,30 @@ order reference. Layer two is a model pass over a bounded window that marks each
 The placeholder→original map is returned to the edge and written to a path the edge chooses, which
 `.gitignore` covers.
 
-#### `ai_review` — stages 4–6
+#### `ai_review`
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 4 | `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
-| 5 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
-| 6 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
+| `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
+| `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
 Three stages rather than one, because they fail and re-run for different reasons: `jury` costs money and
 is cached, `cohesion` is pure arithmetic, and `triage` is re-run on **exactly one** threshold re-tuning
 pass after the pilot. A bucket whose precision the pilot cannot establish gets **no quota**.
 
-#### `human_review` — stages 7–11
+#### `human_review`
 
-| # | stage | reads | writes | skips when |
-|---|---|---|---|---|
-| 7 | `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | `triage.selected_for_review` is false. The glossary is a precondition on the *run*, checked at composition |
-| 8 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
-| 9 | `annotator_answers` | the store, through `answer_from_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
-| 10 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
-| 11 | `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
+| stage | reads | writes | skips when |
+|---|---|---|---|
+| `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | `triage.selected_for_review` is false. The glossary is a precondition on the *run*, checked at composition |
+| `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
+| `annotator_answers` | the store, through `answer_from_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
+| `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
+| `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
 
-Stage 7 reads `triage` **only to decide which records get a question**. Nothing it reads from `ai_review`
-reaches the payload, which is what Requirement 30 asserts.
+`question_generate` reads `triage` **only to decide which records get a question**. Nothing it reads
+from `ai_review` reaches the payload, which is what Requirement 30 asserts.
 
 ### Engine and edge
 
@@ -979,7 +989,7 @@ which is what `objective.md` §3's record shows. *Why this:* they fail and re-ru
 the jury costs money per record and must be cached; cohesion is arithmetic over what the jury wrote; and
 triage reads thresholds `objective.md` §8 calls *provisional until the pilot measures them*. Folded
 together, re-tuning a bucket boundary re-runs the panel. *Reversible:* yes, and it is the arithmetic that
-puts `human_review` on stages 7–11.
+gives `human_review` five stages rather than three.
 
 **4 · The record carries a `provenance` key.**
 `objective.md` §1 requires "per-record provenance for every record and every label"; §3's record example
@@ -1041,7 +1051,7 @@ annotation, and a rejected record travels the whole flow carrying why — so `ou
 structurally true and there is nothing left to assert. What a gate did that a record cannot, a
 *precondition* now does: a service reads the upstream key and skips. *Cost, stated plainly:* nothing
 halts a run any more. A declared count that moves is a line in a `metrics.json` diff rather than a
-crash, and it is now possible to run the whole flow over a corpus that should have stopped at stage 1
+crash, and it is now possible to run the whole flow over a corpus that should have stopped at `label_check`
 and get an artifact at the end. The one place that must not be permissive is export, which is why
 `export` carries the precondition `pii_check.decision == "redacted"` — and export is out of scope, so
 that precondition is declared and unbuilt. *Reversible:* yes, and this is the direction to reverse it —
@@ -1089,8 +1099,8 @@ service is profile-blind, so all twelve signatures would read `Record[Any]` and 
 nothing at fifteen call sites. *The long-term risk, named:* one type touched by every stage is a god
 type, and at fifty stages it would hurt. It is tolerable at fifteen because the coupling is on the type
 and not on the fields — one writer per key (I8) plus a declared `reads` column means a change to a
-stage-11 key reaches stage 0 only if stage 0 reads it, and the contract table says it does not. The way
-out, if that day comes: one table per phase, joined on `record_id`.
+key written by `curate` reaches `load_data` only if `load_data` reads it, and the contract table says
+it does not. The way out, if that day comes: one table per phase, joined on `record_id`.
 
 **14 · `utils.py` stays.**
 It was challenged as violating the naming law — *"utils of what?"* — the same objection AGENTS.md §5
@@ -1120,14 +1130,15 @@ number the pipeline produces is written on δ, so changing it invalidates every 
 against it — which is the argument for settling it in Phase 0 rather than Phase 5.
 
 **16 · The three unowned pieces get owners, and the annotation tool's format is a constraint, not a
-detail.** Three stages could not be built as written. *Stage 9 had no parser:* `build_record` is "the
-only place a source shape is read", but `annotator_answers` reads a second external shape, and without
-a named owner that parse would have been invented inside the store adapter where no test of the answer
-space can see it — so `answer_from_response` is a profile member, the inverse of the capture half that
-produced the response. *Stage 2 rewrote content and left the label:* `redact_label` closes it, and the
-reasoning is in Requirement 17 because that is where the next reader will hit it. *Nothing stated the
-task to a model:* policy owns the template and the profile owns the slots, chosen over the profile
-owning the string because a prompt in code is a prompt change the run manifest cannot see.
+detail.** Three stages could not be built as written. *`annotator_answers` had no parser:*
+`build_record` is "the only place a source shape is read", but `annotator_answers` reads a second
+external shape, and without a named owner that parse would have been invented inside the store adapter
+where no test of the answer space can see it — so `answer_from_response` is a profile member, the
+inverse of the capture half that produced the response. *`pii_check` rewrote content and left the
+label:* `redact_label` closes it, and the reasoning is in Requirement 17 because that is where the
+next reader will hit it. *Nothing stated the task to a model:* policy owns the template and the
+profile owns the slots, chosen over the profile owning the string because a prompt in code is a prompt
+change the run manifest cannot see.
 *Alternative for all three:* leave them to the implementing task. *Why not:* each is a decision about
 which axis owns a piece of knowledge, and an implementer under a deadline resolves that by putting it
 where it is easiest to write.
@@ -1174,10 +1185,10 @@ Two more from the same audit needed a line rather than a change. *P1 — do not 
 of processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
 `AGENTS.md`'s own conflicts section resolves it: step modules stand, but a decision spanning steps is
 extracted under P2 and the steps call it. This design has exactly one such decision, and it is
-extracted: the answer type, which stages 4, 5, 10 and 11 all reason about and none of them owns —
-it lives on the profile. *P22 — define errors out of existence* — landed on the `[]`-versus-`None`
-ambiguity in `vote_consensus` and is closed by construction in § *The answer, and the three operations
-over it*, not by a branch.
+extracted: the answer type, which `jury`, `cohesion`, `aggregate` and `curate` all reason about and
+none of them owns — it lives on the profile. *P22 — define errors out of existence* — landed on the
+`[]`-versus-`None` ambiguity in `vote_consensus` and is closed by construction in § *The answer, and
+the three operations over it*, not by a branch.
 
 **18 · Three dependencies removed, because none of them had a job.**
 `dvc`, `pandera` and `pandas` were declared runtime dependencies that no part of this design uses.
@@ -1195,6 +1206,24 @@ runner might come back. *Why not:* AGENTS.md §2, and the same reasoning P20 app
 adapter. `dvc init` is one command, and `metrics.json` is a fold the edge can write without pandas.
 *Reversible:* yes, one line each. *Cost:* if a metrics fold does want a dataframe, T27 adds pandas back
 with a reason, which is better than it being there without one.
+
+**19 · A stage has a name, not a number.**
+The flow table numbered its rows 0–14, each `STEP ·` docstring repeated its number, and the in-scope
+boundary was written as *stages 0–11*. *Why this changed:* a number is not a property of a stage, it is
+its position in a list — and `STAGES` is a tuple, which already holds that. Writing it down made the same
+fact exist twice, and P16 says the second copy is the one that goes wrong. Worse, it was a **shared**
+index: inserting a stage into `human_review` renumbers every stage after it, so a one-row change becomes a
+diff across `flow.py`, five module docstrings, four contract tables, both documents and the drift guard —
+and every one of those files turns red having done nothing wrong. *What replaces each job the number
+did:* order is position in `STAGES`, which `run_phase` folds and I3 compares row by row; the in-scope
+boundary is `DECLARED_ONLY`, the phases that are in the flow and have no module, because a named phase
+does not move when something above it does; and identity in a docstring is the stage name, which is
+already unique across the flow. *Alternative:* keep the numbers and renumber when it happens — it has not
+happened yet. *Why not:* the cost is paid on the day someone is inserting a stage, which is exactly the
+day they should be thinking about the stage. *Cost, stated plainly:* prose can no longer say "stage 7",
+so it says `question_generate`, which is longer and does not tell you what runs before it. The table
+does, and it is one screen. *Reversible:* yes — one field on `Stage`, one column in the table — but
+reversing it re-acquires the shared index.
 
 ---
 
@@ -1227,7 +1256,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|---|
 | I1 | The engine opens no file and names no path | AST scan over every engine module, plus a subprocess import from an empty directory |
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
-| I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(number, phase, stage)` triples compared against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
+| I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names and the four owned roots |
@@ -1305,14 +1334,14 @@ There is no test suite. It is written against this document, in this order, and 
 **The suite mirrors the layout** — `tests/guards/`, `tests/stages/`, `tests/properties/`,
 `tests/shells/`, `tests/integration/`. Steps 1–4 below are those first four directories, in order.
 
-1. **The guards first (I1–I7, I16–I17)**, before any service. Each is an AST or introspection check proved against
-   synthetic source, so the guard fails before it is ever needed. Writing them after the services is how
+1. **The guards first (I1–I7, I16–I17)**, before any service. Each is an AST or introspection
+   check proved against synthetic source, so the guard fails before it is ever needed. Writing them after the services is how
    a codebase acquires the thing the guard forbids.
 2. **One test module per stage**, asserting that stage's reads/writes/skips-when row: it writes its key,
    writes nothing else, returns as many records as it was given, and skips exactly the records its
    precondition excludes.
 3. **The bus property (I8) and the conservation property (I11)**, once and together: build a corpus,
-   run all twelve in-scope services, and assert that each step's diff is exactly one key and that the
+   run every built service, and assert that each step's diff is exactly one key and that the
    set of `record_id`s is identical at every step.
 4. **Both shells (I15)**: the same input through `pii_check(engine, records)` and
    `POST /data-quality/pii-check`, asserted equal.
@@ -1336,9 +1365,8 @@ There is no test suite. It is written against this document, in this order, and 
 
 ## Out of Scope
 
-- **`release` — stages 12–14** (`split`, `export`, `datasheet`). Declared in the flow so it is complete
-  and `record.release` has an owner; specified in a follow-up. Nothing in stages 0–11 may assume its
-  shape.
+- **`release`** — `split`, `export`, `datasheet`. Declared in the flow so it is complete and
+  `record.release` has an owner; specified in a follow-up. Nothing before it may assume its shape.
 - **The web view.** One Vite + TypeScript SPA over these same endpoints, on the style reference's
   pattern — `objective.md` §9 calls it a later task, and this spec keeps it one.
 - **Real `speech2text`, `image2text`, `video2text`.** The seam is specified — media parts, the pair

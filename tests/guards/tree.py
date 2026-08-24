@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "dataforce"
+SPEC = Path(__file__).resolve().parents[2] / "docs" / "annotation-pipeline" / "spec.md"
 
 MARKER = "guard-exempt"
 EXEMPTION = re.compile(
@@ -46,6 +47,16 @@ class Import(NamedTuple):
 
     module: str  # dotted and absolute, relative imports already resolved
     line: int  # the line of the statement, for the failure message and for an exemption
+
+
+def plain(text: str) -> str:
+    """One line with its markup gone, so a document and a docstring compare as words.
+
+    The spec writes single backticks and an em dash, a docstring writes double backticks and `--`,
+    and either may or may not end in a stop. None of that is the fact being compared.
+    """
+    bare = text.replace("`", "").replace("—", "--").replace("–", "--")
+    return re.sub(r"\s+", " ", bare).strip().rstrip(".")
 
 
 def module_from_source(source: str, name: str = "dataforce.synthetic") -> Module:

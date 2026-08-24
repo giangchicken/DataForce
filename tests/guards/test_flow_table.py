@@ -5,10 +5,13 @@ The flow table is stated twice on purpose -- once as prose a person reads, once 
 test rather than trusted. Changing either side alone fails here, and the failure names which row
 and which side moved.
 
-Three things are compared: the whole row -- number, phase, stage *and* summary -- the module each
-in-scope stage is supposed to live in, and that module's ``STEP ·`` docstring (Requirement 3).
-Markup is normalised away before the summaries are compared -- the spec writes single backticks and
-a docstring writes double -- but the words are not.
+Four things are compared: the whole row -- phase, stage *and* summary, in the table's order -- the
+phases that are declared and not built, the module each built stage is supposed to live in, and
+that module's ``STEP ·`` docstring (Requirement 3).
+
+**Order is position, and nothing else states it.** Neither side numbers a stage, so the comparison
+is list-against-list rather than key-against-key: a row moved up is a row that fails here
+(Decision 19).
 
 Deriving a stage's module path is this test's business and nothing else's yet. It moves into
 ``pipeline/runner.py`` when the runner needs to dispatch over the table for real.
@@ -20,21 +23,29 @@ from pathlib import Path
 
 import pytest
 
-from dataforce.pipeline.flow import LAST_IN_SCOPE_STAGE, PHASES, STAGES
+from dataforce.pipeline.flow import DECLARED_ONLY, PHASES, STAGES
 
-from .tree import SRC, module_at
+from .tree import SPEC, SRC, module_at, plain
 
-SPEC = Path(__file__).resolve().parents[2] / "docs" / "annotation-pipeline" / "spec.md"
+ROW = re.compile(r"^\|\s*(\w+)\s*\|\s*`(\w+)`\s*\|\s*(.+?)\s*\|$")
+DECLARED = re.compile(r"\*\*Declared, not built:\s*(?P<names>[^*]+?)\.\*\*")
+BACKTICKED = re.compile(r"`(\w+)`")
 
-ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*(\w+)\s*\|\s*`(\w+)`\s*\|\s*(.+?)\s*\|$")
-SCOPE = re.compile(r"\*\*Stages (\d+)[–-](\d+) are in scope\.\*\*")
+Row = tuple[str, str, str]
 
 
-def spec_rows() -> list[tuple[int, str, str, str]]:
-    """The § *The flow* table, as the document states it: number, phase, stage, summary."""
+def flow_section() -> str:
+    """§ *The flow*, on its own. Other tables in this document also have a stage column."""
+    text = SPEC.read_text(encoding="utf-8")
+    start = text.index("### The flow")
+    return text[start : text.index("\n### ", start + 1)]
+
+
+def spec_rows() -> list[Row]:
+    """The § *The flow* table, as the document states it: phase, stage, summary, in order."""
     rows = [
-        (int(m[1]), m[2], m[3], m[4])
-        for line in SPEC.read_text(encoding="utf-8").splitlines()
+        (m[1], m[2], m[3])
+        for line in flow_section().splitlines()
         if (m := ROW.match(line))
     ]
     assert rows, (
@@ -43,81 +54,78 @@ def spec_rows() -> list[tuple[int, str, str, str]]:
     return rows
 
 
-def plain(text: str) -> str:
-    """One summary with its markup and its trailing stop removed, so two mediums compare."""
-    return re.sub(r"\s+", " ", text.replace("`", "")).strip().rstrip(".")
+def spec_declared_only() -> list[str]:
+    """The phases the document says are in the flow and have no module."""
+    stated = DECLARED.search(flow_section())
+
+    assert stated, f"{SPEC.name} § *The flow* no longer says which phases are unbuilt"
+    return BACKTICKED.findall(stated["names"])
 
 
-def module_path(number: int, phase: str, stage: str) -> Path:
+def built_rows() -> list[Row]:
+    """Every row whose stage the document says has a module."""
+    unbuilt = spec_declared_only()
+    return [row for row in spec_rows() if row[0] not in unbuilt]
+
+
+def module_path(phase: str, stage: str) -> Path:
     """Where that stage's module belongs: a phase with one stage is a module, several is a
     directory (spec.md § *Package layout*)."""
-    siblings = [row for row in spec_rows() if row[1] == phase]
+    siblings = [row for row in spec_rows() if row[0] == phase]
     tail = f"{stage}.py" if len(siblings) == 1 else f"{phase}/{stage}.py"
     return SRC / "pipeline" / tail
 
 
-def test_the_table_has_the_rows_the_document_promises() -> None:
-    """Fifteen rows, numbered 0-14 without a gap. Guards the parser, not the code."""
+def test_the_table_names_every_stage_once() -> None:
+    """Guards the parser, not the code: a row this regex silently skipped is a row nothing checks."""
     rows = spec_rows()
 
-    assert [row[0] for row in rows] == list(range(15))
+    assert len(rows) > 1
+    assert len({stage for _, stage, _ in rows}) == len(rows)
 
 
 def test_the_code_and_the_document_declare_the_same_rows() -> None:
-    """I3: a row nobody implemented, a row renamed on one side, or a summary reworded on one.
+    """I3: a row nobody implemented, a row renamed on one side, a reordering, or a reworded summary.
 
     The summary is compared too. A field of the table that nothing checks is the fiction P31 is
     about -- and it would be the fourth place this flow is written down."""
-    document = [
-        (number, phase, stage, plain(summary))
-        for number, phase, stage, summary in spec_rows()
-    ]
-    code = [(s.number, s.phase, s.stage, plain(s.summary)) for s in STAGES]
+    document = [(phase, stage, plain(summary)) for phase, stage, summary in spec_rows()]
+    code = [(s.phase, s.stage, plain(s.summary)) for s in STAGES]
 
     assert code == document, "left is pipeline/flow.py, right is spec.md § *The flow*"
 
 
 def test_the_phases_are_the_table_s_phases_in_the_table_s_order() -> None:
     """A phase is not declared anywhere else: it is the distinct phases of the flow, in order."""
-    document = list(dict.fromkeys(phase for _, phase, _, _ in spec_rows()))
+    document = list(dict.fromkeys(phase for phase, _, _ in spec_rows()))
 
     assert list(PHASES) == document
 
 
-def test_the_in_scope_boundary_is_the_one_the_document_states() -> None:
-    """`release` is declared in the flow and built later; both sides say where the line is."""
-    stated = SCOPE.search(SPEC.read_text(encoding="utf-8"))
-
-    assert stated, "spec.md no longer says which stages are in scope"
-    assert (int(stated[1]), int(stated[2])) == (0, LAST_IN_SCOPE_STAGE)
+def test_the_unbuilt_phases_are_the_ones_the_document_names() -> None:
+    """`release` is in the flow and has no module; both sides name it, rather than cut at a number."""
+    assert list(DECLARED_ONLY) == spec_declared_only()
 
 
-@pytest.mark.parametrize(
-    "row", [r for r in spec_rows() if r[0] <= 11], ids=lambda r: r[2]
-)
-def test_each_in_scope_stage_has_the_module_the_layout_puts_it_in(
-    row: tuple[int, str, str, str],
-) -> None:
+def test_every_unbuilt_phase_is_a_phase() -> None:
+    """A phase named unbuilt that is not in the flow at all would exclude nothing, silently."""
+    assert set(DECLARED_ONLY) <= set(PHASES)
+
+
+@pytest.mark.parametrize("row", built_rows(), ids=lambda r: r[1])
+def test_each_built_stage_has_the_module_the_layout_puts_it_in(row: Row) -> None:
     """I3, code -> spec: a stage renamed in the document and not in the tree, or the reverse."""
-    number, phase, stage, _ = row
-    path = module_path(number, phase, stage)
+    phase, stage, _ = row
+    path = module_path(phase, stage)
 
-    assert path.exists(), (
-        f"stage {number} `{stage}` has no module at {path.relative_to(SRC)}"
-    )
+    assert path.exists(), f"`{stage}` has no module at {path.relative_to(SRC)}"
 
 
-@pytest.mark.parametrize(
-    "row", [r for r in spec_rows() if r[0] <= 11], ids=lambda r: r[2]
-)
-def test_each_stage_module_s_docstring_names_its_stage_and_its_number(
-    row: tuple[int, str, str, str],
-) -> None:
-    """Requirement 3: `STEP · <stage> (stage <n>) · <what the table says it does>`."""
-    number, phase, stage, summary = row
-    docstring = ast.get_docstring(module_at(module_path(number, phase, stage)).tree)
+@pytest.mark.parametrize("row", built_rows(), ids=lambda r: r[1])
+def test_each_stage_module_s_docstring_is_its_row_of_the_table(row: Row) -> None:
+    """Requirement 3: `STEP · <stage> · <what the table says it does>`."""
+    phase, stage, summary = row
+    docstring = ast.get_docstring(module_at(module_path(phase, stage)).tree)
 
-    assert docstring, f"stage {number} `{stage}` has no docstring"
-    assert plain(docstring.splitlines()[0]) == plain(
-        f"STEP · {stage} (stage {number}) · {summary}"
-    )
+    assert docstring, f"`{stage}` has no docstring"
+    assert plain(docstring.splitlines()[0]) == plain(f"STEP · {stage} · {summary}")
