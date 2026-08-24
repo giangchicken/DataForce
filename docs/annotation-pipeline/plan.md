@@ -14,8 +14,8 @@ in Phase 4.
 
 **Phase 1 is done. Phase 0 has one task left.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`),
 T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
-(`c72e5a6`) and T35 closed Phase 1. `make check` is green over 57 modules holding no behaviour and
-299 tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
+(`c72e5a6`), T35 and T36 closed Phase 1. `make check` is green over 54 modules holding no behaviour
+and 290 tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
 guard reads.** What each task changed is recorded at the end of the task below it. **Phase 2 is
 next, and nothing in it has been started.**
 
@@ -99,6 +99,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T33 | Write down the layout, and guard it | 0 | T5 | M | ✓ |
 | T34 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
 | T35 | The axis façade, and the guard that could not see through it | 1 | T6 | M | ✓ |
+| T36 | One shared request body, and `cli.py` inside `edge/` | 1 | T5 | M | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -371,8 +372,8 @@ should be thinking about the stage instead.
 
 **Approach.** Drop `Stage.number`. Replace `LAST_IN_SCOPE_STAGE = 11` with `DECLARED_ONLY`, the phases
 that are in the flow and have no module — a named phase does not move when something above it does.
-Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name the stage: `question_generate`, not
-*stage 7*.
+Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name the stage —
+`question_generate`, not *stage 7*.
 
 **Acceptance criteria.** Nothing in `spec.md`, `plan.md` or `workflow.md` numbers a stage, and I3 still
 fails when either side of the table moves alone — including when a row only moves *position*, which the
@@ -649,6 +650,48 @@ façade that cannot say so proves nothing about a real one.
 Three mutations, three reds after the fix, all three green before it: a relative re-export, a deep
 relative re-export on the other axis, and the `base.py` case that I16 already covered — kept, because
 widening a rule is how the half that worked gets broken.
+
+---
+
+### T36 · One shared request body, and `cli.py` inside `edge/`
+
+**Goal.** The layout stops arguing for two things the routes do not support.
+
+**Context.** Two claims in § *Package layout* did not survive being counted.
+
+*Four `schemas.py` files, "because each router needs a quarter of what a single module would hold".*
+Every route but `/load-data` takes `RecordsRequest` and returns `RecordsResponse`. So three of the four
+modules would have imported that pair from somewhere, and the layout had no somewhere — which makes the
+honest reading of four `schemas.py` files three duplicates of a shape that must stay identical. A change
+to it would have had to land in three places to be correct, and nothing would have said so.
+
+*`cli.py` at the package's top level, beside `record.py`.* The spec defines the edge as everything that
+touches a file, a socket or a clock; `cli.py` reads argv, opens JSONL and writes it. It was edge in the
+wrong place, and the rule paid twice: `engine_modules()` carried two exclusions instead of one, and I17
+needed `cli.py` as a special case beside `edge/routers/`. A second condition is a second thing to forget
+when a third shell lands.
+
+**Approach.** `routers/schemas.py` for the shared pair; a per-router `schemas.py` only for what one
+router alone speaks. `data_quality` and `ai_review` speak nothing of their own, so they become one
+module each — §6's rule, and the same rule `pipeline/` already runs on. Move `cli.py` to
+`edge/cli.py`, then collapse both scans to one condition.
+
+**Acceptance criteria.** No model is defined twice. `engine_modules()` has one exclusion. The console
+entry point still resolves.
+
+**Source.** `spec.md` Decisions 20 and 21, Requirement 36, § *Request and response models*.
+
+**Verify.** `uv run dataforce --help`; `make check`; put `from dataforce.edge.cli import main` in an
+engine module and confirm I1 red.
+
+**Out of scope.** Writing any of these models. This task moves and merges docstring-only modules.
+
+**Landed.** 57 modules became 54. The trade on the router shape is written into Decision 20 rather
+than left implicit: giving `ai_review` a model of its own later promotes a module back to a package,
+which is one move and visible in review. That is the cheaper failure than three copies drifting.
+
+`load_data/router.py` claimed "one sub-endpoint per service" for a phase with one service. Fixed while
+it was in front of me — it was wrong before the move and would have been wrong after.
 
 ---
 

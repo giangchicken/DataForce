@@ -1,1 +1,1 @@
-"""façade · the /load-data router and the models its handlers speak."""
+"""façade · the /load-data router and the two models only it speaks."""

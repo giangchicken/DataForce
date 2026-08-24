@@ -1,7 +1,7 @@
 """DataForce -- a raw, model-labelled corpus into a training-ready dataset, and the evidence for it.
 
-**Import direction, stated once, and never reversed.** ``edge/`` and ``cli.py`` may import the
-engine; the engine may not import them. Everything that touches a file, a socket or a clock is
+**Import direction, stated once, and never reversed.** ``edge/`` may import the engine; the engine
+may not import it. Everything that touches a file, a socket or a clock is
 the edge; everything else is the engine, and the arrow points one way (Requirement 36). This is
 not discipline: ``tests/guards/`` holds the scan, and a subprocess import from a directory with
 no ``config/`` proves the engine reads nothing when it is imported (Requirement 37).

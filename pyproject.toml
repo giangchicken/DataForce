@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dataforce = "dataforce.cli:main"
+dataforce = "dataforce.edge.cli:main"
 
 [build-system]
 requires = ["hatchling"]

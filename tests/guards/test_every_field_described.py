@@ -63,7 +63,7 @@ def test_the_walk_reaches_every_module() -> None:
     }
 
     assert "dataforce.record" in walked
-    assert "dataforce.edge.routers.data_quality.schemas" in walked
+    assert "dataforce.edge.routers.schemas" in walked
 
 
 def test_the_rule_rejects_a_field_with_no_description() -> None:

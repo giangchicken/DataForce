@@ -95,12 +95,15 @@ def modules_in(package: str = "") -> list[Module]:
 
 
 def engine_modules() -> list[Module]:
-    """Every module the engine owns: the package less `edge/` and `cli.py` (Requirement 36)."""
+    """Every module the engine owns: the package less `edge/` (Requirement 36).
+
+    One condition, because the edge is one package. It was two while `cli.py` sat at the top level,
+    and a second condition is a second thing to forget when the next shell lands.
+    """
     return [
         module
         for module in modules_in()
         if not module.name.startswith("dataforce.edge")
-        and module.name != "dataforce.cli"
     ]
 
 

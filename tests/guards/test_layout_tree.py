@@ -88,7 +88,8 @@ def test_the_drawing_was_found_and_parsed() -> None:
 
     assert "errors.py" in rows
     assert "pipeline/data_quality/pii_check.py" in rows
-    assert "edge/routers/ai_review/schemas.py" in rows
+    assert "edge/routers/schemas.py" in rows
+    assert "edge/cli.py" in rows
 
 
 def test_the_tree_and_the_package_hold_the_same_modules() -> None:

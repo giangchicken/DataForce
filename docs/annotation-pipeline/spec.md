@@ -404,8 +404,8 @@ Each is a statement a test can be pointed at.
 
 ### Running it
 
-36. No engine module opens a file, names a path, or imports the edge. `edge/` and `cli.py` are the edge;
-    **everything else is the engine**, and the arrow points one way. `Engine` is a type the engine owns;
+36. No engine module opens a file, names a path, or imports the edge. `edge/` **is** the edge — both
+    shells live in it, so the rule is one condition and not a list; **everything else is the engine**, and the arrow points one way. `Engine` is a type the engine owns;
     `open_engine`, which reads the files that fill it, is not.
 37. Importing `dataforce.modalities.text2text` and `dataforce.profiles.tool_decision` from a directory
     holding no `config/` succeeds and writes nothing.
@@ -442,7 +442,7 @@ Each is a statement a test can be pointed at.
     both protocols may import.
 48. **The order of a phase's stages is engine knowledge.** `POST /data-quality` runs three services in
     the order `pipeline/flow.py` declares, folded by `pipeline/runner.py`. No router names a stage
-    sequence, and `cli.py` dispatches over the same table rather than hand-writing one subcommand body
+    sequence, and `edge/cli.py` dispatches over the same table rather than hand-writing one subcommand body
     per stage.
 49. **`answer_from_response` is the only place an annotation tool's shape is read**, the way
     `build_record` is the only place a source shape is read. It takes one annotation's `result` list and
@@ -502,7 +502,8 @@ because a deleted test is no verdict on a module.
 **The edge is called `edge/`.** It was called `api/`, which was a lie: the package also held
 `policy.py`, `artifacts.py` and `store/` — every file, socket and clock in the system — and `cli.py`
 importing from something named `api` was the proof. "Edge" is the word this document already reasons
-in. HTTP keeps the style reference's shape inside it.
+in. HTTP keeps the style reference's shape inside it, and `cli.py` is **in** it: the same argument that
+renamed the package puts the second shell inside it rather than beside it (Decision 21).
 
 **`Engine` is a type; `open_engine` is a reader.** Putting both at the edge forced every service —
 `def pii_check(engine: Engine, …)` — to import the edge, which Requirement 36 forbids and I1 catches on
@@ -547,7 +548,7 @@ src/dataforce/              the package; its docstring states the import directi
       aggregate.py          STEP · aggregate · overlap becomes one verdict with a confidence and an agreement statistic.
       curate.py             STEP · curate · the verdict becomes the record's final label, or an adjudication.
 
-  modalities/               one directory per implementation, beside the protocol each answers
+  modalities/               one directory per implementation, beside the protocol they answer
     __init__.py             façade · the modality axis: the protocol, and nothing that implements it.
     base.py                 DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
 
@@ -572,28 +573,21 @@ src/dataforce/              the package; its docstring states the import directi
     policy.py               LOGIC · config/<axis>/*.yaml, params.yaml and prompts into declarations.
     artifacts.py            TOOL · the one place a record file, metrics.json or a run manifest is read or written.
 
-    routers/                one package per main endpoint, each holding only the models its handlers speak
-      __init__.py           façade · one router package per main endpoint; each holds its own schemas.
+    routers/                one router per main endpoint; a package only where that endpoint has models of its own
+      __init__.py           façade · one router per main endpoint, and the body three of them share.
+      schemas.py            DEFINITION · RecordsRequest and RecordsResponse — the body every record route shares.
+      data_quality.py       TOOL · one APIRouter for /data-quality: the main endpoint, and one sub-endpoint per service.
+      ai_review.py          TOOL · one APIRouter for /ai-review: the main endpoint, and one sub-endpoint per service.
 
-      load_data/            the `/load-data` endpoint
-        __init__.py         façade · the /load-data router and the models its handlers speak.
-        router.py           TOOL · one APIRouter for /load-data: the main endpoint, and one sub-endpoint per service.
-        schemas.py          DEFINITION · the request and response models the /load-data handlers speak.
+      load_data/            a package, because this endpoint has models nothing else speaks
+        __init__.py         façade · the /load-data router and the two models only it speaks.
+        router.py           TOOL · one APIRouter for /load-data: one service, so one route and nothing under it.
+        schemas.py          DEFINITION · LoadDataRequest and LoadDataResponse — the one route the modality reshapes.
 
-      data_quality/         the `/data-quality` endpoint and its three sub-endpoints
-        __init__.py         façade · the /data-quality router and the models its handlers speak.
-        router.py           TOOL · one APIRouter for /data-quality: the main endpoint, and one sub-endpoint per service.
-        schemas.py          DEFINITION · the request and response models the /data-quality handlers speak.
-
-      ai_review/            the `/ai-review` endpoint and its three sub-endpoints
-        __init__.py         façade · the /ai-review router and the models its handlers speak.
-        router.py           TOOL · one APIRouter for /ai-review: the main endpoint, and one sub-endpoint per service.
-        schemas.py          DEFINITION · the request and response models the /ai-review handlers speak.
-
-      human_review/         the `/human-review` endpoint and its five sub-endpoints
-        __init__.py         façade · the /human-review router and the models its handlers speak.
+      human_review/         a package, for the same reason: `/publish/sync` is not a record route
+        __init__.py         façade · the /human-review router and the one model only it speaks.
         router.py           TOOL · one APIRouter for /human-review: the main endpoint, and one sub-endpoint per service.
-        schemas.py          DEFINITION · the request and response models the /human-review handlers speak.
+        schemas.py          DEFINITION · SyncResponse — the one model /human-review adds to the shared body.
 
     store/                  the question store's adapter: SQLite by default, Postgres by URL (Decision 7)
       __init__.py           façade · the question store: the adapter behind the QuestionStore port.
@@ -601,7 +595,7 @@ src/dataforce/              the package; its docstring states the import directi
       repository.py         LOGIC · the QuestionStore port, implemented over a session.
       session.py            TOOL · the store's connection and its lifetime.
 
-  cli.py                    TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, JSONL out.
+    cli.py                  TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, JSONL out.
 ```
 
 Every module above states its own kind (Requirement 2), and the line beside it in this drawing *is* that
@@ -622,13 +616,19 @@ tests/
 A phase with one stage is one module (`load_data.py`); a phase with several is a directory. Nothing is
 split until a second consumer needs half of it.
 
-**Three files are split at the boundary consumers import along, from the first line written.**
-`routers/<domain>/schemas.py` rather than one `schemas.py`, because four routers each need a quarter of
-it and AGENTS.md §6 forbids making a consumer depend on what it does not use — this is also the style
-reference's own `routers/<domain>/<feature>.py` shape. `cli.py` is a dispatch over `flow.py`, not one
-hand-written subcommand body per stage: every service has one signature and Requirement 46 makes the
-in-process call the same call, so the CLI stays roughly one screen however many stages exist.
-`record.py` does not split at all — there is no boundary in it; it is one type, and it is long because
+**A router is a package only when it has models of its own.** Every route but `/load-data` takes
+records and returns records, so `RecordsRequest` and `RecordsResponse` are one module —
+`routers/schemas.py` — and not four copies of one shape (Decision 20). `load_data/` and `human_review/`
+stay packages because each speaks something no other router does; `data_quality` and `ai_review` speak
+nothing of their own and are one module each, which is AGENTS.md §6's rule and the same rule `pipeline/`
+already runs on. The cost is stated: giving `ai_review` a model of its own later promotes a module to a
+package. That is one `git mv` and it is visible in review, which is cheaper than three copies of a
+shape that must stay identical.
+
+**`edge/cli.py` is a dispatch over `flow.py`**, not one hand-written subcommand body per stage: every
+service has one signature and Requirement 46 makes the in-process call the same call, so the CLI stays
+roughly one screen however many stages exist. `record.py` does not split at all — there is no boundary
+in it; it is one type, and it is long because
 Requirement 1 puts a description on every field, which is the file doing its job.
 
 **There is no empty `speech2text/` directory.** The seam is real and specified — `modalities/base.py`,
@@ -650,8 +650,8 @@ which reads the stage's imports — would see a clean line. The registry would s
 no longer be the only way in. `edge/bootstrap.py` names the implementations, because registering them
 is what a composition root is for (Requirement 38, I16).
 
-**Import direction, stated once in the package docstring:** `edge/` and `cli.py` may import the engine;
-the engine may not import them.
+**Import direction, stated once in the package docstring:** `edge/` may import the engine; the engine
+may not import it. One package, one direction, one condition in the scan.
 
 ### The record
 
@@ -860,9 +860,9 @@ computed at the edge when a human wants to read it.
 
 ### Request and response models
 
-`edge/routers/<domain>/schemas.py`, in the style reference's shape — one per router, because each
-router needs a quarter of what a single module would hold. Every field described, because that
-description is what a caller reads in `/docs`.
+`edge/routers/schemas.py` holds the pair every record route shares. A router keeps a `schemas.py` of
+its own only for what nothing else speaks — `load_data/` for the two below, `human_review/` for
+`SyncResponse`. Every field described, because that description is what a caller reads in `/docs`.
 
 ```python
 class RecordsRequest(BaseModel):
@@ -1323,6 +1323,28 @@ so it says `question_generate`, which is longer and does not tell you what runs 
 does, and it is one screen. *Reversible:* yes — one field on `Stage`, one column in the table — but
 reversing it re-acquires the shared index.
 
+**20 · One shared request body, not one per router.**
+The layout said `routers/<domain>/schemas.py`, four of them, *"because each router needs a quarter of
+what a single module would hold"*. Counting the routes retired that: every route but `/load-data` takes
+`RecordsRequest` and returns `RecordsResponse`. *Alternative:* keep four modules. *Why not:* three of
+them would have imported the pair from somewhere, and the layout had no somewhere — so the honest
+reading of four `schemas.py` files is three duplicates of a shape that must stay identical, which is a
+change that has to land in three places to be correct. *Why this:* one module for the shared pair, and a
+per-router module only for what one router alone speaks, which is the same §6 rule stated the other way
+round. *Cost:* `data_quality` and `ai_review` become one module each, so giving either a model of its own
+later promotes a module to a package. *Reversible:* yes, and cheaply — it is a `git mv`.
+
+**21 · `cli.py` moves into `edge/`.**
+It was at the package's top level, beside `record.py`. *Why this changed:* the spec defines the edge as
+everything that touches a file, a socket or a clock, and `cli.py` reads argv, opens JSONL and writes it
+— so it was already edge, in the wrong place. The rule paid for it twice: `engine_modules()` needed two
+exclusions instead of one, and I17's scan needed `cli.py` as a special case beside `edge/routers/`. A
+second condition is a second thing to forget when a third shell lands. *Alternative:* leave it, on the
+grounds that the two shells read better at the same level. *Why not:* the argument that renamed `api/`
+to `edge/` was *"`cli.py` importing from something named `api` was the proof"* — the same argument puts
+it inside. *Cost:* the console entry point becomes `dataforce.edge.cli:main`. *Reversible:* yes, and
+reversing it re-acquires the two-condition rule.
+
 ---
 
 ## Versions
@@ -1368,7 +1390,7 @@ Each names the check that holds it, not a file that used to.
 | I14 | Two runs of one unchanged configuration produce identical run manifests | run twice, compare bytes |
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
 | I16 | Nothing above an axis implementation names one | AST scan over each axis's `base.py` **and** its `__init__.py`. A façade that re-exports its implementations makes every importer of the axis load them, and no scan of the consumer can see that: the consumer's line is clean and the coupling is one hop away |
-| I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `cli.py` names two stages in sequence; both call `run_phase` |
+| I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `edge/cli.py` names two stages in sequence; both call `run_phase` |
 | I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
 
@@ -1407,8 +1429,8 @@ path. I1's scan permits `logging` by name and forbids what it always forbade —
 
 **Every event carries the same three keys**, because an event that cannot be joined to a run and a
 record is a sentence in a log file rather than data: `run_id`, `record_id` (absent only for
-composition-time events), and the stage that emitted it. `edge/main.py` and `cli.py` each install one
-handler on stdout at start-up; nothing else configures logging, and no module writes to a file.
+composition-time events), and the stage that emitted it. `edge/main.py` and `edge/cli.py` each install
+one handler on stdout at start-up; nothing else configures logging, and no module writes to a file.
 
 **What is worth an event, and at what level.** `INFO` once per stage per batch — started, finished, how
 many records, how many skipped by precondition. `WARNING` per record for the things a human must

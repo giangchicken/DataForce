@@ -1,1 +1,1 @@
-"""façade · the /human-review router and the models its handlers speak."""
+"""façade · the /human-review router and the one model only it speaks."""

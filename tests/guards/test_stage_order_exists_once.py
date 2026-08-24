@@ -54,16 +54,16 @@ def stage_order_findings(module: Module) -> list[str]:
 
 
 def order_writing_modules() -> list[Module]:
-    """The two places that would write an order down twice: the routers, and the CLI."""
-    return [*modules_in("edge/routers"), module_at(SRC / "cli.py")]
+    """The two shells that would write an order down twice: the routers, and the CLI."""
+    return [*modules_in("edge/routers"), module_at(SRC / "edge" / "cli.py")]
 
 
 def test_the_scan_has_the_two_places_to_look() -> None:
     """Guards the selection: I17 is about the edge, and an empty list would find nothing."""
     names = {module.name for module in order_writing_modules()}
 
-    assert "dataforce.cli" in names
-    assert "dataforce.edge.routers.data_quality.router" in names
+    assert "dataforce.edge.cli" in names
+    assert "dataforce.edge.routers.data_quality" in names
 
 
 @pytest.mark.parametrize("module", order_writing_modules(), ids=lambda m: m.name)

@@ -5,7 +5,7 @@ before it ever runs; the subprocess catches whatever the scan's list of names do
 by importing both axis implementations from a directory with no ``config/`` in it -- Requirement
 37, stated as something a machine runs.
 
-The engine is the package less ``edge/`` and ``cli.py``, and the arrow points one way
+The engine is the package less ``edge/``, and the arrow points one way
 (Requirement 36). ``logging`` is permitted by name: a logger call opens no file and names no path,
 which is what keeps the observability design inside this invariant -- the engine emits and the edge
 installs the handler.
@@ -56,7 +56,7 @@ FORBIDDEN_CALLS = (
     "datetime.today",
     "datetime.utcnow",
 )
-EDGE = ("dataforce.edge", "dataforce.cli")
+EDGE = ("dataforce.edge",)
 
 
 def world_reading_findings(module: Module) -> list[str]:
@@ -91,7 +91,7 @@ def test_no_engine_module_reads_the_world(module: Module) -> None:
         "import os",
         "import os.path",
         "from dataforce.edge.artifacts import write_records",
-        "from dataforce.cli import main",
+        "from dataforce.edge.cli import main",
         "def read(p):\n    return open(p).read()",
         "from datetime import datetime\nstamped = datetime.now()",
         "import time\nstamped = time.time()",
