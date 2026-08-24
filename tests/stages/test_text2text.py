@@ -550,6 +550,9 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
 
     A `Protocol` is not runtime-checkable and `mypy --strict` reads `src/` alone, so this is what
     catches a renamed member from the test side -- and it reads as the list of what a modality is.
+    Asserted as an equality in both directions: I23 checks the same closure off the tree, and this
+    checks it off a live instance, where a member arriving through a decorator or a base class would
+    show up and an AST scan would not see it.
     """
     declared = {name for name in dir(Modality) if not name.startswith("_")} | set(
         Modality.__annotations__
@@ -563,5 +566,4 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
         "personal_data_detectors",
         "version",
     }
-    for member in declared:
-        assert hasattr(a_modality(), member)
+    assert {name for name in dir(a_modality()) if not name.startswith("_")} == declared

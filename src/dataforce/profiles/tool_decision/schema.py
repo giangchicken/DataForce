@@ -1,10 +1,16 @@
 """DEFINITION · the tool_decision shapes: a call, an answer, and what constrains one.
 
-The four types ``profiles/base.py`` refuses to name (Requirement 47), plus the one that constrains
-them. ``Answer``, ``AnswerConfig`` and ``LabelCheck`` are aliases for ``Any`` there and are these
-shapes here; ``Tool`` is what a record's own catalog turns into, and it is here rather than in
-``record.py`` because a catalog is a *permitted answer's* shape and what an answer is is the whole
-of what a profile declares.
+The types ``profiles/base.py`` refuses to name (Requirement 47), plus the one that constrains them.
+``AnswerConfig`` and ``LabelCheck`` are aliases for ``Any`` there and are these shapes here; ``Call``
+is the model an ``Answer`` is made of; ``Tool`` is what a record's own catalog turns into, and it is
+here rather than in ``record.py`` because a catalog is a *permitted answer's* shape and what an answer
+is is the whole of what a profile declares.
+
+**There is deliberately no ``Answer`` in this module.** ``base.Answer`` is the opaque alias every
+member's signature uses, and what actually crosses the boundary is ``record.StoredAnswer``. A second
+``Answer`` here -- ``tuple[Call, ...]``, the parsed form -- meant one word naming two shapes inside one
+axis, so a reader following Requirement 47 got the wrong type for all four operations (§5). The parsed
+form is ``Calls``, which is what ``calls_in`` returns and what it says.
 
 **An answer is a set of calls, and a call is a name and its arguments.** ``SendStatement`` alone
 cannot distinguish ``ky: "thang_nay"`` from ``ky: "thang_truoc"``, and a dataset that cannot
@@ -49,11 +55,11 @@ class Call(BaseModel):
     )
 
 
-# What a profile means by an answer: a set of calls, at most one per tool name. A tuple because a
+# An answer as this profile reads one: a set of calls, at most one per tool name. A tuple because a
 # set of models is not JSON and the record stores this as an array; the *at most one per name* half
 # is `label_names_one_tool_twice`'s to enforce, because a multiset would force δ to pairwise-match
 # two calls to one tool and silently pick a pairing no juror proposed.
-type Answer = tuple[Call, ...]
+type Calls = tuple[Call, ...]
 
 
 class Tool(BaseModel):

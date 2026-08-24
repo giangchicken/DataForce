@@ -17,7 +17,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-`make check` is green over 55 modules and 609 tests, 164 of which are not guards — but **T34 is open
+`make check` is green over 55 modules and 615 tests, 164 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
 list.**
@@ -58,7 +58,7 @@ depart from it.
 | Written | Lives in |
 |---|---|
 | `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
-| `I8` | `spec.md` § *Invariants* — I1 to I22 |
+| `I8` | `spec.md` § *Invariants* — I1 to I23 |
 | `Decision 12` | `spec.md` § *Decisions* — 22 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
@@ -115,6 +115,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T44 | An item that cannot be read is still an item | 3 | T12, T13 | S | ✓ |
 | T45 | The rendering convention has a name, and a test that crosses it | 3 | T12, T13 | S | ✓ |
 | T46 | The manifest is validated where it is read | 3 | T12, T13 | S | ✓ |
+| T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1503,6 +1504,50 @@ ever asks what the source calls `prior_label`. Its five values were the retired 
 which is what T4 was for. `gold.from` stays, with a comment naming T31 as the reader it is waiting
 for: an unread key with a named future reader is a different thing from an orphan, and the comment is
 what makes the difference visible. `prompts.question` got the same treatment, naming T27.
+
+---
+
+### T47 · The fourteen are closed from the implementation's side too
+
+**Goal.** *Closed* is checked on both sides, and one word does not name two shapes inside one axis.
+
+**Context.** Two findings with one cause: nothing looked at the implementation's own surface.
+`final_label` shipped as a public method on `@final class ToolDecision`, used no `self`, and appeared
+in neither § *Profile*'s fourteen nor this plan — a conversion over a record that became a method
+because a method was the closest thing to hand. T13's note 5 had refused a fifteenth member for
+`redact_label` on P20 grounds, so the argument existed; this one arrived without it. I21 could not
+see it, because it compares the `Protocol` to the document and a protocol says nothing about what an
+implementation may add, and the runtime conformance test asserted containment rather than equality.
+
+The second finding is `schema.Answer`. Requirement 47 says the models satisfying `base.Answer` live
+in the implementation's `schema.py`, so a reader follows it and types `answer_distance(a: Answer, …)`
+— and is wrong: every member takes and returns `record.StoredAnswer`, and `schema.Answer` was the
+internal parsed form. One word, two shapes, one axis (§5).
+
+**Approach.** `final_label` moves out to a module-level conversion. `schema.Answer` becomes `Calls`,
+which is what `calls_in` returns and what it says. Then a new guard, I23, reads each axis package off
+the tree and compares the surface of every class its façade exports to the protocol's member set.
+
+**Acceptance criteria.** I23 fails when `final_label` is restored as a method, and on a synthetic
+public attribute. Both runtime conformance tests assert equality. Requirement 47 says why `Answer`'s
+satisfying model is `Call` and why the parsed form has a different name.
+
+**Source.** Requirement 47, § *Profile*; AGENTS.md §5, P20; I21's stated blind spot.
+
+**Verify.** `uv run pytest tests/guards/test_axis_surface.py -q`.
+
+**Landed.** Six guard tests, and the one that matters watched red: restoring `final_label` as a method
+fails I23 with `ToolDecision has ['final_label'] and is missing []`, and nothing else.
+
+**The guard reads the tree, not an instance.** Constructing either axis needs a manifest and — since
+T12 — an encoder or a template, and a guard that needs fixtures is a guard that gets skipped when the
+fixtures move. So the surface is a scan: public methods off the class body, plus every `self.<name>`
+assignment, because Requirement 40 puts identity *out* of the class body and a scan of the body alone
+would find no `name` at all. The classes checked are the ones the façade exports, which makes a
+façade exporting a second class a finding too.
+
+The two runtime tests keep their place beside it and now assert equality: a member arriving through a
+decorator or a base class would show up on a live instance and not in an AST scan.
 
 ---
 

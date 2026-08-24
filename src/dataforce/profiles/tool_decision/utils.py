@@ -42,9 +42,9 @@ from pydantic import ValidationError
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.profiles.tool_decision.schema import (
-    Answer,
     AnswerConfig,
     Call,
+    Calls,
     LabelCheck,
     Tool,
 )
@@ -153,7 +153,7 @@ def listed(value: Any) -> tuple[Any, ...]:
     return tuple(value)
 
 
-def calls_in(stored: StoredAnswer) -> Answer:
+def calls_in(stored: StoredAnswer) -> Calls:
     """The answer a record stores, parsed. A bare name reads as the call with no arguments.
 
     Lenient by design: δ, the five checks and consensus all run over whatever a source or a juror
@@ -177,7 +177,7 @@ def calls_in(stored: StoredAnswer) -> Answer:
     return tuple(read)
 
 
-def stored_calls(answer: Answer) -> StoredAnswer:
+def stored_calls(answer: Calls) -> StoredAnswer:
     """The answer in the shape a record holds: one plain dict per call, in order."""
     return tuple({NAME: call.name, ARGUMENTS: dict(call.arguments)} for call in answer)
 
@@ -434,6 +434,20 @@ def one_role(manifest: Manifest, part: str) -> str:
             "which names no role"
         )
     return first
+
+
+def final_label(record: Record) -> StoredAnswer:
+    """The answer that ships: what `curate` decided, or the one the record arrived with.
+
+    A conversion over a record, not a fifteenth member. It was a public method on `ToolDecision` for
+    one commit, used no `self`, and appeared in neither § *Profile*'s fourteen nor the plan -- the
+    same guess T13 refused to make for `redact_label`, arrived at by accident instead of by argument.
+    I23 is the guard that now says so.
+    """
+    curated: FinalLabel | None = record.human_review.curate
+    if curated is None or curated.status == "unresolved":
+        return record.label
+    return curated.label
 
 
 def restated_answer(record: Record, role: str) -> StoredAnswer | None:
@@ -744,7 +758,7 @@ class ToolDecision:
         carried = dict(record.meta)
         carried.pop(ID, None)
         tools = carried.pop(TOOLS, [])
-        carried[self._label_at] = list(self.final_label(record))
+        carried[self._label_at] = list(final_label(record))
         return {
             ID: record.source_id,
             MESSAGES: [
@@ -754,13 +768,6 @@ class ToolDecision:
             TOOLS: tools,
             META: carried,
         }
-
-    def final_label(self, record: Record) -> StoredAnswer:
-        """The answer that ships: what `curate` decided, or the one the record arrived with."""
-        curated: FinalLabel | None = record.human_review.curate
-        if curated is None or curated.status == "unresolved":
-            return record.label
-        return curated.label
 
 
 if TYPE_CHECKING:

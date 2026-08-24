@@ -444,7 +444,12 @@ Each is a statement a test can be pointed at.
 47. **A type named in an axis protocol is opaque at the base and concrete in the implementation.**
     `Answer`, `AnswerConfig` and `LabelCheck` are aliases in `profiles/base.py`; `Detector` and
     `DisplayConfig` are aliases in `modalities/base.py`; the pydantic models that satisfy them live in
-    that axis implementation's `schema.py`. Neither `base.py` imports a concrete implementation. `Part`
+    that axis implementation's `schema.py`. **`Answer` is the one whose satisfying model is a
+    composite:** `tool_decision/schema.py` holds `Call`, and an answer is a set of them — what
+    *crosses* the boundary is `record.StoredAnswer`, because a stage hands `record.label` straight to
+    `answer_distance` and may not import the implementation (I2). So the implementation names the
+    parsed form `Calls` and not `Answer`: a second `Answer` inside the axis made one word mean two
+    shapes, and a reader following this requirement got the wrong type for all four operations. Neither `base.py` imports a concrete implementation. `Part`
     belongs to neither axis — it is a piece of record content — so it is defined in `record.py`, which
     both protocols may import.
 48. **The order of a phase's stages is engine knowledge.** `POST /data-quality` runs three services in
@@ -1459,6 +1464,7 @@ Each names the check that holds it, not a file that used to.
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
 | I20 | The record's keys are the keys § *The record* draws | the JSONC drawing is parsed out of this file and compared key by key against `Record`'s fields, nested models included. `label` and `meta` are free-form and named as exceptions: the drawing shows example contents of those two, not keys |
 | I21 | Each axis protocol has the members its section writes down | the `Protocol` block is parsed out of this file and compared to the runtime members, and the count both that section and the module's own docstring state in words is compared to the same number |
+| I23 | An axis implementation's public surface is exactly its protocol's members | AST scan over each axis package: every class its façade exports has, as methods and `self.…` assignments, precisely the protocol's member set. I21 compares the protocol to the document and so cannot see a member that is only in the *class* — a public method in neither contract, which is how `final_label` shipped as a fifteenth |
 | I22 | Every module's docstring opens with one of the five kinds | AST scan over the tree. The five words are read out of Requirement 2 rather than listed a second time, so a sixth kind becomes legal by being written down. `dataforce/__init__.py` is the one exception and says so in its own docstring |
 
 ---

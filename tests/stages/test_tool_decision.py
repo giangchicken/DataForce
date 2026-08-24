@@ -900,11 +900,15 @@ def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
 
 
 def test_it_answers_every_member_its_protocol_declares() -> None:
-    """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically."""
+    """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
+
+    An equality, not a containment: the fourteen are *closed*, and the containment version of this
+    test is what let `final_label` ship as a fifteenth. I23 checks the same closure off the tree;
+    this checks it off a live instance.
+    """
     declared = {name for name in dir(Profile) if not name.startswith("_")} | set(
         Profile.__annotations__
     )
 
     assert len(declared) == 14
-    for member in declared:
-        assert hasattr(a_profile(), member)
+    assert {name for name in dir(a_profile()) if not name.startswith("_")} == declared
