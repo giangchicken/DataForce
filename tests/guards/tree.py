@@ -59,18 +59,29 @@ def plain(text: str) -> str:
     return re.sub(r"\s+", " ", bare).strip().rstrip(".")
 
 
-def module_from_source(source: str, name: str = "dataforce.synthetic") -> Module:
-    """The module that source holds. A guard's P29 proof passes a violation in here."""
+def module_from_source(
+    source: str, name: str = "dataforce.synthetic", package: str | None = None
+) -> Module:
+    """The module that source holds. A guard's P29 proof passes a violation in here.
+
+    `package` is what a relative import inside it resolves against. The default is the parent, which
+    is right for a module and wrong for an `__init__.py`, where the package *is* the name -- so a
+    synthetic façade has to say so or its `from . import x` resolves one level too high.
+    """
     return Module(
-        name, name.rsplit(".", 1)[0], tuple(source.splitlines()), ast.parse(source)
+        name,
+        name.rsplit(".", 1)[0] if package is None else package,
+        tuple(source.splitlines()),
+        ast.parse(source),
     )
 
 
 def module_at(path: Path) -> Module:
     """The module that file holds. `path` is absolute, and under `SRC`."""
     parts = path.relative_to(SRC.parent).with_suffix("").parts
-    package = ".".join(parts if parts[-1] == "__init__" else parts[:-1])
-    name = package if parts[-1] == "__init__" else ".".join(parts)
+    is_init = parts[-1] == "__init__"
+    name = ".".join(parts[:-1] if is_init else parts)
+    package = name if is_init else ".".join(parts[:-1])
     source = path.read_text(encoding="utf-8")
     return Module(
         name, package, tuple(source.splitlines()), ast.parse(source, str(path))

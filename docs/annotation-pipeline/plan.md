@@ -14,8 +14,8 @@ in Phase 4.
 
 **Phase 1 is done. Phase 0 has one task left.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`),
 T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
-(`c72e5a6`) closed Phase 1. `make check` is green over 57 modules holding no behaviour and 283
-tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
+(`c72e5a6`) and T35 closed Phase 1. `make check` is green over 57 modules holding no behaviour and
+299 tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
 guard reads.** What each task changed is recorded at the end of the task below it. **Phase 2 is
 next, and nothing in it has been started.**
 
@@ -98,6 +98,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T32 | Un-number the stages | 0 | T5 | M | ✓ |
 | T33 | Write down the layout, and guard it | 0 | T5 | M | ✓ |
 | T34 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
+| T35 | The axis façade, and the guard that could not see through it | 1 | T6 | M | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -370,8 +371,8 @@ should be thinking about the stage instead.
 
 **Approach.** Drop `Stage.number`. Replace `LAST_IN_SCOPE_STAGE = 11` with `DECLARED_ONLY`, the phases
 that are in the flow and have no module — a named phase does not move when something above it does.
-Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name the stage: `question_generate`,
-not *stage 7*.
+Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name the stage: `question_generate`, not
+*stage 7*.
 
 **Acceptance criteria.** Nothing in `spec.md`, `plan.md` or `workflow.md` numbers a stage, and I3 still
 fails when either side of the table moves alone — including when a row only moves *position*, which the
@@ -604,6 +605,50 @@ the ordering the number used to assert became a list-against-list comparison.
 `PHASES` is derived from `STAGES` rather than listed beside it (P16). Deriving a stage's module path
 stayed in the test: nothing in the engine dispatches over the table yet, and a function with no caller
 in `flow.py` would make a `DEFINITION` module hold logic.
+
+---
+
+### T35 · The axis façade, and the guard that could not see through it
+
+**Goal.** Importing an axis cannot load an implementation of it, and a guard fails if that changes.
+
+**Context.** Both axis façades said *"the protocol, and every implementation of it"*. Follow that and
+`from dataforce.modalities import Modality` loads `text2text`, so a stage that imports only the
+protocol has a concrete axis behind it — and I2, which reads the *stage's* imports, sees a clean line.
+The registry stops being the only way in while every guard stays green. Requirement 38 said the stages
+were blind; it did not say anything above an implementation had to be.
+
+Underneath it was a worse one. `tree.py`'s `module_at` named a package's `__init__.py`
+`dataforce.modalities.__init__` and resolved its relative imports against *that*, so
+`from . import text2text` in a façade came out as `dataforce.modalities.__init__.text2text` and matched
+no implementation. Every guard is a filter over that resolution, so the bug did not fail a guard — it
+made two of them find nothing, which reads exactly like nothing being wrong.
+
+**Approach.** Façades re-export `base.py` only. Widen I16 from *"no axis `base.py` imports an
+implementation"* to *"nothing above an implementation names one"*, covering `base.py` and
+`__init__.py` on both axes. Fix `module_at`. Then test the machinery itself — `tests/guards/test_tree.py`
+— because a rule that finds nothing is indistinguishable from a rule nothing violates (AGENTS.md §8).
+
+**Acceptance criteria.** A façade that re-exports its implementation fails the build, in the relative
+spelling as well as the absolute one. `module_at` names no module `…__init__`.
+
+**Source.** `spec.md` Requirement 38, I16, § *Package layout*; AGENTS.md P18.
+
+**Verify.** Put `from . import text2text` in `modalities/__init__.py` and confirm red.
+
+**Landed.** Found in review, not by a guard, which is the finding. The sequence is worth recording:
+the façade re-export was written into the real tree and **all 283 tests passed**. I16 was widened; the
+synthetic re-export went red and the real one still passed. That gap is what exposed `module_at` —
+the synthetic module resolved correctly because the test said what its package was, and the real one
+did not.
+
+`module_from_source` grew a `package` argument for the same reason: its default is the parent, which
+is right for a module and wrong for an `__init__.py`, where the package *is* the name. A synthetic
+façade that cannot say so proves nothing about a real one.
+
+Three mutations, three reds after the fix, all three green before it: a relative re-export, a deep
+relative re-export on the other axis, and the `base.py` case that I16 already covered — kept, because
+widening a rule is how the half that worked gets broken.
 
 ---
 

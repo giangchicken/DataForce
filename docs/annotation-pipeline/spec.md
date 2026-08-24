@@ -409,8 +409,10 @@ Each is a statement a test can be pointed at.
     `open_engine`, which reads the files that fill it, is not.
 37. Importing `dataforce.modalities.text2text` and `dataforce.profiles.tool_decision` from a directory
     holding no `config/` succeeds and writes nothing.
-38. No module under `pipeline/` imports a concrete modality or profile. Both axes arrive through a
-    registry.
+38. No module under `pipeline/` imports a concrete modality or profile, and **nothing above an
+    implementation names one** — neither an axis's `base.py` nor its `__init__.py`. Importing the
+    protocol never drags an implementation in behind it. Both axes arrive through a registry, and
+    `edge/bootstrap.py` is the only module that names one.
 39. A registry is instance state. Two registries in one process hold different implementations, and
     registering a second implementation of one name is refused.
 40. Identity is never assigned in a class body. `name`, `version` and `modality` come from
@@ -546,7 +548,7 @@ src/dataforce/              the package; its docstring states the import directi
       curate.py             STEP · curate · the verdict becomes the record's final label, or an adjudication.
 
   modalities/               one directory per implementation, beside the protocol each answers
-    __init__.py             façade · the modality axis: the protocol, and every implementation of it.
+    __init__.py             façade · the modality axis: the protocol, and nothing that implements it.
     base.py                 DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
 
     text2text/              the only modality built; *Out of Scope* says why there is no empty `speech2text/`
@@ -555,7 +557,7 @@ src/dataforce/              the package; its docstring states the import directi
       utils.py              LOGIC · the conversions over the shapes in schema.py beside it.
 
   profiles/                 the same shape as `modalities/`, and nothing shared between the two axes
-    __init__.py             façade · the profile axis: the protocol, and every implementation of it.
+    __init__.py             façade · the profile axis: the protocol, and nothing that implements it.
     base.py                 DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
 
     tool_decision/          the only profile built; the first dataset's task
@@ -640,6 +642,13 @@ so `schema.py` does not import `utils.py`. `utils.py` is the one module name AGE
 name, and only under exactly this condition: conversions over the shapes in the `schema.py` beside it.
 So `answer_schema` — a record turned into a JSON Schema — is `utils.py`, while the answer models it
 constrains are `schema.py`.
+
+**An axis façade re-exports its protocol and nothing else.** `dataforce/modalities/__init__.py` holds
+`Modality` and not `text2text`. Re-exporting the implementation would make `import dataforce.modalities`
+load it, so a stage that imports only the protocol would pull a concrete axis in behind it and I2 —
+which reads the stage's imports — would see a clean line. The registry would still be there and would
+no longer be the only way in. `edge/bootstrap.py` names the implementations, because registering them
+is what a composition root is for (Requirement 38, I16).
 
 **Import direction, stated once in the package docstring:** `edge/` and `cli.py` may import the engine;
 the engine may not import them.
@@ -1358,7 +1367,7 @@ Each names the check that holds it, not a file that used to.
 | I13 | The placeholder map is never read by a service and never committed | AST scan plus a `.gitignore` assertion |
 | I14 | Two runs of one unchanged configuration produce identical run manifests | run twice, compare bytes |
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
-| I16 | No axis `base.py` imports an implementation of its own axis | AST scan over `modalities/base.py` and `profiles/base.py` |
+| I16 | Nothing above an axis implementation names one | AST scan over each axis's `base.py` **and** its `__init__.py`. A façade that re-exports its implementations makes every importer of the axis load them, and no scan of the consumer can see that: the consumer's line is clean and the coupling is one hop away |
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `cli.py` names two stages in sequence; both call `run_phase` |
 | I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
