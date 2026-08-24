@@ -3,7 +3,7 @@
 Not a stage either, and here for the reason `test_text2text.py` gives: everything a stage of
 `data_quality`, `ai_review` and `human_review` knows about the task comes from this one object.
 
-**Four of the fourteen members carry real algorithms** and get the weight here: `answer_schema`
+**Four of the fifteen members carry real algorithms** and get the weight here: `answer_schema`
 (`oneOf` per offered tool), `answer_distance` (name-first and soft), `vote_consensus` (per name,
 then per argument) and `label_checks` (five). δ is asserted as the *ordering* the spec hand-works,
 not as three numbers that happen to come out right, and the Jaccard reduction is asserted to the
@@ -614,6 +614,64 @@ def test_an_item_with_no_id_traces_back_through_its_offset() -> None:
     assert a_profile().build_record(item, parts(), a_provenance()).source_id == "41"
 
 
+# --- the label, redacted with the content ---
+
+
+def test_a_value_in_an_argument_is_replaced_under_its_placeholder() -> None:
+    """Requirement 17: the stage rewrites the content and this rewrites the label, one map."""
+    redacted = a_profile().redact_label((SENT,), {"480215": "<CUSTOMER_ID_1>"})
+
+    assert redacted == (
+        {
+            "name": "SendStatement",
+            "arguments": {"ma_khach": "<CUSTOMER_ID_1>", "ky": "thang_nay"},
+        },
+    )
+
+
+def test_a_tool_name_is_never_rewritten() -> None:
+    """A name is the catalog's, not the customer's: rewriting one fires `label_not_in_catalog`."""
+    redacted = a_profile().redact_label((SENT,), {"Send": "<X_1>", "480215": "<X_2>"})
+
+    assert redacted[0]["name"] == "SendStatement"  # type: ignore[call-overload]
+
+
+def test_a_value_nested_inside_an_argument_is_reached() -> None:
+    """An argument may itself be an object or an array, which is why the walk recurses."""
+    nested = ({"name": "OpenTicket", "arguments": {"khach": {"ma": ["480215"]}}},)
+
+    redacted = a_profile().redact_label(nested, {"480215": "<CUSTOMER_ID_1>"})
+
+    assert redacted == (
+        {"name": "OpenTicket", "arguments": {"khach": {"ma": ["<CUSTOMER_ID_1>"]}}},
+    )
+
+
+def test_a_bare_name_answer_comes_back_as_it_went_in() -> None:
+    """A names-only source's label carries no values, so there is nothing in it to redact."""
+    assert a_profile().redact_label(("SendStatement",), {"Send": "<X_1>"}) == (
+        "SendStatement",
+    )
+
+
+def test_one_value_inside_another_is_replaced_longest_first() -> None:
+    """The order both ends share, through `record.redacted_text`.
+
+    Shortest-first would write `48<PHONE_1>` here and the stage would write `<CUSTOMER_ID_1>` in the
+    content, which is the mismatch Requirement 17 exists to prevent -- manufactured by the fix.
+    """
+    both = {"480215": "<CUSTOMER_ID_1>", "0215": "<PHONE_1>"}
+
+    redacted = a_profile().redact_label((SENT,), both)
+
+    assert redacted[0]["arguments"]["ma_khach"] == "<CUSTOMER_ID_1>"  # type: ignore[call-overload,index]
+
+
+def test_a_label_with_nothing_to_replace_is_unchanged() -> None:
+    """The ordinary case, and the one that must not invent a key: no `arguments`, none added."""
+    assert a_profile().redact_label((SENT,), {}) == (SENT,)
+
+
 # --- what a person is asked, and what comes back ---
 
 
@@ -890,13 +948,14 @@ def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
 def test_it_answers_every_member_its_protocol_declares() -> None:
     """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
 
-    An equality, not a containment: the fourteen are *closed*, and the containment version of this
-    test is what let `final_label` ship as a fifteenth. I23 checks the same closure off the tree;
-    this checks it off a live instance.
+    An equality, not a containment: the fifteen are *closed*, and the containment version of this
+    test is what let `final_label` ship as an undeclared extra. I23 checks the same closure off the
+    tree; this checks it off a live instance. Fifteen since T16, which brought `redact_label` the
+    caller T13 refused to add it without.
     """
     declared = {name for name in dir(Profile) if not name.startswith("_")} | set(
         Profile.__annotations__
     )
 
-    assert len(declared) == 14
+    assert len(declared) == 15
     assert {name for name in dir(a_profile()) if not name.startswith("_")} == declared

@@ -119,6 +119,9 @@ class Profile(Protocol):
     def label_checks(self) -> list[LabelCheck]:
         """The checks that need no opinion, each named for the defect it finds."""
 
+    def redact_label(self, label: Answer, replacements: Mapping[str, str]) -> Answer:
+        """The label with every value `pii_check` replaced in the content replaced too."""
+
     def answer_distance(self, a: Answer, b: Answer) -> float:
         """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""
 
@@ -143,7 +146,7 @@ class Profile(Protocol):
         """The record in the shape a trainer expects."""
 ```
 
-Fourteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
+Fifteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`.
 
@@ -333,8 +336,10 @@ Each is a statement a test can be pointed at.
 ### The record
 
 5. Every service reads records and returns records. A service adds **exactly one key** and changes
-   nothing else — except `pii_check`, which also rewrites `content` and bumps `content_version`
-   (Requirement 17).
+   nothing else — except `pii_check`, which also rewrites `content` **and the `label`** together and
+   bumps `content_version` (Requirement 17). Three paths besides its own key, not two: this sentence
+   said `content` and `content_version` until T16, and rewriting one of the pair and not the other is
+   the defect Requirement 17 is written about.
 6. `record_id` is 16 lowercase hex over the canonicalised `content` parts. It does not depend on the
    record's position in the source file, and a shuffled re-ingest produces the same set of ids.
 7. Order *within* a record is content; order *between* records is not.
@@ -550,7 +555,7 @@ src/dataforce/              the package; its docstring states the import directi
   record.py                 DEFINITION · Record, and Part — the bus, and the content it carries.
   manifest.py               DEFINITION · Manifest — one axis's declaration, already parsed.
   engine.py                 DEFINITION · Engine, Registry and ServiceResult — what a service takes and returns; no I/O.
-  ports.py                  DEFINITION · QuestionStore — what the engine demands of the edge.
+  ports.py                  DEFINITION · QuestionStore and PersonalDataVerifier — what the engine demands of the edge.
 
   pipeline/                 the flow: one module per stage, and the fold that runs a phase's stages in order
     __init__.py             façade · the flow's table, its fold, and the phases under it; holds nothing of its own.
@@ -840,7 +845,7 @@ know is per item, so per item is the scope it reports.
 | stage | reads | writes | skips when |
 |---|---|---|---|
 | `label_check` | `content`, `label`, `meta` | `data_quality.label_check` | never; a record that fails a check is marked `quarantined` and travels on |
-| `pii_check` | `content`, `label` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | never; a hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
+| `pii_check` | `content`, `label`, `data_quality.label_check` | `data_quality.pii_check`, **and rewrites `content` and `label` together, bumping `content_version`** | `data_quality.label_check` is absent — Requirement 42's precondition, and the only thing it skips. A **quarantined** record is still scanned: personal data in a record that failed a label check is still personal data, and this cell said "never" because no *verdict* is a reason to skip. A hit layer two cannot confirm raises `unverified`, which `export`'s precondition reads |
 | `duplicate_check` | `content`, `label` | `data_quality.duplicate_check` | never; duplicates are grouped on the record, never removed |
 
 The five label checks are the profile's, not the engine's — `label_checks()` is a profile member:
@@ -850,13 +855,44 @@ The five label checks are the profile's, not the engine's — `label_checks()` i
 (a target of `["X", "X"]` trains a model to call X twice). Each carries a declared expected count in
 `params.invalid_counts`, and a check reading 0 is what tells you when it stops reading 0.
 
-**PII, in two layers.** Layer one is patterns over the raw text and over
-`normalize_text(text, remove_tone_marks=True)`, covering the Vietnamese spoken forms an off-the-shelf
-scrubber misses: digits as words (`không`…`chín`, plus `mốt`, `tư`, `lăm`), `@` as `a còng`, `.` as
-`chấm`. It is tuned for recall and is *allowed* to be noisy — a digit run is also a price, a date, an
-order reference. Layer two is a model pass over a bounded window that marks each hit verified or not.
-The placeholder→original map is returned to the edge and written to a path the edge chooses, which
-`.gitignore` covers.
+**PII, in two layers.** Layer one is patterns over the raw text and over a tone-stripped
+normalisation, covering the Vietnamese spoken forms an off-the-shelf scrubber misses: digits as words
+(`không`…`chín`, plus `mốt`, `tư`, `lăm`), `@` as `a còng`, `.` as `chấm`. It is tuned for recall and
+is *allowed* to be noisy — a digit run is also a price, a date, an order reference. Layer two is a
+model pass over a bounded window that marks each hit verified or not. The placeholder→original map is
+returned to the edge and written to a path the edge chooses, which `.gitignore` covers.
+
+**The tone-stripped half is normalised per word, because an offset has to survive it.**
+`normalize_text` collapses whitespace and strips the ends, so an offset into its output is not an
+offset into `content` — and Requirement 19 records every span against the content it was found in. So
+the scan builds a view of the part in which each whitespace-separated word is replaced by
+`normalize_text(word, remove_tone_marks=True)` **only where that leaves its length unchanged**, which
+for Vietnamese it does: stripping marks off a precomposed character leaves one character. Every hit
+therefore has true offsets and a value that exists in the raw text, which is what makes it
+replaceable at all. What is given up is a word whose NFKC form changes length — `ﬁ`, `①` — which is
+left as it is rather than shifting every offset after it.
+
+**Layer two is a port, and its window is one part.** `PersonalDataVerifier.confirmed_personal_data`
+takes the part's text and the values layer one flagged inside it, and returns the subset it confirms,
+each under the class it confirms it as — so a ten-digit run that matched both the phone and the
+customer-id pattern is decided by the layer that can read the sentence around it. A value confirmed
+in *any* part of a record is confirmed for that record: recall-first, and it is what keeps *one
+placeholder per value* (Requirement 17) true across parts. No verifier and a verifier that failed are
+the same answer for the same reason — the run completes and the record says `unverified`.
+
+**Only a confirmed hit is replaced, and the decision says what happened.** Layer two exists to set
+precision, so a hit it clears — the digit run that is a price — stays in the text; if everything layer
+one flagged were replaced anyway, layer two would buy a number and nothing else. That gives the
+`decision` field its three values: `reported` with `enable_redact: false`, whatever was found
+(Requirement 21); `redacted` where redaction is on and every hit was confirmed, *including* a record
+with no hits at all, which is what `export`'s precondition needs to pass for a clean record; and
+`withheld` where redaction is on and at least one hit could not be confirmed — the confirmed ones are
+still replaced, and the record is held back by a precondition rather than by a count nobody reads.
+`content_version` is bumped only where the text actually changed.
+
+**Placeholders are numbered per class, per record, in the order the scan first met the value.** A gap
+in the numbering is a value layer two cleared, and the spans say which — that is information, not a
+defect.
 
 #### `ai_review`
 

@@ -6,11 +6,12 @@ the document, so a member added to the *document* and not the class fails -- and
 implementation may have on top.
 
 That is not a hypothetical. ``final_label`` shipped as a public method on ``ToolDecision``, used no
-``self``, and appeared in neither § *Profile*'s fourteen nor the plan. It is a conversion over a
+``self``, and appeared in neither § *Profile*'s members nor the plan. It is a conversion over a
 record, so it belongs beside the other module-level ones; what made it a method was that a method was
-the closest thing to hand. T13's own note refused a fifteenth member for ``redact_label`` on P20
-grounds -- *a member with no caller is a guess about a future one* -- and the argument applies just as
-well to one that arrives by accident. This is the guard that says so.
+the closest thing to hand. T13's own note had refused ``redact_label`` a place on the protocol on P20
+grounds -- *a member with no caller is a guess about a future one* -- so the argument existed and this
+one arrived without it. That is what this guard says. (``redact_label`` is a member as of T16, which
+brought the caller: ``pii_check`` cannot rewrite a label without knowing what an answer is.)
 
 **The classes checked are the ones the façade exports**, which is also what makes a façade exporting a
 second class a finding: an axis package's front door is the implementation and the things it is built
@@ -110,7 +111,7 @@ def surface_findings(package: str, protocol: type) -> list[str]:
 def test_every_exported_class_is_exactly_its_protocol(
     axis: str, protocol: type
 ) -> None:
-    """I23, over both axes. Six and fourteen, on the side I21 cannot see."""
+    """I23, over both axes. Six and fifteen, on the side I21 cannot see."""
     for package in axis_implementations():
         if package.parent.name != axis:
             continue

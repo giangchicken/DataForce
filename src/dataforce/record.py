@@ -26,6 +26,15 @@ version of a shared fact. It is the same kind of fact as ``Part``: how a piece o
 written down. So it lives here, where both can reach it, and one test crosses the seam so neither
 end can move alone.
 
+**``redacted_text`` is here for the same reason as the separator, and it is the sharper case.**
+Requirement 17 says ``pii_check`` rewrites ``content`` **and** the label together, under the same
+placeholder -- the stage owns the content and the profile's ``redact_label`` owns the label, and the
+two may not import each other. If they applied the replacements in different orders they would
+disagree: with ``{"480215": "<A_1>", "0215": "<B_1>"}`` a longest-first pass writes ``<A_1>`` and a
+shortest-first pass writes ``48<B_1>``, which manufactures exactly the ``label_assistant_mismatch``
+Requirement 17 exists to prevent. So *how* a value becomes its placeholder is one function here,
+called by both ends, rather than an algorithm spelled twice and agreed by luck (P13, P16).
+
 **A key's model is named for what the key holds, never for the stage that writes it.** ``§5``: a
 name shared with a stage makes every sentence about the code ambiguous, and ``LabelCheck`` is
 already the profile's word for one of the five checks (Requirement 47). So what
@@ -33,7 +42,7 @@ already the profile's word for one of the five checks (Requirement 47). So what
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal, Self
 
@@ -159,6 +168,22 @@ def record_id_for(content: Sequence[Part]) -> str:
     return compute_hash(canonical)[:16]
 
 
+def redacted_text(text: str, replacements: Mapping[str, str]) -> str:
+    """One string with every personal-data value replaced by its placeholder, longest first.
+
+    Longest first is the load-bearing half: where one value contains another -- `0215` inside
+    `480215` -- replacing the shorter one first leaves `48<PHONE_1>`, and the same text redacted by
+    `content` and by `label` in different orders is two strings that no longer match. One function,
+    both callers, no order to agree on.
+
+    A value that is no longer in the text is not an error: `pii_check` replaces by value rather than
+    by offset, so a hit inside a longer hit is already gone by the time its own turn comes.
+    """
+    for value in sorted(replacements, key=len, reverse=True):
+        text = text.replace(value, replacements[value])
+    return text
+
+
 class Branch(RecordModel):
     """The pair this record was read and answered under."""
 
@@ -253,7 +278,11 @@ class PersonalDataScan(RecordModel):
     decision: Literal["redacted", "reported", "withheld"] = Field(
         ...,
         description=(
-            "What happened to the content: rewritten, left alone and reported, or held back."
+            "What happened to the content. `redacted`: rewritten, and every hit was "
+            "confirmed -- which is also a record with no hits at all, since `export`'s "
+            "precondition reads this. `reported`: left alone under "
+            "`enable_redact: false`. `withheld`: rewritten as far as layer two "
+            "confirmed, and held out of a release because something was not."
         ),
     )
     content_version_scanned: int = Field(

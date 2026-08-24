@@ -17,8 +17,8 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-Phase 4 is in progress: T14 and T15 have landed.
-`make check` is green over 56 modules and 643 tests, 186 of which are not guards — but **T34 is open
+Phase 4 is in progress: T14, T15 and T16 have landed.
+`make check` is green over 56 modules and 691 tests, 218 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **T34 is still the oldest thing on this list.**
 
@@ -128,7 +128,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T13 | `tool_decision` | 3 | T1, T11 | L | ✓ |
 | T14 | `load_data` | 4 | T10, T12, T13 | M | ✓ |
 | T15 | `label_check` | 4 | T13, T14 | S | ✓ |
-| T16 | `pii_check` | 4 | T2, T14 | L | |
+| T16 | `pii_check` | 4 | T2, T14 | L | ✓ |
 | T17 | `duplicate_check` | 4 | T12, T14 | M | |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | |
 | T19 | `jury` | 5 | T2, T13, T15 | M | |
@@ -1736,6 +1736,62 @@ is side output returned to the edge, never written by the engine and never commi
 **Source.** `spec.md` § *PII, in two layers*; T2 item 2.
 
 **Verify.** `uv run pytest tests/stages/test_pii_check.py -q`.
+
+**Landed.** Twenty-six stage tests, six on the profile's half and sixteen on I13's new guard. Five
+things had to be decided, and one of them is a defect the task would have shipped.
+
+**`redact_label` is the fifteenth member, and T13's own note said it would be.** It refused the member
+then on P20 grounds — *a member with no caller is a guess about a future one* — and named this task as
+the caller. So the protocol, the count in both places I21 reads, the implementation and I23's own
+docstring all moved together. The alternative was a generic walk over the label's JSON inside
+`pii_check`, replacing every string it found: rejected because only the profile knows that a call's
+`name` is the catalog's word and not the customer's, and a stage that rewrote one would fire
+`label_not_in_catalog` on the next run — the same class of defect Requirement 17 exists to prevent,
+one stage later.
+
+**Requirement 18 and Requirement 19 could not both hold as written, and the fix is per-word.** 18
+runs the patterns over `normalize_text(text, remove_tone_marks=True)`; 19 records every span against
+the content it was found in. But `normalize_text` collapses whitespace and strips the ends, so an
+offset into its output is not an offset into `content` — and worse, a matched string may not occur in
+the raw text at all, which makes it *unredactable*: the value `pii_check` would replace is not there.
+`tone_stripped_view` normalises one whitespace-separated word at a time and keeps the result only
+where its length is unchanged, which for Vietnamese it is. Every hit then has true offsets and a value
+that exists. The case this recovers is the mixed spelling — `bon tám khong hai mot nam` — which
+neither pattern matches against raw text, and it has a test.
+
+**Only a confirmed hit is replaced, which is what gives `decision` three values.** If everything layer
+one flagged were replaced anyway, layer two would buy a number and nothing else, and § *Testing
+Strategy* item 6 explicitly wants *layer one flags it, layer two clears it* for a digit run that is a
+price. So `withheld` finally has a writer and a meaning: redaction on, something unconfirmed, the
+confirmed hits replaced, and the record out of a release by `export`'s precondition rather than by a
+count nobody reads. A record with **no** hits and redaction on is `redacted`, because that precondition
+has to pass for a clean record.
+
+**Layer two is a port, and the second one.** `ports.py` said *one port, because a port with no adapter
+is a guess about a future caller* and that sentence stands — what changed is that a model call opens a
+socket and a stage may not (I1), so the engine slices the window and the edge makes the call. Two
+adapters make the seam real (P20): the client `edge/bootstrap.py` builds in T27, and the stand-in
+every test in `make check` runs against. It reaches the stage through the `Engine`, because
+`(engine, records)` is the only channel a service has — which is how `QuestionStore` will arrive in
+T24. **No verifier is not confirmation by default:** every hit stays unverified and nothing is
+rewritten, because an absent second layer silently meaning *everything layer one guessed was right* is
+the failure mode a privacy feature cannot have.
+
+**And Requirement 5 was wrong.** It said `pii_check` "also rewrites `content` and bumps
+`content_version`" — two paths, where § *Per-service contracts* and Requirement 17 both say the label
+is rewritten with the content. The property test would have found it as a fourth path the requirement
+did not permit; it is corrected in the requirement, which is where the next reader hits it.
+
+`record.redacted_text` is the fifth name something outside the record borrows, and the sharpest case
+of T45's argument: the stage replaces values in `content` and the profile replaces them in the label,
+and if they applied the map in different orders they would disagree — `{"480215": "<A_1>", "0215":
+"<B_1>"}` gives `<A_1>` longest-first and `48<B_1>` shortest-first, manufacturing the mismatch
+Requirement 17 exists to prevent. One function, both callers, no order to agree on.
+
+The precondition resolves a disagreement inside the spec: Requirement 42 says `pii_check` requires
+`data_quality.label_check` and the contract table said it skips *never*. Both are true of different
+things — it skips a record that never went through `label_check`, and **no verdict is a reason to
+skip**, because personal data in a quarantined record is still personal data. Both halves have a test.
 
 ---
 

@@ -6,7 +6,7 @@ after `edge/bootstrap.py` builds it is the last test below.
 
 The doubles are enough of an axis to be *stored*: a registry holds implementations and never calls
 one, so a double carrying only the identity its manifest would give it is the honest fixture. A
-double that satisfies all six or fourteen members is T12's and T13's business.
+double that satisfies all six or fifteen members is T12's and T13's business.
 """
 
 import pytest

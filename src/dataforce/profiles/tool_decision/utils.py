@@ -4,7 +4,7 @@ A record turned into a JSON Schema is a conversion, so ``answer_schema`` is here
 it constrains are ``schema.py``. ``schema.py`` does not import this module (I4).
 
 **The implementation is here too, for the reason the modality's is** -- ``__init__.py`` is a
-``façade ·`` that holds nothing of its own (Requirement 2), and every one of the fourteen members is
+``façade ·`` that holds nothing of its own (Requirement 2), and every one of the fifteen members is
 a conversion over the shapes beside this line.
 
 **Built with what only the edge can produce.** Identity, the modality it composes with, the source's
@@ -60,6 +60,7 @@ from dataforce.record import (
     Record,
     StoredAnswer,
     record_id_for,
+    redacted_text,
 )
 
 if TYPE_CHECKING:
@@ -443,7 +444,7 @@ def final_label(record: Record) -> StoredAnswer:
     """The answer that ships: what `curate` decided, or the one the record arrived with.
 
     A conversion over a record, not a fifteenth member. It was a public method on `ToolDecision` for
-    one commit, used no `self`, and appeared in neither § *Profile*'s fourteen nor the plan -- the
+    one commit, used no `self`, and appeared in neither § *Profile*'s members nor the plan -- the
     same guess T13 refused to make for `redact_label`, arrived at by accident instead of by argument.
     I23 is the guard that now says so.
     """
@@ -451,6 +452,51 @@ def final_label(record: Record) -> StoredAnswer:
     if curated is None or curated.status == "unresolved":
         return record.label
     return curated.label
+
+
+def redacted_arguments(value: Any, replacements: Mapping[str, str]) -> Any:
+    """One argument value with every personal-data string inside it replaced, at any depth.
+
+    An argument may itself be an object or an array -- the same reason δ compares them through
+    canonical JSON -- so a scan that only looked at the top level would rewrite
+    `{"ma_khach": "480215"}` and miss `{"khach": {"ma": "480215"}}`, which is the shape a tool with a
+    nested parameter schema declares.
+    """
+    if isinstance(value, str):
+        return redacted_text(value, replacements)
+    if isinstance(value, Mapping):
+        return {
+            key: redacted_arguments(item, replacements) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redacted_arguments(item, replacements) for item in value]
+    return value
+
+
+def redact_label(label: StoredAnswer, replacements: Mapping[str, str]) -> StoredAnswer:
+    """The label with every value `pii_check` replaced in the content replaced too.
+
+    Requirement 17, and the half of it that is this profile's: the stage owns the content and knows
+    nothing about what an answer is, so the shape of the label is read here. Redacting one and not
+    the other is worse than redacting neither -- it manufactures a `label_assistant_mismatch` on the
+    next run, and `export` emits a training example whose input reads `<CUSTOMER_ID_1>` and whose
+    target reads the original, teaching a model to produce an identifier absent from its input.
+
+    **The tool's name is never rewritten and everything else is.** A name is the catalog's, not the
+    customer's; rewriting one would invent a tool no record offers and fire `label_not_in_catalog` --
+    the same class of defect this exists to prevent, one stage later. A bare-name entry is returned
+    untouched for that reason, and a key this profile does not write is rewritten rather than trusted,
+    because a value carrying personal data is personal data wherever the source put it.
+    """
+    return tuple(
+        entry
+        if isinstance(entry, str)
+        else {
+            key: value if key == NAME else redacted_arguments(value, replacements)
+            for key, value in entry.items()
+        }
+        for entry in label
+    )
 
 
 def restated_answer(record: Record, role: str) -> StoredAnswer | None:
@@ -644,6 +690,12 @@ class ToolDecision:
             LabelCheck("label_cardinality_anomaly", label_cardinality_anomaly),
             LabelCheck("label_names_one_tool_twice", label_names_one_tool_twice),
         ]
+
+    def redact_label(
+        self, label: StoredAnswer, replacements: Mapping[str, str]
+    ) -> StoredAnswer:
+        """The label with every value `pii_check` replaced in the content replaced too."""
+        return redact_label(label, replacements)
 
     def answer_distance(self, a: StoredAnswer, b: StoredAnswer) -> float:
         """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""

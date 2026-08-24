@@ -1,6 +1,6 @@
 """DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
 
-Fourteen members, closed. The three named types are aliases here and concrete pydantic models in
+Fifteen members, closed. The three named types are aliases here and concrete pydantic models in
 an implementation's ``schema.py`` (Requirement 47). This module imports no implementation of its
 own axis (I16).
 """
@@ -42,6 +42,10 @@ class Profile(Protocol):
 
     def label_checks(self) -> list[LabelCheck]:
         """The checks that need no opinion, each named for the defect it finds."""
+        ...
+
+    def redact_label(self, label: Answer, replacements: Mapping[str, str]) -> Answer:
+        """The label with every value `pii_check` replaced in the content replaced too."""
         ...
 
     def answer_distance(self, a: Answer, b: Answer) -> float:

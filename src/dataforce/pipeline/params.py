@@ -34,6 +34,29 @@ def declaration(engine: Engine, *path: str) -> Any:
     return reached
 
 
+def declared_switch(engine: Engine, *path: str) -> bool:
+    """Whether `params.yaml` turned that switch on. An absent one is off.
+
+    Off by default is Requirement 21's whole mechanism: `enable_redact: false` means `pii_check`
+    reports and leaves content untouched, the downstream personal-data scan then fails, and nothing
+    ships — so turning it on has to be an edit to a committed file, which is what makes the decision
+    attributable.
+
+    **Anything that is not `true` or `false` raises rather than being read as truthy.** `bool("no")`
+    is `True`, so a coerced switch turns redaction *on* for a value written to turn it off, and the
+    run that rewrote twenty thousand records is the one that tells you. T46 learned this on
+    `exclude_roles` for a smaller price.
+    """
+    value = declaration(engine, *path)
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ConfigError(
+            f"params.yaml declares {'.'.join(path)} as {value!r}, which is not true or false"
+        )
+    return value
+
+
 def declared_digest(engine: Engine, *path: str) -> str:
     """The digest `params.yaml` declares at that path, or `""` where no corpus is declared yet.
 
