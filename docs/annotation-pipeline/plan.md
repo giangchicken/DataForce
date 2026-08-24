@@ -13,9 +13,9 @@ prompt. Four things in the tree contradicted the spec; they were Phase 0 rather 
 in Phase 4.
 
 **Phase 1 is done. Phase 0 has one task left.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`),
-T4 (`7fa0432`, `f7f30f4`, `89292ce`) and T32 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
+T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
 (`c72e5a6`) closed Phase 1. `make check` is green over 57 modules holding no behaviour and 283
-tests, all of them guards — but **T33 is open and CI is red on a line neither `make check` nor any
+tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
 guard reads.** What each task changed is recorded at the end of the task below it. **Phase 2 is
 next, and nothing in it has been started.**
 
@@ -96,7 +96,8 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T3 | Settle the four standing principle conflicts | 0 | | M | ✓ `9b9a3fe` |
 | T4 | Clear the retired-corpus residue and the stale scaffolding | 0 | | S | ✓ `89292ce` |
 | T32 | Un-number the stages | 0 | T5 | M | ✓ |
-| T33 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
+| T33 | Write down the layout, and guard it | 0 | T5 | M | ✓ |
+| T34 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -396,7 +397,45 @@ that document against this plan is still T4 residue and still open.
 
 ---
 
-### T33 · The CI workflow runs what `make check` runs
+### T33 · Write down the layout, and guard it
+
+**Goal.** Every file and folder in the repository has a stated job, and the statement cannot go stale.
+
+**Context.** § *Package layout* drew the package at directory granularity — `data_quality/  STEP modules:
+label_check.py, pii_check.py, duplicate_check.py` — and said nothing at all about the repository root.
+`config/`, `params.yaml`, `data/`'s five tiers and `deploy/` each had a job and none of them had it
+written down anywhere a person looks first. A layout drawn once and never checked is worse than none: it
+reads as current.
+
+**Approach.** Add § *Repository layout*, one row per entry at the root. Redraw § *Package layout* module
+by module, where each line **is** that module's own docstring rather than a second description of it —
+two summaries of one module drift the moment either is edited, and the drift is silent because both
+still read fine. Then guard it, or the drawing is a lie generator: I19 parses the tree out of the
+document and compares it to the package in both directions.
+
+**Acceptance criteria.** Every module has a row and every row has a module, and the build fails when
+either stops being true — including when only the *text* of a row drifts from its docstring.
+
+**Source.** `spec.md` § *Repository layout*, § *Package layout*, I19; AGENTS.md P31, P29.
+
+**Verify.** `uv run pytest tests/guards/test_layout_tree.py -q`, then add a module with no row and
+confirm red.
+
+**Landed.** Three mutations, three reds: a module with no row, a row with no module, and a row reworded
+on one side only. A fourth check earns its place the other way — the guard is proved to *permit* the two
+mediums spelling the same thing differently, since a docstring writes ` ``content`` ` and `--` where the
+document writes `` `content` `` and an em dash. Without that, the first correctly-written row would have
+failed and the normalisation would have been loosened under pressure.
+
+Writing § *Repository layout* found two entries with no owner. `deploy/` has one — T26 puts the compose
+file there, and § *Versions* says so — so it is recorded as a placeholder with a name on it.
+`config/templates/` has none: nothing in any document references it, which makes it the empty directory
+AGENTS.md §2 forbids. It is named in the table so the next task touching `config/` deletes it. And the
+`.github/workflows/ci.yml` row could not be written truthfully, which is T34.
+
+---
+
+### T34 · The CI workflow runs what `make check` runs
 
 **Goal.** CI passes on a tree where `make check` passes, and fails on one where it does not.
 
@@ -425,7 +464,7 @@ gated on the secrets it needs, so a missing credential reads as *not run* rather
 unwritten module, or a service the runner has no credential for. A pushed commit that fails
 `make check` fails CI, and one that passes passes.
 
-**Source.** `Makefile`; the workflow file itself.
+**Source.** `Makefile`; `spec.md` § *Repository layout*, the `.github/workflows/ci.yml` row.
 
 **Blocked by.** Nothing. It is open because T4 never listed the file.
 

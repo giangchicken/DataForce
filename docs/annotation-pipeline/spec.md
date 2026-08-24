@@ -465,6 +465,30 @@ Each is a statement a test can be pointed at.
 
 ## Design
 
+### Repository layout
+
+Every entry at the root, and the job it holds. A directory whose job is not written down is a directory
+the next person guesses at, and a guess is how one acquires a second place to put things (AGENTS.md §2).
+
+| Entry | What it holds, and why it is its own thing |
+|---|---|
+| `src/dataforce/` | The package, drawn module by module in § *Package layout* below. A `src/` layout, so a test imports the installed package and not the working tree: the thing under test is the thing that ships |
+| `tests/` | Five directories, one per kind of check — § *Testing Strategy* says what each proves. Outside the package, so nothing that ships can reach a fixture |
+| `docs/annotation-pipeline/` | `objective.md` — why, and what one record looks like · `spec.md` — this file, what to build · `plan.md` — the order to build it in · `workflow.md` — how a run is driven end to end |
+| `config/` | What a run declares. `modalities/<name>.yaml` and `profiles/<name>.yaml` each carry an axis's identity in the filename, so it is not assigned anywhere else; `prompts/<axis>/<name>/<file>.vN.txt` holds every template a service sends to a model, versioned in the filename so a digest reaches the run manifest. § *Configuration* |
+| `config/templates/` | Nothing, and nothing references it. An empty directory is the flexibility nobody asked for that AGENTS.md §2 forbids; it goes with the next task that touches `config/`. Recorded here rather than left to be found (AGENTS.md §8) |
+| `params.yaml` | Every threshold the pipeline reads at runtime. Code holds none: a number here is committed, reviewable and recorded by digest in the run manifest, so a change to it is attributable and a run that used the old value stays identifiable |
+| `data/` | What a run writes: `raw/` the source, then `interim/`, `processed/`, `release/`, `quarantine/`, and `run.json` — one run, one manifest, at the root of what it wrote. **Committed: none of it.** `raw/` is the privacy tier (I13) and the rest are artifacts the manifest identifies by digest. Ignored tier by tier rather than as `data/`, so one tier can be un-ignored on its own |
+| `deploy/` | The Label Studio compose file, which arrives with the first task that needs an instance. Empty until then, and named in § *Versions* so the placeholder has an owner |
+| `AGENTS.md` | The conventions and design principles this repository is held to, `§1`–`§9` and `P0`–`P33`. A rule cited in a review or a commit message resolves here |
+| `README.md` | The front door: what this repository is, which spec to read first, and the build order across all of them |
+| `Makefile` | `make check` — ruff, `mypy --strict`, pytest without `-m integration`. What CI runs and what must pass before a commit. `make integration` is the half that needs a network |
+| `pyproject.toml` | Dependencies, package metadata, and the configuration for every tool `make check` runs, in one file rather than four dotfiles |
+| `uv.lock` | The resolved versions, so two machines install the same tree |
+| `.python-version` | The interpreter `uv` picks when told nothing |
+| `.github/workflows/ci.yml` | `make check` on every push. The file does not do that yet — it still runs a `dvc repro` step for a tool that was deleted, and imports a module that was renamed; both are Phase 0 residue, and `plan.md` T34 carries the fix |
+| `.gitignore` | The privacy tier and the artifact tiers, each with the reason it is listed |
+
 ### Package layout
 
 `core/` is gone. It held five things and only `errors.py` earned the package: `artifacts/` was the
@@ -487,41 +511,106 @@ build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `Questio
 a port with no adapter is a guess about a future caller — see Decision 17.
 
 ```
-src/dataforce/
-  errors.py          DEFINITION · ConfigError — the one exception this codebase defines
-  record.py          DEFINITION · Record, and Part — the bus, and the content it carries
-  manifest.py        DEFINITION · Manifest — one axis's declaration, already parsed
-  engine.py          DEFINITION · Engine and Registry — a resolved pair, held; no I/O
-  ports.py           DEFINITION · QuestionStore — what the engine demands of the edge
+src/dataforce/              the package; its docstring states the import direction and the five module kinds
+  __init__.py               DataForce — a raw, model-labelled corpus into a training-ready dataset, and the evidence for it.
+  errors.py                 DEFINITION · ConfigError — the one exception this codebase defines.
+  record.py                 DEFINITION · Record, and Part — the bus, and the content it carries.
+  manifest.py               DEFINITION · Manifest — one axis's declaration, already parsed.
+  engine.py                 DEFINITION · Engine and Registry — a resolved pair, held; no I/O.
+  ports.py                  DEFINITION · QuestionStore — what the engine demands of the edge.
 
-  pipeline/
-    __init__.py      façade · re-exports flow.py and runner.py; holds nothing of its own
-    flow.py          DEFINITION · PHASES and STAGES — the flow table, in code, once
-    runner.py        LOGIC · run_phase — a phase's stages folded over records, in the table's order
-    load_data.py     STEP · load_data
-    data_quality/    STEP modules: label_check.py, pii_check.py, duplicate_check.py
-    ai_review/       STEP modules: jury.py, cohesion.py, triage.py
-    human_review/    STEP modules: question_generate.py … curate.py
+  pipeline/                 the flow: one module per stage, and the fold that runs a phase's stages in order
+    __init__.py             façade · re-exports flow.py and runner.py; holds nothing of its own.
+    flow.py                 DEFINITION · PHASES and STAGES — the flow table, in code, once.
+    runner.py               LOGIC · run_phase — a phase's stages folded over records, in the table's order.
+    load_data.py            STEP · load_data · every source item becomes one record with identity, content and provenance.
 
-  modalities/
-    base.py          DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque
-    text2text/       __init__.py, schema.py, utils.py
+    data_quality/           three stages, so a directory rather than a module
+      __init__.py           façade · the data_quality phase's three stages; holds nothing of its own.
+      label_check.py        STEP · label_check · the five checks on the label that need no opinion.
+      pii_check.py          STEP · pii_check · two-layer detection, typed placeholders, `content` rewritten.
+      duplicate_check.py    STEP · duplicate_check · exact and near-duplicate groups, split by label agreement.
 
-  profiles/
-    base.py          DEFINITION · the Profile protocol; Answer, AnswerConfig, LabelCheck, opaque
-    tool_decision/   __init__.py, schema.py, utils.py
+    ai_review/              three stages (Decision 3)
+      __init__.py           façade · the ai_review phase's three stages; holds nothing of its own.
+      jury.py               STEP · jury · N independent models answer the record's own task.
+      cohesion.py           STEP · cohesion · how much the jury agrees with itself, and with the existing label.
+      triage.py             STEP · triage · the two numbers become a bucket, a stratum and a review quota.
 
-  edge/                                   # everything that touches a file, a socket, a clock
-    main.py          TOOL · create_app(), CORS, one include_router per main endpoint
-    bootstrap.py     LOGIC · open_engine — the composition root; the only builder of an Engine
-    routers/         load_data/, data_quality/, ai_review/, human_review/ — router + its own schemas.py
-    policy.py        LOGIC · config/<axis>/*.yaml, params.yaml, prompts -> declarations
-    artifacts.py     TOOL · the one place a record file, metrics.json or a run manifest is read/written
-    store/           models.py, repository.py, session.py — the question store
-  cli.py             TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, out
+    human_review/           five stages, of which the phase endpoint runs the first two
+      __init__.py           façade · the human_review phase's five stages; holds nothing of its own.
+      question_generate.py  STEP · question_generate · one answerable question per flagged record, with its evidence.
+      publish.py            STEP · publish · questions written to the question store, ready for the annotation tool.
+      annotator_answers.py  STEP · annotator_answers · responses read back out of the store onto the record.
+      aggregate.py          STEP · aggregate · overlap becomes one verdict with a confidence and an agreement statistic.
+      curate.py             STEP · curate · the verdict becomes the record's final label, or an adjudication.
 
+  modalities/               one directory per implementation, beside the protocol each answers
+    __init__.py             façade · the modality axis: the protocol, and every implementation of it.
+    base.py                 DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
+
+    text2text/              the only modality built; *Out of Scope* says why there is no empty `speech2text/`
+      __init__.py           façade · the text2text modality; its shapes are schema.py and its conversions utils.py.
+      schema.py             DEFINITION · the text2text shapes: what a detector is, and what its display config holds.
+      utils.py              LOGIC · the conversions over the shapes in schema.py beside it.
+
+  profiles/                 the same shape as `modalities/`, and nothing shared between the two axes
+    __init__.py             façade · the profile axis: the protocol, and every implementation of it.
+    base.py                 DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
+
+    tool_decision/          the only profile built; the first dataset's task
+      __init__.py           façade · the tool_decision profile; its shapes are schema.py and its conversions utils.py.
+      schema.py             DEFINITION · the tool_decision shapes: a call, an answer, and what constrains one.
+      utils.py              LOGIC · the conversions over the shapes in schema.py beside it.
+
+  edge/                     everything that touches a file, a socket or a clock (Requirement 36)
+    __init__.py             façade · the edge: everything that touches a file, a socket or a clock.
+    main.py                 TOOL · create_app(), CORS, one include_router per main endpoint.
+    bootstrap.py            LOGIC · open_engine — the composition root; the only builder of an Engine.
+    policy.py               LOGIC · config/<axis>/*.yaml, params.yaml and prompts into declarations.
+    artifacts.py            TOOL · the one place a record file, metrics.json or a run manifest is read or written.
+
+    routers/                one package per main endpoint, each holding only the models its handlers speak
+      __init__.py           façade · one router package per main endpoint; each holds its own schemas.
+
+      load_data/            the `/load-data` endpoint
+        __init__.py         façade · the /load-data router and the models its handlers speak.
+        router.py           TOOL · one APIRouter for /load-data: the main endpoint, and one sub-endpoint per service.
+        schemas.py          DEFINITION · the request and response models the /load-data handlers speak.
+
+      data_quality/         the `/data-quality` endpoint and its three sub-endpoints
+        __init__.py         façade · the /data-quality router and the models its handlers speak.
+        router.py           TOOL · one APIRouter for /data-quality: the main endpoint, and one sub-endpoint per service.
+        schemas.py          DEFINITION · the request and response models the /data-quality handlers speak.
+
+      ai_review/            the `/ai-review` endpoint and its three sub-endpoints
+        __init__.py         façade · the /ai-review router and the models its handlers speak.
+        router.py           TOOL · one APIRouter for /ai-review: the main endpoint, and one sub-endpoint per service.
+        schemas.py          DEFINITION · the request and response models the /ai-review handlers speak.
+
+      human_review/         the `/human-review` endpoint and its five sub-endpoints
+        __init__.py         façade · the /human-review router and the models its handlers speak.
+        router.py           TOOL · one APIRouter for /human-review: the main endpoint, and one sub-endpoint per service.
+        schemas.py          DEFINITION · the request and response models the /human-review handlers speak.
+
+    store/                  the question store's adapter: SQLite by default, Postgres by URL (Decision 7)
+      __init__.py           façade · the question store: the adapter behind the QuestionStore port.
+      models.py             DEFINITION · the store's rows: what a published question and a returned answer look like.
+      repository.py         LOGIC · the QuestionStore port, implemented over a session.
+      session.py            TOOL · the store's connection and its lifetime.
+
+  cli.py                    TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, JSONL out.
+```
+
+Every module above states its own kind (Requirement 2), and the line beside it in this drawing *is* that
+module's docstring — not a second description that can drift from it. I19 compares the two, in both
+directions, so a module added without a row and a row left behind after a rename each fail the build.
+
+The test suite mirrors it:
+
+```
 tests/
-  guards/            I1–I7 and I16–I17, written before any service, against synthetic source
+  guards/            the architectural rules, written before any service, each proved against a violation
   stages/            one module per stage: its reads, its writes, the records it skips
   properties/        I8 and I11 together, over one corpus, through every built service
   shells/            I15: the same input in-process and over HTTP
@@ -1272,6 +1361,7 @@ Each names the check that holds it, not a file that used to.
 | I16 | No axis `base.py` imports an implementation of its own axis | AST scan over `modalities/base.py` and `profiles/base.py` |
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `cli.py` names two stages in sequence; both call `run_phase` |
 | I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
+| I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
 
 ---
 
@@ -1334,7 +1424,7 @@ There is no test suite. It is written against this document, in this order, and 
 **The suite mirrors the layout** — `tests/guards/`, `tests/stages/`, `tests/properties/`,
 `tests/shells/`, `tests/integration/`. Steps 1–4 below are those first four directories, in order.
 
-1. **The guards first (I1–I7, I16–I17)**, before any service. Each is an AST or introspection
+1. **The guards first (I1–I7, I16–I17, I19)**, before any service. Each is an AST or introspection
    check proved against synthetic source, so the guard fails before it is ever needed. Writing them after the services is how
    a codebase acquires the thing the guard forbids.
 2. **One test module per stage**, asserting that stage's reads/writes/skips-when row: it writes its key,
