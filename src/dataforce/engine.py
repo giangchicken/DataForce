@@ -3,4 +3,90 @@
 The type is the engine's because every service names it in its signature; the reader that fills
 one from files is ``edge/bootstrap.py``, because reading is the edge's job. A registry is instance
 state: two in one process hold different implementations (Requirement 39).
+
+**An ``Engine`` is what a run resolved to, not what it could resolve to.** It carries the pair, the
+registry it came out of, the thresholds a stage reads instead of holding a number of its own (P25),
+and the digest of every policy file that produced them, which is what makes two runs of one
+configuration comparable (Requirement 45). It holds no store and no clock: those are the edge's,
+and I1 is the scan that says so.
+
+**The registry takes the name rather than reading it off the implementation.** The two axes share
+``name``, ``version`` and ``Part`` and nothing else, so a ``Registrable`` protocol holding the first
+of those would be a fourth shared thing this design says does not exist. ``edge/bootstrap.py`` is
+the only caller (Requirement 38) and registers under the manifest's own name.
 """
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, final
+
+from dataforce.errors import ConfigError
+from dataforce.modalities import Modality
+from dataforce.profiles import Profile
+
+
+def _refuse_a_second(axis: str, registered: Mapping[str, Any], name: str) -> None:
+    """Requirement 39: a second implementation of one name is a mistake, never an override.
+
+    Replacing the first silently is how two runs of one configuration produce different records
+    and nothing in either run says why.
+    """
+    if name in registered:
+        raise ConfigError(f"{axis} {name!r} is registered; a second one is refused")
+
+
+def _registered[Implementation](
+    axis: str, registered: Mapping[str, Implementation], name: str
+) -> Implementation:
+    """The implementation under that name, or a `ConfigError` naming the ones there are."""
+    if name not in registered:
+        known = ", ".join(sorted(registered)) or "none"
+        raise ConfigError(f"unknown {axis} {name!r}; registered: {known}")
+    return registered[name]
+
+
+@final
+class Registry:
+    """Every implementation a run may resolve, by axis and by name.
+
+    Instance state and not a module-level dict (Requirement 39). A process-wide registry is a
+    mutable global: the order two tests ran in becomes part of what the second one asserts, and a
+    fake registered by one of them outlives it. Two registries here hold different implementations
+    and neither can see the other's.
+
+    The two axes are separate namespaces, because a name is only unique within the axis whose
+    `config/<axis>/` directory it was read from.
+    """
+
+    def __init__(self) -> None:
+        self._modalities: dict[str, Modality] = {}
+        self._profiles: dict[str, Profile] = {}
+
+    def register_modality(self, name: str, modality: Modality) -> None:
+        """Add one modality under the name its manifest filename gave it."""
+        _refuse_a_second("modality", self._modalities, name)
+        self._modalities[name] = modality
+
+    def register_profile(self, name: str, profile: Profile) -> None:
+        """Add one profile under the name its manifest filename gave it."""
+        _refuse_a_second("profile", self._profiles, name)
+        self._profiles[name] = profile
+
+    def modality(self, name: str) -> Modality:
+        """The modality registered under that name; `ConfigError` listing the ones that are."""
+        return _registered("modality", self._modalities, name)
+
+    def profile(self, name: str) -> Profile:
+        """The profile registered under that name; `ConfigError` listing the ones that are."""
+        return _registered("profile", self._profiles, name)
+
+
+@dataclass(frozen=True)
+class Engine:
+    """One resolved pair and what resolved it. Every service takes one, and it opens nothing."""
+
+    modality: Modality  # the resolved modality: how content is read and shown
+    profile: Profile  # the resolved profile: what an answer to this run's task is
+    registry: Registry  # the implementations this run may resolve, held per instance
+    thresholds: Mapping[str, Any]  # `params.yaml`: no stage holds a number
+    policy_digests: Mapping[str, str]  # every policy file, by digest (Req 45)

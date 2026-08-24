@@ -14,11 +14,11 @@ in Phase 4.
 
 **Phase 1 is done. Phase 0 has one task left, and Phase 2 has started.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
-(`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. Phase 2: T8.
-Phase 3: T11, taken early because `Engine` names both protocols.
-`make check` is green over 55 modules and 313 tests, 21 of which are the first in the tree that are not
+(`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. Phase 2: T8 and
+T9. Phase 3: T11, taken early because `Engine` names both protocols.
+`make check` is green over 55 modules and 320 tests, 28 of which are the first in the tree that are not
 guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
-each task changed is recorded at the end of the task below it. **T9 is next.**
+each task changed is recorded at the end of the task below it. **T10 is next.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -109,7 +109,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
 | T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | ✓ |
-| T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M | |
+| T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8, T11 | M | ✓ |
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
 | T11 | The two protocols | 3 | T8 | S | ✓ |
 | T12 | `text2text` | 3 | T4, T11 | M | |
@@ -853,6 +853,28 @@ A duplicate registration raises `ConfigError`.
 **Source.** `spec.md` § *Engine and edge*, Requirements 36, 39; Decision 12.
 
 **Verify.** `uv run pytest tests/guards -q && uv run pytest tests/stages -q -k registry`.
+
+**Landed, and `ports.py` was not touched.** This task's title names it because T3 left one port
+there, not because there was anything to add: `QuestionStore`'s members are what `publish` and
+`annotator_answers` demand, and neither stage exists. Writing them now is the guess Decision 17
+deleted `MediaResolver` for — a port with no adapter, whose first real caller then works around it.
+T23's goal is *three tables behind the port*, which is where the members and their adapter land
+together.
+
+`Registry` holds both axes in two namespaces rather than one, because a name is only unique inside
+the `config/<axis>/` directory it was read from. It takes the name rather than reading
+`implementation.name`: the two axes share `name`, `version` and `Part` and nothing else, so a
+`Registrable` protocol holding the first of those would be a fourth shared thing § *Package layout*
+says does not exist. `edge/bootstrap.py` is the only caller (Requirement 38), and registering under
+a name the manifest did not give is a review-visible line in one file.
+
+Two things `Engine` does not hold, both stated rather than guessed. **No store:** how a stage reaches
+the question store is unsettled in the spec — § *Engine and edge* says the engine returns rows as side
+output and the edge writes them, and T24 says `publish` runs against a store and records the receipt.
+T24 settles it, and if the answer is a port on the `Engine`, that is one field. **`thresholds` is
+`params.yaml` resolved**, which is the spec's own word for the field; `enable_redact` is not a
+threshold, and whether a stage reads it here or off the record's `<phase>_config` (Decision 5) is
+T16's to settle.
 
 ---
 
