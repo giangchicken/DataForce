@@ -3,7 +3,18 @@ version: "1"
 modality: text2text
 
 prompts:
-  question: profiles/tool_decision/question.v1
+  question: profiles/tool_decision/question.v2
+
+# The cardinality ceiling: at most this many calls in one answer. `answer_schema`
+# materialises it as `maxItems` and `label_cardinality_anomaly` reads the same number,
+# so the check and the space an answer is validated against cannot disagree.
+#
+# Provisional. Two, because the declared input shape's own sample calls one tool and a
+# request that needs two -- send the statement *and* open a ticket -- is the ordinary
+# next case, while three would make the check silent on a source nobody has measured.
+# What re-measures it: the distribution of `len(label)` over a declared corpus, which
+# the first run reports and `params.invalid_counts.label_cardinality_anomaly` then pins.
+max_calls: 2
 
 # Which control captures the answer. Declared rather than detected, because it changes
 # what an annotator can physically express and therefore what their agreement means.

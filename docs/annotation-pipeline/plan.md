@@ -12,15 +12,15 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phases 1 and 2 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
+**Phases 1, 2 and 3 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
-second review round — T39 to T43 — and then T12.
-`make check` is green over 55 modules and 513 tests, 68 of which are not guards — but **T34 is open
+second review round — T39 to T43 — and then T12 and T13.
+`make check` is green over 55 modules and 581 tests, 136 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
-at the end of the task below it. **T13 is the last of Phase 3, and T34 is still the oldest thing on
-this list.**
+at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
+list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -120,7 +120,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | ✓ |
 | T11 | The two protocols | 3 | T8 | S | ✓ |
 | T12 | `text2text` | 3 | T4, T11 | M | ✓ |
-| T13 | `tool_decision` | 3 | T1, T11 | L | |
+| T13 | `tool_decision` | 3 | T1, T11 | L | ✓ |
 | T14 | `load_data` | 4 | T10, T12, T13 | M | |
 | T15 | `label_check` | 4 | T13, T14 | S | |
 | T16 | `pii_check` | 4 | T2, T14 | L | |
@@ -1273,6 +1273,82 @@ checks). Everything a stage knows about the task comes from here.
 
 **Verify.** `uv run pytest tests/stages -q -k tool_decision`. The δ ordering is a hand-worked
 assertion, not a property test.
+
+**Landed.** Fourteen members, four algorithms, 68 tests. `schema.py` holds `Call`, `Answer`, `Tool`,
+`AnswerConfig` and `LabelCheck`; `utils.py` holds the conversions and the object, for the reason T12
+gives — `__init__.py` is a `façade ·` that holds nothing of its own. `ToolDecision` is built with its
+manifest **and its question template**, because the template is a policy file and no engine module
+opens one (I1): the same shape as `text2text`'s encoder, which makes *an axis implementation is built
+with what only the edge can produce* one sentence for both axes rather than two special cases.
+
+**Validation is `jsonschema`'s, under one annotated I6 exemption.** Requirement 49 validates a
+human's corrected answer against that record's own `answer_schema` — with no model call, so
+`complete_structured`, which is where the library keeps validation, cannot be it. The alternative was
+a second reading of the catalog beside the schema we materialise ourselves, which is *exactly* the
+pair of definitions I6 exists to prevent: the two drift on the first `enum` nobody remembered to
+check, and the test that proves it — an argument outside `ky`'s enum — is in the suite. So the import
+carries `# guard-exempt: I6 · …` on its line, `jsonschema` moves from the dev group to
+`[project.dependencies]` (it arrived transitively through `agent-toolkit[llm]` regardless), and I6's
+invariant row says so. One exemption standing, against a ceiling of five.
+
+**`vote_consensus` validates its own result.** § *The answer* says a consensus answer validates
+against the record's schema and asserts it directly; making that *true by construction* is one line
+and it turns two of the five steps into one rule — a call is dropped where a `required` argument has
+no majority **and** where the catalog never offered the tool, and the assembled answer is `None` if it
+still would not validate. Half-building one puts a value no juror proposed into a ranking signal.
+
+**Eight things the document could not answer, and what was done about each.**
+
+1. **`StoredAnswer` had to widen.** § *The answer* says a bare name string *reads as the call with no
+   arguments*, "which is what makes a names-only source a special case of this type rather than a
+   second type" — and `tuple[dict[str, Any], ...]` made one impossible to store, so a names-only
+   label could not be built at all. Widened to `tuple[dict[str, Any] | str, ...]`. The alternative
+   was normalising names into objects at load, which stops the label being verbatim. `answer_schema`
+   still does not accept a bare name and that is not an asymmetry: the schema is what a *producer*
+   must satisfy, and a jury and an annotator's form both emit objects.
+2. **`max_calls` was declared nowhere.** `label_cardinality_anomaly` needs a ceiling and
+   `answer_schema` needs `maxItems`, and neither the manifest nor `params.yaml` had one. It is a
+   declaration about what an answer *is* rather than a threshold, so it went in the profile manifest
+   with the provisional note `exclude_roles` set the precedent for, and § *Configuration* now names
+   it.
+3. **`{{focus}}` was a slot nothing can fill.** The previous tree's `question_text(record, focus)`
+   took one; § *Profile*'s signature does not, and `question.v1.txt` still asked for it — a raw
+   `{{focus}}` in front of an annotator. Replaced by `question.v2.txt`, the question and nothing
+   else, and construction refuses a template naming *any* slot: the record's own specifics reach the
+   annotator as task data, not as words in the question.
+4. **The restating turn is the record's final part, not its last target-role part.** A fixture caught
+   it: an assistant tool-call turn mid-conversation is history — a tool called before the customer
+   supplied what was missing — so `label_assistant_mismatch` would have fired on every multi-turn
+   record. It now reads `content[-1]` and only when that turn is the target role. The previous tree's
+   version returned True where *nothing* restated the label, which was right for a corpus whose
+   assistant turn was the answer and would quarantine every record of the shape Requirement 13
+   declares.
+5. **`redact_label` still has no home.** Requirement 17 and Decision 16 both name it a profile
+   member; § *Profile* writes fourteen and calls them closed, and I21 compares that list to the code.
+   Not added here: `pii_check` is its only consumer and lands in T16, and a fifteenth member with no
+   caller is the guess P20 refuses — the same argument that deleted `MediaResolver`. **T16 adds it to
+   the protocol, the count in both places I21 reads, and this implementation.**
+6. **`answer_config()` has no per-record half, so `$tool_names` has no producer.** The capture half's
+   dynamic choice list is per record and `answer_config()` takes none. `publish` can read the names
+   off `answer_schema(record)`'s `oneOf`, which is one source of truth rather than two — **T24
+   decides, and if it needs a member instead, that is a fifteenth one to argue for there.**
+7. **A missing label raises, and Requirement 14 and Requirement 43 disagree about that.**
+   Requirement 14: "An undeclared key raises, naming the manifest and what *is* declared."
+   Requirement 43: the only exception is a `ConfigError` raised *before any record is read*. An item
+   whose meta lacks the declared label key is neither — it cannot become a record at all, because
+   `Record.label` is required precisely so a missing label is not defaulted to *call nothing*.
+   `build_record` raises `ConfigError` naming the manifest, the key and the offset. **T14 settles
+   whether `load_data` stops on it or reports it**, and it is the only place that can, because it is
+   the only caller.
+8. **The capture half cannot express *call nothing* as a correction.** § *The annotation config* puts
+   `required="true"` on `corrected_names`, so an annotator who judges a label incorrect must name at
+   least one tool — and the correct answer to a record whose model called a tool it should not have
+   is the empty answer, which § *The answer* calls a large share of a real corpus.
+   `answer_from_response` already returns `()` for an empty name list, so the limit is entirely in
+   the config fragment and not in the code behind it. **T24 composes that fragment and T31's pilot is
+   what would report the cost**; the fix is a sentinel choice or a second control, which is a
+   decision about the surface an agreement figure is measured on and therefore not one to invent
+   here.
 
 ---
 

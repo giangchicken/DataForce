@@ -46,10 +46,16 @@ class RecordModel(BaseModel):
 # `text2text`, `speech2text` -- and are not themselves registrable (spec.md § *The two axes*).
 PartType = Literal["text", "audio", "image", "video"]
 
-# An answer as the record stores it: one object per call. What is inside a call is the profile's
+# An answer as the record stores it: one entry per call. What is inside a call is the profile's
 # (Requirement 47); the record knows only that an answer is a list of them, and that the empty
 # answer -- call nothing -- is a member of the type rather than a missing value.
-StoredAnswer = tuple[dict[str, Any], ...]
+#
+# A bare name string is an entry too, because it *reads as the call with no arguments* (spec.md
+# § *The answer*) -- which is what makes a names-only source a special case of this type rather
+# than a second type, and what lets a label stay verbatim instead of being normalised at load.
+# Nothing the pipeline produces spells one: a jury answers the materialised schema and an
+# annotator answers a form, and both of those are objects.
+StoredAnswer = tuple[dict[str, Any] | str, ...]
 
 
 class Part(RecordModel):

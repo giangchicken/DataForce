@@ -1079,7 +1079,12 @@ not assigned anywhere else; the profile manifest's `modality:` names the same st
 `params.invalid_counts` lists the five label-check names with no values, and `params.source` is empty —
 both stay that way until a corpus is declared.
 
-The profile manifest also declares **`answer_control`**, which decides what an annotator can physically
+The profile manifest also declares **`max_calls`** — the cardinality ceiling. `answer_schema`
+materialises it as `maxItems` and `label_cardinality_anomaly` reads the same number, so the check and
+the space an answer is validated against cannot disagree. It is provisional, and the manifest records
+what re-measures it: the distribution of `len(label)` over a declared corpus.
+
+And it declares **`answer_control`**, which decides what an annotator can physically
 express and therefore what a measured agreement figure means. It is `names_and_json_arguments`: the
 names come from a dynamic choice list over this record's catalog, so they cannot be mistyped, and only
 the arguments are typed by hand. `per_name_arguments` — a rendered argument form per chosen tool — is
@@ -1420,7 +1425,7 @@ Each names the check that holds it, not a file that used to.
 | I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
-| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names, the four owned roots, and `hashlib` — the one import a second `record_id` would come through |
+| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names, the four owned roots, and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
 | I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |
 | I9 | `record_id` is stable across a shuffled re-ingest and sensitive to content | property test over a synthetic corpus |

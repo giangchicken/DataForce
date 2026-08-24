@@ -15,6 +15,14 @@ dependencies = [
     # function of its input and dedup is reproducible run to run.
     "model2vec>=0.9",
     "pydantic>=2.13",
+    # Requirement 49: a corrected value an annotator typed by hand either validates
+    # against that record's own `answer_schema` or is `None`. `agent-toolkit` owns
+    # validation and exposes it only inside `complete_structured`, which needs a model
+    # call -- and a hand-written twin of a schema we materialise ourselves is the pair
+    # of definitions I6 exists to prevent. It arrives transitively through
+    # `agent-toolkit[llm]` anyway; declared here because `src/` imports it, under one
+    # annotated I6 exemption in `profiles/tool_decision/utils.py`.
+    "jsonschema>=4.26",
 ]
 
 [project.scripts]
@@ -36,11 +44,6 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.0.0",
     "ruff>=0.13.1",
-    # Proves `answer_schema` means what it says: a call in the record's space
-    # validates and one outside it does not. Tests only, and it stays that way --
-    # I6's guard forbids any module under `src/` from importing it, because
-    # `agent-toolkit` owns validation.
-    "jsonschema>=4.26",
 ]
 
 [tool.ruff]
