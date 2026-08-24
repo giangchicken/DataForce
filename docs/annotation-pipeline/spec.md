@@ -829,6 +829,25 @@ pass after the pilot. A bucket whose precision the pilot cannot establish gets *
 `question_generate` reads `triage` **only to decide which records get a question**. Nothing it reads
 from `ai_review` reaches the payload, which is what Requirement 30 asserts.
 
+**`publish` and `annotator_answers` are two stages because a person answers between them.** They read
+like halves of one exchange with the store, and whether to merge them is a fair question to ask of any
+pair that talks to the same thing. Three answers. They cannot run in one call — `POST /human-review`
+stops after `publish` for exactly this reason — so one module would still owe two routes, two
+subcommands and two record keys, and P16 gives each key one writer. They re-run for different reasons,
+the same argument that keeps `ai_review` at three: republishing costs a write and a re-sync, re-reading
+answers is free and idempotent. And they read different things — `publish` reads
+`human_review.question_generate` and the two config halves, `annotator_answers` reads the store.
+
+**The shape they appear to share has three owners, and each is already one module.** The permitted
+answers are the profile's capture half, and the inverse of that half is `answer_from_response`, a member
+of the same profile — I18 round-trips the pair, so adding a verdict value is one directory's edit and
+neither stage names a value. `question_id` is minted by `question_generate`; `publish` echoes it into
+`stored`, `annotator_answers` joins on it, and `edge/store/models.py` keys on it — one author and three
+readers, so merging two of the readers leaves the author outside the merge. Idempotency is the two unique
+constraints in the store's tables and `store_run_id` on the record: a table's guarantee, not a stage's.
+Temporal decomposition would be one of those three decisions cut across the two stages. None of them is
+cut — Decision 22.
+
 ### Engine and edge
 
 The engine computes; the edge supplies everything that came from a file, a socket or a clock.
@@ -1345,6 +1364,23 @@ grounds that the two shells read better at the same level. *Why not:* the argume
 to `edge/` was *"`cli.py` importing from something named `api` was the proof"* — the same argument puts
 it inside. *Cost:* the console entry point becomes `dataforce.edge.cli:main`. *Reversible:* yes, and
 reversing it re-acquires the two-condition rule.
+
+**22 · `publish` and `annotator_answers` stay two stages.**
+The merge proposed: they are two halves of one decision — the shape of the exchange with the question
+store — separated only by time, which is temporal decomposition. *Why not:* the three changes offered as
+proof each land somewhere else. A new verdict value edits the profile's capture half and its inverse
+`answer_from_response`, both members of `profiles/<name>/`, which is what Requirement 31 and I18 are for.
+The `question_id` scheme is `question_generate`'s — one author, three readers, and a merge of two readers
+leaves the author outside. Idempotency is two unique constraints in `edge/store/`. Neither stage holds any
+of the three, so neither would shrink. *And the separation is not one of ordering:* the two never run in
+one execution. A person answers in between, over days, and `POST /human-review` stopping after `publish`
+is that fact written into the surface. Temporal decomposition is cutting one decision at *what runs
+first* within a single run; this cut is where the human is, which is the one boundary this phase exists
+to serve. *Why this:* two stages, two record keys, two skip conditions, and one owner for each piece of
+the shape they exchange. *Cost, stated plainly:* a reader meeting the two files side by side asks this
+question and the document did not answer it, which is why § *Per-service contracts* now carries the
+answer where that reader is. *Reversible:* merging is one row of the flow and one record key; the price
+of reversing is re-arguing this, and losing the ability to re-run either half alone.
 
 ---
 

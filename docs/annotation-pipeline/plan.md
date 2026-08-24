@@ -14,7 +14,7 @@ in Phase 4.
 
 **Phase 1 is done. Phase 0 has one task left.** Phase 0: T1 (`2c41599`), T2 (`a2fc1df`),
 T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5 (`64edb99`),
-T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36 and T37. `make check` is green over
+T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. `make check` is green over
 55 modules holding no behaviour and 292 tests, all of them guards — but **T34 is open and CI is red
 on a line neither `make check` nor any guard reads.** What each task changed is recorded at the end of
 the task below it. **Phase 2 is next, and nothing in it has been started.**
@@ -56,7 +56,7 @@ depart from it.
 |---|---|
 | `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
 | `I8` | `spec.md` § *Invariants* — I1 to I19 |
-| `Decision 12` | `spec.md` § *Decisions* — 19 of them |
+| `Decision 12` | `spec.md` § *Decisions* — 22 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
 | `§6` | a numbered section of `AGENTS.md` § *Conventions* |
@@ -101,6 +101,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T35 | The axis façade, and the guard that could not see through it | 1 | T6 | M | ✓ |
 | T36 | One shared request body, and `cli.py` inside `edge/` | 1 | T5 | M | ✓ |
 | T37 | Give the event stream an owner | 1 | T5 | S | ✓ |
+| T38 | Why `publish` and `annotator_answers` are two | 1 | T5 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -731,6 +732,42 @@ is the path by which someone adds a method to "the port" here, and the engine th
 The name that was proposed for it, `PostgresQuestionStore`, is wrong for a different reason worth
 recording: SQLite and Postgres are one adapter with two DSNs, not two adapters (Decision 7). It reads
 `LOGIC · the QuestionStore adapter, over a SQLAlchemy session.`
+
+---
+
+### T38 · Why `publish` and `annotator_answers` are two
+
+**Goal.** The document answers the merge question where the reader asks it.
+
+**Context.** A review proposed merging the two: halves of one decision — the shape of the exchange with
+the question store — separated only by time, therefore temporal decomposition. The proof offered was
+three changes said to touch both files: a new value in the question's enum, a different `question_id`
+scheme, a different idempotency guarantee.
+
+None of the three touches either file. The enum is the profile's capture half and its inverse is
+`answer_from_response`, a member of the same profile; `question_id` is minted by `question_generate` and
+merely read by these two; idempotency is two unique constraints in `edge/store/`. The proposal was
+therefore not taken — but the reason it was asked is real: § *Per-service contracts* explains why
+`ai_review` is three stages and said nothing about why `human_review` is five. Two files that talk to one
+store and have no stated reason to be apart will be asked about again.
+
+**Approach.** Two paragraphs under the `human_review` contract table — why the pair is two stages, and
+where each piece of the shape they exchange is owned — and Decision 22 recording the merge as considered
+and declined, with its cost.
+
+**Acceptance criteria.** The next reader who asks this finds the answer beside the table, and the
+Decisions section says what was given up by not merging.
+
+**Source.** `spec.md` § *Per-service contracts*, Requirements 29–33 and 49, I18; AGENTS.md P1, P2, P16.
+
+**Verify.** `make check` — the flow table is unchanged, so I3 and I19 both still pass over the same
+fifteen rows and 55 modules.
+
+**Out of scope.** Any code change. The claim was about module boundaries and the boundaries were right;
+what was missing was the sentence saying so.
+
+**Landed** as two paragraphs and Decision 22. No module moved, no test changed, and the flow still has
+fifteen rows.
 
 ---
 
