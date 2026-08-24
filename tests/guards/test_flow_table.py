@@ -13,8 +13,10 @@ that module's ``STEP ·`` docstring (Requirement 3).
 is list-against-list rather than key-against-key: a row moved up is a row that fails here
 (Decision 19).
 
-Deriving a stage's module path is this test's business and nothing else's yet. It moves into
-``pipeline/runner.py`` when the runner needs to dispatch over the table for real.
+Deriving a stage's module path was this test's business until the runner needed it. It now reads
+``stage_module_name`` out of ``pipeline/runner.py``, which is what makes the two file assertions
+below a check on the runner: every stage the document declares is where ``run_phase`` will go
+looking for it.
 """
 
 import ast
@@ -24,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from dataforce.pipeline.flow import DECLARED_ONLY, PHASES, STAGES
+from dataforce.pipeline.runner import stage_module_name
 
 from .tree import SPEC, SRC, module_at, plain
 
@@ -69,11 +72,9 @@ def built_rows() -> list[Row]:
 
 
 def module_path(phase: str, stage: str) -> Path:
-    """Where that stage's module belongs: a phase with one stage is a module, several is a
-    directory (spec.md § *Package layout*)."""
-    siblings = [row for row in spec_rows() if row[0] == phase]
-    tail = f"{stage}.py" if len(siblings) == 1 else f"{phase}/{stage}.py"
-    return SRC / "pipeline" / tail
+    """The file the runner will import for that row of the table."""
+    dotted = stage_module_name(phase, stage)
+    return SRC.parent / Path(*dotted.split(".")).with_suffix(".py")
 
 
 def test_the_table_names_every_stage_once() -> None:

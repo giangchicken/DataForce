@@ -12,13 +12,14 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phase 1 is done. Phase 0 has one task left, and Phase 2 has started.** Phase 0: T1 (`2c41599`),
+**Phases 1 and 2 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
-(`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. Phase 2: T8 and
-T9. Phase 3: T11, taken early because `Engine` names both protocols.
-`make check` is green over 55 modules and 320 tests, 28 of which are the first in the tree that are not
-guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
-each task changed is recorded at the end of the task below it. **T10 is next.**
+(`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
+Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols.
+`make check` is green over 55 modules and 326 tests, 34 of which are not guards — but **T34 is open
+and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
+at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
+the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -110,7 +111,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
 | T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | ✓ |
 | T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8, T11 | M | ✓ |
-| T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
+| T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | ✓ |
 | T11 | The two protocols | 3 | T8 | S | ✓ |
 | T12 | `text2text` | 3 | T4, T11 | M | |
 | T13 | `tool_decision` | 3 | T1, T11 | L | |
@@ -897,6 +898,30 @@ names two stages in sequence.
 **Source.** `spec.md` § *Package layout*, Requirement 48; I3, I17.
 
 **Verify.** `uv run pytest tests/guards -q`.
+
+**Landed, and it needed a home for `ServiceResult` first.** `flow.py` came with T7, so this task is
+`runner.py` and the façade — except that `run_phase` returns what a stage returns, and the spec names
+`ServiceResult` three times without ever putting it in § *Package layout*. It went into `engine.py`:
+what a service is handed and what it hands back are one sentence, and a module holding one dataclass
+and forwarding it is P8's pass-through. The layout row moved with the docstring, because I19 compares
+them.
+
+**A stage is found by deriving its module, not by a table of imports.** A dispatch mapping in
+`runner.py` would name all fifteen stages a second time and the second copy goes stale when a row
+moves. So the rule § *Package layout* states — one stage is a module, several are a directory — is
+`stage_module_name`, and `tests/guards/test_flow_table.py` now reads it from there instead of keeping
+its own copy, which is what its own docstring said would happen. That turns the file assertions into a
+check on the runner: every stage the document declares is where `run_phase` will look for it.
+
+Two `ConfigError`s and one deliberate `AttributeError`. An unknown phase and a phase that is declared
+and not built (`release`) are configuration mistakes and say which phases there are. A stage module
+with no function of its own name raises `AttributeError`, unwrapped: Python's message already names the
+module and the missing attribute, and that is the state every stage is in until Phase 4 — the fold is
+proved against stand-ins installed where the real services will be, which proves the dispatch as well
+as the order.
+
+`side_output` is keyed by the stage that produced it, because that is what tells the edge where to
+write it. T16 is the first stage that has any, and it either follows the key or changes it.
 
 ---
 

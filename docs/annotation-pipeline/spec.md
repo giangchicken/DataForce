@@ -519,7 +519,7 @@ src/dataforce/              the package; its docstring states the import directi
   errors.py                 DEFINITION · ConfigError — the one exception this codebase defines.
   record.py                 DEFINITION · Record, and Part — the bus, and the content it carries.
   manifest.py               DEFINITION · Manifest — one axis's declaration, already parsed.
-  engine.py                 DEFINITION · Engine and Registry — a resolved pair, held; no I/O.
+  engine.py                 DEFINITION · Engine, Registry and ServiceResult — what a service takes and returns; no I/O.
   ports.py                  DEFINITION · QuestionStore — what the engine demands of the edge.
 
   pipeline/                 the flow: one module per stage, and the fold that runs a phase's stages in order

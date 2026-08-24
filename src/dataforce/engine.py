@@ -1,4 +1,4 @@
-"""DEFINITION · Engine and Registry -- a resolved pair, held; no I/O.
+"""DEFINITION · Engine, Registry and ServiceResult -- what a service takes and returns; no I/O.
 
 The type is the engine's because every service names it in its signature; the reader that fills
 one from files is ``edge/bootstrap.py``, because reading is the edge's job. A registry is instance
@@ -10,6 +10,11 @@ and the digest of every policy file that produced them, which is what makes two 
 configuration comparable (Requirement 45). It holds no store and no clock: those are the edge's,
 and I1 is the scan that says so.
 
+**``ServiceResult`` is here because this is where a service's signature is written.** ``Engine``
+is what a stage is handed and ``ServiceResult`` is what it hands back, and the two are one sentence:
+``def pii_check(engine: Engine, records: Iterable[Record]) -> ServiceResult``. A module of its own
+would hold one dataclass and forward it, which is P8's pass-through.
+
 **The registry takes the name rather than reading it off the implementation.** The two axes share
 ``name``, ``version`` and ``Part`` and nothing else, so a ``Registrable`` protocol holding the first
 of those would be a fourth shared thing this design says does not exist. ``edge/bootstrap.py`` is
@@ -17,12 +22,13 @@ the only caller (Requirement 38) and registers under the manifest's own name.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, final
 
 from dataforce.errors import ConfigError
 from dataforce.modalities import Modality
 from dataforce.profiles import Profile
+from dataforce.record import Record
 
 
 def _refuse_a_second(axis: str, registered: Mapping[str, Any], name: str) -> None:
@@ -90,3 +96,22 @@ class Engine:
     registry: Registry  # the implementations this run may resolve, held per instance
     thresholds: Mapping[str, Any]  # `params.yaml`: no stage holds a number
     policy_digests: Mapping[str, str]  # every policy file, by digest (Req 45)
+
+
+@dataclass(frozen=True)
+class ServiceResult:
+    """What one service hands back: the bus, and anything the edge must persist.
+
+    There is no third field. **The records are the report** -- anything corpus-level is a fold over
+    them, computed at the edge when a human wants to read it (Requirement 44), and a `metrics` field
+    here would be a second place to compute it and a first place to get it wrong.
+
+    `side_output` is keyed by the stage that produced it, because that is what tells the edge where
+    to write it: `pii_check`'s placeholder map is a file that is never committed, `publish`'s rows
+    are the question store. The engine returns it and never writes it (Requirement 36).
+    """
+
+    records: tuple[Record, ...]  # as many out as went in, in order (Requirement 41)
+    side_output: Mapping[str, Any] = field(  # by stage; what the edge must persist
+        default_factory=dict
+    )
