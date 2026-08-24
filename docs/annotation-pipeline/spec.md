@@ -1421,7 +1421,7 @@ Each names the check that holds it, not a file that used to.
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names, the four owned roots, and `hashlib` — the one import a second `record_id` would come through |
-| I7 | Every field of every data class has a description | model introspection: every `FieldInfo.description` is non-empty |
+| I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |
 | I9 | `record_id` is stable across a shuffled re-ingest and sensitive to content | property test over a synthetic corpus |
 | I10 | No answer space is ever stored | `Record` has no such field; constructing one raises |
@@ -1436,6 +1436,7 @@ Each names the check that holds it, not a file that used to.
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
 | I20 | The record's keys are the keys § *The record* draws | the JSONC drawing is parsed out of this file and compared key by key against `Record`'s fields, nested models included. `label` and `meta` are free-form and named as exceptions: the drawing shows example contents of those two, not keys |
 | I21 | Each axis protocol has the members its section writes down | the `Protocol` block is parsed out of this file and compared to the runtime members, and the count both that section and the module's own docstring state in words is compared to the same number |
+| I22 | Every module's docstring opens with one of the five kinds | AST scan over the tree. The five words are read out of Requirement 2 rather than listed a second time, so a sixth kind becomes legal by being written down. `dataforce/__init__.py` is the one exception and says so in its own docstring |
 
 ---
 

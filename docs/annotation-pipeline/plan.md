@@ -16,8 +16,8 @@ in Phase 4.
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
-second review round — T39, T40 and T41.
-`make check` is green over 55 modules and 357 tests, 38 of which are not guards — but **T34 is open
+second review round — T39 to T42.
+`make check` is green over 55 modules and 483 tests, 38 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
 the oldest thing on this list.**
@@ -58,7 +58,7 @@ depart from it.
 | Written | Lives in |
 |---|---|
 | `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
-| `I8` | `spec.md` § *Invariants* — I1 to I21 |
+| `I8` | `spec.md` § *Invariants* — I1 to I22 |
 | `Decision 12` | `spec.md` § *Decisions* — 22 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
@@ -110,6 +110,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T39 | Two guards that pass what they exist to catch | 1 | T6 | S | ✓ |
 | T40 | The two shapes the document states and nothing compared | 1 | T8, T11 | M | ✓ |
 | T41 | Two promises that were discipline | 1 | T8, T10 | S | ✓ |
+| T42 | The two requirements with no guard | 1 | T6, T10 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -897,6 +898,48 @@ the test.
 Both record checks carry a discovery guard — `len(models_here()) > 20` — because a promise checked
 over an empty list is the same as no promise, and that is exactly how I7 spent Phase 1 (correctly, but
 knowingly).
+
+---
+
+### T42 · The two requirements with no guard
+
+**Goal.** Requirement 2's five kinds are checked over the tree (I22), and Requirement 1's other half —
+the trailing comment on a plain dataclass attribute — is checked with it (I7).
+
+**Context.** All fifty-five modules carry a valid kind and nothing asserted it: I19 compares a
+docstring line to its row in the layout tree, so a module and its row can be wrong *together*, one
+edit apart. And I7 introspects pydantic models, while Requirement 1 explicitly covers "a trailing
+comment on a plain dataclass attribute" — T9 and T10 created the first three, `Engine`,
+`ServiceResult` and `Stage`, all described by hand and none of them checked.
+
+**Approach.** Read the five words out of Requirement 2 rather than listing them again (P31). For the
+dataclass half, scan every line a field's declaration spans rather than only its first.
+
+**Acceptance criteria.** An invented kind, a miscased one, a prose docstring and a missing docstring
+each go red, and the one exempt module is exempt by name. A dataclass field with no comment goes red;
+a parenthesised annotation whose comment sits on the next line stays green.
+
+**Source.** Requirements 1 and 2; I7, I22; AGENTS.md P28, P29, P31.
+
+**Verify.** `uv run pytest tests/guards -q`.
+
+**Landed, and the parser was the interesting part.** Reading the kinds out of the requirement instead
+of listing them means finding Requirement 2, and the first version of that regex matched a different
+numbered list — § *The answer* numbers `vote_consensus`'s steps, and one of them starts with `2.`. It
+found "Otherwise a name is in when a strict majority…", parsed no kinds out of it, and took
+fifty-nine tests red with it. That is the argument for every one of these guards having a
+*guard-the-parse* test: the failure was loud and cost a minute, where a parse that had matched
+*something* plausible would have passed everything forever.
+
+I7's second half reads the whole declaration for the same reason. `Stage.phase` in `flow.py` is a
+parenthesised annotation with its comment on the line below, so a scan reading one line would have
+called the tree's own code undescribed — and a guard that is wrong about the tree it ships with gets
+switched off, not fixed.
+
+The package docstring is one *named* module, not a rule: `dataforce/__init__.py` opens with
+`DataForce —` because none of the five kinds describes a package, and a second module opening that way
+fails. Requirement 2, the package docstring and this guard all say so, which is AGENTS.md §8's
+three places.
 
 ---
 
