@@ -15,6 +15,7 @@ in Phase 4.
 **Phase 1 is done. Phase 0 has one task left, and Phase 2 has started.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38. Phase 2: T8.
+Phase 3: T11, taken early because `Engine` names both protocols.
 `make check` is green over 55 modules and 313 tests, 21 of which are the first in the tree that are not
 guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
 each task changed is recorded at the end of the task below it. **T9 is next.**
@@ -78,8 +79,10 @@ depart from it.
 | 7 | Two shells, one implementation | HTTP and an in-process caller produce the same record |
 | 8 | The rungs | Provisional thresholds become measured ones |
 
-Phases 1–3 are strictly sequential. Phases 4–6 are sequential in the flow but each stage task inside
-them is independent once its upstream key exists. Phase 7 can start as soon as Phase 4 lands.
+Phases 1–3 are strictly sequential, with one exception found while building and recorded at T11:
+`Engine` names both protocols in its own fields, so T11 came before T9. Phases 4–6 are sequential in
+the flow but each stage task inside them is independent once its upstream key exists. Phase 7 can
+start as soon as Phase 4 lands.
 
 ---
 
@@ -108,7 +111,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T8 | `errors.py`, `record.py`, `manifest.py` | 2 | T5 | M | ✓ |
 | T9 | `engine.py`, `ports.py`, and the registry | 2 | T3, T8 | M | |
 | T10 | `pipeline/flow.py` and `pipeline/runner.py` | 2 | T9 | S | |
-| T11 | The two protocols | 3 | T8 | S | |
+| T11 | The two protocols | 3 | T8 | S | ✓ |
 | T12 | `text2text` | 3 | T4, T11 | M | |
 | T13 | `tool_decision` | 3 | T1, T11 | L | |
 | T14 | `load_data` | 4 | T10, T12, T13 | M | |
@@ -899,6 +902,22 @@ identity, and `version` is a string.
 **Source.** `spec.md` § *Modality*, § *Profile*, Requirements 40, 47; I5, I16.
 
 **Verify.** `uv run pytest tests/guards -q`.
+
+**Landed — before T9, which this plan did not say it had to be.** `Engine` holds the resolved pair, so
+`engine.py` names `Modality` and `Profile` in its own fields; without them the pair types as `object`
+and every stage that calls a member needs a cast to do it. T9's stated dependencies are T3 and T8, and
+this task is missing from them — the same shape as the T7-before-T6 swap, and it cost nothing but the
+phase boundary.
+
+Two `Protocol` classes, five opaque aliases, and one re-export per façade. The aliases are
+`type X = Any` (PEP 695), which is what *opaque* means here: the base names the type so a signature can
+use it and says nothing about what is inside, because saying more would make the protocol a description
+of its single implementation (P18) and naming the model would be the import I16 forbids. `Answer` is
+the sharpest of the five — what an answer *is* is the whole of what a profile declares.
+
+The façades now hold what their docstrings already promised: `from .base import Modality`, and nothing
+that implements it. I16 and I5 were vacuous over these four modules until this commit, because an empty
+file names nothing.
 
 ---
 
