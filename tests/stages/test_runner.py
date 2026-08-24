@@ -13,6 +13,7 @@ a `conftest.py`. Two consumers is when a thing moves; this is the second, and it
 """
 
 from collections.abc import Iterable
+from importlib import import_module
 
 import pytest
 
@@ -114,3 +115,21 @@ def test_a_phase_the_flow_does_not_have_names_the_ones_it_does() -> None:
     """The same courtesy the registry gives an unknown axis name."""
     with pytest.raises(ConfigError, match="data_quality"):
         run_phase(an_engine(), "data_qualtiy", [])
+
+
+def test_a_stage_module_with_no_function_of_its_own_name_says_which(
+    stand_ins: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unwrapped `AttributeError` `runner.py`'s docstring argues for, which nothing proved.
+
+    `delattr(..., raising=False)` is what makes this durable in both directions: the attribute is
+    missing anyway until Phase 4 builds the stage, and from then on it exists and is removed for
+    the length of this test. Asserting the raise directly against a bare module would have been
+    green today and red the day `label_check` was written.
+    """
+    first = next(row for row in STAGES if row.phase == PHASE)
+    module = import_module(stage_module_name(first.phase, first.stage))
+    monkeypatch.delattr(module, first.stage, raising=False)
+
+    with pytest.raises(AttributeError, match=first.stage):
+        run_phase(an_engine(), PHASE, [])

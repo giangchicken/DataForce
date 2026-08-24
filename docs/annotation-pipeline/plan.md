@@ -16,8 +16,8 @@ in Phase 4.
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
-second review round — T39 and T40.
-`make check` is green over 55 modules and 353 tests, 34 of which are not guards — but **T34 is open
+second review round — T39, T40 and T41.
+`make check` is green over 55 modules and 357 tests, 38 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
 the oldest thing on this list.**
@@ -109,6 +109,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T38 | Why `publish` and `annotator_answers` are two | 1 | T5 | S | ✓ |
 | T39 | Two guards that pass what they exist to catch | 1 | T6 | S | ✓ |
 | T40 | The two shapes the document states and nothing compared | 1 | T8, T11 | M | ✓ |
+| T41 | Two promises that were discipline | 1 | T8, T10 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -861,6 +862,41 @@ I21 compares member *names* and not only the count, because a rename keeps the c
 implementation. The count is compared as well, in both places it is written, because the word is what
 a reader believes and a word is what nobody updates. A count word the guard does not know fails
 loudly instead of being skipped.
+
+---
+
+### T41 · Two promises that were discipline
+
+**Goal.** `record.py`'s *frozen, and every sequence a tuple* is checked over every model it defines,
+and `runner.py`'s unwrapped `AttributeError` has a test.
+
+**Context.** The record's docstring hangs Requirement 41 on that promise, and the only fields proved
+unassignable were `Record.content_version` and `Manifest.version`. All twenty-two models inherit it
+from `RecordModel`; the first one to declare its own `model_config`, or to subclass `BaseModel`
+directly, breaks the promise with nothing going red. Separately, `runner.py`'s docstring and T10's
+commit both argue for letting the `AttributeError` through, and both `ConfigError` branches had a test
+while that one did not — a documented interface with no proof (P12, §7).
+
+**Approach.** Introspect every model `record.py` defines: frozen, and no `list[…]` annotation. For the
+runner, install the stand-ins and then take one stage's function away again.
+
+**Acceptance criteria.** A model that is not frozen, and a field typed `list[…]`, each fail. The
+runner test names the stage whose function is missing and passes both before and after Phase 4 builds
+it.
+
+**Source.** Requirement 41; AGENTS.md §7, P12, P28.
+
+**Verify.** `uv run pytest tests/stages -q`.
+
+**Landed.** The runner test is written with `monkeypatch.delattr(module, stage, raising=False)`, and
+that detail is the whole test: asserting the raise against a module that simply has no function yet
+would be green today and **red the day `label_check` is written**. Removing the attribute works in
+both worlds — it is already absent now, and from Phase 4 it exists and is taken away for the length of
+the test.
+
+Both record checks carry a discovery guard — `len(models_here()) > 20` — because a promise checked
+over an empty list is the same as no promise, and that is exactly how I7 spent Phase 1 (correctly, but
+knowingly).
 
 ---
 

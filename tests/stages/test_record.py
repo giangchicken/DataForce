@@ -10,6 +10,11 @@ different one. **I10**, that no answer space can be stored. And the two structur
 type makes to every stage -- a part carries what its type declares, and a record handed to a stage
 cannot be edited by it.
 
+That second promise is made by the module docstring about *every* model here, so it is checked over
+every model here rather than through the one field a single test happens to touch (P28). Both
+halves: frozen, and no mutable sequence inside the frozen thing. Twenty-two models inherit it from
+`RecordModel` today, and the first one to declare its own `model_config` is the one this catches.
+
 Every fixture below is invented (AGENTS.md §9). The Vietnamese is there because the corpus this
 runs over is Vietnamese and an id over non-ASCII is worth exercising, not for flavour.
 """
@@ -20,8 +25,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
+import dataforce.record
 from dataforce.record import (
     Branch,
     Part,
@@ -232,3 +238,48 @@ def test_a_record_survives_the_trip_through_json() -> None:
 
     assert written["data_quality"]["pii_check"]["spans"][0]["class"] == "CUSTOMER_ID"
     assert Record.model_validate_json(scanned.model_dump_json()) == scanned
+
+
+def models_here() -> list[type[BaseModel]]:
+    """Every model `record.py` defines. One it merely imported would be another module's promise."""
+    return [
+        value
+        for value in vars(dataforce.record).values()
+        if isinstance(value, type)
+        and issubclass(value, BaseModel)
+        and value.__module__ == "dataforce.record"
+    ]
+
+
+def test_the_collection_found_the_models_it_is_about() -> None:
+    """Guards the discovery: an empty list would make both promises below pass by vacancy."""
+    assert len(models_here()) > 20
+    assert Record in models_here()
+
+
+def test_every_model_here_is_frozen() -> None:
+    """The docstring's promise: a stage returns a copy one key richer, or it returns nothing."""
+    assignable = [
+        model.__name__
+        for model in models_here()
+        if not model.model_config.get("frozen")
+    ]
+
+    assert assignable == []
+
+
+def test_no_field_here_holds_a_mutable_sequence() -> None:
+    """The other half. `frozen` stops an assignment; a `list` inside a frozen model is still a list.
+
+    The guarantee is only as deep as the record's own shape -- `meta` and `label` are free-form
+    JSON, and a dict inside one of them is the source's to own -- so this is about the fields the
+    record declares itself, which is where `tuple` is the whole difference.
+    """
+    mutable = [
+        f"{model.__name__}.{name}"
+        for model in models_here()
+        for name, field in model.model_fields.items()
+        if "list[" in str(field.annotation)
+    ]
+
+    assert mutable == []
