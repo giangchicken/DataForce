@@ -49,6 +49,7 @@ from dataforce.profiles.tool_decision.schema import (
     Tool,
 )
 from dataforce.record import (
+    SPOKEN_AND_STATED,
     Branch,
     FinalLabel,
     Part,
@@ -410,11 +411,21 @@ def restated_answer(record: Record, role: str) -> StoredAnswer | None:
     record; a fixture caught exactly that. Where the conversation ends with the customer, the label
     answers that turn and nothing restates it, which is the declared shape's ordinary case. Prose is
     not a restatement either.
+
+    **The calls are the segment after the last `record.SPOKEN_AND_STATED`**, because a turn that both
+    speaks and acts is written down as both and this check went silent on exactly those turns until a
+    review found it -- a `data_quality` check reading 0 on the common shape is worse than no check,
+    since Requirement 22 compares its count against `params.invalid_counts` and a zero reads as
+    health. The separator is the record's constant rather than a copy of the modality's, and a
+    crossing test builds the turn through `text2text` and reads it here, so neither end can move
+    alone. Splitting on it costs nothing where there is no separator: `rsplit` returns the whole
+    text, which is what a calls-only turn carries.
     """
     if not record.content or record.content[-1].role != role:
         return None
+    tail = (record.content[-1].text or "").rsplit(SPOKEN_AND_STATED, 1)[-1]
     try:
-        stated = json.loads(record.content[-1].text or "")
+        stated = json.loads(tail)
     except json.JSONDecodeError:
         return None
     return tuple(stated) if isinstance(stated, list) else None

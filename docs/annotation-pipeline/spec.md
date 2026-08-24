@@ -199,8 +199,15 @@ panel agreed to call nothing* and *the panel produced nothing defensible* are tw
 value read two ways. A consensus answer validates against the record's `answer_schema`, asserted
 directly.
 
-The two contracts share three names and nothing else: `name`, `version`, and `Part`, which is the
-record's and is only borrowed by both. Neither axis may drift into the other's job.
+The two contracts share four names and nothing else: `name`, `version`, `Part`, and
+`SPOKEN_AND_STATED` — the last two are the record's and are only borrowed by both. The separator is
+there for `Part`'s own reason: a turn can both speak and act, a part carries one string, so the
+modality that writes such a turn down and the profile that compares its calls against the label need
+one convention between them. It was a convention spelled in one axis and assumed in the other until a
+review found `label_assistant_mismatch` silent on every turn of that shape, which is the worst
+version of a shared fact — so it is named in `record.py` where both can reach it, and one test builds
+a turn through the modality and reads it through the profile so neither end can move alone. Neither
+axis may drift into the other's job.
 
 ---
 

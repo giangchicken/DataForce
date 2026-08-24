@@ -17,7 +17,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-`make check` is green over 55 modules and 588 tests, 143 of which are not guards — but **T34 is open
+`make check` is green over 55 modules and 590 tests, 145 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
 list.**
@@ -113,6 +113,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T42 | The two requirements with no guard | 1 | T6, T10 | S | ✓ |
 | T43 | The pipeline façade re-exports nothing | 2 | T10 | S | ✓ |
 | T44 | An item that cannot be read is still an item | 3 | T12, T13 | S | ✓ |
+| T45 | The rendering convention has a name, and a test that crosses it | 3 | T12, T13 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1413,6 +1414,52 @@ raise on a readable item — the thing this task exists to remove.
 contracts share `name`, `version` and `Part`, and a third shared helper would make a fourth. The
 double `(call.get(FUNCTION) or {})` in `stated_calls` went at the same time, since that function was
 being edited anyway.
+
+---
+
+### T45 · The rendering convention has a name, and a test that crosses it
+
+**Goal.** `label_assistant_mismatch` fires on a turn that both speaks and calls, and the convention
+that made it silent is a fact in one place with a test across it.
+
+**Context.** `text2text` writes a turn that both speaks and acts as `"prose\n[calls]"`;
+`restated_answer` ran `json.loads` over the whole part text, so it returned None for exactly those
+turns — the check reported nothing on the shape it is most likely to see. Two defects in one: a
+`data_quality` check reading 0 on the common shape is worse than no check, because Requirement 22
+compares its count against `params.invalid_counts` and a zero reads as health; and the two ends were
+connascent by meaning (P13, P14) across a boundary neither may import, with every fixture
+hand-writing `json.dumps([...])` so no test tied them.
+
+**Approach.** Move the separator to `record.py` and have both axes borrow it, then read the calls off
+the segment after the last one. Rebuild every restating-turn fixture through
+`Text2Text.content_parts`.
+
+**Acceptance criteria.** A turn carrying prose *and* the calls is a restatement. The crossing test
+fails when either end changes. § *The two axes* says four shared names, not three.
+
+**Source.** Requirement 18's neighbour — Requirement 22; § *The two axes*; AGENTS.md P13, P14, §8.
+
+**Verify.** `uv run pytest tests/stages -q -k tool_decision`.
+
+**Landed.** Two tests, and the second one watched red: restoring the whole-text parse fails
+`test_a_turn_that_speaks_and_calls_is_still_a_restatement` and nothing else, which is the guard
+working.
+
+**Two repairs rejected before this one.** *Parse harder with the library:*
+`extract_json_from_text` prefers the outer brace object over the bracket array, so it returns the
+first call rather than the list, and it reads `Kết quả: {"so_du": 1250000}` as a value too — a check
+whose whole worth is reading 0 honestly would start reading false positives. *Split on the separator
+inside the profile:* that hard-codes one axis's convention into the other, which is the finding, not
+the fix.
+
+**And one design change rejected.** Rendering a speak-and-call turn as *two* parts deletes the
+separator entirely and would make `restated_answer` a bare `json.loads` of the final part. It was
+turned down because it changes the bus's content shape and contradicts § *Modality*'s "One source
+item's turns, as ordered parts" more directly than the join does. Worth writing down that no option
+reaches zero: *the calls are a JSON array inside a part's text* stays a cross-axis assumption unless
+`Part` grows a `calls` field, which would put the profile's vocabulary in the record. What changed is
+that the assumption is now named once and checked once instead of being spelled twice and checked
+nowhere.
 
 ---
 

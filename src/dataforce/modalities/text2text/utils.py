@@ -23,6 +23,13 @@ A non-string ``content`` is **not** in that category and does not raise: the con
 the same standard Requirement 13 declares, so such an item is a declared item and has to become a
 record.
 
+**A turn that both speaks and calls joins the two on ``record.SPOKEN_AND_STATED``**, which is the
+record's constant and not this module's, because ``tool_decision`` reads the calls back off it and a
+convention spelled here and assumed there is connascence of meaning across a boundary neither side
+may import. ``record.py``'s docstring says why it lives there, and one test in
+``tests/stages/test_tool_decision.py`` builds a turn through this module and reads it through that
+one, so neither end can move alone.
+
 **A tool-call turn is rendered here, and that is content rather than an answer.** ``messages`` holds
 the conversation and *nothing in it is an answer* (Requirement 13); an assistant turn that already
 called a tool is context like any other. Requirement 15 asks that one call spelled three ways --
@@ -41,7 +48,7 @@ from agent_toolkit.string_utils import normalize_text
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities.text2text.schema import Detector, DisplayConfig
-from dataforce.record import Part, Record
+from dataforce.record import SPOKEN_AND_STATED, Part, Record
 
 if TYPE_CHECKING:
     from dataforce.modalities import Modality
@@ -69,10 +76,6 @@ CONVERSATION = "conversation"
 
 # What separates one turn from the next in the document a vector is taken over.
 TURN_SEPARATOR = "\n\n"
-
-# What separates a turn's words from the calls it made, where a turn carries both. Dropping
-# either would lose content that `record_id` has to cover.
-SPOKEN_AND_STATED = "\n"
 
 # Requirement 52: `<Chat>` renders this exactly the way this modality wants and is Enterprise-only,
 # so the community path is `<Paragraphs layout="dialogue">`. `$question` is the profile's string and

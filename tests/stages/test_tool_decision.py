@@ -27,9 +27,12 @@ import pytest
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
+from dataforce.modalities.text2text import Text2Text
+from dataforce.modalities.text2text.utils import stated_calls
 from dataforce.profiles import Profile
 from dataforce.profiles.tool_decision import ToolDecision
 from dataforce.record import (
+    SPOKEN_AND_STATED,
     Branch,
     FinalLabel,
     HumanReview,
@@ -133,6 +136,38 @@ def a_profile(question: str = QUESTION, **declared: Any) -> ToolDecision:
 def parts(turns: Sequence[tuple[str, str]] = TURNS) -> tuple[Part, ...]:
     """The content, as `text2text` would have produced it."""
     return tuple(Part(type="text", role=role, text=text) for role, text in turns)
+
+
+def a_text2text() -> Text2Text:
+    """The modality this profile composes with. Its encoder is never called from here."""
+    return Text2Text(
+        Manifest(
+            name="text2text",
+            version="1",
+            declarations={"embedding": {"model": "m", "exclude_roles": []}},
+        ),
+        lambda document: (0.0,),
+    )
+
+
+def a_turn_that_calls(name: str, arguments: Any, said: str | None = None) -> Part:
+    """One target turn, rendered by the modality that will actually render it.
+
+    Crossing the seam is the point. `text2text` writes a turn's calls into a part's text and
+    `restated_answer` reads them back out, and until a review found it the two agreed only by a
+    convention spelled in one axis and assumed in the other. Building this fixture here rather than
+    hand-writing `json.dumps` is what makes a change at either end fail this file. The *arguments*
+    are a JSON string on purpose: that is the form a source item carries them in.
+    """
+    turn: dict[str, Any] = {
+        "role": "assistant",
+        "tool_calls": [
+            {"function": {"name": name, "arguments": json.dumps(arguments)}}
+        ],
+    }
+    if said is not None:
+        turn["content"] = said
+    return a_text2text().content_parts({"messages": [turn]})[0]
 
 
 def a_record(
@@ -424,21 +459,58 @@ def test_a_label_naming_one_tool_twice_fires() -> None:
     assert "label_names_one_tool_twice" in checks_that_fire(twice)
 
 
+def test_the_separator_between_what_a_turn_said_and_called_is_the_records() -> None:
+    """The fourth name both axes borrow, asserted once so neither copy can drift.
+
+    This is the assumption that made `label_assistant_mismatch` silent on every turn that both
+    speaks and acts: the modality joined the two halves and the profile parsed the whole string.
+    """
+    part = a_turn_that_calls(
+        "LookupBalance", {"ma_khach": "480215"}, said="Mình tra cứu ngay nhé."
+    )
+
+    spoken, stated = (part.text or "").split(SPOKEN_AND_STATED)
+
+    assert spoken == "Mình tra cứu ngay nhé."
+    assert stated == stated_calls(
+        [{"function": {"name": "LookupBalance", "arguments": '{"ma_khach": "480215"}'}}]
+    )
+    assert json.loads(stated) == [LOOKED_UP]
+
+
 def test_a_restating_turn_that_disagrees_with_the_label_fires() -> None:
-    """The last target-role turn states the answer, and the two disagree."""
-    restated = parts(
-        (*TURNS, ("assistant", json.dumps([LOOKED_UP], ensure_ascii=False)))
+    """The final turn states the answer, and the two disagree."""
+    restated = parts(TURNS) + (
+        a_turn_that_calls("LookupBalance", {"ma_khach": "480215"}),
     )
 
     assert "label_assistant_mismatch" in checks_that_fire(a_record(content=restated))
 
 
+def test_a_turn_that_speaks_and_calls_is_still_a_restatement() -> None:
+    """The shape the check went silent on: prose joined to the calls in one part's text."""
+    both = parts(TURNS) + (
+        a_turn_that_calls(
+            "LookupBalance", {"ma_khach": "480215"}, said="Mình tra cứu ngay nhé."
+        ),
+    )
+
+    assert "label_assistant_mismatch" in checks_that_fire(a_record(content=both))
+
+
 def test_a_restating_turn_that_agrees_is_quiet() -> None:
     """The check is about disagreement, so the agreeing case has to stay silent."""
-    restated = parts((*TURNS, ("assistant", json.dumps([SENT], ensure_ascii=False))))
+    agreed = {"ma_khach": "480215", "ky": "thang_nay"}
+    restated = parts(TURNS) + (a_turn_that_calls("SendStatement", agreed),)
+    speaks_too = parts(TURNS) + (
+        a_turn_that_calls("SendStatement", agreed, said="Đã gửi sao kê cho bạn."),
+    )
 
     assert "label_assistant_mismatch" not in checks_that_fire(
         a_record(content=restated)
+    )
+    assert "label_assistant_mismatch" not in checks_that_fire(
+        a_record(content=speaks_too)
     )
 
 
@@ -461,12 +533,10 @@ def test_prose_in_the_final_turn_restates_nothing() -> None:
 
 def test_an_earlier_tool_call_turn_is_history_and_not_a_restatement() -> None:
     """A tool called before the customer supplied what was missing is context (Requirement 13)."""
-    history = parts(
-        (
-            ("user", "Cho mình xem số dư."),
-            ("assistant", json.dumps([LOOKED_UP], ensure_ascii=False)),
-            ("user", "Gửi giúp mình sao kê tháng này."),
-        )
+    history = (
+        *parts((("user", "Cho mình xem số dư."),)),
+        a_turn_that_calls("LookupBalance", {"ma_khach": "480215"}),
+        *parts((("user", "Gửi giúp mình sao kê tháng này."),)),
     )
 
     assert "label_assistant_mismatch" not in checks_that_fire(a_record(content=history))
@@ -793,15 +863,9 @@ def test_a_missing_declaration_names_the_file_and_the_path(missing: str) -> None
 
 def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
     """`conversation: [user]` is a list in the manifest, so `target:` may be one too."""
-    listed = a_profile(
-        roles={
-            "instruction": "system",
-            "conversation": ["user"],
-            "target": ["assistant"],
-        }
-    )
-    restated = parts(
-        (*TURNS, ("assistant", json.dumps([LOOKED_UP], ensure_ascii=False)))
+    listed = a_profile(roles={"target": ["assistant"]})
+    restated = parts(TURNS) + (
+        a_turn_that_calls("LookupBalance", {"ma_khach": "480215"}),
     )
 
     assert "label_assistant_mismatch" in checks_that_fire(
