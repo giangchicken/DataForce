@@ -678,9 +678,13 @@ prose, and nests `human_review` inside `ai_review`.
 
   // --- Content: the conversation, in order ---
   "content": [                        // ordered parts; order is content, so it is covered by record_id
-    { "type": "text",                 // "text" carries `text`; media types carry `uri` + `sha256`
+    { "type": "text",                 // both kinds are drawn; a text2text record holds only this one
       "role": "user",                 // who spoke; every turn is context and none of it is an answer
-      "text": "Mã của mình là <CUSTOMER_ID_1>." }
+      "text": "Mã của mình là <CUSTOMER_ID_1>." },
+    { "type": "audio",                // what a media modality writes instead: the file, by reference
+      "role": "user",
+      "uri":    "data/raw/4471.wav",  // where it sits; never in record_id, so moving it changes nothing
+      "sha256": "b2c3d4e5…" }         // what record_id covers, so changing the file changes the id
   ],
   "content_version": 2,               // bumped only by pii_check; says which text the spans point into
 
@@ -1430,6 +1434,8 @@ Each names the check that holds it, not a file that used to.
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `edge/cli.py` names two stages in sequence; both call `run_phase` |
 | I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
+| I20 | The record's keys are the keys § *The record* draws | the JSONC drawing is parsed out of this file and compared key by key against `Record`'s fields, nested models included. `label` and `meta` are free-form and named as exceptions: the drawing shows example contents of those two, not keys |
+| I21 | Each axis protocol has the members its section writes down | the `Protocol` block is parsed out of this file and compared to the runtime members, and the count both that section and the module's own docstring state in words is compared to the same number |
 
 ---
 

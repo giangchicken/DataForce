@@ -16,8 +16,8 @@ in Phase 4.
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols. Then a
-second review round — T39.
-`make check` is green over 55 modules and 335 tests, 34 of which are not guards — but **T34 is open
+second review round — T39 and T40.
+`make check` is green over 55 modules and 353 tests, 34 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 2 is done. T12 opens what is left of Phase 3, and T34 is still
 the oldest thing on this list.**
@@ -58,7 +58,7 @@ depart from it.
 | Written | Lives in |
 |---|---|
 | `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
-| `I8` | `spec.md` § *Invariants* — I1 to I19 |
+| `I8` | `spec.md` § *Invariants* — I1 to I21 |
 | `Decision 12` | `spec.md` § *Decisions* — 22 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
@@ -108,6 +108,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T37 | Give the event stream an owner | 1 | T5 | S | ✓ |
 | T38 | Why `publish` and `annotator_answers` are two | 1 | T5 | S | ✓ |
 | T39 | Two guards that pass what they exist to catch | 1 | T6 | S | ✓ |
+| T40 | The two shapes the document states and nothing compared | 1 | T8, T11 | M | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -815,6 +816,51 @@ roots are `agent-toolkit`'s own dependencies; `hashlib` is the standard library 
 for it itself, so putting it there would make the guard's own reason false. The spec's I6 row says so
 too now. P30's hatch is proved for the case that is coming: a media part's `sha256` is over bytes and
 `compute_hash` takes a `str`.
+
+---
+
+### T40 · The two shapes the document states and nothing compared
+
+**Goal.** § *The record*'s drawing and both axis protocols are compared to the code — I20 and I21,
+both added by this task.
+
+**Context.** I3 compares the flow table and I19 the layout tree. The record drawing — about a hundred
+keys, and the only place a key's meaning sits beside it in prose — was compared by nothing, and T8's
+own note already records two ways the two sides have drifted. Each protocol is stated three times: as
+a `Protocol` block in the document, as a count in words in that section, and as a second count in the
+module's own docstring.
+
+**Approach.** Parse the JSONC out of § *The record* and compare it key by key against `Record`'s
+fields, through aliases and nested models and lists; name the free-form keys rather than detecting
+them. Parse each `Protocol` block and compare member names, then both stated counts, against the
+runtime protocol.
+
+**Acceptance criteria.** Both guards are green over the tree as it stands. A key drawn with no field,
+a field with no key, a member renamed on one side, and a stale count each go red.
+
+**Source.** `spec.md` § *The record*, § *Modality*, § *Profile*; I20, I21; AGENTS.md P29, P31.
+
+**Verify.** `uv run pytest tests/guards -q`.
+
+**Landed, and the drawing was what changed.** The one real disagreement was `content.uri` and
+`content.sha256`, which existed as a comment on `type` and not as keys. That is fixed in the drawing —
+a media part is drawn beside the text part now — rather than by an exception in the guard: § *Out of
+Scope* calls the media part shape a specified seam, and a comment is not a key.
+
+A naive comparison reports nine differences and seven of them are the comparison's own fault:
+`question_generate` is a `tuple[Question, …]` that has to be descended, and `label` and `meta` are
+free-form bags whose *contents* the drawing illustrates. So the guard descends lists, unions the keys
+of a list's members — which is what makes `content` drawing two parts the right shape to draw — and
+names exactly two exceptions. Two named exceptions are auditable; seven silent ones would have made
+the guard a decoration.
+
+T8's `class` alias pays for itself here: the drawing says `class`, the field is
+`personal_data_class`, and the guard compares by alias, so the wire key is what is checked.
+
+I21 compares member *names* and not only the count, because a rename keeps the count and breaks every
+implementation. The count is compared as well, in both places it is written, because the word is what
+a reader believes and a word is what nobody updates. A count word the guard does not know fails
+loudly instead of being skipped.
 
 ---
 
