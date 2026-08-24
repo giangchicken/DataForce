@@ -17,10 +17,11 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-Phase 4 is in progress: T14, T15, T16 and T17 have landed.
-`make check` is green over 56 modules and 708 tests, 235 of which are not guards — but **T34 is open
+**Phases 1 to 4 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
+`make check` is green over 56 modules and 715 tests, 242 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
-at the end of the task below it. **T34 is still the oldest thing on this list.**
+at the end of the task below it. **Phase 5 opens with T19, and T34 is still the oldest thing on this
+list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -130,7 +131,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T15 | `label_check` | 4 | T13, T14 | S | ✓ |
 | T16 | `pii_check` | 4 | T2, T14 | L | ✓ |
 | T17 | `duplicate_check` | 4 | T12, T14 | M | ✓ |
-| T18 | The bus and conservation properties | 4 | T14–T17 | S | |
+| T18 | The bus and conservation properties | 4 | T14–T17 | S | ✓ |
 | T19 | `jury` | 5 | T2, T13, T15 | M | |
 | T20 | `cohesion` | 5 | T19 | S | |
 | T21 | `triage` | 5 | T20 | S | |
@@ -1869,6 +1870,29 @@ record fails this test rather than the reviewer noticing.
 confirm red; revert.
 
 **Out of scope.** I15 — that needs both shells and is T29.
+
+**Landed.** Seven tests, and three of them are the scan proved red.
+
+**The verify step is a test, not an instruction.** *Make one stage return `records[:-1]` and confirm
+red* is a thing a person does once and never again; `bus_findings` takes a step as a value, so the same
+proof is three tests that run on every commit — a dropped record, a key the stage does not own, and a
+stage nobody declared the paths of.
+
+**The stages are discovered from the flow table**, through the same `stage_module_name` derivation the
+runner uses, so a stage added to `data_quality` is folded here the day it is written. And it cannot
+pass vacuously: `PERMITTED` is Requirement 5 as data, and a stage missing from it is a finding rather
+than a skip.
+
+**Requirement 5's exception is written down as a set**, which is what makes it an exception and not a
+hole: `pii_check` may write its key, `content`, `content_version` and `label`, and a fifth path or a
+different stage touching any of them fails. This is where T16's correction to Requirement 5 would have
+been caught if it had not been caught by reading.
+
+The corpus holds every state the phase produces — a duplicate pair, a quarantined record, a record
+whose content *and* label were rewritten, and an item that cannot be read at all — and one test does
+nothing but assert that, because a corpus with none of those states would make the fold vacuous. The
+last of the four is there to show where the property starts: `load_data` returns fewer records than it
+was given items, and conservation is a promise about the bus, which begins after it.
 
 ---
 
