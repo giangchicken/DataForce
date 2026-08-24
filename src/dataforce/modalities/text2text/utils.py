@@ -146,6 +146,41 @@ def declared(manifest: Manifest, *path: str) -> Any:
     return reached
 
 
+def declared_name(manifest: Manifest, *path: str) -> str:
+    """One declared non-empty string, or a `ConfigError` naming the path and what it holds.
+
+    A declaration is read once, at composition, so this is where a wrong *type* can still be a
+    `ConfigError` (Requirement 43). Coercing with `str()` is what it replaced: a list declared where
+    a name belongs becomes `"['a']"`, which is a model nobody has and an error a hundred records
+    later.
+    """
+    value = declared(manifest, *path)
+    if not isinstance(value, str) or not value:
+        raise ConfigError(
+            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a name"
+        )
+    return value
+
+
+def declared_roles(manifest: Manifest, *path: str) -> frozenset[str]:
+    """The roles a declaration names, or a `ConfigError` for anything that is not a list of them.
+
+    `exclude_roles: system` -- a bare string where a list belongs -- is the slip this exists for.
+    `frozenset("system")` is five letters, so no role matches, the instruction turn goes into the
+    vector anyway, and nothing anywhere says a word: the run succeeds and every vector is wrong.
+    Wrong vectors are invisible and a refused run is not, which is why this raises rather than
+    reading a lone string as a one-role list.
+    """
+    value = declared(manifest, *path)
+    if not isinstance(value, list) or any(not isinstance(role, str) for role in value):
+        raise ConfigError(
+            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a list of role names"
+        )
+    return frozenset(value)
+
+
 def embedding_model(manifest: Manifest) -> str:
     """Which static model this modality's vectors come from.
 
@@ -153,7 +188,7 @@ def embedding_model(manifest: Manifest) -> str:
     knows what it means (`manifest.py`), and loaded there rather than here because loading it opens
     a file (I1). `edge/bootstrap.py` calls this, builds the `Encoder`, and hands it over.
     """
-    return str(declared(manifest, EMBEDDING, MODEL))
+    return declared_name(manifest, EMBEDDING, MODEL)
 
 
 def text_parts(parts: Sequence[Part]) -> tuple[Part, ...]:
@@ -268,7 +303,7 @@ class Text2Text:
         self.name = manifest.name
         self.version = manifest.version
         self._encode = encode
-        self._not_embedded = frozenset(declared(manifest, EMBEDDING, EXCLUDE_ROLES))
+        self._not_embedded = declared_roles(manifest, EMBEDDING, EXCLUDE_ROLES)
 
     def content_parts(self, item: Mapping[str, Any]) -> list[Part]:
         """One source item's turns, as ordered parts. Text verbatim, media by reference.

@@ -390,6 +390,40 @@ def declared(manifest: Manifest, *path: str) -> Any:
     return reached
 
 
+def declared_text(manifest: Manifest, *path: str) -> str:
+    """One declared non-empty string, or a `ConfigError` naming the path and what it holds.
+
+    What it replaced was `str(...)`: `label: {at: [label]}` coerced to `"['label']"`, a key no item
+    carries, and the run then failed once per record with a message about the *item* rather than
+    about the line that was wrong.
+    """
+    value = declared(manifest, *path)
+    if not isinstance(value, str) or not value:
+        raise ConfigError(
+            f"config/profiles/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a key name"
+        )
+    return value
+
+
+def declared_count(manifest: Manifest, *path: str) -> int:
+    """One declared whole number of one or more, or a `ConfigError` naming what is there.
+
+    `int()` was doing this and doing it silently: `max_calls: 2.7` truncated to 2 and
+    `max_calls: true` became 1, so a mistyped ceiling became `maxItems` and
+    `label_cardinality_anomaly`'s boundary without anything to read in a diff. `bool` is excluded
+    before `int` because `True` *is* an `int` in Python, which is exactly how the `true` case got
+    through.
+    """
+    value = declared(manifest, *path)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigError(
+            f"config/profiles/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a whole number of calls"
+        )
+    return value
+
+
 def one_role(manifest: Manifest, part: str) -> str:
     """What this source calls one of the pipeline's roles, where a list means its first entry."""
     named = declared(manifest, ROLES, part)
@@ -519,8 +553,8 @@ class ToolDecision:
         self.version = manifest.version
         self.modality = manifest.modality
         self._control = str(control)
-        self._max_calls = int(declared(manifest, MAX_CALLS))
-        self._label_at = str(declared(manifest, LABEL, AT))
+        self._max_calls = declared_count(manifest, MAX_CALLS)
+        self._label_at = declared_text(manifest, LABEL, AT)
         self._target_role = one_role(manifest, TARGET)
         self._question = question_template.strip()
 

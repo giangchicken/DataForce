@@ -17,7 +17,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-`make check` is green over 55 modules and 590 tests, 145 of which are not guards — but **T34 is open
+`make check` is green over 55 modules and 609 tests, 164 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 4 opens with T14, and T34 is still the oldest thing on this
 list.**
@@ -114,6 +114,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T43 | The pipeline façade re-exports nothing | 2 | T10 | S | ✓ |
 | T44 | An item that cannot be read is still an item | 3 | T12, T13 | S | ✓ |
 | T45 | The rendering convention has a name, and a test that crosses it | 3 | T12, T13 | S | ✓ |
+| T46 | The manifest is validated where it is read | 3 | T12, T13 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1460,6 +1461,48 @@ reaches zero: *the calls are a JSON array inside a part's text* stays a cross-ax
 `Part` grows a `calls` field, which would put the profile's vocabulary in the record. What changed is
 that the assumption is now named once and checked once instead of being spelled twice and checked
 nowhere.
+
+---
+
+### T46 · The manifest is validated where it is read
+
+**Goal.** No declaration is coerced. Every key a manifest carries has a reader, and every reader
+checks the type it was handed.
+
+**Context.** The manifest is the axis interface and was its least-verified surface. `exclude_roles:
+system` — one YAML character from `[system]` — became `frozenset("system")`, five letters, so no role
+matched, the instruction turn went into every vector, and the run succeeded. `max_calls: 2.7`
+truncated to 2 and `max_calls: true` became 1, because `True` *is* an `int` in Python, so a mistyped
+ceiling became `maxItems` and `label_cardinality_anomaly`'s boundary with nothing to read in a diff.
+`label: {at: [label]}` coerced to `"['label']"`, a key no item carries, and then failed once per
+record with a message about the item rather than about the line that was wrong. Meanwhile the same
+constructor already turned `shape`, `answer_control`, `modality` and the template into `ConfigError`,
+so the inconsistency was inside one function.
+
+**Approach.** Three named readers, one per shape a declaration can have: `declared_name` /
+`declared_roles` in the modality, `declared_text` / `declared_count` in the profile. Each holds a rule
+and so earns a name at one caller (§4). Then delete the keys nothing reads.
+
+**Acceptance criteria.** Every non-conforming value for the four keys raises `ConfigError` naming the
+file and the path. `config/profiles/tool_decision.yaml` declares nothing without a reader, and
+§ *Configuration* lists the readers.
+
+**Source.** Requirement 40, Requirement 43, AGENTS.md P12, P22; the T4 precedent for retired-corpus
+residue.
+
+**Verify.** `uv run pytest tests/stages -q`.
+
+**Landed.** Nineteen tests. A bare string is **refused** rather than read as a one-role list: reading
+it would be a guess about what someone meant, and the failure this replaces was silent, so the fix
+has to be loud.
+
+Four declarations went with it. `roles.instruction` and `roles.conversation` had no reader — every
+turn is context, and the display half, the jury slots and the vector all take all of them — and the
+five-entry `meta:` rename map had none either, because Requirement 9 keeps `meta` verbatim so nothing
+ever asks what the source calls `prior_label`. Its five values were the retired corpus's key names,
+which is what T4 was for. `gold.from` stays, with a comment naming T31 as the reader it is waiting
+for: an unread key with a named future reader is a different thing from an orphan, and the comment is
+what makes the difference visible. `prompts.question` got the same treatment, naming T27.
 
 ---
 

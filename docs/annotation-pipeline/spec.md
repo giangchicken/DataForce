@@ -1086,6 +1086,17 @@ not assigned anywhere else; the profile manifest's `modality:` names the same st
 `params.invalid_counts` lists the five label-check names with no values, and `params.source` is empty —
 both stay that way until a corpus is declared.
 
+**Every key a manifest declares has a reader, and the reader validates it.** The modality's are
+`embedding.model` and `embedding.exclude_roles`; the profile's are `shape`, `answer_control`,
+`max_calls`, `label.at`, `roles.target` and `prompts.question`, plus `gold.from`, whose only reader is
+the pilot's gold accuracy in T31. A declaration is read once, at composition, so a wrong *type* is
+still a `ConfigError` there: `exclude_roles: system` — one character from `[system]` — used to become
+a frozenset of five letters, so no role matched and every vector silently included the instruction
+turn, and `max_calls: 2.7` used to truncate to 2. Four keys were declared with no reader at all
+(`roles.instruction`, `roles.conversation`, a `meta:` rename map from our names to the source's, whose
+five values were the retired corpus's) and are deleted: Requirement 9 keeps `meta` verbatim, so a
+rename map has no future reader either.
+
 The profile manifest also declares **`max_calls`** — the cardinality ceiling. `answer_schema`
 materialises it as `maxItems` and `label_cardinality_anomaly` reads the same number, so the check and
 the space an answer is validated against cannot disagree. It is provisional, and the manifest records

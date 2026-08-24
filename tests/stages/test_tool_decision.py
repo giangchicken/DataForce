@@ -102,9 +102,8 @@ DECLARED: dict[str, Any] = {
     "max_calls": 2,
     "answer_control": "names_and_json_arguments",
     "shape": "openai_chat_completion",
-    "roles": {"instruction": "system", "conversation": ["user"], "target": "assistant"},
+    "roles": {"target": "assistant"},
     "label": {"at": "label"},
-    "meta": {"labelling_model": "llm_model"},
     "gold": {"from": "human_checked"},
 }
 
@@ -859,6 +858,33 @@ def test_a_missing_declaration_names_the_file_and_the_path(missing: str) -> None
 
     with pytest.raises(ConfigError, match=r"config/profiles/tool_decision.yaml"):
         ToolDecision(incomplete, QUESTION)
+
+
+@pytest.mark.parametrize(
+    "max_calls",
+    ["two", [2], None, 2.7, True, 0, -1],
+    ids=["a-word", "a-list", "null", "a-fraction", "a-flag", "zero", "negative"],
+)
+def test_a_ceiling_that_is_not_a_whole_number_of_calls_is_refused(
+    max_calls: Any,
+) -> None:
+    """Two of these used to pass silently, which is the reason this test exists.
+
+    `int()` truncated `2.7` to 2 and read `true` as 1 -- so a mistyped ceiling became `maxItems`
+    *and* `label_cardinality_anomaly`'s boundary with nothing to read in a diff. `True` is an `int`
+    in Python, which is exactly how the flag case got through.
+    """
+    with pytest.raises(ConfigError, match="max_calls"):
+        a_profile(max_calls=max_calls)
+
+
+@pytest.mark.parametrize(
+    "at", [["label"], "", None, 7], ids=["a-list", "empty", "null", "a-number"]
+)
+def test_a_label_key_that_is_not_a_key_name_is_refused(at: Any) -> None:
+    """`str(["label"])` is a key no item carries, and the run then failed once per record."""
+    with pytest.raises(ConfigError, match="label.at"):
+        a_profile(label={"at": at})
 
 
 def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:

@@ -394,6 +394,33 @@ def test_an_undeclared_embedding_key_names_the_manifest(
         Text2Text(incomplete, code_points)
 
 
+@pytest.mark.parametrize(
+    "exclude_roles",
+    ["system", {"system": True}, ["system", 1], 7],
+    ids=["a-bare-string", "a-mapping", "a-mixed-list", "a-number"],
+)
+def test_exclude_roles_that_is_not_a_list_of_roles_is_refused(
+    exclude_roles: Any,
+) -> None:
+    """The slip that produced a green run and wrong vectors for every record.
+
+    `exclude_roles: system` is one YAML character away from `[system]`, and
+    `frozenset("system")` is five letters -- so no role matched, the instruction turn went into
+    every vector, and nothing said a word. A refused run is visible; wrong vectors are not.
+    """
+    with pytest.raises(ConfigError, match="exclude_roles"):
+        a_modality(exclude_roles=exclude_roles)
+
+
+@pytest.mark.parametrize(
+    "model", [["m"], "", None, 7], ids=["a-list", "empty", "null", "a-number"]
+)
+def test_a_model_that_is_not_a_name_is_refused(model: Any) -> None:
+    """`str(["m"])` is `"['m']"`, which is a model nobody has and an error much later."""
+    with pytest.raises(ConfigError, match="embedding.model"):
+        embedding_model(a_manifest(model=model))
+
+
 def test_the_model_name_is_read_off_the_manifest() -> None:
     """The key is read here and the model is loaded at the edge; this is the seam between them."""
     assert embedding_model(a_manifest()) == "minishlab/potion-multilingual-128M"

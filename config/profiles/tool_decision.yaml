@@ -2,6 +2,11 @@ name: tool_decision
 version: "1"
 modality: text2text
 
+# The question template, by name under `config/prompts/`. Read at the edge and handed
+# to the profile, because no engine module opens a file -- `edge/bootstrap.py` (T27) is
+# what resolves this name. The template names no slot: one question is asked per record
+# and the record's own specifics reach the annotator as task data, so a `{{...}}` in the
+# file is refused at composition rather than shown to a person.
 prompts:
   question: profiles/tool_decision/question.v2
 
@@ -43,20 +48,23 @@ answer_control: names_and_json_arguments
 # this profile read a declared-input record as an empty catalog.
 shape: openai_chat_completion
 
+# Which turn states the answer a second time, in this source's own vocabulary.
+# `label_assistant_mismatch` reads it and nothing else does: `instruction` and
+# `conversation` were declared here too and had no reader, because every turn is context
+# and the display half, the jury slots and the vector all take all of them. A list is
+# permitted and its first entry is used, since `roles` in this shape may name several.
 roles:
-  instruction: system
-  conversation: [user]
   target: assistant
 
+# Which key inside the source's `meta` holds the answer (Requirement 14). Declared, so a
+# source calling it `target` or `gold` needs this line and no code.
 label:
   at: label
 
-meta:
-  labelling_model: llm_model
-  prior_label: orig_label
-  label_provenance: label_source
-  human_checked: human_checked
-  human_checked_by: human_check_src
-
+# Which source key marks a record a person has already checked. No reader yet: the
+# pilot's gold accuracy is T31, and this is the line it will read. A five-entry `meta:`
+# rename map sat beside this and was deleted -- Requirement 9 keeps `meta` verbatim, so a
+# map from our names to the source's has no future reader either, and the names in it were
+# the retired corpus's.
 gold:
   from: human_checked
