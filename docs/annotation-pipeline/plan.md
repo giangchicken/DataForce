@@ -12,12 +12,12 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phase 1 is done. Phase 0 has one task left.** T1 (`2c41599`), T2 (`a2fc1df`), T3 (`9b9a3fe`),
-T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33 landed; T5 (`64edb99`), T7 (`b1c49b6`) and T6
-(`c72e5a6`), T35 and T36 closed Phase 1. `make check` is green over 54 modules holding no behaviour
-and 290 tests, all of them guards — but **T34 is open and CI is red on a line neither `make check` nor any
-guard reads.** What each task changed is recorded at the end of the task below it. **Phase 2 is
-next, and nothing in it has been started.**
+**Phase 1 is done. Phase 0 has one task left.** Phase 0: T1 (`2c41599`), T2 (`a2fc1df`),
+T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5 (`64edb99`),
+T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36 and T37. `make check` is green over
+55 modules holding no behaviour and 292 tests, all of them guards — but **T34 is open and CI is red
+on a line neither `make check` nor any guard reads.** What each task changed is recorded at the end of
+the task below it. **Phase 2 is next, and nothing in it has been started.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -100,6 +100,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T34 | The CI workflow runs what `make check` runs | 0 | T4 | S | |
 | T35 | The axis façade, and the guard that could not see through it | 1 | T6 | M | ✓ |
 | T36 | One shared request body, and `cli.py` inside `edge/` | 1 | T5 | M | ✓ |
+| T37 | Give the event stream an owner | 1 | T5 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -692,6 +693,44 @@ which is one move and visible in review. That is the cheaper failure than three 
 
 `load_data/router.py` claimed "one sub-endpoint per service" for a phase with one service. Fixed while
 it was in front of me — it was wrong before the move and would have been wrong after.
+
+---
+
+### T37 · Give the event stream an owner
+
+**Goal.** The three keys every event carries are written in one place.
+
+**Context.** § *Observability* is specified in full — stdlib `logging.getLogger(__name__)` in every
+module, a handler installed by the edge, `run_id` / `record_id` / stage on every record, INFO per
+stage per batch and WARNING per record. The layout had no module for any of it, and the spec said
+*"`edge/main.py` and `edge/cli.py` each install one handler"*. Two shells implementing one contract
+from a paragraph is two copies of it, and the paragraph is not one of them: nothing would fail when
+they drift, because an event stream has no test that reads it.
+
+The absence of an *engine* module is deliberate and stays that way — a service emits through the
+standard library and names no destination, which is what keeps logging inside Requirement 36. What
+was missing is the edge's half.
+
+**Approach.** `edge/observability.py`, `TOOL ·` — the handler and the three keys. Both shells install
+what it builds. Nothing in the engine imports it; the engine calls `logging` and this decides where
+that goes.
+
+**Acceptance criteria.** The format and the mandatory keys exist once. I1 still passes — no engine
+module reaches the edge to emit.
+
+**Source.** `spec.md` § *Observability*; AGENTS.md P27.
+
+**Verify.** `make check`. I19 requires the new module to have a row in the layout.
+
+**Out of scope.** Writing the handler. This declares the owner; T29 fills it.
+
+**Landed** with one wording fix from the same review: `edge/store/repository.py` called itself *"the
+QuestionStore port, implemented over a session"*. The port is `ports.py`. Calling the adapter a port
+is the path by which someone adds a method to "the port" here, and the engine then has to import
+`edge/store/` to name a type — the exact inversion Decision 12 moved `ports.py` inward to prevent.
+The name that was proposed for it, `PostgresQuestionStore`, is wrong for a different reason worth
+recording: SQLite and Postgres are one adapter with two DSNs, not two adapters (Decision 7). It reads
+`LOGIC · the QuestionStore adapter, over a SQLAlchemy session.`
 
 ---
 

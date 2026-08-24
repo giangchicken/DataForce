@@ -572,6 +572,7 @@ src/dataforce/              the package; its docstring states the import directi
     bootstrap.py            LOGIC · open_engine — the composition root; the only builder of an Engine.
     policy.py               LOGIC · config/<axis>/*.yaml, params.yaml and prompts into declarations.
     artifacts.py            TOOL · the one place a record file, metrics.json or a run manifest is read or written.
+    observability.py        TOOL · the stdout handler, and the three keys every event carries.
 
     routers/                one router per main endpoint; a package only where that endpoint has models of its own
       __init__.py           façade · one router per main endpoint, and the body three of them share.
@@ -592,7 +593,7 @@ src/dataforce/              the package; its docstring states the import directi
     store/                  the question store's adapter: SQLite by default, Postgres by URL (Decision 7)
       __init__.py           façade · the question store: the adapter behind the QuestionStore port.
       models.py             DEFINITION · the store's rows: what a published question and a returned answer look like.
-      repository.py         LOGIC · the QuestionStore port, implemented over a session.
+      repository.py         LOGIC · the QuestionStore adapter, over a SQLAlchemy session.
       session.py            TOOL · the store's connection and its lifetime.
 
     cli.py                  TOOL · one subcommand per stage, dispatched over the flow table; JSONL in, JSONL out.
@@ -1429,8 +1430,10 @@ path. I1's scan permits `logging` by name and forbids what it always forbade —
 
 **Every event carries the same three keys**, because an event that cannot be joined to a run and a
 record is a sentence in a log file rather than data: `run_id`, `record_id` (absent only for
-composition-time events), and the stage that emitted it. `edge/main.py` and `edge/cli.py` each install
-one handler on stdout at start-up; nothing else configures logging, and no module writes to a file.
+composition-time events), and the stage that emitted it. That contract is one module —
+`edge/observability.py` — and not a paragraph two shells each implement: `edge/main.py` and
+`edge/cli.py` install the handler it builds, nothing else configures logging, and no module writes to
+a file.
 
 **What is worth an event, and at what level.** `INFO` once per stage per batch — started, finished, how
 many records, how many skipped by precondition. `WARNING` per record for the things a human must

@@ -1,1 +1,1 @@
-"""LOGIC · the QuestionStore port, implemented over a session."""
+"""LOGIC · the QuestionStore adapter, over a SQLAlchemy session."""
