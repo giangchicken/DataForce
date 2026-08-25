@@ -2549,6 +2549,14 @@ pydantic's 422. `GET /branches` lists registered modalities and profiles with ve
 
 **Source.** `spec.md` § *Routes*, § *Request and response models*, Requirement 48; I17.
 
+**Found while building Phase 6: `POST /human-review` runs the first two of five, and `run_phase`
+runs all five.** § *Routes* says the phase endpoint is `question_generate -> publish` and stops,
+because a person answers next; `runner.run_phase` folds every stage of the phase it is given. Today
+that is harmless — the three stages after `publish` each skip a record with nothing to read — but it
+costs a store round trip per call and it contradicts the route table. Where it belongs is `flow.py`
+beside `FROM_SOURCE` and `DECLARED_ONLY`: *where a phase endpoint stops* is one more fact about the
+flow, and putting it in the router would be the router naming a stage sequence, which I17 forbids.
+
 **Verify.** `uv run pytest tests/shells -q`.
 
 ---
