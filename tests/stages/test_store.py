@@ -22,12 +22,18 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, select
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from dataforce.edge.store.models import Publication, Question
-from dataforce.edge.store.repository import SqlQuestionStore, store_run_id_for
-from dataforce.edge.store.session import store_engine
+from dataforce.edge.store.repository import (
+    SqlQuestionStore,
+    insert_of,
+    store_run_id_for,
+)
+from dataforce.edge.store.session import SUPPORTED, store_engine
+from dataforce.errors import ConfigError
 
 from .conftest import (
     RESULT,
@@ -38,6 +44,10 @@ from .conftest import (
     an_answer,
     upgraded,
 )
+
+# The two compilers, so a statement can be read as each backend would receive it. Keyed by the names
+# `session.get_bind().dialect.name` reports, which is what `insert_of` is handed.
+DIALECTS = {"sqlite": sqlite.dialect, "postgresql": postgresql.dialect}
 
 
 def rows_of(sessions: sessionmaker[Session], model: Any) -> list[Any]:
@@ -110,6 +120,37 @@ def test_a_second_write_does_not_rewrite_what_was_published(
     store.stored_questions([a_question(config_digest="deadbeef")])
 
     assert rows_of(sessions, Question)[0].config_digest == "a1b2c3d4"
+
+
+@pytest.mark.parametrize("dialect", ["sqlite", "postgresql"])
+def test_the_insert_leaves_a_held_question_to_the_constraint(dialect: str) -> None:
+    """Both dialects, because this is the one line of the adapter that knows which it is.
+
+    What the behaviour tests above cannot show is the *window*: writing one batch twice in sequence
+    is a no-op under a check as well as under a constraint, and the difference only appears when two
+    publishers overlap. So this reads the SQL instead. A genuine two-connection race is not asserted
+    anywhere — it is not reliably reproducible on SQLite, and a flaky test about concurrency is worse
+    than a stated gap (AGENTS.md §7).
+    """
+    statement = insert_of(dialect, [{"question_id": "q_0000000000000001"}])
+
+    emitted = str(statement.compile(dialect=DIALECTS[dialect]()))
+    assert "ON CONFLICT" in emitted
+    assert "DO NOTHING" in emitted
+
+
+def test_the_dialects_are_the_two_the_pool_admits() -> None:
+    """P29's other direction: the fork covers `SUPPORTED` and nothing reaches it that is not in it."""
+    assert set(DIALECTS) == set(SUPPORTED)
+
+
+def test_a_dsn_this_store_is_not_written_for_is_refused_when_the_pool_is_built() -> (
+    None
+):
+    """P23: a fact about configuration, read before any record, and by parsing rather than by
+    connecting — a driver nobody installed would otherwise fail as an `ImportError`."""
+    with pytest.raises(ConfigError, match="mysql"):
+        store_engine("mysql+pymysql://a_user@a_host/a_database")
 
 
 def test_the_receipt_names_every_question_in_the_batch(store: SqlQuestionStore) -> None:

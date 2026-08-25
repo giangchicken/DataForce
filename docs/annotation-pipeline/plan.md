@@ -2337,6 +2337,15 @@ was asked and declined* — which is the difference the pilot's skip rate is abo
 names a write and a call per record would make twenty thousand of them out of one publish. A phase
 that selected nothing returns before touching the database at all.
 
+**The store's own write was the check the sync's docstring rejects.** Found in review:
+`stored_questions` read which ids were held and inserted the rest, in one transaction — so two
+concurrent publishes of one batch both saw nothing, both inserted, and the second raised
+`IntegrityError` about a row saying exactly what it wanted to say. Replaced with
+`ON CONFLICT DO NOTHING`, which forks the adapter on the dialect for the first time; the fork is
+`insert_of`, and `store_engine` now refuses a backend that is not one of the two so nothing else can
+reach it. What is asserted is the emitted SQL on both dialects, not a live race: a two-connection
+race is not reliably reproducible on SQLite, and a flaky concurrency test is worse than a stated gap.
+
 **A sync is over the whole store, and that is the pull's only workable scope** — but the cost is
 unbounded. `synced_with_label_studio` takes no run id, and a person answers days after their task
 was made, so a run-scoped pull would never reach last week's annotations. The consequence is one

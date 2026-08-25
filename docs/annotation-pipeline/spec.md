@@ -1224,8 +1224,14 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
   of the question: a second publish of an unchanged corpus is the same rows. Insert-if-absent and not an
   upsert — an existing row records what was *published*, and overwriting its payload would rewrite a
   question a person may already have answered. `store_run_id` is a digest of the ids written rather than
-  a fresh id per call, so a re-run's record is identical except for `published_at`.
-- **SQLite by default, Postgres by URL.** SQLAlchemy 2.0 declarative models, Alembic migrations.
+  a fresh id per call, so a re-run's record is identical except for `published_at`. The no-op is
+  `ON CONFLICT DO NOTHING` and not a read of which ids are held: that read is a check with a window in
+  it, and two publishes of one batch both see nothing, both insert, and the second raises about a row
+  that says exactly what it wanted to say. It is the rule the sync's own module states, kept here too.
+- **SQLite by default, Postgres by URL.** SQLAlchemy 2.0 declarative models, Alembic migrations. The
+  two are named rather than assumed: `store_engine` reads the backend out of the DSN and refuses a
+  third when the pool is built, because `ON CONFLICT` is the one thing the adapter spells twice and a
+  backend the tests have never run against would reach that fork with nothing to do.
 - `POST /human-review/publish/sync` pushes unpublished questions into Label Studio through
   `label-studio-sdk`, writes the returned task ids into `publication`, then pulls new annotations into
   `annotator_answer`. It is idempotent in both directions: the two unique constraints are what make it

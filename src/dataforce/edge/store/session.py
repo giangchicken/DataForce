@@ -22,8 +22,10 @@ import os
 from typing import Any
 
 from sqlalchemy import Engine as StoreEngine
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, make_url
 from sqlalchemy.orm import Session, sessionmaker
+
+from dataforce.errors import ConfigError
 
 # Where a deployment says which database. Absent is ordinary, which is what the default is for.
 DATABASE_URL = "DATAFORCE_DATABASE_URL"
@@ -38,6 +40,14 @@ DEFAULT_URL = "sqlite+pysqlite:///dataforce.sqlite3"
 # the default backend -- which is P26's classic violation and Decision 7's named risk, arriving in
 # the one place a substitute is allowed to differ silently.
 SQLITE = "sqlite"
+
+# The other one, and the two together are what this store is written for (Decision 7). A list rather
+# than an assumption because `repository.py` forks on the dialect to spell its `ON CONFLICT`: a third
+# backend would reach that fork with nothing to do there. Read from the DSN when the pool is built,
+# which is before any record (P23), and by parsing rather than by connecting -- naming a database
+# nobody installed a driver for should say so, not fail importing the driver.
+POSTGRES = "postgresql"
+SUPPORTED = (SQLITE, POSTGRES)
 
 
 def store_url() -> str:
@@ -63,8 +73,16 @@ def store_engine(url: str | None = None) -> StoreEngine:
     uses to point at a real Postgres. Nothing else passes one: the composition root reads the
     environment, which is the one place a deployment's address is allowed to come from.
     """
-    engine = create_engine(url or store_url())
-    if engine.dialect.name == SQLITE:
+    dsn = url or store_url()
+    backend = make_url(dsn).get_backend_name()
+    if backend not in SUPPORTED:
+        raise ConfigError(
+            f"{DATABASE_URL} names a {backend} database and this store is written for "
+            f"{' and '.join(SUPPORTED)} (Decision 7); the schema leans on constraints "
+            "the two of them have been tested against and a third has not"
+        )
+    engine = create_engine(dsn)
+    if backend == SQLITE:
         event.listen(engine, "connect", turn_on_foreign_keys)
     return engine
 
