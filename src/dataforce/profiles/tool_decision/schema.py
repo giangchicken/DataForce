@@ -118,6 +118,14 @@ class AnswerConfig(BaseModel):
             "correction gated behind it. Community tags only (Requirement 52)."
         ),
     )
+    data: dict[str, Any] = Field(
+        ...,
+        description=(
+            "The task-payload keys this half *owns*: `tool_names`, as the objects a "
+            "dynamic choice list reads. Per record, because the catalog is, which is "
+            "why a static `<Choice>` list cannot express it (Requirement 52)."
+        ),
+    )
 
 
 class LabelCheck(NamedTuple):

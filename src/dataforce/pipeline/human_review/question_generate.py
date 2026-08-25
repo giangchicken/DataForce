@@ -21,12 +21,16 @@ yet** -- T27 is where that check lands, and saying so is cheaper than implying i
 (AGENTS.md §7).
 
 **The permitted answers are copied onto the record, and the copy is the point.** They are the
-profile's capture half, read once through ``answer_config().verdicts``, and an answer read a year
+profile's capture half, read through ``answer_config(record).verdicts``, and an answer read a year
 from now has to be legible against what was askable when it was asked -- a live reference would
 re-read a question answered under three verdicts as one that offered four. The cost is two
 statements of one tuple, and the record's is the one that stays right about the past. Reading a
 *field* off a type this module may not import is the connascence ``label_check`` already carries on
 ``LabelCheck.name``, named here for P14's reason rather than left to be noticed.
+
+The call is per record and was hoisted out of the fold until T24, when the capture half gained the
+task data it owns and therefore a record to read it from. The verdicts are the same tuple every
+time; what moved is that the member answering for them now answers for a per-record thing too.
 
 **The id covers the words, not only the record.** Idempotency downstream is a unique constraint on
 ``question_id`` (§ *The question store*), so an id that did not move when a question was reworded
@@ -91,15 +95,9 @@ def question_id_for(
     return ID_PREFIX + compute_hash(FIELD_SEPARATOR.join(fields))[:ID_LENGTH]
 
 
-def question_about(
-    engine: Engine, record: Record, permitted: tuple[str, ...]
-) -> Question:
-    """One record's question: the words, the answers it permits, and the id that joins both.
-
-    `permitted` is handed in rather than read here because the capture half is a fact about the run
-    and not about the record -- `answer_config()` takes none, so reading it per record would be
-    twenty thousand calls that cannot return twenty thousand answers.
-    """
+def question_about(engine: Engine, record: Record) -> Question:
+    """One record's question: the words, the answers it permits, and the id that joins both."""
+    permitted: tuple[str, ...] = engine.profile.answer_config(record).verdicts
     content = engine.profile.question_text(record)
     return Question(
         question_id=question_id_for(
@@ -117,11 +115,7 @@ def question_generate(engine: Engine, records: Iterable[Record]) -> ServiceResul
     One question, in a tuple of one (Requirement 29). The tuple is the record's shape and not this
     stage's ambition: a second *kind* of question is a change to this module and to nothing else,
     which is what the shape leaves room for.
-
-    The capture half is read before the first record, on `triage`'s line: a profile that cannot say
-    what an answer may be stops the run rather than half of it.
     """
-    permitted: tuple[str, ...] = engine.profile.answer_config().verdicts
     written: list[Record] = []
     for record in records:
         if not needs_a_question(record):
@@ -131,7 +125,7 @@ def question_generate(engine: Engine, records: Iterable[Record]) -> ServiceResul
             record.model_copy(
                 update={
                     "human_review": record.human_review.model_copy(
-                        update={STAGE: (question_about(engine, record, permitted),)}
+                        update={STAGE: (question_about(engine, record),)}
                     )
                 }
             )

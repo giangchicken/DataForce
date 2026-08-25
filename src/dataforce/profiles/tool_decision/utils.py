@@ -105,6 +105,8 @@ VALUE = "value"
 CHOICES = "choices"
 TEXT = "text"
 VERDICT = "verdict"
+# The payload key the capture half owns, read by `$tool_names` in the fragment above it.
+TOOL_NAMES = "tool_names"
 CORRECTED_NAMES = "corrected_names"
 CORRECTED_ARGUMENTS = "corrected_arguments"
 INCORRECT = "incorrect"
@@ -599,13 +601,20 @@ class ToolDecision:
         """This record's permitted answers: `oneOf` per offered tool. Never persisted."""
         return answer_schema(record, self._max_calls)
 
-    def answer_config(self) -> AnswerConfig:
-        """How an answer is controlled: cardinality ceiling, argument handling."""
+    def answer_config(self, record: Record) -> AnswerConfig:
+        """The capture half: the fragment that collects an answer, and the task data it owns.
+
+        The tool names are objects and not strings -- `{"value": "SendStatement"}` -- because that
+        is what a dynamic choice list reads, and it is the kind of detail a parser written from
+        memory gets wrong. In the catalog's own order, which is the order the record was answered
+        under and the order `scenario_hash` is taken over.
+        """
         return AnswerConfig(
             control=self._control,
             max_calls=self._max_calls,
             verdicts=VERDICTS,
             tags=CAPTURE_TAGS,
+            data={TOOL_NAMES: [{VALUE: tool.name} for tool in catalog_of(record)]},
         )
 
     def build_record(

@@ -127,8 +127,12 @@ class Profile(Protocol):
     def answer_schema(self, record: Record) -> dict:
         """This record's permitted answers: `oneOf` per offered tool. Never persisted."""
 
-    def answer_config(self) -> AnswerConfig:
-        """How an answer is controlled: cardinality ceiling, argument handling."""
+    def answer_config(self, record: Record) -> AnswerConfig:
+        """The capture half: the fragment that collects an answer, and the task data it owns.
+
+        Takes the record for `display_config`'s reason -- half of what it returns is per record.
+        The catalog an annotator chooses from is this record's, and a Label Studio project holds
+        one config for every task in it, so the names travel as *data* and not as markup."""
 
     def build_record(self, item: Mapping[str, Any], parts: Sequence[Part],
                      provenance: Provenance) -> Record:
@@ -1246,7 +1250,11 @@ names above, and nothing else:
 ```
 
 Dynamic choices read *objects*, not strings — `{"value": "LookupBalance"}` — which is the kind of
-detail a parser written from memory gets wrong. `question_id` rides inside `data` because Label Studio
+detail a parser written from memory gets wrong. **Each half owns its own keys**, and they are
+disjoint: `conversation` is the display half's, `tool_names` is the capture half's, and `question_id`
+and `question` are neither axis's — `publish` adds them, because neither axis knows a question.
+That is why `answer_config` takes a record: half of what it returns is per record, exactly as
+`display_config` is. `question_id` rides inside `data` because Label Studio
 assigns its own task ids and we must map an annotation back to the question that produced it;
 `publication` records the pair, and `data.question_id` is what makes the mapping survive a project
 rebuild. Requirement 30 is asserted on this dict: no vote, no cohesion number, no bucket appears in it.

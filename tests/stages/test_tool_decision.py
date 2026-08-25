@@ -812,7 +812,7 @@ def test_a_control_the_annotator_never_touched_is_simply_absent() -> None:
 
 def test_the_capture_half_declares_the_verdicts_and_emits_no_display_tag() -> None:
     """Requirement 31: neither half of the config may emit the other's."""
-    control = a_profile().answer_config()
+    control = a_profile().answer_config(a_record())
 
     assert control.verdicts == ("correct", "incorrect", "unsure")
     assert control.max_calls == 2
@@ -820,6 +820,24 @@ def test_the_capture_half_declares_the_verdicts_and_emits_no_display_tag() -> No
     assert "<Paragraphs" not in control.tags
     assert '<Choices name="verdict"' in control.tags
     assert 'value="$tool_names"' in control.tags
+    assert "conversation" not in control.data
+
+
+def test_the_capture_half_owns_this_records_tool_names_as_objects() -> None:
+    """A dynamic choice list reads `{"value": …}` objects, which is what a parser written from
+    memory gets wrong — and the catalog is per record, so a static `<Choice>` list cannot say it."""
+    control = a_profile().answer_config(a_record())
+
+    assert control.data["tool_names"] == [
+        {"value": "LookupBalance"},
+        {"value": "SendStatement"},
+        {"value": "OpenTicket"},
+    ]
+
+
+def test_a_record_offered_nothing_offers_the_annotator_nothing_to_choose() -> None:
+    """An empty catalog is a quarantine, not a crash: the list is empty and the config still composes."""
+    assert a_profile().answer_config(a_record(tools=[])).data["tool_names"] == []
 
 
 # --- the four members a later phase reads ---

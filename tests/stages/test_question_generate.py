@@ -109,7 +109,9 @@ def test_the_permitted_answers_are_the_profiles_capture_half() -> None:
     """`enum` is a copy of one declaration, so the record stays legible against a past answer."""
     engine = an_engine_asking()
 
-    assert the_question(engine).enum == engine.profile.answer_config().verdicts
+    assert (
+        the_question(engine).enum == engine.profile.answer_config(a_record()).verdicts
+    )
 
 
 def test_free_text_is_not_a_permitted_answer() -> None:

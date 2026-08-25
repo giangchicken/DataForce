@@ -13,11 +13,13 @@ every service's signature is ``(engine, records)`` and a port has no other way t
 ``personal_data_verifier`` is layer two's interface and ``jury_panel`` is the panel's, never a
 client this module builds.
 
-**Both ports default to ``None`` and the two absences mean different things.** Layer two is a
+**Every port defaults to ``None`` and the absences do not mean the same thing.** Layer two is a
 *second* layer, so an engine without one still scans: ``pii_check`` runs its patterns and the record
 says `unverified`. A jury without a panel has nothing to run at all, so ``jury`` refuses the run
-rather than writing a key that says the panel agreed on nothing -- the field is optional here
-because the type cannot express *required for one phase*, and the stage is where that is said.
+rather than writing a key that says the panel agreed on nothing, and ``publish`` refuses one without
+a store for the same reason -- there is nowhere to put a question and a receipt for a write nobody
+made is a lie. The fields are optional here because the type cannot express *required for one
+phase*, and the stage that needs one is where that is said.
 
 **``ServiceResult`` is here because this is where a service's signature is written.** ``Engine``
 is what a stage is handed and ``ServiceResult`` is what it hands back, and the two are one sentence:
@@ -36,7 +38,7 @@ from typing import Any, final
 
 from dataforce.errors import ConfigError
 from dataforce.modalities import Modality
-from dataforce.ports import JuryPanel, PersonalDataVerifier
+from dataforce.ports import JuryPanel, PersonalDataVerifier, QuestionStore
 from dataforce.profiles import Profile
 from dataforce.record import Record
 
@@ -110,6 +112,9 @@ class Engine:
         None  # layer two; None runs layer one alone
     )
     jury_panel: JuryPanel | None = None  # the panel; None is `jury`'s `ConfigError`
+    question_store: QuestionStore | None = (
+        None  # the store; None is `publish`'s `ConfigError`
+    )
 
 
 @dataclass(frozen=True)
