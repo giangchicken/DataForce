@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 4 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-`make check` is green over 56 modules and 835 tests, 285 of which are not guards — but **T34 is open
+`make check` is green over 56 modules and 858 tests, 308 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 5 opens with T19, and T34 is still the oldest thing on this
 list.**
@@ -134,7 +134,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | ✓ |
 | T19 | `jury` | 5 | T2, T13, T15 | M | ✓ |
 | T20 | `cohesion` | 5 | T19 | S | ✓ |
-| T21 | `triage` | 5 | T20 | S | |
+| T21 | `triage` | 5 | T20 | S | ✓ |
 | T22 | `question_generate` | 6 | T21 | M | |
 | T23 | The question store | 6 | T3, T9 | M | |
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | |
@@ -2021,6 +2021,40 @@ No numeric literal in the module (P25).
 **Source.** `spec.md` § *Per-service contracts* row 6, Requirements 26 and 27; Decision 3.
 
 **Verify.** `uv run pytest tests/stages/test_triage.py -q`.
+
+**Landed.** 23 tests, one new `params.py` reader, and `params.thresholds.triage` filled in — it had
+been `{}` with a `(T21)` comment since Phase 0.
+
+**The cells are code and the numbers are config.** Two floors make four cells — `confirmed`,
+`disputed`, `divided`, `contested` — and the cell structure is logic, not a threshold: what
+Requirement 27 forbids in code is a *tuned* number, and a coordinate pair is not one. Every floor,
+stratum and quota is a line in `params.yaml`, so a boundary that moves is an attributable edit whose
+digest the manifest records. The four cell names are read by whoever audits a quota, which is why
+they are words and not a pair of booleans.
+
+**A quota is a share of the bucket, applied per record from a digest of its `record_id`.** A *count*
+per bucket was the obvious reading of the word and it is not reproducible: selection would depend on
+which records happened to be in the batch, so two runs over one corpus select different records
+(Requirement 23) and a re-tuning pass churns the audit sample. A share needs no batch-wide state and
+re-runs identically. The digest is `compute_hash(record_id)` rather than the id read as base sixteen,
+because `Record.record_id` is a string and a malformed one would be a `ValueError` out of arithmetic.
+
+**Where a record with no usable votes lands, decided rather than fallen into.** `cohesion` scores
+absent evidence as `0.0`, so a panel that failed, a panel of one and a panel that answered nothing
+valid all meet neither floor and land in `contested` — whose quota is declared for records a person
+should see. A bucket with `quota: 0` selects nothing and the `reason` says so, which is
+`objective.md` §8's rule for a bucket whose precision the pilot cannot establish: a row retires
+without being deleted.
+
+**What the shipped floors cost, written into `params.yaml` rather than discovered later.** At 0.7,
+two jurors of three agreeing with the label is 0.667 and reads as *no agreement*, so a 2-of-3
+majority is `contested` and goes to a person. That is the conservative side to be provisionally
+wrong on, and it is the first thing the pilot's bucket precision will argue about.
+
+`thresholds.jury` stays `{}`, and its comment now says why rather than naming three numbers T19
+would fill: `jury` reads no threshold. A panel floor and an invalid-vote rate were sketched there
+before Decision 10 deleted the gates, and comparing `invalid_votes` to anything is a line in
+`metrics.json` (Requirement 44), not a value on a record.
 
 ---
 

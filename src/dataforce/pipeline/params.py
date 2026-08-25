@@ -78,6 +78,20 @@ def declared_ratio(engine: Engine, *path: str) -> float:
     return float(value)
 
 
+def declared_text(engine: Engine, *path: str) -> str:
+    """One declared name, or a `ConfigError` naming what is there instead.
+
+    Absent is not ordinary here and neither is blank: a stratum is the group a quota is audited
+    by, and `""` files every bucket that forgot to declare one under a name no report can print.
+    """
+    value = declaration(engine, *path)
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(
+            f"params.yaml declares {'.'.join(path)} as {value!r}, which is not a name"
+        )
+    return value
+
+
 def declared_digest(engine: Engine, *path: str) -> str:
     """The digest `params.yaml` declares at that path, or `""` where no corpus is declared yet.
 

@@ -31,9 +31,45 @@ invalid_counts:
   label_names_one_tool_twice:
 
 thresholds:
-  jury: {}          # panel floor, invalid-vote rate, estimated-token ceiling (T19)
-  triage: {}        # bucket boundaries, stratum quotas, audit sizing (T21)
+  # Empty and reads as empty: `jury` holds no threshold. A panel floor and an invalid-vote
+  # rate were sketched here before Decision 10 deleted the gates, and a number nothing reads
+  # is a number that goes stale unnoticed -- `invalid_votes` and the vote count are on every
+  # record, and comparing them to anything is a line in metrics.json (Requirement 44). Kept as
+  # a declared key so the question is visible rather than forgotten.
+  jury: {}
+
   pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T31)
+
+  # Two floors and one row per cell they make. Every value here is provisional: `objective.md`
+  # §8 calls bucket thresholds provisional until the pilot measures them, and `triage` gets
+  # exactly one re-tuning pass afterwards. What re-measures them is the pilot's own question --
+  # does each bucket predict what humans find -- and a bucket whose precision the pilot cannot
+  # establish gets `quota: 0`, which is how a bucket is retired without deleting its row.
+  #
+  # A quota is a share of the bucket, applied per record from a digest of its `record_id`, so
+  # two runs over one corpus select the same records and a re-tuning pass does not churn the
+  # audit sample.
+  triage:
+    # Agreement is `1 - δ`, so 0.7 is "mostly the same answer". Below the first floor the
+    # jurors do not agree with each other; below the second they do not agree with the label.
+    # Note what 0.7 costs on a panel of three: two jurors of three agreeing with the label is
+    # 0.667 and reads as no agreement, so a 2-of-3 majority lands in `contested` and goes to a
+    # person. That is the conservative side to be provisionally wrong on, and it is the first
+    # thing the pilot's bucket precision will argue about.
+    self_agreement_floor: 0.7
+    label_agreement_floor: 0.7
+    buckets:
+      # Both floors met: the panel and the label say the same thing. Sampled, not reviewed --
+      # this is the audit sample the unvalidated remainder's error bar is estimated from.
+      confirmed: { stratum: audit, quota: 0.05 }
+      # The jurors agree with each other and against the label. The highest-value review there
+      # is, so all of it goes to a person.
+      disputed: { stratum: flagged, quota: 1.0 }
+      # The jurors split and lean toward the label.
+      divided: { stratum: flagged, quota: 1.0 }
+      # Neither floor met, which is also where a record with no usable votes lands: `cohesion`
+      # scores absent evidence as 0.0, so a panel that failed and a panel of one arrive here.
+      contested: { stratum: flagged, quota: 1.0 }
 
   # The one threshold with a value, because a similarity has no defensible default: 0 groups
   # every record with every other and 1 groups nothing, so `duplicate_check` refuses to guess
