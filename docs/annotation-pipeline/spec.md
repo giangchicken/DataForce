@@ -1046,6 +1046,18 @@ correction.** A verdict, a confidence and three counts are what a fold produces;
 and what they proposed instead are on the responses. The alternative was four more fields on
 `OverlapVerdict`, copied from the key beside it — one more place for the same fact.
 
+**An overlap is a number of people, not a number of submissions.** Nothing upstream enforces that:
+the store has no unique `(question_id, annotator_id)`, and the sync writes every annotation the tool
+returned. So `aggregate` and `curate` both fold over one answer per annotator — the last each of them
+submitted — through `aggregate.one_answer_each`. Deduplicated at the fold rather than forbidden at
+the store, because a person revising their own answer is legitimate and the second row *is* the
+revision; what is not legitimate is counting it as a second opinion. Everything the numbers are read
+for is about independent observers: `confidence` would take a self-pair for a corroboration, an
+overlap floor of two would be cleared by one person twice, and Krippendorff's α is **defined** over
+coders, so a unit holding one person twice is not a weak measurement of agreement but not a
+measurement of one. `curate` needs it for a second reason — `vote_consensus` wants a strict majority
+per tool name, and one person answering twice would otherwise outvote two who answered once.
+
 **`aggregate` writes one number that is not about its record.** `overlap` and `confidence` are the
 record's; `alpha` is Krippendorff's α over the batch, which is a fact about the annotation *design*
 and is written identically on every record the run aggregated. A record aggregated alone therefore
@@ -1317,7 +1329,10 @@ is a skip and carries no verdict.
 
 **The rungs are project settings, not prose.** Smoke is `maximum_annotations: 1`. Pilot is
 `maximum_annotations: 2` with `overlap_cohort_percentage: 100` — that *is* "two annotators at 100%
-overlap", and `aggregate`'s overlap floor reads the same number so the two cannot drift. That floor
+overlap", and `aggregate`'s overlap floor reads the same number so the two cannot drift. The two
+count slightly different things — `maximum_annotations` is a ceiling on *submissions* per task and
+the floor is a count of *people* — and they agree because Label Studio does not hand one task to the
+same annotator twice. Where they part is exactly where the floor is right and the ceiling is not. That floor
 is `params.thresholds.aggregate.overlap_floor`, and the two moving together is a discipline until
 there is a project to read: a project collecting one answer and a floor of two produces a corpus
 where nothing is ever aggregated and nothing says why.

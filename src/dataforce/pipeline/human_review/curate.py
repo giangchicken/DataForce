@@ -30,6 +30,12 @@ precondition will. Requirement 49's malformed correction and a verdict of *unsur
 and inventing an ingest-time timestamp would put a value in the record that two runs disagree about
 (I15). When it was decided *is* when the last person who decided it pressed submit.
 
+**This is the one stage that imports another.** ``one_answer_each`` is ``aggregate``'s, because
+what an overlap *is* belongs to the stage that writes ``overlap`` -- and a majority here has to be
+of the same people that verdict was folded from, or the two keys describe different rooms. The
+dependency is not new: this stage already reads ``human_review.aggregate``, and § *Per-service
+contracts* says so. The import makes it visible instead of implied.
+
 **``adjudicated_by`` is always ``None``, and that is a gap rather than a design.** Requirement 35
 says curate records who adjudicated where the validators disagreed; nothing in this system performs
 an adjudication, which would be a second trip through the store with a named arbiter. Until one
@@ -48,6 +54,8 @@ from dataforce.record import (
     Record,
     StoredAnswer,
 )
+
+from .aggregate import one_answer_each
 
 # The key this stage owns, under `human_review` (P16: one key, one writer).
 STAGE = "curate"
@@ -73,13 +81,19 @@ def responses_behind(record: Record) -> tuple[AnnotatorResponse, ...]:
     correction -- so this stage reads the answers themselves rather than adding four fields to a
     summary. Its § *Per-service contracts* cell says so.
 
+    Folded to one answer per person by `aggregate.one_answer_each`, for the reason that function
+    carries and for one of this stage's own: `vote_consensus` needs a *strict majority per tool
+    name*, so one person answering twice would otherwise outvote two people who each answered once.
+    `validators` was already de-duplicated and the corrections were not, which is one stage holding
+    two ideas of what an annotator is.
+
     A verdict with no answers under it cannot happen through the flow, because `aggregate` writes
     one only where the overlap floor was met. It can happen through `POST /human-review/curate` with
     a hand-made body, and the fold treats it as nothing to curate rather than as a crash: the
     validators and the clock both come from here, and there is no honest value for either.
     """
     returned = record.human_review.annotator_answers
-    return returned.responses if returned else ()
+    return one_answer_each(returned.responses) if returned else ()
 
 
 def corrections_in(responses: Sequence[AnnotatorResponse]) -> tuple[StoredAnswer, ...]:
@@ -104,8 +118,9 @@ def curated_label(
 ) -> FinalLabel:
     """One record's final label: what ships, why it is that, and who decided.
 
-    `validators` is every annotator who answered, de-duplicated in the order they came back --
-    a person who answered twice about one record is one validator of it.
+    `validators` is every annotator who answered, in the order they came back. It needs no
+    de-duplication of its own: `responses_behind` hands one answer per person, which is the same
+    list the verdict, the confidence and α were folded from.
     """
     status: Status
     if verdict.verdict == engine.profile.answer_config(record).endorsing_verdict:
@@ -119,9 +134,7 @@ def curated_label(
     return FinalLabel(
         status=status,
         label=label,
-        validators=tuple(
-            dict.fromkeys(response.annotator_id for response in responses)
-        ),
+        validators=tuple(response.annotator_id for response in responses),
         adjudicated_by=None,
         decided_at=max(response.submitted_at for response in responses),
     )

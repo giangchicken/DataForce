@@ -17,7 +17,7 @@ from dataforce.pipeline.human_review.aggregate import aggregate
 from dataforce.pipeline.human_review.curate import curate
 from dataforce.record import FinalLabel, Record
 
-from .test_aggregate import an_engine_folding, by, folded
+from .test_aggregate import LATER, an_engine_folding, by, folded
 from .test_label_check import written_paths
 from .test_tool_decision import LOOKED_UP, SENT, TICKETED, a_record
 
@@ -153,6 +153,32 @@ def test_the_final_label_validates_against_the_records_answer_space() -> None:
 
     assert label_of(written).label == (TICKETED, SENT)
     assert engine.profile.answer_is_permitted(label_of(written).label, written)
+
+
+def test_one_person_cannot_outvote_another_by_answering_twice() -> None:
+    """`vote_consensus` needs a strict majority per tool name, and two rows from one person is one.
+
+    Undeduplicated this is three votes with `LookupBalance` in two of them — a majority, and a
+    label shipped on one annotator's say-so against another's.
+    """
+    written = curated(
+        an_engine_folding(),
+        by(
+            "u_1",
+            corrected_names=["LookupBalance"],
+            corrected_arguments=BOTH_SAY_LOOKUP,
+        ),
+        by(
+            "u_1",
+            corrected_names=["LookupBalance"],
+            corrected_arguments=BOTH_SAY_LOOKUP,
+            submitted_at=LATER,
+        ),
+        by("u_2"),
+    )
+
+    assert label_of(written).status == "unresolved"
+    assert label_of(written).validators == ("u_1", "u_2")
 
 
 # --- nobody could decide ---

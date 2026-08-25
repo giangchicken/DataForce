@@ -56,17 +56,23 @@ def an_annotation_of(
     *,
     annotator_id: str = "u_14",
     was_skipped: bool = False,
+    submitted_at: datetime = ANSWERED_AT,
     **controls: Any,
 ) -> StoredAnnotation:
-    """One answer as the store holds it: the control values verbatim, and the tool's envelope."""
+    """One answer as the store holds it: the control values verbatim, and the tool's envelope.
+
+    `answer_id` carries the clock as well as the answerer, because the store's key is per *answer*
+    and a person answering twice about one question is two rows there — which is the whole of what
+    `aggregate.one_answer_each` is about.
+    """
     return StoredAnnotation(
-        answer_id=f"a_{annotator_id}_{question_id}",
+        answer_id=f"a_{annotator_id}_{question_id}_{int(submitted_at.timestamp())}",
         question_id=question_id,
         annotator_id=annotator_id,
         result=tuple(an_annotation(**controls)),
         was_skipped=was_skipped,
         lead_time_seconds=41.5,
-        submitted_at=ANSWERED_AT,
+        submitted_at=submitted_at,
     )
 
 

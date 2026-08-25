@@ -12,7 +12,9 @@ implementation's.
 Every fixture is invented (AGENTS.md §9).
 """
 
+from collections.abc import Sequence
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import pytest
 
@@ -29,7 +31,7 @@ from dataforce.record import OverlapVerdict, Record
 
 from .test_annotator_answers import an_annotation_of, an_engine_reading, store_of
 from .test_label_check import written_paths
-from .test_question_generate import asked
+from .test_question_generate import another_record, asked
 from .test_tool_decision import LOOKED_UP, SENT, a_record
 from .test_triage import thresholds
 
@@ -39,6 +41,8 @@ SENT_NEARLY = [
 ]
 # A correction naming a different tool entirely.
 LOOKED_UP_INSTEAD = ['{"LookupBalance": {"ma_khach": "480215"}}']
+# Later than `test_annotator_answers.ANSWERED_AT`, for the same person answering twice.
+LATER = datetime(2026, 8, 25, 15, 30, tzinfo=UTC)
 
 
 def an_engine_folding(overlap_floor: int = 1) -> Engine:
@@ -61,6 +65,23 @@ def folded(
     )
     read = annotator_answers(engine, published).records
     return aggregate(engine, read).records[0]
+
+
+def folded_pair(
+    engine: Engine,
+    first: Sequence[object],
+    second: Sequence[object],
+) -> tuple[Record, ...]:
+    """Two records published and folded in one batch, which is the only way α sees two units."""
+    published = publish(engine, asked(engine, a_record(), another_record())).records
+    for record, annotations in zip(published, (first, second), strict=True):
+        question_id = record.human_review.publish.stored[0]  # type: ignore[union-attr]
+        store_of(engine).answers.extend(
+            making(question_id)  # type: ignore[operator]
+            for making in annotations
+        )
+    read = annotator_answers(engine, published).records
+    return aggregate(engine, read).records
 
 
 def saying(**controls: object) -> object:
@@ -181,6 +202,77 @@ def test_one_answer_is_not_a_corroborated_one() -> None:
 
     assert verdict_of(written).confidence == 0.0
     assert verdict_of(written).overlap == 1
+
+
+# --- one answer per person, which is what an overlap counts ---
+
+
+def test_one_person_answering_twice_is_an_overlap_of_one() -> None:
+    """An overlap is people. Nothing upstream enforces that: the store takes both rows."""
+    written = folded(
+        an_engine_folding(),
+        by("u_1", verdict=["incorrect"]),
+        by("u_1", verdict=["correct"], submitted_at=LATER),
+    )
+
+    assert verdict_of(written).overlap == 1
+
+
+def test_one_person_answering_twice_does_not_clear_a_floor_of_two() -> None:
+    """The floor is *how many people looked*, so two submissions from one of them is still one."""
+    engine = an_engine_folding(overlap_floor=2)
+
+    written = folded(engine, by("u_1"), by("u_1", submitted_at=LATER))
+
+    assert written.human_review.aggregate is None
+    assert written.human_review.annotator_answers is not None
+
+
+def test_a_self_pair_is_not_a_corroboration() -> None:
+    """Two identical answers from one person scored 1.0 before the fold read people."""
+    written = folded(an_engine_folding(), by("u_1"), by("u_1", submitted_at=LATER))
+
+    assert verdict_of(written).confidence == 0.0
+
+
+def test_the_later_answer_supersedes_the_same_persons_earlier_one() -> None:
+    """A re-submission is a revision, so it is the second answer that stands."""
+    written = folded(
+        an_engine_folding(),
+        by("u_1", verdict=["incorrect"]),
+        by("u_1", verdict=["unsure"], submitted_at=LATER),
+    )
+
+    assert verdict_of(written).verdict == "unsure"
+
+
+def test_alpha_does_not_price_a_person_against_themselves() -> None:
+    """Two records: one two people agreed about, one where a person contradicted themselves.
+
+    Deduplicated, the second is a unit of one and α measures the first alone: 1.0. Undeduplicated
+    it is a split unit beside an agreeing one — the corpus
+    `test_one_disagreeing_unit_in_two_scores_chance` hand-works to 0.0. So this number is the whole
+    difference between *nobody disagreed* and *agreement no better than chance*.
+    """
+    written = folded_pair(
+        an_engine_folding(),
+        (by("u_1", verdict=["correct"]), by("u_2", verdict=["correct"])),
+        (
+            by("u_3", verdict=["correct"]),
+            by("u_3", verdict=["incorrect"], submitted_at=LATER),
+        ),
+    )
+
+    assert verdict_of(written[0]).alpha == 1.0
+
+
+def test_the_record_still_carries_both_answers_the_store_held() -> None:
+    """The fold reads one each; `annotator_answers` stays a faithful mirror of the store."""
+    written = folded(an_engine_folding(), by("u_1"), by("u_1", submitted_at=LATER))
+
+    responses = written.human_review.annotator_answers
+    assert responses is not None
+    assert len(responses.responses) == 2
 
 
 # --- Krippendorff's α, hand-worked ---

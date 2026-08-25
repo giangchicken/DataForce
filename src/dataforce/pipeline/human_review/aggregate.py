@@ -11,6 +11,12 @@ this run aggregated. A record aggregated alone therefore carries the α of a cor
 records are comparable on it only within one run. That is what a corpus statistic is; it is on the
 record because the records are the report (Requirement 44).
 
+**All three are folded over one answer per person** (``one_answer_each``). Two rows from one
+annotator are a revision and not a second opinion, and every number above is about independent
+observers -- so the later answer stands and the earlier one is not counted beside it. The store
+permits the second row on purpose, because a person correcting themselves is legitimate; what is
+not is a self-pair scoring as a corroboration.
+
 **α is over the verdict and not over the correction, and that is a real choice.** α compares every
 value to every other to estimate what disagreement chance alone would produce, so it needs one value
 space every unit shares. The three verdicts are that space. A *correction* is an answer to one
@@ -58,15 +64,42 @@ OVERLAP_FLOOR = ("thresholds", "aggregate", "overlap_floor")
 MEASURABLE = 2
 
 
+def one_answer_each(
+    responses: Sequence[AnnotatorResponse],
+) -> tuple[AnnotatorResponse, ...]:
+    """One answer per annotator -- the last each of them submitted -- in the order they first appear.
+
+    **An overlap is a number of people and not a number of submissions**, and nothing upstream
+    enforces that: the store has no unique `(question_id, annotator_id)` and the sync writes every
+    annotation the tool returned. Deduplicated here rather than forbidden there, because a person
+    revising their own answer is legitimate and the second row *is* the revision -- what is not
+    legitimate is counting it as a second opinion.
+
+    Every number this stage writes is about independent observers, which is why the fold and not
+    just `overlap` reads this: `confidence` would take a self-pair for a corroboration, a floor of
+    two would be cleared by one person twice, and α is **defined** over coders -- a unit holding
+    one person twice is not a weak measurement of agreement but not a measurement of one.
+
+    First-appearance order is kept so `agreed_verdict`'s tiebreak stays *whoever answered first*,
+    which is a person rather than a row.
+    """
+    latest: dict[str, AnnotatorResponse] = {}
+    for response in responses:
+        held = latest.get(response.annotator_id)
+        if held is None or held.submitted_at <= response.submitted_at:
+            latest[response.annotator_id] = response
+    return tuple(latest.values())
+
+
 def responses_to_fold(record: Record) -> tuple[AnnotatorResponse, ...]:
-    """This stage's precondition, as the value it needs: what people said about this record.
+    """This stage's precondition, as the value it needs: what each person said about this record.
 
     Absent and empty are one fact -- *nobody has answered* -- which is the shape `publish` uses and
     not `cohesion`'s. A record whose every answer was a skip has the key with nothing in it, and it
     reaches the floor test as the zero responses it is.
     """
     returned = record.human_review.annotator_answers
-    return returned.responses if returned else ()
+    return one_answer_each(returned.responses) if returned else ()
 
 
 def response_distance(

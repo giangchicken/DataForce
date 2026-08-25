@@ -2408,6 +2408,18 @@ stamp would be a value two runs disagree about (I15). `adjudicated_by` is always
 a gap rather than a design: nothing here performs an adjudication, so a disagreement is `unresolved`
 and goes back to a person (AGENTS.md §7).
 
+**An overlap counted submissions, and three documents said it counted people.** Found in review
+after the phase landed: `overlap` was `len(responses)`, the floor gated on the same count, and
+`record.py`, § *The record* and the store's own `annotator_id` comment all said *annotators*. `curate`
+disagreed in the other direction — `validators` was de-duplicated and `corrections_in` was not, so
+one stage held two ideas of what an annotator is. Fixed as the code, not the descriptions:
+`aggregate.one_answer_each` keeps the last answer per person and both stages fold through it. α
+decided the direction — it is *defined* over coders, so a unit pricing someone against themselves is
+not a weak measurement but not one at all. Deduplicated at the fold rather than forbidden at the
+store, because revising an answer is legitimate; `annotator_answers` still mirrors every row, and
+one test asserts that. `curate` is now the one stage that imports another, which is the dependency
+its contract cell already declared.
+
 **`human_review` joined the conservation property**, so all eleven built stages now fold over one
 corpus in the flow's order. It needed one fixture that models something a fold cannot contain — a
 store where a person answers the moment a question arrives — because `publish` and
