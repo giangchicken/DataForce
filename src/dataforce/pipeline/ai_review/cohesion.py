@@ -41,6 +41,21 @@ STAGE = "cohesion"
 METHOD = "mean_1_minus_delta_over_valid_votes"
 
 
+def votes_to_fold(record: Record) -> PanelVerdict | None:
+    """This stage's precondition, as the value it needs: what `jury` wrote, or None.
+
+    **The key and not the votes in it.** A record whose panel *failed* has a key with no votes and
+    is measured -- `0.0` against `0.0` is what a record with no evidence should carry into a
+    bucket. A record `jury` *skipped* has no key at all and comes back with none from here either,
+    so `triage` reads one absence rather than two.
+
+    A `bool` was the other shape and it is the worse one: it cannot narrow, so the caller reads
+    `ai_review.jury` a second time and proves again that it is there -- which is the assert this
+    phase just finished deleting (P22). Named for what it returns, beside the signature, once.
+    """
+    return record.ai_review.jury
+
+
 def mean(values: Sequence[float]) -> float:
     """The mean of those, and `0.0` over none of them -- never `NaN`, and never `1.0`."""
     return sum(values) / len(values) if values else 0.0
@@ -56,7 +71,9 @@ def agreement(engine: Engine, a: StoredAnswer, b: StoredAnswer) -> float:
     return 1.0 - engine.profile.answer_distance(a, b)
 
 
-def scores_of(engine: Engine, record: Record, verdict: PanelVerdict) -> AgreementScores:
+def agreement_scores(
+    engine: Engine, record: Record, verdict: PanelVerdict
+) -> AgreementScores:
     """This record's two numbers: the jurors against each other, and against the label it carries.
 
     Pairwise for the first, because agreement among N is a property of the pairs and not of any
@@ -82,23 +99,23 @@ def scores_of(engine: Engine, record: Record, verdict: PanelVerdict) -> Agreemen
 def cohesion(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every judged record, one key richer: how much its panel agreed, and with what.
 
-    The precondition is the key `jury` writes (P12), and it is the key rather than what is in it:
-    a record `jury` skipped has nothing to fold and comes back with no `cohesion` key either, so
-    `triage` sees one absence rather than two. A record whose panel *failed* is a different case
-    and is measured -- the key is there, the votes are not, and `0.0` against `0.0` is what a
-    record with no evidence should carry into a bucket.
+    The precondition is `votes_to_fold`, named beside the signature and not spelled inside the
+    fold (P12): what it has to make visible is that the *key* is the condition and not the votes
+    in it. The loop is `pii_check`'s shape for the same reason -- a skip is one readable statement.
     """
-    return ServiceResult(
-        records=tuple(
+    written: list[Record] = []
+    for record in records:
+        verdict = votes_to_fold(record)
+        if verdict is None:
+            written.append(record)
+            continue
+        written.append(
             record.model_copy(
                 update={
                     "ai_review": record.ai_review.model_copy(
-                        update={STAGE: scores_of(engine, record, record.ai_review.jury)}
+                        update={STAGE: agreement_scores(engine, record, verdict)}
                     )
                 }
             )
-            if record.ai_review.jury is not None
-            else record
-            for record in records
         )
-    )
+    return ServiceResult(records=tuple(written))

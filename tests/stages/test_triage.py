@@ -144,6 +144,17 @@ def test_a_boundary_is_read_and_not_held() -> None:
     assert landed(*split, self_agreement_floor=0.9, **lenient).bucket == "divided"
 
 
+def test_each_floor_is_read_from_its_own_declaration() -> None:
+    """The two floors are floats of one type read from two adjacent lines, so a swap type-checks
+    and runs and moves every record one cell sideways. Lowering one alone has to move the record
+    in that floor's own direction: this fails if the two `params.yaml` paths trade places."""
+    split = ((SENT,), (SENT,), (LOOKED_UP,))
+
+    assert landed(*split).bucket == "contested"
+    assert landed(*split, self_agreement_floor=0.3).bucket == "disputed"
+    assert landed(*split, label_agreement_floor=0.6).bucket == "divided"
+
+
 def test_the_stratum_is_the_one_declared_for_that_cell() -> None:
     """The sampling group is config's, because it is what a release's error bar is grouped by."""
     declared = {

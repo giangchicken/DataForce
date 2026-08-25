@@ -36,6 +36,7 @@ precision the pilot cannot establish. It is a `0` in a config file rather than a
 """
 
 from collections.abc import Iterable, Mapping
+from typing import NamedTuple
 
 from agent_toolkit.string_utils import compute_hash
 
@@ -66,6 +67,20 @@ CELLS: Mapping[tuple[bool, bool], str] = {
 
 # The digits a digest is written in, named so the base below is not a tuned literal in disguise.
 HEX = "0123456789abcdef"
+
+
+class Floors(NamedTuple):
+    """The two boundaries, named rather than ordered.
+
+    They are two floats of one type read from two adjacent lines and passed through three calls,
+    which is connascence of position at exactly the distance P13 says to convert: a swap type-checks,
+    runs, and moves every record one cell sideways. `flow.py`'s `Stage` is the same conversion.
+    """
+
+    self_agreement: float  # below it, the jurors do not agree with each other
+    label_agreement: (
+        float  # below it, they do not agree with the label the record carries
+    )
 
 
 def share_of(record_id: str) -> float:
@@ -101,20 +116,30 @@ def declared_buckets(engine: Engine) -> Mapping[str, tuple[str, float]]:
     }
 
 
-def cell_of(scores: AgreementScores, self_floor: float, label_floor: float) -> str:
+def cell_of(scores: AgreementScores, floors: Floors) -> str:
     """Which of the four cells this record's two numbers fall in."""
     return CELLS[
         (
-            scores.self_agreement >= self_floor,
-            scores.label_agreement >= label_floor,
+            scores.self_agreement >= floors.self_agreement,
+            scores.label_agreement >= floors.label_agreement,
         )
     ]
 
 
-def selection_of(
+def scores_to_place(record: Record) -> AgreementScores | None:
+    """This stage's precondition, as the value it needs: what `cohesion` wrote, or None.
+
+    A record with no two numbers has no cell, and `question_generate` reads the same absence. It
+    returns the scores rather than a `bool` for `votes_to_fold`'s reason: a predicate cannot narrow,
+    so the caller would read the key twice and prove twice that it is there.
+    """
+    return record.ai_review.cohesion
+
+
+def review_selection(
     record: Record,
     scores: AgreementScores,
-    floors: tuple[float, float],
+    floors: Floors,
     buckets: Mapping[str, tuple[str, float]],
 ) -> ReviewSelection:
     """One record's cell, its group, and whether the quota on that cell reaches it.
@@ -123,7 +148,7 @@ def selection_of(
     audit of a quota needs: count the records selected in one bucket, count the records in it, and
     the ratio is the declared share or the declaration is not being applied.
     """
-    bucket = cell_of(scores, *floors)
+    bucket = cell_of(scores, floors)
     stratum, quota = buckets[bucket]
     selected = share_of(record.record_id) < quota
     if selected:
@@ -143,30 +168,30 @@ def selection_of(
 def triage(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every measured record, one key richer: where it landed, and whether a person sees it.
 
-    The precondition is `ai_review.cohesion` (P12): a record with no two numbers has no cell, and
-    `question_generate` reads the same absence. The declarations are read before the first record,
-    so a `params.yaml` this stage cannot run on stops the run rather than half of it.
+    The precondition is `scores_to_place`, named beside the signature rather than spelled inside
+    the fold (P12). The declarations are read before the first record, so a `params.yaml` this
+    stage cannot run on stops the run rather than half of it.
     """
-    floors = (
-        declared_ratio(engine, *SELF_FLOOR),
-        declared_ratio(engine, *LABEL_FLOOR),
+    floors = Floors(
+        self_agreement=declared_ratio(engine, *SELF_FLOOR),
+        label_agreement=declared_ratio(engine, *LABEL_FLOOR),
     )
     buckets = declared_buckets(engine)
-    return ServiceResult(
-        records=tuple(
+    written: list[Record] = []
+    for record in records:
+        scores = scores_to_place(record)
+        if scores is None:
+            written.append(record)
+            continue
+        written.append(
             record.model_copy(
                 update={
                     "ai_review": record.ai_review.model_copy(
                         update={
-                            STAGE: selection_of(
-                                record, record.ai_review.cohesion, floors, buckets
-                            )
+                            STAGE: review_selection(record, scores, floors, buckets)
                         }
                     )
                 }
             )
-            if record.ai_review.cohesion is not None
-            else record
-            for record in records
         )
-    )
+    return ServiceResult(records=tuple(written))
