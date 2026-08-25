@@ -40,7 +40,7 @@ from collections.abc import Iterable, Sequence
 
 from dataforce.engine import Engine, ServiceResult
 from dataforce.errors import ConfigError
-from dataforce.ports import JurorAnswer
+from dataforce.ports import JurorAnswer, JuryPanel
 from dataforce.record import JurorVote, PanelVerdict, Record, StoredAnswer
 
 # The key this stage owns, under `ai_review` (P16: one key, one writer).
@@ -58,7 +58,7 @@ def judged(record: Record) -> bool:
     return verdict is not None and not verdict.quarantined
 
 
-def answered(engine: Engine, record: Record) -> Sequence[JurorAnswer]:
+def answered(engine: Engine, panel: JuryPanel, record: Record) -> Sequence[JurorAnswer]:
     """What the panel said about this record, or nothing where the call did not come back.
 
     A failed panel is read as *no votes*, for the reason § *Error Behavior* gives layer two: a call
@@ -70,11 +70,6 @@ def answered(engine: Engine, record: Record) -> Sequence[JurorAnswer]:
     The record does not leave: what crosses is the filled slots and this record's materialised
     answer space, which is Requirement 51's own division of the prompt.
     """
-    panel = engine.jury_panel
-
-    assert panel is not None, (
-        "jury() refuses a run with no panel before it reaches a record"
-    )
     try:
         return panel.votes(
             engine.profile.jury_slots(record), engine.profile.answer_schema(record)
@@ -96,7 +91,9 @@ def votes_of(
         JurorVote(
             model_name=juror.model_name,
             label_is_right=juror.label_is_right,
-            answer=juror.answer or (),
+            # Explicit rather than `or ()`, because None and the empty answer are exactly
+            # what this function is here to tell apart.
+            answer=() if juror.answer is None else juror.answer,
             reasoning=juror.reasoning,
             valid=juror.answer is not None
             and engine.profile.answer_is_permitted(juror.answer, record),
@@ -105,14 +102,13 @@ def votes_of(
     )
 
 
-def plurality_of(
-    engine: Engine, record: Record, votes: Sequence[JurorVote]
-) -> StoredAnswer:
+def plurality_of(engine: Engine, votes: Sequence[JurorVote]) -> StoredAnswer:
     """The answer most of the usable votes gave, ties going to the juror that voted first.
 
-    Grouped by the profile's δ rather than by `==`, for `duplicate_check`'s reason: two votes
-    naming one tool with the argument keys in a different order are the same answer, and a
-    comparison on the stored form would report a tie between one answer and itself.
+    Grouped by the profile's δ rather than by `==`, for `duplicate_check`'s reason: δ is over the
+    *set* of names, so two jurors naming the same two tools in a different order voted for one
+    answer -- and `==` on the stored form would split them and hand the plurality to whichever
+    single dissenting vote came first.
 
     `()` where no vote was usable, which is also *the panel agreed to call nothing* -- the vote
     count beside it is what tells a reader which. `final_prediction` is where that distinction is
@@ -131,26 +127,25 @@ def plurality_of(
     return max(grouped, key=len)[0] if grouped else ()
 
 
-def verdict_of(engine: Engine, record: Record) -> PanelVerdict:
+def verdict_of(engine: Engine, panel: JuryPanel, record: Record) -> PanelVerdict:
     """One record's panel: every vote it cast, what most of them said, and what it is taken to say.
+
+    The panel is a parameter rather than something read off the engine again, because `jury` has
+    already refused a run without one -- passing it down is what makes *no panel here* a state
+    nothing below this line can be in (P22).
 
     `panel_version` and `prompt_version` are read off the panel rather than returned per record: a
     composition is a fact about the run, and both reach the record because a change to either
     invalidates every comparison drawn across them.
     """
-    panel = engine.jury_panel
-
-    assert panel is not None, (
-        "jury() refuses a run with no panel before it reaches a record"
-    )
-    votes = votes_of(engine, record, answered(engine, record))
+    votes = votes_of(engine, record, answered(engine, panel, record))
     usable = [vote.answer for vote in votes if vote.valid]
     return PanelVerdict(
         panel_version=panel.panel_version,
         prompt_version=panel.prompt_version,
         llm_votes=votes,
         invalid_votes=sum(1 for vote in votes if not vote.valid),
-        plurality=plurality_of(engine, record, votes),
+        plurality=plurality_of(engine, votes),
         final_prediction=engine.profile.vote_consensus(usable, record),
     )
 
@@ -161,7 +156,8 @@ def jury(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     There is no side output. A vote is a value on the record and the run manifest already carries
     which panel produced it -- the records are the report (Requirement 44).
     """
-    if engine.jury_panel is None:
+    panel = engine.jury_panel
+    if panel is None:
         raise ConfigError(
             "ai_review needs a jury panel and this engine was opened without one; "
             "the edge supplies it at composition"
@@ -171,7 +167,7 @@ def jury(engine: Engine, records: Iterable[Record]) -> ServiceResult:
             record.model_copy(
                 update={
                     "ai_review": record.ai_review.model_copy(
-                        update={STAGE: verdict_of(engine, record)}
+                        update={STAGE: verdict_of(engine, panel, record)}
                     )
                 }
             )

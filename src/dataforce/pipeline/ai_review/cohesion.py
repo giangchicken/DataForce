@@ -31,7 +31,7 @@ from collections.abc import Iterable, Sequence
 from itertools import combinations
 
 from dataforce.engine import Engine, ServiceResult
-from dataforce.record import AgreementScores, Record, StoredAnswer
+from dataforce.record import AgreementScores, PanelVerdict, Record, StoredAnswer
 
 # The key this stage owns, under `ai_review` (P16: one key, one writer).
 STAGE = "cohesion"
@@ -46,14 +46,9 @@ def mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def usable_answers(record: Record) -> tuple[StoredAnswer, ...]:
+def usable_answers(verdict: PanelVerdict) -> tuple[StoredAnswer, ...]:
     """Every vote the panel cast that this record's answer space accepts, in the panel's order."""
-    verdict = record.ai_review.jury
-    return (
-        ()
-        if verdict is None
-        else tuple(vote.answer for vote in verdict.llm_votes if vote.valid)
-    )
+    return tuple(vote.answer for vote in verdict.llm_votes if vote.valid)
 
 
 def agreement(engine: Engine, a: StoredAnswer, b: StoredAnswer) -> float:
@@ -61,14 +56,18 @@ def agreement(engine: Engine, a: StoredAnswer, b: StoredAnswer) -> float:
     return 1.0 - engine.profile.answer_distance(a, b)
 
 
-def scores_of(engine: Engine, record: Record) -> AgreementScores:
+def scores_of(engine: Engine, record: Record, verdict: PanelVerdict) -> AgreementScores:
     """This record's two numbers: the jurors against each other, and against the label it carries.
 
     Pairwise for the first, because agreement among N is a property of the pairs and not of any
     one of them; against the label for the second, over the same population, so the two numbers
     are read on one scale.
+
+    The verdict is a parameter rather than read off the record again: `cohesion` has already
+    established there is one, and passing it down is what keeps *no votes to fold* out of the
+    states anything below this line can be in.
     """
-    answers = usable_answers(record)
+    answers = usable_answers(verdict)
     return AgreementScores(
         self_agreement=mean(
             [agreement(engine, a, b) for a, b in combinations(answers, 2)]
@@ -94,7 +93,7 @@ def cohesion(engine: Engine, records: Iterable[Record]) -> ServiceResult:
             record.model_copy(
                 update={
                     "ai_review": record.ai_review.model_copy(
-                        update={STAGE: scores_of(engine, record)}
+                        update={STAGE: scores_of(engine, record, record.ai_review.jury)}
                     )
                 }
             )

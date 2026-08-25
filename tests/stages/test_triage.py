@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+from agent_toolkit.file_utils import read_yaml
 
 from dataforce.engine import Engine
 from dataforce.errors import ConfigError
@@ -265,7 +265,7 @@ def test_a_declaration_this_stage_cannot_run_on_stops_the_run(
 def test_the_params_file_this_repository_ships_answers_for_every_cell() -> None:
     """`declared_buckets` refuses a cell the file does not answer for, so running against the
     real file is what proves it complete -- a fixture would only prove the fixture."""
-    shipped = yaml.safe_load(PARAMS.read_text(encoding="utf-8"))
+    shipped = read_yaml(PARAMS)
     engine = replace(an_engine(shipped), jury_panel=a_panel_of((SENT,), (SENT,)))
     written = selection_of(sorted_through(engine, a_record())[0])
 
