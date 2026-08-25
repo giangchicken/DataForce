@@ -53,7 +53,10 @@ this project's `agent-toolkit` was extracted from settles four things this spec 
 **What `agent-toolkit` already owns** and must not be re-implemented: `compute_hash`, `normalize_text`
 (including `remove_tone_marks`, which the PII layer needs), `slot_filling`, `extract_json_from_text`,
 atomic `read_jsonlines` / `write_jsonlines` / `read_yaml`, and the whole LLM client — `complete`,
-`complete_structured`, `count_tokens`, retries, rate limiting.
+`complete_structured`, `count_tokens`, retries, rate limiting. Those are the ones this pipeline
+reaches for and not the whole surface: I6 reads the owned names off the installed library's
+`__all__`, so the rule covers every function `agent-toolkit` exports whether or not this sentence
+names one.
 
 ---
 
@@ -1540,7 +1543,7 @@ Each names the check that holds it, not a file that used to.
 | I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
-| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for the known names, the four owned roots, and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
+| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for every function the installed library exports — read off the `__all__` of each front door, so a name the document forgets is still owned — plus the four owned roots and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
 | I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |
 | I9 | `record_id` is stable across a shuffled re-ingest and sensitive to content | property test over a synthetic corpus |

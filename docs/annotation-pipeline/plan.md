@@ -583,7 +583,11 @@ reaches `run_phase`, has no handler to be asserted of yet and is left stated rat
 **I7** is vacuous over today's tree, which is the argument for writing it now rather than after
 `record.py`.
 
-I6's owned-name list is parsed out of the spec sentence that states it, not copied from it (P31).
+I6's owned-name list *was* parsed out of the spec sentence that states it, not copied from it (P31). It
+is read off the installed library's `__all__` now: the sentence and the list agreed with each other while
+both disagreed with `agent-toolkit`, and seventeen exported functions were in neither. That is the one
+failure a pairing over two hand-kept copies of a fact cannot see, and it is why the third party has to be
+asked directly.
 
 P30's escape hatch arrived with the guards rather than after the first argument about one: a line names
 an invariant, a reason, an owner and a date, and `test_exemptions.py` is the review. The list is empty.
