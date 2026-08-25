@@ -34,10 +34,10 @@ from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
 from dataforce.modalities.text2text.utils import (
     PHONE_PLANS,
-    SPOKEN_FORMS,
+    SPOKEN_PII_FORMS,
     phone_plan,
     spaced,
-    spoken_forms,
+    spoken_pii_forms,
 )
 from dataforce.record import (
     AgreementScores,
@@ -455,7 +455,7 @@ def test_the_shipped_manifest_names_a_language_that_is_written_down() -> None:
     entry in the table is a `ConfigError` on the first real run and on no test."""
     shipped = read_yaml(MANIFEST)
 
-    assert shipped["language"] in SPOKEN_FORMS
+    assert shipped["language"] in SPOKEN_PII_FORMS
     assert shipped["language"] == "vi"
 
 
@@ -494,7 +494,7 @@ def test_a_declared_phrase_matches_however_its_words_are_spaced() -> None:
 def test_the_two_tables_are_keyed_by_the_same_languages() -> None:
     """Two tables under one name is how a language arrives in one and not the other, and the
     second lookup is the one that raises after the first has already succeeded."""
-    assert set(SPOKEN_FORMS) == set(PHONE_PLANS)
+    assert set(SPOKEN_PII_FORMS) == set(PHONE_PLANS)
 
 
 def test_the_two_phone_lengths_disagree_by_one_and_the_type_says_so() -> None:
@@ -514,8 +514,8 @@ def test_a_language_missing_a_phone_plan_is_refused_by_name() -> None:
     with pytest.raises(ConfigError, match="a phone plan"):
         phone_plan("es")
 
-    with pytest.raises(ConfigError, match="spoken forms"):
-        spoken_forms("es")
+    with pytest.raises(ConfigError, match="spoken PII forms"):
+        spoken_pii_forms("es")
 
 
 def test_every_detector_carries_two_patterns_that_compile() -> None:
@@ -555,7 +555,7 @@ def test_the_detector_names_are_distinct() -> None:
         "spoken-email",
     ],
 )
-def test_layer_one_finds_the_spoken_forms_a_scrubber_misses(
+def test_layer_one_finds_the_spoken_pii_forms_a_scrubber_misses(
     hit: str, expected: str
 ) -> None:
     """Requirement 18, over the two texts every pattern is run against."""

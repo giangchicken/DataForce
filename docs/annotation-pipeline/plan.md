@@ -1653,10 +1653,16 @@ nobody should be able to get wrong buys sixty lines of machinery and a new way t
 manifest with `digits: [.]` compiles a regex that matches everything. Replacing it with
 `spoken_forms(language)` and one declared word removed 112 lines net.
 
-**The words are written in `agent-toolkit` and not released.** `src/agent_toolkit/language.py` plus
-13 tests, on branch `spoken-forms` (`a5855f1`), holding `SpokenForms` and `spoken_forms(language)` —
-the whole suite green, 570 passed, and only those two files staged so the in-flight `llm/` work in
-that tree stayed untouched. Not tagged: DataForce pins the library by git tag, pyproject's own note
+**The words are written in `agent-toolkit` and not released.** `spoken_pii_forms(language)` and
+`SpokenPiiForms` went into `string_utils.py` with 11 tests, on branch `spoken-forms` (`61fdf65`) —
+the whole suite green, 568 passed, and only those two files staged so the in-flight `llm/` work in
+that tree stayed untouched. **A module of its own was the first attempt and was rejected:** one table
+is not a module, and this belongs beside `normalize_text` because the tone-stripped half of a
+Vietnamese scan is the same concern — one test asserts the pairing, that every digit word survives
+stripping at the same length. Named for the job rather than for the language, since the four fields
+are what a dictated-PII scan needs and nothing else.
+
+Not tagged: DataForce pins the library by git tag, pyproject's own note
 records that *"this tag has already been moved once"*, and a detector's reach deciding what gets
 redacted is exactly what must not change under a moved tag.
 
@@ -1665,9 +1671,9 @@ belong in a library at all: how long a phone number runs is a fact about a *coun
 those numbers is wrong — nine dictated digits is not a valid Vietnamese number. Shipping it would
 have made this repository's off-by-one a fact about Vietnamese. So DataForce keeps two tables keyed
 by the same languages, with a test asserting the key sets are equal, and only the words leave. **The
-migration is mechanical and self-enforcing:** the day the pin moves past `a5855f1`, `spoken_forms`
-appears in the installed library's `__all__`, I6 fails on the duplicate `def` here, and the fix is an
-import and a deletion.
+migration is mechanical and self-enforcing:** the day the pin moves past `61fdf65`, `spoken_pii_forms`
+appears in the installed library's `__all__`, I6 fails on the duplicate `def` here, and the fix is
+one import and one deletion — the names on both sides are the same, so nothing else moves.
 
 **One discrepancy was found and deliberately not fixed.** The written phone shape matched ten *or
 eleven* digits and the spoken one nine *or ten* words — an off-by-one between two spellings of one

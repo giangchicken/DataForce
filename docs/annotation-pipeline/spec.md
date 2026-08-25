@@ -920,9 +920,10 @@ English `text2text` corpus registering this one got Vietnamese digit words and n
 do not vary between two Vietnamese corpora, so a manifest block bought sixty lines of reader,
 validation and fixture for a fact nobody should be able to get wrong.
 
-**Two tables, because only one of them is about a language.** `SPOKEN_FORMS` is the words, and it
+**Two tables, because only one of them is about a language.** `SPOKEN_PII_FORMS` is the words, and it
 belongs in `agent-toolkit` — it has no connection to this pipeline, and it is written there on a
-branch already. `PHONE_PLANS` is what a number opens with and how long it runs, which is a fact about
+branch already, in `string_utils.py` beside `normalize_text`, whose tone-stripping is the other half
+of the same scan. `PHONE_PLANS` is what a number opens with and how long it runs, which is a fact about
 a *country* and changes when a regulator says so; and one of its numbers is wrong — a written number
 is ten or eleven digits and a dictated one nine or ten words, where nine digits is not a valid
 Vietnamese number at all. Both patterns read `{8,9}` before either was named, so the discrepancy was
@@ -930,7 +931,7 @@ invisible; it is preserved because a detector's reach decides what gets redacted
 shrinks what layer one finds, and what settles it is a measurement of recall over a declared corpus.
 Shipping that to a library would have made this repository's off-by-one a fact about Vietnamese. The
 words leave when this repository's pin moves past the branch — I6 fails on the duplicate `def
-spoken_forms` and the fix is an import and a deletion. Layer two is a
+spoken_pii_forms` and the fix is one import and one deletion. Layer two is a
 model pass over a bounded window that marks each hit verified or not. The placeholder→original map is
 returned to the edge and written to a path the edge chooses, which `.gitignore` covers.
 

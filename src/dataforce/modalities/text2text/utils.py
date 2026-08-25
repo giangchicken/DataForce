@@ -97,14 +97,15 @@ EMAIL = r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
 IDENTIFIER_DIGITS = 6
 
 
-class SpokenForms(NamedTuple):
+class SpokenPiiForms(NamedTuple):
     """The words one language says a digit, an `@` and a `.` with.
 
     **Every field is a fact about a language and none is a fact about a country or a corpus.** That
-    is what makes this the half that leaves: `agent_toolkit.language` holds this exact shape on a
-    branch already, and the day this repository's pin moves past it, I6 fails on the `def
-    spoken_forms` below and the fix is an import and a deletion. `PhonePlan` beside it does *not*
-    leave, and its own docstring says why.
+    is what makes this the half that leaves: `agent_toolkit.string_utils` holds this exact shape and
+    these exact names on a branch already -- beside `normalize_text`, because the tone-stripped half
+    of this scan is the same concern -- and the day this repository's pin moves past it, I6 fails on
+    the `def spoken_pii_forms` below and the fix is one import and one deletion. `PhonePlan` beside
+    it does *not* leave, and its own docstring says why.
 
     `digits` is a set of words rather than ten indexed by value, because a language may say a digit
     more than one way -- `một`/`mốt`, `bốn`/`tư`, `năm`/`lăm`. `zero` is separate because it is the
@@ -139,10 +140,11 @@ class PhonePlan(NamedTuple):
     spoken_words: tuple[int, int]  # total words dictated, shortest first
 
 
-# The language packs, in the shape `agent_toolkit.language` keeps them. `mốt`, `tư` and `lăm` are
-# Vietnamese's second words for one, four and five; `oh` is English's for zero.
-SPOKEN_FORMS: Mapping[str, SpokenForms] = {
-    "vi": SpokenForms(
+# The language packs, under the names `agent_toolkit.string_utils` keeps them, so the migration is
+# an import rather than a rename. `mốt`, `tư` and `lăm` are Vietnamese's second words for one, four
+# and five; `oh` is English's for zero.
+SPOKEN_PII_FORMS: Mapping[str, SpokenPiiForms] = {
+    "vi": SpokenPiiForms(
         digits=(
             "không",
             "một",
@@ -162,7 +164,7 @@ SPOKEN_FORMS: Mapping[str, SpokenForms] = {
         at="a còng",
         dot="chấm",
     ),
-    "en": SpokenForms(
+    "en": SpokenPiiForms(
         digits=(
             "zero",
             "oh",
@@ -204,9 +206,9 @@ def written_down[Pack](table: Mapping[str, Pack], what: str, language: str) -> P
     return table[language]
 
 
-def spoken_forms(language: str) -> SpokenForms:
+def spoken_pii_forms(language: str) -> SpokenPiiForms:
     """How that language dictates a digit, an `@` and a `.`."""
-    return written_down(SPOKEN_FORMS, "spoken forms", language)
+    return written_down(SPOKEN_PII_FORMS, "spoken PII forms", language)
 
 
 def phone_plan(language: str) -> PhonePlan:
@@ -319,7 +321,7 @@ def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
     provide "the common processing framework for a task family" cannot also decide the family's
     language: an English `text2text` corpus registered this and got `không|một|mốt|...`.
 
-    The manifest declares one word -- which language -- and `spoken_forms` is the table. A block of
+    The manifest declares one word -- which language -- and `spoken_pii_forms` is the table. A block of
     declared vocabulary was the other build and it is worse: the words for the digits do not vary
     between two Vietnamese corpora, so declaring them per corpus adds sixty lines of reader,
     validation and fixture for a fact nobody should be able to get wrong.
@@ -328,7 +330,7 @@ def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
     tuned for recall, and layer two is what decides which class it was.
     """
     language = declared_name(manifest, LANGUAGE)
-    spoken = spoken_forms(language)
+    spoken = spoken_pii_forms(language)
     plan = phone_plan(language)
     digits = "|".join(spaced(word) for word in spoken.digits)
     least = IDENTIFIER_DIGITS - 1
