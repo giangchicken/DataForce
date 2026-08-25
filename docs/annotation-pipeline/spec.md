@@ -899,9 +899,20 @@ corpus where every record offers one catalog is one block and the quadratic come
 is a signature to block on or an index — not a smaller batch, which would change the groups.
 
 **PII, in two layers.** Layer one is patterns over the raw text and over a tone-stripped
-normalisation, covering the Vietnamese spoken forms an off-the-shelf scrubber misses: digits as words
-(`không`…`chín`, plus `mốt`, `tư`, `lăm`), `@` as `a còng`, `.` as `chấm`. It is tuned for recall and
-is *allowed* to be noisy — a digit run is also a price, a date, an order reference. Layer two is a
+normalisation, covering the spoken forms an off-the-shelf scrubber misses: digits as words, `@` and
+`.` said aloud. It is tuned for recall and is *allowed* to be noisy — a digit run is also a price, a
+date, an order reference.
+
+**The shapes are the modality's and the language is the corpus's.** Six pattern shapes live in
+`text2text/utils.py`, because a regular expression is tested and these are tested against the
+adversarial fixtures § *Testing Strategy* item 6 asks for. What fills them is declared:
+`config/modalities/text2text.yaml` carries the words this corpus dictates digits with
+(`không`…`chín`, plus `mốt`, `tư`, `lăm`), the words for `@` and `.` (`a còng`, `chấm`), and the two
+lengths a run must reach. They were literals in the module until § *The two axes*' definition was
+written properly — a modality that provides a task family's *framework* cannot also decide the
+family's language, and an English `text2text` corpus registering this one got Vietnamese digit words
+and nothing usable. Every declared word must be alphanumeric, because it is written into a regular
+expression and a `.` would compile as syntax. Layer two is a
 model pass over a bounded window that marks each hit verified or not. The placeholder→original map is
 returned to the edge and written to a path the edge chooses, which `.gitignore` covers.
 
@@ -1242,7 +1253,9 @@ refuses to guess and the number is provisional with its re-measurement named bes
 profile manifest's `max_calls` is. The three empty blocks belong to stages that are not built yet.
 
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
-`embedding.model` and `embedding.exclude_roles`; the profile's are `shape`, `answer_control`,
+`embedding.model`, `embedding.exclude_roles` and the `personal_data` block — `spoken.digits`,
+`spoken.zero`, `spoken.at`, `spoken.dot`, `identifier_digits` and `phone.prefix`,
+`phone.written_digits`, `phone.spoken_words`; the profile's are `shape`, `answer_control`,
 `max_calls`, `label.at`, `roles.target` and `prompts.question`, plus `gold.from`, whose only reader is
 the pilot's gold accuracy in T31. A declaration is read once, at composition, so a wrong *type* is
 still a `ConfigError` there: `exclude_roles: system` — one character from `[system]` — used to become

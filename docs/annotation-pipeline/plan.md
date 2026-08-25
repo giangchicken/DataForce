@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 862 tests, 312 of which are not
+Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 887 tests, 336 of which are not
 guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
 each task changed is recorded at the end of the task below it. **Phase 6 opens with T22, and T34 is
 still the oldest thing on this list.**
@@ -118,6 +118,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T46 | The manifest is validated where it is read | 3 | T12, T13 | S | ✓ |
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
+| T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1603,6 +1604,58 @@ wrote last as much as to what I wrote first.
 **`$question` is wiring, not a missing owner**, and that distinction is what the note now records:
 `question_text(record)` produces it and `publish` is already handed both halves, so T24 has one key to
 assemble and one — `$tool_names` — to decide the producer for.
+
+---
+
+### T50 · What a modality is, and whose language layer one speaks
+
+**Goal.** § *Modality*'s definition survives being read, and `text2text` provides its family's
+framework without also deciding the family's language.
+
+**Context.** A reader asked whether `text2text` really means text in, text out — the protocol has six
+members and not one produces an output. The answer settles the definition: **a modality names a family
+of input-to-output tasks and provides the common processing framework for that family.** The output
+half is a *family boundary*, not an operation, which is why no member delivers one; `tool_decision` is
+in the family because a juror is prompted with text and answers with text. `base.py`'s docstring
+already said this and the spec's prose had stopped halfway.
+
+Two things fell out. The vocabulary sentence was false in both halves — `speech2text` is not built
+from `PartType`, because `speech` is not `audio` — and Decision 2's two justifications did not hold:
+`objective.md` §3 writes the string and never defines a modality, and `display_config` returns the
+conversation and nothing else. Then, accepting the definition, one member contradicted it:
+`personal_data_detectors` returned Vietnamese literals out of `utils.py`.
+
+**Approach.** Shapes stay in code, language is declared. The six pattern shapes remain in
+`text2text/utils.py` where the adversarial fixtures can hold them (§ *Testing Strategy* item 6); the
+words and the two lengths move to `config/modalities/text2text.yaml` behind three new readers —
+`declared_words`, `declared_count`, `declared_span`. A declared word must be alphanumeric, because it
+is written into a regular expression and a `.` would compile as syntax and match everything silently.
+
+**Acceptance criteria.** All six built patterns are **byte-identical** to the constants they replaced:
+moving a literal must not move a boundary, since a detector's reach decides what gets redacted. A
+second language declares its own words and gets the same shapes. Decision 2 keeps its choice and
+records which justifications were struck. I21 compares the protocol's docstring, which the member
+list cannot see.
+
+**Source.** `spec.md` § *The two axes*, § *PII, in two layers*, § *Configuration*, Decision 2;
+Requirements 18, 40, 47; P25, P31; AGENTS.md §7.
+
+**Verify.** `uv run pytest tests/stages/test_text2text.py tests/guards/test_protocol_members.py -q`.
+
+**Landed.** 25 tests. Byte-identical confirmed for all six patterns against the previous constants.
+
+**One discrepancy was found and deliberately not fixed.** The written phone shape matched ten *or
+eleven* digits and the spoken one nine *or ten* words — an off-by-one between two spellings of one
+class, invisible while both were `{8,9}` in a regex with an extra `\d` on one side. Declaring them
+preserved both, because a refactor that moves a literal may not move a boundary. `written_digits: [10,
+11]` and `spoken_words: [9, 10]` now sit two lines apart in the manifest with a comment saying the
+disagreement is inherited; what settles it is a measurement of layer one's recall over a declared
+corpus, which is the pilot's.
+
+**What this does not fix.** `PHONE_DIGITS`'s trunk prefix is declared, but a phone *shape* is still
+one shape: a corpus whose numbers are grouped `+84 90 123 4567` needs a pattern, not a declaration.
+The line drawn here is words and lengths, and the next corpus is what tests whether it is the right
+one.
 
 ---
 

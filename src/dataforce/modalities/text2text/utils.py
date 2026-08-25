@@ -61,6 +61,17 @@ type Encoder = Callable[[str], Sequence[float]]
 # The keys this modality reads: its own manifest's, and the declared source shape's.
 EMBEDDING = "embedding"
 MODEL = "model"
+PERSONAL_DATA = "personal_data"
+SPOKEN = "spoken"
+DIGITS = "digits"
+ZERO = "zero"
+AT = "at"
+DOT = "dot"
+IDENTIFIER_DIGITS = "identifier_digits"
+PHONE = "phone"
+PREFIX = "prefix"
+WRITTEN_DIGITS = "written_digits"
+SPOKEN_WORDS = "spoken_words"
 EXCLUDE_ROLES = "exclude_roles"
 MESSAGES = "messages"
 ROLE = "role"
@@ -86,20 +97,9 @@ DISPLAY_TAGS = (
     '<Header value="$question"/>'
 )
 
-# Vietnamese digits as they are spoken, which is the form no off-the-shelf scrubber detects.
-# `mốt`, `tư` and `lăm` are the spoken variants of one, four and five and are why this is a list
-# rather than a range.
-SPOKEN_DIGITS = "không|một|mốt|hai|ba|bốn|tư|năm|lăm|sáu|bảy|tám|chín"
-
-# Six digits is the shortest identifier this corpus's sample carries (`480215`), and a run of ten
-# starting with a zero is a Vietnamese mobile number. The two overlap on purpose: a phone number
-# matches both, layer one is tuned for recall, and layer two is what decides which it was.
-DIGIT_RUN = r"\d(?:[\s.-]?\d){5,}"
-PHONE_DIGITS = r"\b0\d(?:[\s.-]?\d){8,9}\b"
-SPOKEN_RUN = rf"(?:{SPOKEN_DIGITS})(?:[\s.,]+(?:{SPOKEN_DIGITS})){{5,}}"
-SPOKEN_PHONE = rf"không(?:[\s.,]+(?:{SPOKEN_DIGITS})){{8,9}}"
+# `@` and `.` are written the same way in every language that writes an address at all, so the one
+# shape that needs nothing declared is a constant.
 EMAIL = r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
-SPOKEN_EMAIL = r"[\w.+-]+\s+a\s+còng\s+[\w.\s-]+?\s+chấm\s+\w+"
 
 
 def a_detector(name: str, personal_data_class: str, pattern: str) -> Detector:
@@ -118,18 +118,16 @@ def a_detector(name: str, personal_data_class: str, pattern: str) -> Detector:
     )
 
 
-# The pattern layer, in code rather than in the manifest: a regular expression is tested, and these
-# are tested against adversarial fixtures (spec.md § *Testing Strategy* item 6). What a corpus
-# decides is which *classes* it turns out to carry, and that is what a first run over a declared
-# source adds to this list.
-DETECTORS = (
-    a_detector("phone_digits", "PHONE", PHONE_DIGITS),
-    a_detector("phone_spoken", "PHONE", SPOKEN_PHONE),
-    a_detector("customer_id_digits", "CUSTOMER_ID", DIGIT_RUN),
-    a_detector("customer_id_spoken", "CUSTOMER_ID", SPOKEN_RUN),
-    a_detector("email_written", "EMAIL", EMAIL),
-    a_detector("email_spoken", "EMAIL", SPOKEN_EMAIL),
-)
+def spaced(phrase: str) -> str:
+    """One dictated phrase as a pattern: its words in order, any whitespace between them.
+
+    `a còng` has to match `a  còng` and a newline between them, so a declared phrase is joined on
+    ``\\s+`` rather
+    than written in verbatim. Nothing is escaped because nothing needs to be -- `declared_words`
+    refuses a token that is not alphanumeric, which is also what keeps a declaration out of the
+    pattern's syntax and keeps the tone-stripped twin derivable.
+    """
+    return r"\s+".join(phrase.split())
 
 
 def declaration(manifest: Manifest, *path: str) -> Any:
@@ -170,6 +168,69 @@ def declared_name(manifest: Manifest, *path: str) -> str:
     return value
 
 
+def declared_words(manifest: Manifest, *path: str) -> tuple[str, ...]:
+    """The words a declaration names, in the order it names them.
+
+    **Every token has to be alphanumeric**, and that is not tidiness: these words are written into
+    a regular expression, so a declaration holding `.` or `(` would be read as syntax rather than
+    as a word -- silently, since `re` would still compile. It is also what makes the tone-stripped
+    twin derivable: `normalize_text` over a pattern is safe exactly while the only literals in it
+    came from here.
+    """
+    value = declaration(manifest, *path)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(
+            not isinstance(word, str)
+            or not word.split()
+            or any(not token.isalnum() for token in word.split())
+            for word in value
+        )
+    ):
+        raise ConfigError(
+            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a non-empty list of words"
+        )
+    return tuple(value)
+
+
+def declared_count(manifest: Manifest, *path: str) -> int:
+    """One declared whole number above zero, or a `ConfigError` naming what is there instead.
+
+    `bool` is excluded before `int` because `True` *is* an `int` in Python, which is the slip
+    `tool_decision`'s own reader records paying for.
+    """
+    value = declaration(manifest, *path)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigError(
+            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not a count"
+        )
+    return value
+
+
+def declared_span(manifest: Manifest, *path: str) -> tuple[int, int]:
+    """Two declared counts, shortest first: how long a run may be and still be one thing.
+
+    A pair rather than two keys, because the two are only meaningful together -- a floor above its
+    ceiling matches nothing at all, and a detector that matches nothing is the failure this whole
+    layer is least able to notice (it looks exactly like a clean corpus).
+    """
+    value = declaration(manifest, *path)
+    if (
+        not isinstance(value, list)
+        or len(value) != 2
+        or any(isinstance(edge, bool) or not isinstance(edge, int) for edge in value)
+        or not 1 <= value[0] <= value[1]
+    ):
+        raise ConfigError(
+            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
+            f"{value!r}, which is not two counts, shortest first"
+        )
+    return (value[0], value[1])
+
+
 def declared_roles(manifest: Manifest, *path: str) -> frozenset[str]:
     """The roles a declaration names, or a `ConfigError` for anything that is not a list of them.
 
@@ -196,6 +257,63 @@ def embedding_model(manifest: Manifest) -> str:
     a file (I1). `edge/bootstrap.py` calls this, builds the `Encoder`, and hands it over.
     """
     return declared_name(manifest, EMBEDDING, MODEL)
+
+
+def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
+    """The six shapes layer one scans for, filled with the words and lengths a corpus declares.
+
+    **The shapes are here and the language is not, and the split is the point.** A regular
+    expression is tested, and these six are tested against the adversarial fixtures § *Testing
+    Strategy* item 6 asks for -- so the shape of a dictated phone number (the word for the trunk
+    prefix, then eight or nine more digit words) stays in code where a test can hold it. What a
+    *corpus* supplies is which words its speakers use and how long its identifiers run, and those
+    were Vietnamese literals in this module until it was pointed out that a modality claiming to
+    provide "the common processing framework for a task family" cannot also decide the family's
+    language: an English `text2text` corpus registered this and got `không|một|mốt|...`.
+
+    **Written and spoken phone lengths disagree by one and are declared as they are.** The written
+    shape matches ten or eleven digits and the spoken shape nine or ten words, which is what the two
+    patterns did before they were parameterised. Moving a literal must not move a boundary -- a
+    detector's reach decides what gets redacted -- so the discrepancy is declared, visible in
+    `config/modalities/text2text.yaml`, and left for whoever measures layer one's recall to settle.
+
+    The two overlap on purpose: a phone number matches the identifier shape too, layer one is tuned
+    for recall, and layer two is what decides which class it was.
+    """
+    digits = "|".join(
+        spaced(word) for word in declared_words(manifest, PERSONAL_DATA, SPOKEN, DIGITS)
+    )
+    zero = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, ZERO))
+    at = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, AT))
+    dot = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, DOT))
+    least = declared_count(manifest, PERSONAL_DATA, IDENTIFIER_DIGITS)
+    prefix = declared_name(manifest, PERSONAL_DATA, PHONE, PREFIX)
+    written = declared_span(manifest, PERSONAL_DATA, PHONE, WRITTEN_DIGITS)
+    dictated = declared_span(manifest, PERSONAL_DATA, PHONE, SPOKEN_WORDS)
+    return (
+        a_detector(
+            "phone_digits",
+            "PHONE",
+            rf"\b{prefix}\d(?:[\s.-]?\d){{{written[0] - 2},{written[1] - 2}}}\b",
+        ),
+        a_detector(
+            "phone_spoken",
+            "PHONE",
+            rf"{zero}(?:[\s.,]+(?:{digits})){{{dictated[0] - 1},{dictated[1] - 1}}}",
+        ),
+        a_detector(
+            "customer_id_digits", "CUSTOMER_ID", rf"\d(?:[\s.-]?\d){{{least - 1},}}"
+        ),
+        a_detector(
+            "customer_id_spoken",
+            "CUSTOMER_ID",
+            rf"(?:{digits})(?:[\s.,]+(?:{digits})){{{least - 1},}}",
+        ),
+        a_detector("email_written", "EMAIL", EMAIL),
+        a_detector(
+            "email_spoken", "EMAIL", rf"[\w.+-]+\s+{at}\s+[\w.\s-]+?\s+{dot}\s+\w+"
+        ),
+    )
 
 
 def text_parts(parts: Sequence[Part]) -> tuple[Part, ...]:
@@ -304,6 +422,10 @@ class Text2Text:
     static model that turns a document into a vector is loaded at the edge and handed over,
     because no engine module opens a file (I1). `exclude_roles` is a measured choice and the
     manifest records what re-measures it; nothing about either is assigned in this class body (I5).
+
+    **Layer one's language is a declaration too**, for the same reason and found later: the shapes
+    it scans for are this module's and the words they are filled with are the corpus's, so
+    `personal_data_detectors` is built once here rather than being a module constant.
     """
 
     def __init__(self, manifest: Manifest, encode: Encoder) -> None:
@@ -311,6 +433,7 @@ class Text2Text:
         self.version = manifest.version
         self._encode = encode
         self._not_embedded = declared_roles(manifest, EMBEDDING, EXCLUDE_ROLES)
+        self._detectors = personal_data_detectors(manifest)
 
     def content_parts(self, item: Mapping[str, Any]) -> list[Part]:
         """One source item's turns, as ordered parts. Text verbatim, media by reference.
@@ -350,7 +473,7 @@ class Text2Text:
 
     def personal_data_detectors(self) -> list[Detector]:
         """The high-recall pattern layer, in this modality's terms."""
-        return list(DETECTORS)
+        return list(self._detectors)
 
     def display_config(self, record: Record) -> DisplayConfig:
         """The *display* half of the annotation config. Never the capture half.

@@ -26,6 +26,7 @@ from dataforce.pipeline.data_quality.duplicate_check import duplicate_check
 from dataforce.record import Part, Record
 
 from .test_label_check import written_paths
+from .test_text2text import A_LANGUAGE
 from .test_tool_decision import CATALOG, SENT, TICKETED, a_profile, a_record
 
 ASKED = "Cho mình xem số dư tài khoản."
@@ -55,7 +56,10 @@ def an_engine(near: Any = 0.95) -> Engine:
         Manifest(
             name="text2text",
             version="1",
-            declarations={"embedding": {"model": "m", "exclude_roles": []}},
+            declarations={
+                "embedding": {"model": "m", "exclude_roles": []},
+                "personal_data": A_LANGUAGE,
+            },
         ),
         a_vector,
     )

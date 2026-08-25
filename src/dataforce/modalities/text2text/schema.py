@@ -49,14 +49,16 @@ class Detector(BaseModel):
     pattern: str = Field(
         ...,
         description=(
-            "The regular expression over the raw text, written in correct Vietnamese."
+            "The regular expression over the raw text: a shape from `utils.py` filled "
+            "with the words the manifest declares, in the corpus's own spelling."
         ),
     )
     tone_stripped_pattern: str = Field(
         ...,
         description=(
             "The same expression over `normalize_text(text, remove_tone_marks=True)`, "
-            "derived from `pattern` so a pattern is written once."
+            "derived from `pattern` so a pattern is written once. Safe only because "
+            "every declared word is alphanumeric: normalising syntax would not be."
         ),
     )
 

@@ -25,12 +25,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from agent_toolkit.file_utils import read_yaml
 from agent_toolkit.string_utils import normalize_text
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
+from dataforce.modalities.text2text.utils import personal_data_detectors, spaced
 from dataforce.record import (
     AgreementScores,
     AiReview,
@@ -78,16 +80,55 @@ def code_points(document: str) -> Sequence[float]:
     return [float(ord(character)) for character in document]
 
 
+# The manifest this repository ships, which one test below compares the fixture against.
+MANIFEST = (
+    Path(__file__).resolve().parents[2] / "config" / "modalities" / "text2text.yaml"
+)
+
+# The language layer one is filled with. Declared in `config/modalities/text2text.yaml` since the
+# modality stopped holding it, and repeated here because a fixture that read the real file would
+# make every detection test depend on a committed file's current contents. The values are that
+# file's, and `test_the_shipped_manifest_declares_a_working_language` is what compares the two.
+A_LANGUAGE: dict[str, Any] = {
+    "spoken": {
+        "digits": [
+            "không",
+            "một",
+            "mốt",
+            "hai",
+            "ba",
+            "bốn",
+            "tư",
+            "năm",
+            "lăm",
+            "sáu",
+            "bảy",
+            "tám",
+            "chín",
+        ],
+        "zero": "không",
+        "at": "a còng",
+        "dot": "chấm",
+    },
+    "identifier_digits": 6,
+    "phone": {"prefix": "0", "written_digits": [10, 11], "spoken_words": [9, 10]},
+}
+
+
 def a_manifest(**declared: Any) -> Manifest:
-    """One `config/modalities/text2text.yaml`, already parsed, with the two declarations it holds."""
+    """One `config/modalities/text2text.yaml`, already parsed, with the declarations it holds."""
     embedding = {
         "model": "minishlab/potion-multilingual-128M",
         "exclude_roles": ["system"],
     }
+    language = declared.pop("personal_data", A_LANGUAGE)
     return Manifest(
         name="text2text",
         version="1",
-        declarations={"embedding": {**embedding, **declared}},
+        declarations={
+            "embedding": {**embedding, **declared},
+            "personal_data": language,
+        },
     )
 
 
@@ -337,7 +378,8 @@ def test_the_same_input_gives_the_same_vector_in_two_processes(tmp_path: Path) -
         "from dataforce.modalities.text2text import Text2Text\n"
         f"{CODE_POINTS}"
         f"ITEM = {ITEM!r}\n"
-        'declared = {"embedding": {"model": "m", "exclude_roles": ["system"]}}\n'
+        f"declared = {{'embedding': {{'model': 'm', 'exclude_roles': ['system']}}, "
+        f"'personal_data': {A_LANGUAGE!r}}}\n"
         'modality = Text2Text(Manifest(name="text2text", version="1", declarations=declared), encode)\n'
         "print(json.dumps(modality.embedding(modality.content_parts(ITEM))))\n",
         encoding="utf-8",
@@ -371,7 +413,10 @@ def test_identity_comes_from_the_manifest() -> None:
     renamed = Manifest(
         name="text2text_v2",
         version="7",
-        declarations={"embedding": {"model": "m", "exclude_roles": []}},
+        declarations={
+            "embedding": {"model": "m", "exclude_roles": []},
+            "personal_data": A_LANGUAGE,
+        },
     )
 
     modality = Text2Text(renamed, code_points)
@@ -429,6 +474,129 @@ def test_the_model_name_is_read_off_the_manifest() -> None:
         embedding_model(
             Manifest(name="text2text", version="1", declarations={"embedding": {}})
         )
+
+
+def test_the_shipped_manifest_declares_a_working_language() -> None:
+    """P31, and the reason `A_LANGUAGE` is a fixture rather than a read of the committed file.
+
+    Every detection test above runs against the fixture, so nothing would notice if the shipped
+    file drifted from it -- or declared something the readers refuse, which would be a
+    `ConfigError` on the first real run and on no test. This is the one place the two meet.
+    """
+    shipped = read_yaml(MANIFEST)
+
+    assert shipped["personal_data"] == A_LANGUAGE
+    assert len(
+        personal_data_detectors(
+            Manifest(name="text2text", version="1", declarations=shipped)
+        )
+    ) == len(a_modality().personal_data_detectors())
+
+
+def test_a_second_language_gets_the_same_shapes_and_its_own_words() -> None:
+    """The defect this declaration exists for: an English corpus registering this modality used
+    to get `không|một|mốt|...` and nothing usable, because a modality that provides a task
+    family's framework was also deciding the family's language."""
+    english = {
+        "spoken": {
+            "digits": [
+                "zero",
+                "oh",
+                "one",
+                "two",
+                "three",
+                "four",
+                "five",
+                "six",
+                "seven",
+                "eight",
+                "nine",
+            ],
+            "zero": "zero",
+            "at": "at",
+            "dot": "dot",
+        },
+        "identifier_digits": 6,
+        "phone": {"prefix": "0", "written_digits": [10, 11], "spoken_words": [9, 10]},
+    }
+    spoken = {
+        detector.name: detector.pattern
+        for detector in a_modality(personal_data=english).personal_data_detectors()
+    }
+
+    assert re.search(spoken["customer_id_spoken"], "four eight zero two one five")
+    assert re.search(spoken["email_spoken"], "an at vi du dot vn")
+    assert "không" not in spoken["customer_id_spoken"]
+    assert spoken["customer_id_digits"] == r"\d(?:[\s.-]?\d){5,}", "shapes do not move"
+
+
+def test_a_declared_phrase_matches_however_its_words_are_spaced() -> None:
+    """`a còng` is two words, so the pattern joins them on `\\s+` rather than on one space."""
+    assert spaced("a còng") == r"a\s+còng"
+    assert re.search(spaced("a còng"), "an  a\ncòng vidu")
+
+
+@pytest.mark.parametrize(
+    "digits",
+    [["một", "."], ["một", "(hai"], ["một", ""], "một", [], ["một", 9]],
+    ids=["a-dot", "a-group", "blank", "a-bare-string", "empty", "a-number"],
+)
+def test_a_digit_list_that_is_not_words_is_refused(digits: Any) -> None:
+    """These go into a regular expression. `.` compiles, matches anything, and says nothing --
+    so a declaration that is not a word is refused where it is read (P22)."""
+    with pytest.raises(ConfigError, match="spoken.digits"):
+        a_modality(
+            personal_data={
+                **A_LANGUAGE,
+                "spoken": {**A_LANGUAGE["spoken"], "digits": digits},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "length",
+    [0, -1, "six", 6.5, True, None],
+    ids=["zero", "negative", "a-word", "a-float", "a-bool", "null"],
+)
+def test_an_identifier_length_that_is_not_a_count_is_refused(length: Any) -> None:
+    """A floor of 0 makes every digit a hit; `True` is an `int` in Python and would read as 1."""
+    with pytest.raises(ConfigError, match="identifier_digits"):
+        a_modality(personal_data={**A_LANGUAGE, "identifier_digits": length})
+
+
+@pytest.mark.parametrize(
+    "span",
+    [[11, 10], [10], [10, 11, 12], 10, [10, "eleven"], [0, 11], [True, 11]],
+    ids=[
+        "backwards",
+        "one-edge",
+        "three-edges",
+        "a-number",
+        "a-word",
+        "zero-floor",
+        "a-bool",
+    ],
+)
+def test_a_phone_span_that_is_not_two_counts_is_refused(span: Any) -> None:
+    """A floor above its ceiling matches nothing at all, and a detector that matches nothing
+    looks exactly like a clean corpus -- which is the one failure this layer cannot notice."""
+    with pytest.raises(ConfigError, match="phone.written_digits"):
+        a_modality(
+            personal_data={
+                **A_LANGUAGE,
+                "phone": {**A_LANGUAGE["phone"], "written_digits": span},
+            }
+        )
+
+
+def test_the_two_phone_lengths_disagree_by_one_and_the_file_says_so() -> None:
+    """Declaring a literal must not move a boundary: the written shape matched ten or eleven
+    digits and the spoken shape nine or ten words before these lines existed, and both still do.
+    The discrepancy is inherited, and the manifest is where it is now visible."""
+    declared = read_yaml(MANIFEST)["personal_data"]["phone"]
+
+    assert declared["written_digits"] != declared["spoken_words"]
+    assert "inherited, not chosen" in MANIFEST.read_text(encoding="utf-8")
 
 
 def test_every_detector_carries_two_patterns_that_compile() -> None:
