@@ -22,6 +22,11 @@ data/run.json
 # belongs in a committed policy file whose digest reaches the run manifest.
 config/model/
 
+# The default question store, for a developer who attached no database (Decision 7). It holds
+# questions about real records, which makes a committed one a corpus in the repository. A
+# deployment names its own through `DATAFORCE_DATABASE_URL` and never lands here.
+dataforce.sqlite3
+
 .env
 .venv/
 __pycache__/

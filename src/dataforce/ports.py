@@ -40,11 +40,26 @@ beside ``final_prediction: null``, and nothing in the record would say which one
 
 **A port reaches a stage through the ``Engine``**, because every service's signature is
 ``(engine, records)`` and there is no other channel. ``Engine.personal_data_verifier`` and
-``Engine.jury_panel`` are that, and ``QuestionStore`` arrives the same way in T24.
+``Engine.jury_panel`` are that, and ``QuestionStore`` reaches one the same way when ``publish``
+lands in T24 -- **the field does not exist yet**, because a field with no reader is a guess and this
+module is where that rule is kept.
+
+**``QuestionStore`` is the one port whose absence Requirement 32 settled rather than this module.**
+Whether a stage reaches the store through a port at all or hands rows back as side output was open
+until T23 -- § *Engine and edge* says the engine returns rows and the edge writes them, which reads
+like the second. Requirement 32 says ``publish`` writes *through a port supplied at the edge* **and
+records the receipt on the record**, and only the first shape can do both: a receipt names a write
+that has already happened, so a stage that only returned rows could not write its own key and P16
+would have the edge writing ``human_review.publish``.
+
+**What crosses is a row and never a record.** The store holds one question's payload and one
+annotation's control values; it holds no content, no label and no verdict of any earlier phase,
+because nothing there is answerable and Requirement 30 is asserted on what reaches a person.
 """
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol
 
 from dataforce.record import StoredAnswer
@@ -117,5 +132,96 @@ class JuryPanel(Protocol):
 
         **It may not raise**, for `confirmed_personal_data`'s reason: a panel that failed after the
         retries is a record with no votes, not a stopped run of twenty thousand (Requirement 43).
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class QuestionToStore:
+    """One question as the store takes it: the join keys, the task payload, and what composed it.
+
+    Flat rather than the record's `Question` plus a payload, because the store's own row is flat and
+    an adapter that had to reshape one would be a second place the row's shape is written down. The
+    pair and the run travel with it for the reason `Provenance` carries them: a store outlives a run
+    and a question answered under one pair cannot be read under another.
+    """
+
+    question_id: str  # what everything joins on; minted by `question_generate`
+    record_id: str  # which record it asks about, for joining an answer back to the bus
+    run_id: str  # which pipeline run published it; a store outlives any one of them
+    modality: str  # the pair this question was composed under, stamped `name@version`
+    profile: str  # the other half of that pair, stamped the same way
+    payload: Mapping[
+        str, Any
+    ]  # the task payload: `data` and nothing else (Requirement 30)
+    config_digest: str  # of the annotation config the payload was composed against
+
+
+@dataclass(frozen=True)
+class StoreReceipt:
+    """What the store did with a batch of questions: which it now holds, under which write, when.
+
+    The two stamps are the store's and not the engine's, because both are I/O -- a clock and an
+    identity for one write -- and no engine module holds either (I1). `publish` writes them onto the
+    record verbatim, which is what makes a re-publish visible as a second `store_run_id` rather than
+    as a silently identical key.
+    """
+
+    stored: tuple[str, ...]  # the `question_id`s the store holds after this write
+    store_run_id: str  # which write; the adapter mints it, the record carries it
+    published_at: datetime  # when the store wrote them, by the store's clock
+
+
+@dataclass(frozen=True)
+class StoredAnnotation:
+    """One person's answer as the store holds it: the control values, and the tool's own metadata.
+
+    **`result` is verbatim and undecomposed.** Requirement 49 makes `answer_from_response` the only
+    place an annotation tool's shape is read, so a `verdict` column filled by whatever wrote the row
+    would be a second reader of that shape -- in the layer furthest from the capture half that
+    defines it. The envelope is a different fact and is decomposed: `was_skipped` and
+    `lead_time_seconds` are the pilot's instruments and are not an answer to anything.
+
+    `external_annotation_id` does not cross. It is the store's own idempotency key and no stage has
+    a use for it, which is the whole of P10.
+    """
+
+    answer_id: str  # the store's id for this answer; unique within the store
+    question_id: str  # which question it answers, joined back to `question_generate`
+    annotator_id: str  # who answered
+    result: tuple[Mapping[str, Any], ...]  # the annotation's control values, verbatim
+    was_skipped: bool  # the annotator saw it and declined; a skip is not a verdict
+    lead_time_seconds: float | None  # how long they took, where the tool reported it
+    submitted_at: datetime  # when they submitted it, by the annotation tool's clock
+
+
+class QuestionStore(Protocol):
+    """The questions a run published, and the answers people gave them."""
+
+    def stored_questions(self, questions: Sequence[QuestionToStore]) -> StoreReceipt:
+        """Every question the store holds after writing these, and the stamps of the write.
+
+        **Writing a question the store already has is not an error.** The id is a pure function of
+        the question (`question_generate`), so a second publish of an unchanged corpus is the same
+        rows -- and a store that raised would make re-running a phase something a caller has to be
+        careful about, which is the error P22 says to design out. The receipt names every id the
+        store holds for this batch, whether this call wrote it or an earlier one did, because that
+        is what `publish` records and what a person auditing a re-run reads.
+
+        **It may not raise about one question.** A batch that reached a store and a batch that did
+        not are different facts, and the second is a `ConfigError` about the configuration (P23):
+        an unreachable database is one thing wrong, not twenty thousand.
+        """
+        ...
+
+    def answers_to(self, question_ids: Sequence[str]) -> Sequence[StoredAnnotation]:
+        """Every answer the store holds to any of those questions, in no promised order.
+
+        Answers and not answer: a question is asked of as many annotators as the rung's overlap
+        says, and `aggregate` is what folds them. A question nobody has answered contributes
+        nothing rather than an empty answer -- the two are told apart by counting.
+
+        Ids rather than records, because the store joins on `question_id` and has never seen a
+        record. A caller with no ids gets nothing back and makes no query.
         """
         ...

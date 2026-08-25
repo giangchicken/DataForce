@@ -1,0 +1,11 @@
+The store's schema, one revision at a time.
+
+`alembic.ini` is at the repository root and holds three lines; the DSN is not one of
+them -- `env.py` reads it through `edge/store/session.py`, so a migration and a running
+process address the same database by the same rule.
+
+  uv run alembic upgrade head                  apply every revision to the attached database
+  uv run alembic revision --autogenerate -m "" write the next one from a change to `models.py`
+
+Autogenerate compares the database to `edge/store/models.py`. Read what it wrote before
+committing it: it is good at columns and bad at intent.

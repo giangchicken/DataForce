@@ -23,6 +23,16 @@ dependencies = [
     # `agent-toolkit[llm]` anyway; declared here because `src/` imports it, under one
     # annotated I6 exemption in `profiles/tool_decision/utils.py`.
     "jsonschema>=4.26",
+    # The question store's engine (Decision 6: `publish` writes to a database we own).
+    # Pinned inside 2.0 because the models are written in its declarative style and 2.1
+    # is where that changes; SQLite and Postgres are one adapter with two DSNs, not two
+    # adapters, which is the whole of why one dependency covers both (Decision 7).
+    "sqlalchemy>=2.0.52,<2.1",
+    # Migrations. A store whose schema is applied by `create_all` has no way to change
+    # one, and the pilot changes one: `alembic upgrade head` against an empty database
+    # is what T23 asserts, so the first schema is a migration rather than a side effect
+    # of importing the models.
+    "alembic>=1.19.1",
 ]
 
 [project.scripts]

@@ -554,6 +554,8 @@ the next person guesses at, and a guess is how one acquires a second place to pu
 | `pyproject.toml` | Dependencies, package metadata, and the configuration for every tool `make check` runs, in one file rather than four dotfiles |
 | `uv.lock` | The resolved versions, so two machines install the same tree |
 | `.python-version` | The interpreter `uv` picks when told nothing |
+| `alembic.ini` | Three lines: where the migrations are and how one path is split. No DSN — `migrations/env.py` reads `DATAFORCE_DATABASE_URL` through `edge/store/session.py`, and the placeholder Alembic generates is a credential-shaped line in a public repository. No logging config either; `edge/observability.py` owns that |
+| `migrations/` | The store's schema, one revision at a time, and `env.py` — the only module outside `src/` that imports the package. Outside it because a migration is not part of what ships; it is the tool that moves a database from one version of what ships to the next |
 | `.github/workflows/ci.yml` | `make check` on every push. The file does not do that yet — it still runs a `dvc repro` step for a tool that was deleted, and imports a module that was renamed; both are Phase 0 residue, and `plan.md` T34 carries the fix |
 | `.gitignore` | The privacy tier and the artifact tiers, each with the reason it is listed |
 
@@ -576,10 +578,13 @@ renamed the package puts the second shell inside it rather than beside it (Decis
 the first run. The abstraction belongs to the inner layer, so `Engine` and `Registry` are
 `dataforce/engine.py`, holding a resolved pair and no I/O; the composition root that reads config to
 build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `QuestionStore` is what the
-*engine* demands of the edge, so an adapter cannot be where it is declared. It held one port when that
-sentence was written, because a port with no adapter is a guess about a future caller — see Decision 17.
-It holds three, and each arrived with the caller that made it real: `PersonalDataVerifier` with
-`pii_check`, `JuryPanel` with `jury`.
+*engine* demands of the edge, so an adapter cannot be where it is declared. It named three and held
+one when that sentence was written, because a port with no adapter is a guess about a future caller —
+see Decision 17. It holds three now, and each arrived with what made it real: `PersonalDataVerifier`
+with `pii_check`, `JuryPanel` with `jury`, and `QuestionStore` with its adapter and its three tables
+in T23. That last one is the exception the rule allows: its two members are what `publish` and
+`annotator_answers` demand, and neither stage exists yet — what it has instead of a caller is an
+adapter that is exercised, which is the half of P20 a guess never has.
 
 ```
 src/dataforce/              the package; its docstring states the import direction and the five module kinds
@@ -1150,11 +1155,30 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
 |---|---|
 | `question` | `question_id` pk · `record_id` · `run_id` · `modality` · `profile` · `payload` json · `config_digest` · `created_at` |
 | `publication` | `question_id` fk · `external_system` · `external_project_id` · `external_task_id` · `status` · `pushed_at` · unique (`question_id`, `external_system`) |
-| `annotator_answer` | `answer_id` pk · `question_id` fk · `annotator_id` · `verdict` · `corrected_value` json · `note` · `was_skipped` · `lead_time_seconds` · `submitted_at` · `external_annotation_id` unique |
+| `annotator_answer` | `answer_id` pk · `question_id` fk · `annotator_id` · `result` json · `was_skipped` · `lead_time_seconds` · `submitted_at` · `external_annotation_id` unique |
 
-- The engine knows none of this. `publish` returns rows; `edge/store/repository.py` writes them behind
-  the `QuestionStore` port — declared in `dataforce/ports.py`, because a port is what the engine
-  demands, not what an adapter offers — and the DSN is read at the edge from `DATAFORCE_DATABASE_URL`.
+- The engine knows none of this. `publish` hands rows across the `QuestionStore` port — declared in
+  `dataforce/ports.py`, because a port is what the engine demands, not what an adapter offers — and
+  `edge/store/repository.py` writes them. The DSN is read at the edge from `DATAFORCE_DATABASE_URL`.
+- **`result` is one column and not three.** This table drew `verdict`, `corrected_value` and `note`
+  until T23. Requirement 49 makes `answer_from_response` *the only place an annotation tool's shape is
+  read*, and decomposing an annotation into three columns needs a second reader of that shape — in the
+  layer furthest from the capture half that defines it, and with no record to validate a corrected
+  value against. So the store holds the control values verbatim and the profile is the only thing that
+  reads meaning into them. What it costs is that *how many annotators said incorrect* stops being one
+  SQL query and becomes a fold over records, which Requirement 44 already says it is. The envelope is a
+  different fact and stays decomposed: `was_skipped` and `lead_time_seconds` are the tool's own
+  metadata, they answer nothing, and the pilot reads them as instruments.
+- **The port is two members, and Requirement 32 is why there is a port at all.** `stored_questions`
+  returns a receipt — which question ids the store holds, under which write, when — and `answers_to`
+  returns every answer to a set of question ids. Whether a stage reaches the store through a port or
+  hands rows back as side output was open until T23: only the first shape lets `publish` record its own
+  receipt, because a receipt names a write that has already happened, and P16 gives that key one writer.
+- **Writing a question the store already holds is a no-op**, because a `question_id` is a pure function
+  of the question: a second publish of an unchanged corpus is the same rows. Insert-if-absent and not an
+  upsert — an existing row records what was *published*, and overwriting its payload would rewrite a
+  question a person may already have answered. `store_run_id` is a digest of the ids written rather than
+  a fresh id per call, so a re-run's record is identical except for `published_at`.
 - **SQLite by default, Postgres by URL.** SQLAlchemy 2.0 declarative models, Alembic migrations.
 - `POST /human-review/publish/sync` pushes unpublished questions into Label Studio through
   `label-studio-sdk`, writes the returned task ids into `publication`, then pulls new annotations into

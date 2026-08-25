@@ -18,10 +18,10 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. Phase 6 is open: T22 has landed. `make check` is green over 56 modules
-and 888 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
+Phase 5: T19, T20 and T21. Phase 6 is open: T22 and T23 have landed. `make check` is green over 56
+modules and 912 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **T23 is next, and T34 is still the oldest thing on this list.**
+it. **T24 is next, and T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -137,7 +137,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T20 | `cohesion` | 5 | T19 | S | ✓ |
 | T21 | `triage` | 5 | T20 | S | ✓ |
 | T22 | `question_generate` | 6 | T21 | M | ✓ |
-| T23 | The question store | 6 | T3, T9 | M | |
+| T23 | The question store | 6 | T3, T9 | M | ✓ |
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | |
 | T25 | `aggregate` and `curate` | 6 | T24 | M | |
 | T26 | The Label Studio sync | 6 | T23 | M | |
@@ -2230,6 +2230,47 @@ the pilot reads, not bookkeeping.
 **Source.** `spec.md` § *The question store*; Decisions 6 and 7; T3's P26 row.
 
 **Verify.** `uv run pytest tests/stages -q -k store` (SQLite in `tmp_path`); `make integration`.
+
+**Landed, and one column list changed.** `annotator_answer` drew `verdict`, `corrected_value` and
+`note`; it holds one `result` json instead. Requirement 49 makes `answer_from_response` *the only
+place an annotation tool's shape is read*, and three decomposed columns need a second reader of that
+shape — in `edge/store/` or in the sync, which are the two layers furthest from the capture half that
+defines it, and neither has the record a corrected value has to validate against. What it costs is
+that *how many annotators said incorrect* is a fold over records rather than one SQL query, which
+Requirement 44 already says it is. `was_skipped` and `lead_time_seconds` stay columns: they are the
+tool's envelope, they answer nothing, and the pilot reads them as instruments. Recorded in `spec.md`
+§ *The question store* and in `models.py` (§8).
+
+**The port's shape was settled by Requirement 32, not by a new decision.** T9 left it open — § *Engine
+and edge* says the engine returns rows and the edge writes them, which reads like side output.
+Requirement 32 says `publish` writes *through a port supplied at the edge* **and** records the receipt
+on the record, and only the port shape does both: a receipt names a write that has already happened,
+so a stage that merely returned rows could not write its own key and P16 would have the edge writing
+`human_review.publish`. Two members: `stored_questions` returns the receipt, `answers_to` returns the
+answers. `Engine.question_store` is deliberately **not** added — a field with no reader is the guess
+Decision 17 deleted `MediaResolver` for, and T24 is its first reader.
+
+**`ports.py` had named three ports and held two since T5.** The first line of its docstring has listed
+`QuestionStore` since the module was a stub, and T19's "Three ports." made a count out of it; the
+class had never existed, and I19 could not see it because the spec's tree row says the same words. It
+exists now, and the paragraph that claimed the third field on `Engine` was corrected to future tense
+in the same commit.
+
+**Two things SQLite ships differently, and both are fixed rather than carried.** Decision 7 says the
+substitution's *differences* are the risk, so the two that reach a record are closed: foreign keys are
+off by default in SQLite, so `store_engine` sets the pragma per connection — a schema whose integrity
+only Postgres enforces is decoration; and `DateTime(timezone=True)` comes back naive from SQLite and
+aware from Postgres, so `UtcDateTime` normalises both ways and refuses a naive value rather than
+guessing a timezone. Each has a test that runs on both backends, which is what found both.
+
+**Every test in `test_store.py` runs twice**, over a `store_at` fixture parametrised on two DSNs —
+SQLite in `tmp_path`, and a Postgres named by `DATAFORCE_TEST_DATABASE_URL` under `-m integration`.
+With no Postgres attached, `make integration` reports 22 skipped rather than green: *not run* and
+*passed* are different claims (T34's own distinction).
+
+**The schema comes from the migration, never `create_all`.** Every test's database is built by
+`alembic upgrade head`, so a column the migration forgot fails here rather than in the pilot, and
+`alembic check` runs as a test — P31 over a schema that is written in two places.
 
 ---
 
