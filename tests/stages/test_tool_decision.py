@@ -746,6 +746,7 @@ def an_annotation(**controls: Any) -> list[dict[str, Any]]:
                 )
             },
         ),
+        "note": ("textarea", {"text": controls.get("note", ["Khách hỏi hai việc."])}),
     }
     return [
         {"from_name": name, "to_name": "conversation", "type": kind, "value": value}
@@ -758,7 +759,10 @@ def test_a_corrected_answer_comes_back_as_the_answer_that_went_in() -> None:
     """I18's round trip: the capture half's inverse, and it validates against this record's space."""
     profile, record = a_profile(), a_record()
 
-    assert profile.answer_from_response(an_annotation(), record) == (SENT,)
+    said = profile.annotation_response(an_annotation(), record)
+
+    assert said.corrected_value == (SENT,)
+    assert said.verdict == "incorrect"
 
 
 def test_a_textarea_string_rather_than_a_list_fails() -> None:
@@ -767,14 +771,16 @@ def test_a_textarea_string_rather_than_a_list_fails() -> None:
     result = an_annotation()
     result[2]["value"] = {"text": '{"SendStatement": {}}'}
 
-    assert profile.answer_from_response(result, record) is None
+    assert profile.annotation_response(result, record).corrected_value is None
 
 
 def test_arguments_that_are_not_json_are_never_coerced() -> None:
     """Requirement 49: a human's malformed answer is evidence about the question, not noise."""
     malformed = an_annotation(corrected_arguments=['{"SendStatement": '])
 
-    assert a_profile().answer_from_response(malformed, a_record()) is None
+    assert (
+        a_profile().annotation_response(malformed, a_record()).corrected_value is None
+    )
 
 
 def test_a_correction_that_does_not_validate_is_none() -> None:
@@ -787,17 +793,18 @@ def test_a_correction_that_does_not_validate_is_none() -> None:
         ]
     )
 
-    assert profile.answer_from_response(stray, record) is None
-    assert profile.answer_from_response(mistyped, record) is None
+    assert profile.annotation_response(stray, record).corrected_value is None
+    assert profile.annotation_response(mistyped, record).corrected_value is None
 
 
 def test_a_verdict_that_is_not_incorrect_carries_no_correction() -> None:
     """Called only where the verdict is `incorrect`; anything else has nothing to invert."""
     profile, record = a_profile(), a_record()
 
-    assert (
-        profile.answer_from_response(an_annotation(verdict=["correct"]), record) is None
-    )
+    said = profile.annotation_response(an_annotation(verdict=["correct"]), record)
+
+    assert said.verdict == "correct"
+    assert said.corrected_value is None
 
 
 def test_a_control_the_annotator_never_touched_is_simply_absent() -> None:
@@ -805,7 +812,41 @@ def test_a_control_the_annotator_never_touched_is_simply_absent() -> None:
     profile, record = a_profile(), a_record()
 
     assert (
-        profile.answer_from_response(an_annotation(corrected_names=None), record)
+        profile.annotation_response(
+            an_annotation(corrected_names=None), record
+        ).corrected_value
+        is None
+    )
+
+
+def test_the_note_comes_back_verbatim_and_unparsed() -> None:
+    """The third control the capture half emits, and the third thing its inverse answers for."""
+    said = a_profile().annotation_response(
+        an_annotation(note=["  hai việc  "]), a_record()
+    )
+
+    assert said.note == "  hai việc  "
+
+
+def test_an_annotation_that_touched_no_note_carries_none() -> None:
+    """Absent from the list rather than present and empty, and `None` rather than `""`."""
+    assert (
+        a_profile().annotation_response(an_annotation(note=None), a_record()).note
+        is None
+    )
+
+
+def test_a_verdict_the_capture_half_never_offered_is_no_verdict() -> None:
+    """Three values are declared; anything else came from a config this profile did not compose."""
+    said = a_profile().annotation_response(an_annotation(verdict=["maybe"]), a_record())
+
+    assert said.verdict is None
+
+
+def test_an_annotation_with_no_verdict_control_at_all_is_no_verdict() -> None:
+    """`required="true"` means the tool refuses one, so this is a store row nothing composed."""
+    assert (
+        a_profile().annotation_response(an_annotation(verdict=None), a_record()).verdict
         is None
     )
 

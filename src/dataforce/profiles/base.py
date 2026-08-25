@@ -6,6 +6,7 @@ own axis (I16).
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from dataforce.record import Part, Provenance, Record
@@ -17,6 +18,34 @@ from dataforce.record import Part, Provenance, Record
 type Answer = Any
 type AnswerConfig = Any
 type LabelCheck = Any
+
+
+@dataclass(frozen=True)
+class AnnotationResponse:
+    """What one annotation said, decoded by the profile that composed the controls it came from.
+
+    Concrete here rather than opaque, which is the opposite of the three aliases above: what an
+    *answer* is belongs to the profile, and what an annotation *says* is the same three things for
+    every profile there could be -- a chosen verdict, a correction where the verdict was that the
+    label is wrong, and free text. Only the second of the three is the profile's own vocabulary,
+    and it is typed ``Answer`` for exactly that reason. ``ports.JurorAnswer`` is the same shape of
+    thing on the other side of the engine: a small value carrying what one respondent said.
+
+    **The two ``None``s do not mean the same thing.** A ``verdict`` of ``None`` is an annotation
+    that answered nothing this profile offers -- there is no answer to record. A
+    ``corrected_value`` of ``None`` is either *no correction was called for* or *the correction did
+    not validate*, and Requirement 49 says the second is never coerced into something that does.
+    The store keeps the control values verbatim, so what a person actually typed survives either
+    way; what the record carries is the conclusion.
+    """
+
+    verdict: (
+        str | None
+    )  # which of `answer_config().verdicts`; None if the annotation chose none
+    corrected_value: (
+        Answer | None
+    )  # the correction, where one was called for and it validates
+    note: str | None  # the annotator's free text, verbatim; never parsed
 
 
 class Profile(Protocol):
@@ -70,11 +99,14 @@ class Profile(Protocol):
         """What an annotator is asked, in their language. No model output may appear in it."""
         ...
 
-    def answer_from_response(
+    def annotation_response(
         self, result: Sequence[Mapping[str, Any]], record: Record
-    ) -> Answer | None:
-        """The corrected answer out of one annotation's control values; None if it does not
-        validate. Called only where the verdict is `incorrect`. The inverse of the capture half."""
+    ) -> AnnotationResponse:
+        """What one annotation said: its verdict, its correction where it validates, its note.
+
+        The inverse of the capture half, and the whole of it -- the half emits three controls, so
+        its inverse answers for three. **The only place an annotation tool's shape is read**
+        (Requirement 49), the way `build_record` is the only place a source shape is read."""
         ...
 
     def jury_slots(self, record: Record) -> Mapping[str, Any]:

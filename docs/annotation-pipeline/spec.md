@@ -158,10 +158,13 @@ class Profile(Protocol):
     def question_text(self, record: Record) -> str:
         """What an annotator is asked, in their language. No model output may appear in it."""
 
-    def answer_from_response(self, result: Sequence[Mapping[str, Any]],
-                             record: Record) -> Answer | None:
-        """The corrected answer out of one annotation's control values; None if it does not
-        validate. Called only where the verdict is `incorrect`. The inverse of the capture half."""
+    def annotation_response(self, result: Sequence[Mapping[str, Any]],
+                            record: Record) -> AnnotationResponse:
+        """What one annotation said: its verdict, its correction where it validates, its note.
+
+        The inverse of the capture half, and the whole of it — the half emits three controls, so
+        its inverse answers for three. **The only place an annotation tool's shape is read**
+        (Requirement 49), the way `build_record` is the only place a source shape is read."""
 
     def jury_slots(self, record: Record) -> Mapping[str, Any]:
         """What the jury prompt's slots are filled with. The template is policy's, not this."""
@@ -175,7 +178,10 @@ class Profile(Protocol):
 
 Sixteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
-is `tool_decision/utils.py`.
+is `tool_decision/utils.py`. `AnnotationResponse` is the exception and is **concrete** in
+`profiles/base.py`: a verdict, a correction and a note are the same three things for every profile
+there could be, and only the correction is the profile's own vocabulary — which is why it alone is
+typed `Answer`. `ports.JurorAnswer` is the same shape of value on the other side of the engine.
 
 **`build_record` is the only place a source shape is *validated*, and not the only place one is
 read.** `content_parts` reads `messages`, and inside it `role`, `content`, `tool_calls` and a call's
@@ -514,12 +520,16 @@ Each is a statement a test can be pointed at.
     the order `pipeline/flow.py` declares, folded by `pipeline/runner.py`. No router names a stage
     sequence, and `edge/cli.py` dispatches over the same table rather than hand-writing one subcommand body
     per stage.
-49. **`answer_from_response` is the only place an annotation tool's shape is read**, the way
+49. **`annotation_response` is the only place an annotation tool's shape is read**, the way
     `build_record` is the only place a source shape is read. It takes one annotation's `result` list and
-    the record, and returns an answer that validates against that record's `answer_schema` or `None`. A
-    corrected value that does not validate is recorded as `malformed` on the record and never coerced —
-    the same treatment `jury` gives an invalid vote, because a human's malformed answer is evidence
-    about the question and not noise to discard.
+    the record, and returns the verdict, the corrected value — which validates against that record's
+    `answer_schema` or is `None` — and the note. A corrected value that does not validate is never
+    coerced, and what the person actually typed is kept verbatim in the store's `result`: the same
+    treatment `jury` gives an invalid vote, and for the same reason. **The record carries the
+    conclusion and not the attempt** — `AnnotatorResponse` has no `valid` beside its
+    `corrected_value`, so *tried and failed* and *did not try* read alike on the bus and are told
+    apart in the store. It answers for all three controls because a caller reading one of them
+    itself would be a second reader of this shape, and the caller is a pipeline stage.
 50. **A skip is not an answer and not a missing row.** Label Studio's `was_cancelled` is stored as
     `was_skipped`, counted, and excluded from `aggregate`'s overlap. An annotator declining a question
     is evidence about that question.
@@ -1023,7 +1033,7 @@ layer two's absence leaves `pii_check` a layer one to run, and this one leaves n
 |---|---|---|---|
 | `question_generate` | `content`, `label`, `ai_review.triage` (selection only) | `human_review.question_generate` | `triage.selected_for_review` is false. The glossary is a precondition on the *run*, checked at composition |
 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
-| `annotator_answers` | the store, through `answer_from_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
+| `annotator_answers` | `human_review.publish`, and the store through `annotation_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
 | `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
 
@@ -1040,7 +1050,7 @@ answers is free and idempotent. And they read different things — `publish` rea
 `human_review.question_generate` and the two config halves, `annotator_answers` reads the store.
 
 **The shape they appear to share has three owners, and each is already one module.** The permitted
-answers are the profile's capture half, and the inverse of that half is `answer_from_response`, a member
+answers are the profile's capture half, and the inverse of that half is `annotation_response`, a member
 of the same profile — I18 round-trips the pair, so adding a verdict value is one directory's edit and
 neither stage names a value. `question_id` is minted by `question_generate`; `publish` echoes it into
 `stored`, `annotator_answers` joins on it, and `edge/store/models.py` keys on it — one author and three
@@ -1165,7 +1175,7 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
   `dataforce/ports.py`, because a port is what the engine demands, not what an adapter offers — and
   `edge/store/repository.py` writes them. The DSN is read at the edge from `DATAFORCE_DATABASE_URL`.
 - **`result` is one column and not three.** This table drew `verdict`, `corrected_value` and `note`
-  until T23. Requirement 49 makes `answer_from_response` *the only place an annotation tool's shape is
+  until T23. Requirement 49 makes `annotation_response` *the only place an annotation tool's shape is
   read*, and decomposing an annotation into three columns needs a second reader of that shape — in the
   layer furthest from the capture half that defines it, and with no record to validate a corrected
   value against. So the store holds the control values verbatim and the profile is the only thing that
@@ -1283,7 +1293,7 @@ overlap", and `aggregate`'s overlap floor reads the same number so the two canno
 
 **The cost, stated.** A set of calls with typed arguments has no widget in community Label Studio, so
 `corrected_arguments` is a JSON object an annotator types. That is a real burden on the person doing
-the work and a real source of malformed input, which is why `answer_from_response` validates against
+the work and a real source of malformed input, which is why `annotation_response` validates against
 the record's own `answer_schema` and returns `None` rather than a half-parsed answer. It is also the
 strongest argument for the annotation platform `objective.md` §9 defers — recorded here so the pilot's
 skip rate and lead time are read as evidence about *that* decision, not only about the questions.
@@ -1506,7 +1516,7 @@ against it — which is the argument for settling it in Phase 0 rather than Phas
 detail.** Three stages could not be built as written. *`annotator_answers` had no parser:*
 `build_record` is "the only place a source shape is read", but `annotator_answers` reads a second
 external shape, and without a named owner that parse would have been invented inside the store adapter
-where no test of the answer space can see it — so `answer_from_response` is a profile member, the
+where no test of the answer space can see it — so `annotation_response` is a profile member, the
 inverse of the capture half that produced the response. *`pii_check` rewrote content and left the
 label:* `redact_label` closes it, and the reasoning is in Requirement 17 because that is where the
 next reader will hit it. *Nothing stated the task to a model:* policy owns the template and the
@@ -1624,7 +1634,7 @@ reversing it re-acquires the two-condition rule.
 The merge proposed: they are two halves of one decision — the shape of the exchange with the question
 store — separated only by time, which is temporal decomposition. *Why not:* the three changes offered as
 proof each land somewhere else. A new verdict value edits the profile's capture half and its inverse
-`answer_from_response`, both members of `profiles/<name>/`, which is what Requirement 31 and I18 are for.
+`annotation_response`, both members of `profiles/<name>/`, which is what Requirement 31 and I18 are for.
 The `question_id` scheme is `question_generate`'s — one author, three readers, and a merge of two readers
 leaves the author outside. Idempotency is two unique constraints in `edge/store/`. Neither stage holds any
 of the three, so neither would shrink. *And the separation is not one of ordering:* the two never run in
@@ -1716,7 +1726,7 @@ Each names the check that holds it, not a file that used to.
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
 | I16 | Nothing above an axis implementation names one | AST scan over each axis's `base.py` **and** its `__init__.py`. A façade that re-exports its implementations makes every importer of the axis load them, and no scan of the consumer can see that: the consumer's line is clean and the coupling is one hop away |
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `edge/cli.py` names two stages in sequence; both call `run_phase` |
-| I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `answer_from_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
+| I18 | The annotation format round-trips | compose the config and payload for a fixture, feed back a synthetic `result` in Label Studio's shape, assert `annotation_response` returns the answer that went in — and that a `textarea` string, not a list, fails |
 | I19 | Every module is in § *Package layout*, described the way it describes itself | the tree is parsed out of this file: every row names a module that exists, every module has a row, and each row's text is that module's own docstring line |
 | I20 | The record's keys are the keys § *The record* draws | the JSONC drawing is parsed out of this file and compared key by key against `Record`'s fields, nested models included. `label` and `meta` are free-form and named as exceptions: the drawing shows example contents of those two, not keys |
 | I21 | Each axis protocol has the members its section writes down | the `Protocol` block is parsed out of this file and compared to the runtime members, and the count both that section and the module's own docstring state in words is compared to the same number |

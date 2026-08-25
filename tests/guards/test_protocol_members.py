@@ -138,7 +138,7 @@ def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
     """Guards the parse: an empty set on both sides would make the comparison vacuous."""
     assert len(drawn_members("### Modality")) == 6
     assert "content_parts" in drawn_members("### Modality")
-    assert "answer_from_response" in drawn_members("### Profile")
+    assert "annotation_response" in drawn_members("### Profile")
     assert drawn_sentence("### Modality").startswith("One input")
     assert drawn_sentence("### Profile").startswith("One dataset task")
 

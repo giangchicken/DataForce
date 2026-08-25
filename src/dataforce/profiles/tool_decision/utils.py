@@ -44,6 +44,7 @@ from agent_toolkit.string_utils import compute_hash
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
+from dataforce.profiles.base import AnnotationResponse
 from dataforce.profiles.tool_decision.schema import (
     AnswerConfig,
     Call,
@@ -109,6 +110,7 @@ VERDICT = "verdict"
 TOOL_NAMES = "tool_names"
 CORRECTED_NAMES = "corrected_names"
 CORRECTED_ARGUMENTS = "corrected_arguments"
+NOTE = "note"
 INCORRECT = "incorrect"
 
 # The permitted answers to a question. `unsure` is a real answer and not a skip: a skip is
@@ -168,7 +170,7 @@ def calls_in(stored: StoredAnswer) -> Calls:
     produced, and none of them may raise (Requirement 43). An entry this cannot read is left out,
     which shows up as a cardinality or catalog difference in `label_check` rather than as a stop.
     An entry an *annotator* produced is the one case that must not be lenient, and
-    `answer_from_response` validates the whole answer instead.
+    `annotation_response` validates the whole answer instead.
     """
     read = []
     for entry in stored:
@@ -237,7 +239,7 @@ def answer_schema(record: Record, max_calls: int) -> dict[str, Any]:
 
     It also does not accept a bare name, and that is not an asymmetry with `calls_in`: this is what
     a *producer* must satisfy -- a jury answering it, an annotator's form inverted through
-    `answer_from_response` -- and both of those emit objects. Reading a bare name is a tolerance for
+    `annotation_response` -- and both of those emit objects. Reading a bare name is a tolerance for
     a names-only source's label, which no producer writes.
     """
     catalog = catalog_of(record)
@@ -555,6 +557,59 @@ def typed_arguments(written: Sequence[Any]) -> dict[str, Any] | None:
     return keyed
 
 
+def control_values(
+    result: Sequence[Mapping[str, Any]],
+) -> dict[str, Mapping[str, Any]]:
+    """One annotation's controls, by the name the config gave each.
+
+    By name and not by position, because a control the annotator never touched is absent from the
+    list rather than present and empty -- there are no positions to read. An entry that is not a
+    mapping, or whose `value` is not one, is not a control and is left out rather than raising: this
+    is what a person's tool sent, and Requirement 43 gives it no channel to stop a run through.
+    """
+    return {
+        str(entry[FROM_NAME]): value
+        for entry in result
+        if isinstance(entry, Mapping) and FROM_NAME in entry
+        for value in [entry.get(VALUE)]
+        if isinstance(value, Mapping)
+    }
+
+
+def corrected_answer(
+    answered: Mapping[str, Mapping[str, Any]], record: Record, max_calls: int
+) -> StoredAnswer | None:
+    """The correction those controls carry, or None where it is not an answer this record permits.
+
+    `None` for every way it can fail -- a control absent, a `textarea` that is a string, arguments
+    that are not JSON, a name outside the catalog -- because the record has one place to put a
+    correction and a half-parsed one is a value nobody typed (Requirement 49).
+    """
+    names = answered.get(CORRECTED_NAMES, {}).get(CHOICES)
+    written = answered.get(CORRECTED_ARGUMENTS, {}).get(TEXT, [])
+    if not isinstance(names, list) or not isinstance(written, list):
+        return None
+    arguments = typed_arguments(written)
+    if arguments is None:
+        return None
+    answer = tuple(
+        {NAME: str(name), ARGUMENTS: arguments.get(str(name)) or {}} for name in names
+    )
+    return answer if answer_is_permitted(record, answer, max_calls) else None
+
+
+def one_written_line(written: Any) -> str | None:
+    """The one thing a `textarea` holds, or None where it holds nothing.
+
+    A `textarea` value is a list because `maxSubmissions` permits more than one; a note is one
+    piece of free text, so the first entry is it. Never parsed and never joined -- what a person
+    typed reaches the record as what they typed.
+    """
+    if not isinstance(written, list) or not written:
+        return None
+    return str(written[0])
+
+
 @final
 class ToolDecision:
     """Tool selection over Vietnamese call-centre text, composed with `text2text`.
@@ -736,43 +791,31 @@ class ToolDecision:
         """
         return self._question
 
-    def answer_from_response(
+    def annotation_response(
         self, result: Sequence[Mapping[str, Any]], record: Record
-    ) -> StoredAnswer | None:
-        """The corrected answer out of one annotation's control values; None if it does not
-        validate. Called only where the verdict is `incorrect`. The inverse of the capture half.
+    ) -> AnnotationResponse:
+        """What one annotation said: its verdict, its correction where it validates, its note.
 
         The only place an annotation tool's shape is read (Requirement 49), the way `build_record`
-        is the only place a source shape is read. A `textarea` value is a list and a string is not
-        one; either way a corrected value that does not validate against this record's own
+        is the only place a source shape is read. It answers for all three controls the capture
+        half emits, because a caller reading one of them itself would be a second place that knew
+        this shape -- and the caller is a pipeline stage, which may not know it at all.
+
+        A verdict outside `VERDICTS` is no verdict: the control offers three values and anything
+        else came from a config this profile did not compose. A correction is read only where the
+        verdict says the label is wrong, and one that does not validate against this record's own
         `answer_schema` is `None` and never coerced.
         """
-        # By control name, because a control the annotator never touched is absent from the
-        # list rather than present and empty -- there are no positions to read.
-        answered = {
-            str(entry[FROM_NAME]): value
-            for entry in result
-            if isinstance(entry, Mapping) and FROM_NAME in entry
-            for value in [entry.get(VALUE)]
-            if isinstance(value, Mapping)
-        }
+        answered = control_values(result)
         chosen = answered.get(VERDICT, {}).get(CHOICES)
-        if not isinstance(chosen, list) or INCORRECT not in chosen:
-            return None
-        names = answered.get(CORRECTED_NAMES, {}).get(CHOICES)
-        written = answered.get(CORRECTED_ARGUMENTS, {}).get(TEXT, [])
-        if not isinstance(names, list) or not isinstance(written, list):
-            return None
-        arguments = typed_arguments(written)
-        if arguments is None:
-            return None
-        answer = tuple(
-            {NAME: str(name), ARGUMENTS: arguments.get(str(name)) or {}}
-            for name in names
+        verdict = chosen[0] if isinstance(chosen, list) and chosen else None
+        return AnnotationResponse(
+            verdict=str(verdict) if verdict in VERDICTS else None,
+            corrected_value=corrected_answer(answered, record, self._max_calls)
+            if verdict == INCORRECT
+            else None,
+            note=one_written_line(answered.get(NOTE, {}).get(TEXT)),
         )
-        if not answer_is_permitted(record, answer, self._max_calls):
-            return None
-        return answer
 
     def jury_slots(self, record: Record) -> Mapping[str, Any]:
         """What the jury prompt's slots are filled with. The template is policy's, not this."""

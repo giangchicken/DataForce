@@ -176,7 +176,7 @@ class StoreReceipt:
 class StoredAnnotation:
     """One person's answer as the store holds it: the control values, and the tool's own metadata.
 
-    **`result` is verbatim and undecomposed.** Requirement 49 makes `answer_from_response` the only
+    **`result` is verbatim and undecomposed.** Requirement 49 makes `annotation_response` the only
     place an annotation tool's shape is read, so a `verdict` column filled by whatever wrote the row
     would be a second reader of that shape -- in the layer furthest from the capture half that
     defines it. The envelope is a different fact and is decomposed: `was_skipped` and

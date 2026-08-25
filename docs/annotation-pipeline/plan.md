@@ -18,10 +18,10 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. Phase 6 is open: T22 and T23 have landed. `make check` is green over 56
-modules and 912 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
+Phase 5: T19, T20 and T21. Phase 6 is open: T22, T23 and T24 have landed. `make check` is green over
+56 modules and 957 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **T24 is next, and T34 is still the oldest thing on this list.**
+it. **T25 is next, and T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -138,7 +138,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T21 | `triage` | 5 | T20 | S | ✓ |
 | T22 | `question_generate` | 6 | T21 | M | ✓ |
 | T23 | The question store | 6 | T3, T9 | M | ✓ |
-| T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | |
+| T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | ✓ |
 | T25 | `aggregate` and `curate` | 6 | T24 | M | |
 | T26 | The Label Studio sync | 6 | T23 | M | |
 | T27 | The edge | 7 | T9, T12, T13 | M | |
@@ -235,7 +235,7 @@ where the type now lives.
 1. **`annotator_answers` has no parser.** `build_record` is declared "the only place a source shape
    is read", but `annotator_answers` reads a second external shape — whatever the annotation tool
    hands back. The profile defined the capture half that produced it. Add
-   `answer_from_response(payload) -> Answer`, the inverse of `answer_config`. Without it the parse gets invented in the store adapter, where no
+   `annotation_response(payload) -> Answer`, the inverse of `answer_config`. Without it the parse gets invented in the store adapter, where no
    test of the answer space can see it.
 2. **`pii_check` rewrites content and leaves the label behind.** A worked case: content reads
    `Mã của mình là 480215.` and the label carries `arguments: {"ma_khach": "480215"}`. `pii_check`
@@ -263,7 +263,7 @@ in the spec matches the members listed.
 
 **Out of scope.** The PII detector patterns themselves — those are T16.
 
-**Landed — `a2fc1df`,** and it grew. `answer_from_response` and `jury_slots` are profile members
+**Landed — `a2fc1df`,** and it grew. `annotation_response` and `jury_slots` are profile members
 (Profile is now fourteen, not twelve); `redact_label` is written into Requirement 17 with the
 data-poisoning reasoning, because that is where the next reader hits it; policy owns the jury template
 and the profile owns the slots, so a prompt change reaches the run manifest.
@@ -767,7 +767,7 @@ three changes said to touch both files: a new value in the question's enum, a di
 scheme, a different idempotency guarantee.
 
 None of the three touches either file. The enum is the profile's capture half and its inverse is
-`answer_from_response`, a member of the same profile; `question_id` is minted by `question_generate` and
+`annotation_response`, a member of the same profile; `question_id` is minted by `question_generate` and
 merely read by these two; idempotency is two unique constraints in `edge/store/`. The proposal was
 therefore not taken — but the reason it was asked is real: § *Per-service contracts* explains why
 `ai_review` is three stages and said nothing about why `human_review` is five. Two files that talk to one
@@ -1360,7 +1360,7 @@ still would not validate. Half-building one puts a value no juror proposed into 
    `required="true"` on `corrected_names`, so an annotator who judges a label incorrect must name at
    least one tool — and the correct answer to a record whose model called a tool it should not have
    is the empty answer, which § *The answer* calls a large share of a real corpus.
-   `answer_from_response` already returns `()` for an empty name list, so the limit is entirely in
+   `annotation_response` already returns `()` for an empty name list, so the limit is entirely in
    the config fragment and not in the code behind it. **T24 composes that fragment and T31's pilot is
    what would report the cost**; the fix is a sentinel choice or a second control, which is a
    decision about the surface an agreement figure is measured on and therefore not one to invent
@@ -2232,7 +2232,7 @@ the pilot reads, not bookkeeping.
 **Verify.** `uv run pytest tests/stages -q -k store` (SQLite in `tmp_path`); `make integration`.
 
 **Landed, and one column list changed.** `annotator_answer` drew `verdict`, `corrected_value` and
-`note`; it holds one `result` json instead. Requirement 49 makes `answer_from_response` *the only
+`note`; it holds one `result` json instead. Requirement 49 makes `annotation_response` *the only
 place an annotation tool's shape is read*, and three decomposed columns need a second reader of that
 shape — in `edge/store/` or in the sync, which are the two layers furthest from the capture half that
 defines it, and neither has the record a corrected value has to validate against. What it costs is
@@ -2280,7 +2280,7 @@ With no Postgres attached, `make integration` reports 22 skipped rather than gre
 
 **Context.** Decision 6 — `publish` writes to a database we own; the sync is separate (T26). The
 annotation config is composed from the modality's display half and the profile's capture half, and
-neither may emit the other's. `annotator_answers` parses responses through `answer_from_response`
+neither may emit the other's. `annotator_answers` parses responses through `annotation_response`
 (T2 item 1).
 
 **Acceptance criteria.** Both stages run to completion against a store with no Label Studio
@@ -2295,6 +2295,51 @@ never coerced; `was_cancelled` is stored as a skip and excluded from `aggregate`
 back*, Requirements 31, 32, 33, 49 and 50; Decision 6; I18.
 
 **Verify.** `uv run pytest tests/stages/test_publish.py tests/stages/test_annotator_answers.py -q`.
+
+**Landed as two commits, and two protocol contracts moved.** Each moved because its first real
+caller could not use it as written — which is the only good reason, and both are recorded in
+`spec.md` rather than only here.
+
+**`answer_config` takes a record.** `text2text/schema.py` already said `$tool_names` is the capture
+half's *on both counts* — the tag and the data — and the catalog is per record, so a member taking
+none could not supply it. Both halves are now the same shape: a fragment and the task data it owns,
+per record, exactly as `display_config` is. T22 pays one line for it, reading the verdicts inside
+its fold instead of once before it.
+
+**`answer_from_response` is `annotation_response`, and returns all three controls.** Its docstring
+said *the inverse of the capture half*; the half emits three controls and it answered for one, with
+a stated precondition — *called only where the verdict is `incorrect`* — that no caller could
+satisfy, because nothing told a caller the verdict. The alternative was a seventeenth member, and it
+is the worse one: two members for one inverse is a shallower interface for the same functionality
+(P6), and the caller would have had to combine them. `AnnotationResponse` is **concrete** in
+`profiles/base.py` rather than a fourth opaque alias, because a verdict, a correction and a note are
+the same three things for every profile — only the correction is the profile's own vocabulary, and
+it alone is typed `Answer`. `ports.JurorAnswer` is the same shape of value on the other side.
+
+**Two things Requirement 49 and 50 ask for that the record cannot hold, both stated rather than
+faked.** Requirement 49 says a malformed correction is *recorded as `malformed` on the record*;
+`AnnotatorResponse` has no `valid` beside `corrected_value`, so *tried and failed* and *did not try*
+read alike on the bus. They are told apart in the store, which keeps `result` verbatim — a
+consequence of T23's column decision that pays for itself here. Requirement 50 says a skip is
+*counted*; it is counted in the store's `was_skipped`, which is where the pilot reads it, and it
+never becomes a response — which is what keeps it out of `aggregate`'s overlap structurally rather
+than by a filter downstream.
+
+**`annotator_answers` reads `human_review.publish`, which its contract cell did not list.** It has
+to know which ids to join on and the receipt is the store's own word for which it holds. The cell
+now says so.
+
+**A record whose every answer was a skip gets the key with nothing in it.** A record the store holds
+no answers for gets no key. Both reach `aggregate` with no verdict, and only the first says *someone
+was asked and declined* — which is the difference the pilot's skip rate is about.
+
+**`publish` and `annotator_answers` each make one call for the whole batch**, because `store_run_id`
+names a write and a call per record would make twenty thousand of them out of one publish. A phase
+that selected nothing returns before touching the database at all.
+
+**The store double is a real second adapter.** `AStore` in `test_publish.py` and `AnAnsweredStore`
+in `test_annotator_answers.py` keep the port's promises; four tests run both stages against
+`SqlQuestionStore` on both backends, so *the two fit* is asserted rather than assumed (P20).
 
 ---
 

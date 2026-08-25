@@ -187,7 +187,7 @@ def test_answers_come_back_for_the_questions_asked_about(
 def test_the_control_values_come_back_verbatim(
     store: SqlQuestionStore, sessions: sessionmaker[Session]
 ) -> None:
-    """Requirement 49: only `answer_from_response` reads this shape, so the store may not touch it."""
+    """Requirement 49: only `annotation_response` reads this shape, so the store may not touch it."""
     store.stored_questions([a_question()])
     with sessions.begin() as session:
         session.add(an_answer())

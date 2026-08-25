@@ -11,7 +11,7 @@ joins a row back to the bus is ``record_id``, and reading it is the pipeline's b
 
 **``annotator_answer`` keeps the annotation's control values verbatim and decomposes nothing.**
 § *The question store* drew ``verdict``, ``corrected_value`` and ``note`` as columns; they are one
-``result`` here instead, because Requirement 49 makes ``answer_from_response`` *the only place an
+``result`` here instead, because Requirement 49 makes ``annotation_response`` *the only place an
 annotation tool's shape is read* and three decomposed columns need a second reader of that shape --
 in the layer furthest from the capture half that defines it, and with no record to validate a
 corrected value against. The envelope is a different fact and stays decomposed: ``was_skipped`` and
@@ -174,7 +174,7 @@ class AnnotatorAnswer(Base):
     )
     result: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON,
-        comment="The annotation's control values, verbatim. Only `answer_from_response` reads this shape.",
+        comment="The annotation's control values, verbatim. Only `annotation_response` reads this shape.",
     )
     was_skipped: Mapped[bool] = mapped_column(
         comment="The annotator saw the question and declined it. Not a verdict, and not a missing row.",
