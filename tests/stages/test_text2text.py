@@ -32,7 +32,13 @@ from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
-from dataforce.modalities.text2text.utils import SPOKEN_FORMS, spaced, spoken_forms
+from dataforce.modalities.text2text.utils import (
+    PHONE_PLANS,
+    SPOKEN_FORMS,
+    phone_plan,
+    spaced,
+    spoken_forms,
+)
 from dataforce.record import (
     AgreementScores,
     AiReview,
@@ -485,10 +491,31 @@ def test_a_declared_phrase_matches_however_its_words_are_spaced() -> None:
     assert re.search(spaced("a còng"), "an  a\ncòng vidu")
 
 
-def test_the_two_phone_lengths_disagree_by_one_and_the_table_says_so() -> None:
-    """Declaring a literal must not move a boundary: the written shape matched ten or eleven
-    digits and the spoken shape nine or ten words before either was named, and both still do."""
-    assert spoken_forms("vi").phone_digits != spoken_forms("vi").phone_words
+def test_the_two_tables_are_keyed_by_the_same_languages() -> None:
+    """Two tables under one name is how a language arrives in one and not the other, and the
+    second lookup is the one that raises after the first has already succeeded."""
+    assert set(SPOKEN_FORMS) == set(PHONE_PLANS)
+
+
+def test_the_two_phone_lengths_disagree_by_one_and_the_type_says_so() -> None:
+    """Naming a literal must not move a boundary: the written shape matched ten or eleven digits
+    and the spoken shape nine or ten words before either was named, and both still do. Nine
+    dictated digits is not a valid Vietnamese number, which is why this is the inherited bug and
+    not a language fact -- and why `PhonePlan` did not go into `agent-toolkit` with the words."""
+    plan = phone_plan("vi")
+
+    assert plan.written_digits != plan.spoken_words
+    assert plan.written_digits == (10, 11)
+    assert plan.spoken_words == (9, 10)
+
+
+def test_a_language_missing_a_phone_plan_is_refused_by_name() -> None:
+    """The two lookups say which table failed, because the fix is a different row each time."""
+    with pytest.raises(ConfigError, match="a phone plan"):
+        phone_plan("es")
+
+    with pytest.raises(ConfigError, match="spoken forms"):
+        spoken_forms("es")
 
 
 def test_every_detector_carries_two_patterns_that_compile() -> None:

@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 869 tests, 318 of which are not
+Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 871 tests, 320 of which are not
 guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
 each task changed is recorded at the end of the task below it. **Phase 6 opens with T22, and T34 is
 still the oldest thing on this list.**
@@ -1653,12 +1653,21 @@ nobody should be able to get wrong buys sixty lines of machinery and a new way t
 manifest with `digits: [.]` compiles a regex that matches everything. Replacing it with
 `spoken_forms(language)` and one declared word removed 112 lines net.
 
-**Where the table belongs is `agent-toolkit`, and it is here for one reason.** It is a language fact
-with no connection to this pipeline, and `spoken_forms(language)` is the signature it would keep
-there. This repository pins that library by git tag — and pyproject's own note says *"this tag has
-already been moved once"* — so consuming a new function means cutting `v0.2.0`, pushing it, bumping
-the pin and relocking. Named rather than done, because a detector's reach deciding what gets redacted
-is exactly the thing that must not change under a moved tag. The move is an import and a deletion.
+**The words are written in `agent-toolkit` and not released.** `src/agent_toolkit/language.py` plus
+13 tests, on branch `spoken-forms` (`a5855f1`), holding `SpokenForms` and `spoken_forms(language)` —
+the whole suite green, 570 passed, and only those two files staged so the in-flight `llm/` work in
+that tree stayed untouched. Not tagged: DataForce pins the library by git tag, pyproject's own note
+records that *"this tag has already been moved once"*, and a detector's reach deciding what gets
+redacted is exactly what must not change under a moved tag.
+
+**Writing the library half turned up the split.** `PhonePlan` was in `SpokenForms` and does not
+belong in a library at all: how long a phone number runs is a fact about a *country*, and one of
+those numbers is wrong — nine dictated digits is not a valid Vietnamese number. Shipping it would
+have made this repository's off-by-one a fact about Vietnamese. So DataForce keeps two tables keyed
+by the same languages, with a test asserting the key sets are equal, and only the words leave. **The
+migration is mechanical and self-enforcing:** the day the pin moves past `a5855f1`, `spoken_forms`
+appears in the installed library's `__all__`, I6 fails on the duplicate `def` here, and the fix is an
+import and a deletion.
 
 **One discrepancy was found and deliberately not fixed.** The written phone shape matched ten *or
 eleven* digits and the spoken one nine *or ten* words — an off-by-one between two spellings of one
@@ -1667,11 +1676,10 @@ preserved both, because a refactor that moves a literal may not move a boundary.
 `phone_words` now sit two lines apart in `SpokenForms` with the reason written on the type; what
 settles it is a measurement of layer one's recall over a declared corpus, which is the pilot's.
 
-**What this does not fix.** The trunk prefix is a language fact now, but a phone *shape* is still one
-shape: a corpus whose numbers are grouped `+84 90 123 4567` needs a pattern, not a table entry. And
-`IDENTIFIER_DIGITS = 6` stays a module constant — six digits is the shortest identifier *this
-corpus's* sample carries, so it is neither a language fact nor one worth a manifest key on its own,
-and the comment beside it names what re-measures it.
+**What this does not fix.** A phone *shape* is still one shape: a corpus whose numbers are grouped
+`+84 90 123 4567` needs a pattern, not a table row. And `IDENTIFIER_DIGITS = 6` stays a module
+constant — six digits is the shortest identifier *this corpus's* sample carries, so it is neither a
+language fact nor a country's, and the comment beside it names what re-measures it.
 
 ---
 

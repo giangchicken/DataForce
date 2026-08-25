@@ -98,36 +98,49 @@ IDENTIFIER_DIGITS = 6
 
 
 class SpokenForms(NamedTuple):
-    """How one language dictates the things layer one looks for.
+    """The words one language says a digit, an `@` and a `.` with.
 
-    **Everything here is a fact about a language, and nothing is a fact about a corpus.** That is
-    what makes this a table keyed by a name rather than a block in a manifest: the words for the
-    digits do not change between two Vietnamese corpora, and a corpus that declares them is a
-    corpus that can get them wrong.
+    **Every field is a fact about a language and none is a fact about a country or a corpus.** That
+    is what makes this the half that leaves: `agent_toolkit.language` holds this exact shape on a
+    branch already, and the day this repository's pin moves past it, I6 fails on the `def
+    spoken_forms` below and the fix is an import and a deletion. `PhonePlan` beside it does *not*
+    leave, and its own docstring says why.
 
-    `phone_digits` and `phone_words` are counts of the whole number, written and dictated. **They
-    disagree by one, and that is inherited rather than chosen**: the two patterns matched ten-or-
-    eleven digits and nine-or-ten words respectively before either was named, and a refactor that
-    moves a literal may not move a boundary -- a detector's reach decides what gets redacted. What
-    settles it is a measurement of layer one's recall, which is the pilot's.
+    `digits` is a set of words rather than ten indexed by value, because a language may say a digit
+    more than one way -- `một`/`mốt`, `bốn`/`tư`, `năm`/`lăm`. `zero` is separate because it is the
+    one word whose position matters: a dictated number opens with it.
     """
 
     digits: tuple[str, ...]  # every word this language says a digit with
-    zero: str  # the word a phone number is dictated from
-    at: str  # `@`, said aloud
-    dot: str  # `.`, said aloud
-    phone_prefix: str  # the national trunk prefix, written
-    phone_digits: tuple[int, int]  # total digits written, shortest first
-    phone_words: tuple[int, int]  # total words dictated, shortest first
+    zero: str  # the word a dictated number opens with
+    at: str  # `@`, read aloud
+    dot: str  # `.`, read aloud
 
 
-# The language packs. `mốt`, `tư` and `lăm` are the spoken variants of one, four and five, and
-# `oh` is English's, which is why `digits` is a set of words and not ten entries.
-#
-# **This table belongs in `agent-toolkit`** -- it is a language fact with no connection to this
-# pipeline, and `spoken_forms` is the signature it would keep there. It is here because DataForce
-# pins the library by git tag and consuming a new function means cutting one; the move is an import
-# and a deletion the day a tag is cut for other reasons.
+class PhonePlan(NamedTuple):
+    """How long a phone number is, written and dictated, and what it opens with.
+
+    **Not a language fact, which is why it did not go into the library** -- and this is what writing
+    the library half turned up. How many digits a mobile number carries is a fact about a *country*
+    and changes when a regulator says so. Worse, one of these numbers is wrong: `written_digits` is
+    ten or eleven, which is a Vietnamese mobile and its pre-2018 form, and `spoken_words` is nine or
+    ten, where nine dictated digits is not a valid number at all. Both patterns read `{8,9}` before
+    either was named -- one of them with an extra digit atom in front -- so it was invisible.
+
+    It stays as it is on purpose. A refactor that moves a literal may not move a boundary: a
+    detector's reach decides what gets redacted, and correcting this shrinks what layer one finds.
+    What settles it is a measurement of layer one's recall over a declared corpus, which is the
+    pilot's. Shipping it to `agent-toolkit` would have made this repository's off-by-one a fact
+    about Vietnamese.
+    """
+
+    prefix: str  # the national trunk prefix, written
+    written_digits: tuple[int, int]  # total digits written, shortest first
+    spoken_words: tuple[int, int]  # total words dictated, shortest first
+
+
+# The language packs, in the shape `agent_toolkit.language` keeps them. `mốt`, `tư` and `lăm` are
+# Vietnamese's second words for one, four and five; `oh` is English's for zero.
 SPOKEN_FORMS: Mapping[str, SpokenForms] = {
     "vi": SpokenForms(
         digits=(
@@ -148,9 +161,6 @@ SPOKEN_FORMS: Mapping[str, SpokenForms] = {
         zero="không",
         at="a còng",
         dot="chấm",
-        phone_prefix="0",
-        phone_digits=(10, 11),
-        phone_words=(9, 10),
     ),
     "en": SpokenForms(
         digits=(
@@ -169,27 +179,39 @@ SPOKEN_FORMS: Mapping[str, SpokenForms] = {
         zero="zero",
         at="at",
         dot="dot",
-        phone_prefix="0",
-        phone_digits=(10, 11),
-        phone_words=(9, 10),
     ),
 }
 
+# Keyed by the same names, and one test asserts the two key sets are equal: two tables under one
+# name is how a language arrives in one and not the other, and the second lookup is the one that
+# raises after the first has already succeeded.
+PHONE_PLANS: Mapping[str, PhonePlan] = {
+    "vi": PhonePlan(prefix="0", written_digits=(10, 11), spoken_words=(9, 10)),
+    "en": PhonePlan(prefix="0", written_digits=(10, 11), spoken_words=(9, 10)),
+}
 
-def spoken_forms(language: str) -> SpokenForms:
-    """How that language dictates a digit, an `@` and a `.`, or a `ConfigError` naming the ones
-    this table knows.
+
+def written_down[Pack](table: Mapping[str, Pack], what: str, language: str) -> Pack:
+    """One row of a language table, or a `ConfigError` naming the languages there are.
 
     A language nobody has written down is refused rather than falling back to any particular one:
     silently scanning a Spanish corpus with Vietnamese digit words finds nothing, and finding
     nothing is the one failure layer one cannot tell from a clean corpus.
     """
-    if language not in SPOKEN_FORMS:
-        known = ", ".join(sorted(SPOKEN_FORMS))
-        raise ConfigError(
-            f"no spoken forms are written down for language {language!r}; known: {known}"
-        )
-    return SPOKEN_FORMS[language]
+    if language not in table:
+        known = ", ".join(sorted(table))
+        raise ConfigError(f"no {what} for language {language!r}; written down: {known}")
+    return table[language]
+
+
+def spoken_forms(language: str) -> SpokenForms:
+    """How that language dictates a digit, an `@` and a `.`."""
+    return written_down(SPOKEN_FORMS, "spoken forms", language)
+
+
+def phone_plan(language: str) -> PhonePlan:
+    """That language's numbering plan: what a number opens with and how long it runs."""
+    return written_down(PHONE_PLANS, "a phone plan", language)
 
 
 def a_detector(name: str, personal_data_class: str, pattern: str) -> Detector:
@@ -305,16 +327,18 @@ def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
     The identifier and phone shapes overlap on purpose: a phone number matches both, layer one is
     tuned for recall, and layer two is what decides which class it was.
     """
-    spoken = spoken_forms(declared_name(manifest, LANGUAGE))
+    language = declared_name(manifest, LANGUAGE)
+    spoken = spoken_forms(language)
+    plan = phone_plan(language)
     digits = "|".join(spaced(word) for word in spoken.digits)
     least = IDENTIFIER_DIGITS - 1
-    written = spoken.phone_digits
-    dictated = spoken.phone_words
+    written = plan.written_digits
+    dictated = plan.spoken_words
     return (
         a_detector(
             "phone_digits",
             "PHONE",
-            rf"\b{spoken.phone_prefix}\d(?:[\s.-]?\d){{{written[0] - 2},{written[1] - 2}}}\b",
+            rf"\b{plan.prefix}\d(?:[\s.-]?\d){{{written[0] - 2},{written[1] - 2}}}\b",
         ),
         a_detector(
             "phone_spoken",
