@@ -59,8 +59,8 @@ depart from it.
 | Written | Lives in |
 |---|---|
 | `Requirement 47` | `spec.md` § *Requirements* — 52 of them |
-| `I8` | `spec.md` § *Invariants* — I1 to I23 |
-| `Decision 12` | `spec.md` § *Decisions* — 22 of them |
+| `I8` | `spec.md` § *Invariants* — I1 to I24 |
+| `Decision 12` | `spec.md` § *Decisions* — 23 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
 | `§6` | a numbered section of `AGENTS.md` § *Conventions* |
@@ -1781,6 +1781,13 @@ every test in `make check` runs against. It reaches the stage through the `Engin
 T24. **No verifier is not confirmation by default:** every hit stays unverified and nothing is
 rewritten, because an absent second layer silently meaning *everything layer one guessed was right* is
 the failure mode a privacy feature cannot have.
+
+**And it may not add.** The port returns a subset of what layer one flagged, which this task took as
+given from § *PII, in two layers* and did not argue. Decision 23 argues it now, because *why not let
+the model find what the patterns missed* is the first question a reader of `confirmed_personal_data`
+asks, and the document answered it with a type rather than a reason. The short form: an added value has
+no offset to record against Requirement 19's `content_version`, and a hallucinated one is replaced in
+the label too.
 
 **And Requirement 5 was wrong.** It said `pii_check` "also rewrites `content` and bumps
 `content_version`" — two paths, where § *Per-service contracts* and Requirement 17 both say the label

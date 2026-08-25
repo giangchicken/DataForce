@@ -891,8 +891,9 @@ left as it is rather than shifting every offset after it.
 
 **Layer two is a port, and its window is one part.** `PersonalDataVerifier.confirmed_personal_data`
 takes the part's text and the values layer one flagged inside it, and returns the subset it confirms,
-each under the class it confirms it as — so a ten-digit run that matched both the phone and the
-customer-id pattern is decided by the layer that can read the sentence around it. A value confirmed
+each under the class it confirms it as — a subset and never a superset, which is Decision 23. So a
+ten-digit run that matched both the phone and the customer-id pattern is decided by the layer that can
+read the sentence around it. A value confirmed
 in *any* part of a record is confirmed for that record: recall-first, and it is what keeps *one
 placeholder per value* (Requirement 17) true across parts. No verifier and a verifier that failed are
 the same answer for the same reason — the run completes and the record says `unverified`.
@@ -1508,6 +1509,39 @@ the shape they exchange. *Cost, stated plainly:* a reader meeting the two files 
 question and the document did not answer it, which is why § *Per-service contracts* now carries the
 answer where that reader is. *Reversible:* merging is one row of the flow and one record key; the price
 of reversing is re-arguing this, and losing the ability to re-run either half alone.
+
+**23 · Layer two sets precision; recall is declared, not inferred.**
+`PersonalDataVerifier.confirmed_personal_data(window, found)` returns a **subset** of `found`. The model
+may clear a hit, and may come back with a different class for one, and may not add a value layer one
+never flagged. *Alternative:* let it return whatever it finds in the window, so a personal-data form
+nobody wrote a pattern for is caught anyway — which is the one thing a pattern layer over Vietnamese
+spoken forms genuinely cannot do. *Why this:* four costs, and none of them is the model's accuracy.
+**It changes who the model runs on.** A part with no candidates is skipped today; a layer that can add
+has to read every part of every record, which is a different cost class over twenty thousand of them,
+and it puts Requirement 28's endpoint precondition on a call made per part rather than per hit.
+**An added value has no offset.** Requirement 19 records `part`, `start` and `end` against the
+pre-rewrite `content_version`; layer one's hits carry offsets because they matched, while a value a
+model hands back has to be found by searching for it — and where it is not literally in the raw text,
+because the model normalised or re-spaced it, it is unreplaceable. That is the failure
+`tone_stripped_view` exists to prevent, arriving through the other door. **A hallucinated hit is a
+poisoned training example, silently.** Requirement 17 rewrites content and label together, so an
+invented value is replaced in both and `export` ships the result; layer one's noise is bounded by a
+declared pattern set someone reviewed in a diff, a model's is bounded by nothing, and the one artifact
+that would show it is the placeholder map — which I13 forbids any service to read. **And the redaction
+stops being reproducible**, which is the reason Requirement 23 took a static embedder for the other
+stage in this phase. `record_id` survives, being computed at load and a field rather than a validator
+over `content`, but two runs would export different text.
+*The gap is real, and it gets the other fix:* a form the patterns miss is a pattern to add.
+`personal_data_detectors()` is the modality's member and the place a form is named, so recall improves
+where it is reviewable in a diff, permanent for every later run, and deterministic when the run
+happens. Using a model *offline* to propose detectors is a different activity from a model adding hits
+per record, and nothing here forbids it. *Cost, stated plainly:* recall is capped by the pattern set, a
+form nobody has written down is invisible however good the verifier is, and no number in the run says
+so — `unverified` counts the hits layer two could not confirm, never the hits layer one never made.
+*What revisits this:* a measured recall gap on a declared corpus, the way `max_calls` and
+`near_duplicate_cosine` name what re-measures them — not an argument. *Reversible:* yes, at a stated
+price — the port's return type widens, this decision and § *PII, in two layers* change, both adapters
+change, and `scanned` calls the port for every part instead of only for the parts that have candidates.
 
 ---
 
