@@ -18,10 +18,10 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 871 tests, 320 of which are not
-guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
-each task changed is recorded at the end of the task below it. **Phase 6 opens with T22, and T34 is
-still the oldest thing on this list.**
+Phase 5: T19, T20 and T21. Phase 6 is open: T22 has landed. `make check` is green over 56 modules
+and 888 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
+`make check` nor any guard reads.** What each task changed is recorded at the end of the task below
+it. **T23 is next, and T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -136,7 +136,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T19 | `jury` | 5 | T2, T13, T15 | M | ✓ |
 | T20 | `cohesion` | 5 | T19 | S | ✓ |
 | T21 | `triage` | 5 | T20 | S | ✓ |
-| T22 | `question_generate` | 6 | T21 | M | |
+| T22 | `question_generate` | 6 | T21 | M | ✓ |
 | T23 | The question store | 6 | T3, T9 | M | |
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | |
 | T25 | `aggregate` and `curate` | 6 | T24 | M | |
@@ -2173,6 +2173,42 @@ inside `data`, because Label Studio assigns its own task ids.
 back*, Requirements 29, 30 and 52; I12.
 
 **Verify.** `uv run pytest tests/stages/test_question_generate.py -q`.
+
+**Landed, and smaller than this block reads.** Three of the four acceptance criteria above are
+`publish`'s and are asserted in T24: the config's `visibleWhen`, the dynamic choice list and
+`question_id` inside `data` are all facts about the composed config and the task payload, and
+§ *Per-service contracts* gives both to `publish` — this stage writes a question and reads no config
+half. I12's own row says the same thing ("the `publish` payload and the generated config"), so the
+duplication was in this plan and not in the design. What T22 owes I12 is the half that *is* here,
+and it is asserted: a record whose panel disagreed with its label carries a plurality, two agreement
+figures and a bucket, and none of them appears anywhere in the question.
+
+**Requirement 30 is structural, not promised.** `needs_a_question` returns a `bool`, so the
+selection never becomes a value in the module and no bucket has a path into a payload. That makes it
+the one precondition in this phase that should be a predicate — `votes_to_fold` and
+`scores_to_place` return their value because the caller needs it, and this caller must not have it.
+
+**The id covers the words, and that is the load-bearing decision.** Idempotency downstream is a
+unique constraint on `question_id`, so an id minted over the record alone would make a *reworded*
+question a no-op: the annotator answers the old wording and nothing says so. It is minted over the
+record, the question's name, its words and the answers it permits, joined the way `scenario_hash`
+joins tool names — a separator and not an escape, which the module states. Both directions are
+tested, since neither is visible until T23 exists.
+
+**`enum` is a copy of the capture half, on purpose.** `answer_config().verdicts` is the one
+declaration; the record's copy is what keeps an answer legible against what was askable when it was
+asked. The cost is two statements of one tuple, and reading a *field* off an opaque axis type is the
+connascence `label_check` already has on `LabelCheck.name` (P14) — named in the module rather than
+discovered.
+
+**`question_name` is a machine name and the record's drawing calls it *the short label an annotator
+sees*.** No annotator sees it: the payload carries the words, under `question`. Its job is telling
+two *kinds* of question apart and there is one kind, so it is `label_is_right` — the name
+`JurorVote` already uses for the same question — and stable, because the id is minted over it.
+
+**What is still not enforced: the glossary.** § *Out of Scope* makes it a precondition on *opening
+the engine*, and `edge/bootstrap.py` is a docstring — so no code checks it, here or anywhere. T27,
+and the module says so where a reader hits it (AGENTS.md §7).
 
 ---
 
