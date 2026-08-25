@@ -2346,6 +2346,14 @@ concurrent publishes of one batch both saw nothing, both inserted, and the secon
 reach it. What is asserted is the emitted SQL on both dialects, not a live race: a two-connection
 race is not reliably reproducible on SQLite, and a flaky concurrency test is worse than a stated gap.
 
+**Two fields on `AnswerConfig` had no reader and are gone.** `control` and `max_calls` predate this
+phase and Phase 6 is where their consumers arrived and read neither: every reader of the ceiling
+reads the profile's own attribute, and `answer_control` is declared so that composition can *refuse*
+a manifest naming a surface `CAPTURE_TAGS` does not implement — which is a reader that validates, as
+§ *Configuration* requires, and not a value to carry onward. `ports.py`'s own rule decided it: a
+field with no reader is a guess. `publish.task_payload` went the same way for §4's reason — one
+caller, one expression, and no test naming it.
+
 **A sync is over the whole store, and that is the pull's only workable scope** — but the cost is
 unbounded. `synced_with_label_studio` takes no run id, and a person answers days after their task
 was made, so a run-scoped pull would never reach last week's annotations. The consequence is one

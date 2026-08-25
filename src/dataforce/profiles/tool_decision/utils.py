@@ -634,6 +634,10 @@ class ToolDecision:
                 f"config/profiles/{manifest.name}.yaml declares shape {shape!r}, "
                 f"which is not one of {list(SHAPES)}"
             )
+        # `answer_control` is read to be refused and not to be stored: `CAPTURE_TAGS` implements
+        # exactly one surface, and a manifest naming another must fail at composition rather than
+        # emit tags that collect something else. What a measured agreement figure was measured on is
+        # stamped by the manifest itself (§ *Configuration*), not carried onward from here.
         control = declaration(manifest, ANSWER_CONTROL)
         if control not in CONTROLS:
             raise ConfigError(
@@ -653,7 +657,6 @@ class ToolDecision:
         self.name = manifest.name
         self.version = manifest.version
         self.modality = manifest.modality
-        self._control = str(control)
         self._max_calls = declared_count(manifest, MAX_CALLS)
         self._label_at = declared_text(manifest, LABEL, AT)
         self._target_role = one_role(manifest, TARGET)
@@ -672,8 +675,6 @@ class ToolDecision:
         under and the order `scenario_hash` is taken over.
         """
         return AnswerConfig(
-            control=self._control,
-            max_calls=self._max_calls,
             verdicts=VERDICTS,
             tags=CAPTURE_TAGS,
             data={TOOL_NAMES: [{VALUE: tool.name} for tool in catalog_of(record)]},

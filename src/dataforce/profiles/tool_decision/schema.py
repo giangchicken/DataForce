@@ -85,25 +85,17 @@ class Tool(BaseModel):
 
 
 class AnswerConfig(BaseModel):
-    """How an answer is controlled: the ceiling, the surface, and the capture half of the config."""
+    """What a question permits and what collects the answer: the capture half of the config.
+
+    It carried `control` and `max_calls` too, copied off the manifest, and nothing ever read
+    either: every consumer of the ceiling reads the profile's own attribute, and the surface is
+    declared so that composition can *refuse* a manifest naming a control these tags do not
+    implement. A field with no reader is a guess (`ports.py`), so they were deleted rather than
+    kept for a reader that might arrive -- whichever one does can add the field back with itself.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    control: str = Field(
-        ...,
-        description=(
-            "Which control captures an answer, declared rather than detected: it "
-            "decides what an annotator can physically express, and so what a measured "
-            "agreement figure means."
-        ),
-    )
-    max_calls: int = Field(
-        ...,
-        description=(
-            "The cardinality ceiling: `answer_schema` materialises it as `maxItems` "
-            "and `label_cardinality_anomaly` reads the same number."
-        ),
-    )
     verdicts: tuple[str, ...] = Field(
         ...,
         description=(

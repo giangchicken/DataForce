@@ -29,8 +29,7 @@ transaction, mint an id over nothing and stamp a clock nobody reads, so the stag
 *no questions* is an ordinary state of a corpus, not a degenerate write.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from collections.abc import Iterable, Sequence
 
 from agent_toolkit.string_utils import compute_hash
 
@@ -70,25 +69,6 @@ def annotation_config(display_tags: str, capture_tags: str) -> str:
     return f"<View>\n{display_tags}\n{capture_tags}\n</View>"
 
 
-def task_payload(
-    question: Question,
-    display_data: Mapping[str, Any],
-    capture_data: Mapping[str, Any],
-) -> dict[str, Any]:
-    """The `data` dict the config's `$names` read: both halves' keys, and the question's two.
-
-    The halves own disjoint keys by Requirement 31 and a collision would silently drop one, which is
-    why `tests/stages/test_publish.py` asserts the disjointness rather than this line guarding it: a
-    key emitted by both is a fault in an axis, and it is one a test can state and a branch cannot fix.
-    """
-    return {
-        QUESTION_ID: question.question_id,
-        QUESTION: question.content,
-        **display_data,
-        **capture_data,
-    }
-
-
 def rows_for(engine: Engine, record: Record) -> tuple[QuestionToStore, ...]:
     """One record's questions in the shape the store takes, each with the config it was composed
     against.
@@ -112,7 +92,17 @@ def rows_for(engine: Engine, record: Record) -> tuple[QuestionToStore, ...]:
             run_id=record.provenance.run_id,
             modality=record.provenance.modality,
             profile=record.provenance.profile,
-            payload=task_payload(question, display.data, capture.data),
+            # The `data` dict the config's `$names` read: both halves' keys and the question's
+            # two. The halves own disjoint keys by Requirement 31 and a collision would silently
+            # drop one, which is why `test_publish.py` asserts the disjointness rather than a
+            # branch here guarding it -- a key emitted by both is a fault in an axis, and one a
+            # test can state and a branch cannot fix.
+            payload={
+                QUESTION_ID: question.question_id,
+                QUESTION: question.content,
+                **display.data,
+                **capture.data,
+            },
             config_digest=digest,
         )
         for question in questions_to_publish(record)

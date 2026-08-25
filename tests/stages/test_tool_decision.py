@@ -856,8 +856,6 @@ def test_the_capture_half_declares_the_verdicts_and_emits_no_display_tag() -> No
     control = a_profile().answer_config(a_record())
 
     assert control.verdicts == ("correct", "incorrect", "unsure")
-    assert control.max_calls == 2
-    assert control.control == "names_and_json_arguments"
     assert "<Paragraphs" not in control.tags
     assert '<Choices name="verdict"' in control.tags
     assert 'value="$tool_names"' in control.tags
