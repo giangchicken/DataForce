@@ -1,4 +1,4 @@
-"""I8 and I11 together, over one corpus, through every built stage of `data_quality`.
+"""I8 and I11 together, over one corpus, through every built stage there is.
 
 Requirement 41 says `output == input` at every stage "structurally — not asserted, because there is
 nothing to assert against". Once four stages exist there is: run them in the order the flow declares
@@ -8,8 +8,14 @@ than being noticed in review, and the scan is proved against exactly that below 
 
 **The stages are discovered from the flow table, not listed.** `pipeline/flow.py` is the one place the
 flow exists in code and `stage_module_name` is the derivation the runner itself uses, so a stage added
-to the phase is folded here the day it is written -- and if nobody says which paths it may write, this
+to a phase is folded here the day it is written -- and if nobody says which paths it may write, this
 fails rather than passing vacuously.
+
+**Both built phases are folded, in the flow's order, over one corpus.** `ai_review` joined when its
+third stage landed, and it belongs in the same fold rather than a second one: its preconditions read
+what `data_quality` wrote, so a `jury` that judged a quarantined record or a `triage` that ran on a
+record with no cohesion figure is caught here against real upstream output instead of a fixture's
+idea of it. It also puts `jury` downstream of a `content` rewrite, which is the order a run has.
 
 **`PERMITTED` is Requirement 5, as data.** One key, and one exception: `pii_check` also rewrites
 `content` and the `label` and bumps `content_version`. Writing the exception down as a set is what
@@ -23,23 +29,32 @@ from importlib import import_module
 from typing import Any, NamedTuple
 
 from dataforce.engine import Engine, ServiceResult
+from dataforce.pipeline.ai_review.triage import CELLS
 from dataforce.pipeline.flow import STAGES
 from dataforce.pipeline.load_data import load_data
 from dataforce.pipeline.runner import Service, stage_module_name
 from dataforce.record import DataQuality, Record
 
+from ..stages.test_jury import a_panel_of
 from ..stages.test_label_check import written_paths
 from ..stages.test_load_data import an_engine
 from ..stages.test_pii_check import TYPED, confirming_everything
 from ..stages.test_tool_decision import SENT, an_item
 
-PHASE = "data_quality"
+# Every phase whose stages are built, in the flow's order. `load_data` is not one: it mints the
+# records this fold starts from and its input is not the bus (`flow.py`'s `FROM_SOURCE`).
+PHASES = ("data_quality", "ai_review")
 
-# Requirement 5, as data: the paths each stage may change, and no others.
+# Requirement 5, as data: the paths each stage may change, and no others. Keyed by stage rather
+# than by phase because a stage name is unique in the flow -- and the order is the flow's, which
+# is what the assertion below compares the fold against.
 PERMITTED = {
     "label_check": {"data_quality.label_check"},
     "pii_check": {"data_quality.pii_check", "content", "content_version", "label"},
     "duplicate_check": {"data_quality.duplicate_check"},
+    "jury": {"ai_review.jury"},
+    "cohesion": {"ai_review.cohesion"},
+    "triage": {"ai_review.triage"},
 }
 
 
@@ -52,17 +67,35 @@ class Step(NamedTuple):
 
 
 def an_engine_for_a_run() -> Engine:
-    """One engine for the whole fold, with redaction on and layer two answering."""
+    """One engine for the whole fold: redaction on, layer two answering, a panel behind `jury`.
+
+    The triage declarations are written here rather than read out of `params.yaml`, because what
+    this file asserts is the bus and not the file -- `tests/stages/test_triage.py` is where the
+    shipped declarations are run. Every quota is full so nothing is sampled away: a record the
+    sampling skipped still has a `triage` key, but a fold that selected none of them would be a
+    weaker fixture for no reason.
+    """
     from dataclasses import replace
 
     return replace(
         an_engine(
             {
                 "enable_redact": True,
-                "thresholds": {"duplicate_check": {"near_duplicate_cosine": 0.95}},
+                "thresholds": {
+                    "duplicate_check": {"near_duplicate_cosine": 0.95},
+                    "triage": {
+                        "self_agreement_floor": 0.7,
+                        "label_agreement_floor": 0.7,
+                        "buckets": {
+                            cell: {"stratum": "flagged", "quota": 1.0}
+                            for cell in CELLS.values()
+                        },
+                    },
+                },
             }
         ),
         personal_data_verifier=confirming_everything(),
+        jury_panel=a_panel_of((SENT,), (SENT,)),
     )
 
 
@@ -99,15 +132,15 @@ def a_corpus(engine: Engine) -> tuple[Record, ...]:
     ).records
 
 
-def services_of(phase: str) -> list[tuple[str, Service]]:
-    """Every built stage of that phase, in the flow's order, found the way the runner finds them."""
+def services_of(*phases: str) -> list[tuple[str, Service]]:
+    """Every built stage of those phases, in the flow's order, found the way the runner finds them."""
     return [
         (
             row.stage,
             getattr(import_module(stage_module_name(row.phase, row.stage)), row.stage),
         )
         for row in STAGES
-        if row.phase == phase
+        if row.phase in phases
     ]
 
 
@@ -118,13 +151,13 @@ def a_fold(
 ) -> list[Step]:
     """The phase's stages over one corpus, keeping what each step was given and gave back.
 
-    `stages` is a way to fold *part* of a phase, which is what `POST /data-quality/pii-check` is:
-    the whole phase is the default and the only thing that overrides it is the precondition test
+    `stages` is a way to fold *part* of the flow, which is what `POST /data-quality/pii-check` is:
+    every built phase is the default and the only thing that overrides it is the precondition test
     below, where the record has to arrive without the first stage's key.
     """
     steps: list[Step] = []
     running = tuple(corpus)
-    for stage, service in stages if stages is not None else services_of(PHASE):
+    for stage, service in stages if stages is not None else services_of(*PHASES):
         result: ServiceResult = service(engine, running)
         steps.append(Step(stage, running, result.records))
         running = result.records
@@ -156,7 +189,7 @@ def bus_findings(step: Step) -> list[str]:
 
 
 def test_every_step_writes_only_what_it_owns_and_returns_every_record() -> None:
-    """I8 and I11, per step, over a corpus that exercises every state `data_quality` has."""
+    """I8 and I11, per step, over a corpus that exercises every state either phase has."""
     engine = an_engine_for_a_run()
 
     steps = a_fold(engine, a_corpus(engine))
@@ -207,6 +240,19 @@ def test_every_state_the_corpus_was_built_to_hold_is_in_it() -> None:
         and record.data_quality.duplicate_check.duplicate_content_same_label
         for record in written
     )
+    assert any(
+        record.ai_review.triage and record.ai_review.jury for record in written
+    ), "a record the whole of ai_review ran on"
+    assert any(
+        record.data_quality.label_check
+        and record.data_quality.label_check.quarantined
+        and record.ai_review.jury is None
+        and record.ai_review.triage is None
+        for record in written
+    ), "a quarantined record that no stage of ai_review touched"
+    assert any(
+        record.content_version == 2 and record.ai_review.jury for record in written
+    ), "a record judged on content pii_check had already rewritten"
 
 
 def test_a_record_that_meets_no_precondition_travels_the_whole_flow() -> None:
@@ -220,7 +266,7 @@ def test_a_record_that_meets_no_precondition_travels_the_whole_flow() -> None:
     engine = an_engine_for_a_run()
     unchecked = a_corpus(engine)[0].model_copy(update={"data_quality": DataQuality()})
 
-    steps = a_fold(engine, [unchecked], services_of(PHASE)[1:])
+    steps = a_fold(engine, [unchecked], services_of("data_quality")[1:])
 
     assert [finding for step in steps for finding in bus_findings(step)] == []
     assert steps[-1].after[0].data_quality.pii_check is None

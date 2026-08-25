@@ -17,11 +17,11 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-**Phases 1 to 4 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-`make check` is green over 56 modules and 858 tests, 308 of which are not guards — but **T34 is open
-and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
-at the end of the task below it. **Phase 5 opens with T19, and T34 is still the oldest thing on this
-list.**
+**Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
+Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 858 tests, 308 of which are not
+guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
+each task changed is recorded at the end of the task below it. **Phase 6 opens with T22, and T34 is
+still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -1882,7 +1882,12 @@ confirm red; revert.
 
 **Out of scope.** I15 — that needs both shells and is T29.
 
-**Landed.** Seven tests, and three of them are the scan proved red.
+**Landed.** Seven tests, and three of them are the scan proved red. **Extended in Phase 5** rather
+than copied: `PHASES` is now both built phases and `PERMITTED` has six rows, so one fold carries a
+record from `label_check` to `triage`. That order is the point — `jury`'s precondition reads what
+`label_check` wrote and it judges content `pii_check` had already rewritten, so a stage that ignored
+an upstream key is caught against real output rather than against a fixture's idea of one. Proved red
+again on a live mutation: `triage` bumping `content_version` fails it.
 
 **The verify step is a test, not an instruction.** *Make one stage return `records[:-1]` and confirm
 red* is a thing a person does once and never again; `bus_findings` takes a step as a value, so the same
