@@ -929,11 +929,21 @@ defect.
 |---|---|---|---|
 | `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken; and a record `label_check` never saw at all, for the reason its own row gives |
 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
-| `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
+| `triage` | `ai_review.cohesion` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
 Three stages rather than one, because they fail and re-run for different reasons: `jury` costs money and
 is cached, `cohesion` is pure arithmetic, and `triage` is re-run on **exactly one** threshold re-tuning
 pass after the pilot. A bucket whose precision the pilot cannot establish gets **no quota**.
+
+**`triage` reads the two numbers and nothing from `data_quality`.** This cell said `data_quality`
+until T21 and could not be true: a quarantined record has no `jury` key, so no `cohesion` key, so it
+never reaches this stage — and Requirement 26 says the bucket is made of *those numbers*. Two other
+statements said the same false thing, which is what makes it worth a paragraph rather than a
+deletion. `record.py`'s `failed_checks` described itself as being read by triage, and it cannot be.
+And `duplicate_check` writes `duplicate_content_diff_label` — *same content, different label: one of
+them is wrong* — which is the strongest per-record argument in `data_quality` that a person should
+look, and **nothing reads it anywhere.** Routing it is a change to Requirement 26 and not a defect in
+this stage, so it is named here and in § *Out of Scope* rather than quietly implemented.
 
 **Both cohesion numbers are δ, over the usable votes.** Agreement is `1 - answer_distance`, so a
 jury that called the right tool with one argument wrong scores above one that called the wrong tool —
@@ -1735,6 +1745,17 @@ There is no test suite. It is written against this document, in this order, and 
 - **Model training and evaluation, synthetic data generation, active learning, fine-tuning a juror,
   Confident Learning**, and automatic write-back to any source file. Export produces an artifact; putting
   it anywhere is a human step.
+- **Routing a duplicate pair that disagrees to a person.** `duplicate_check` writes
+  `duplicate_content_diff_label` — *same content, different label: one of them is wrong* — and nothing
+  reads it. It is the strongest per-record argument in `data_quality` that a human should look, and
+  Requirement 26 says a triage bucket is made of the two cohesion numbers, so routing it is a change to
+  that requirement rather than a gap in `triage`. Named here so the group is a known unread signal
+  instead of a forgotten one; the pilot is where it is worth arguing, since a bucket needs measured
+  precision before it earns a quota.
+- **Caching the panel.** Decision 3 and § *Per-service contracts* both assert that `jury` costs money
+  per record and **must be cached** — it is the whole reason `ai_review` is three stages — and no module
+  owns it in either document. A cache is I/O, so it cannot be the engine's; T27 is where it lands, and
+  until it does, re-running `jury` re-pays the panel in full and nothing says so at the call site.
 - **The two blocking prerequisites that are not code**: the cross-border data-transfer review before the
   first offshore jury call, and the written glossary before the first generated question. Both are
   preconditions on *opening the engine*, checked once at composition and raised as `ConfigError`; this

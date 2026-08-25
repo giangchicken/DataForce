@@ -237,7 +237,10 @@ class LabelVerdict(RecordModel):
     passed: bool = Field(..., description="Did every check on the label hold.")
     failed_checks: tuple[str, ...] = Field(
         default=(),
-        description="Which named checks did not, so triage can read the defect.",
+        description=(
+            "Which named checks did not. Read by whoever reads the quarantine tier: "
+            "`triage` never sees a quarantined record, because it has no jury."
+        ),
     )
     quarantined: bool = Field(
         ...,

@@ -15,16 +15,22 @@ encoder is not declared here.
 said *one port, because a port with no adapter is a guess about a future caller* (P20), and the
 sentence stands: what changed is that Requirement 18's second layer is a model pass, a model call
 opens a socket, and ``pii_check`` may not make one. So the engine slices the window and decides what
-to do with the answer, and the edge makes the call. Two adapters make a seam real (P20) and there are
-two: the client ``edge/bootstrap.py`` builds, and the stand-in every test in ``make check`` runs
-against -- *no network in `make check`* is § *Testing Strategy*'s rule, not a convenience.
+to do with the answer, and the edge makes the call. Two adapters are what would make the seam real
+(P20), and **today there is one**: the stand-in every test in ``make check`` runs against, which is
+not a convenience -- *no network in `make check`* is § *Testing Strategy*'s rule. The client belongs
+to ``edge/bootstrap.py``, which is a docstring; T27 is where it lands and until then the second
+adapter is a claim (AGENTS.md §7).
 
 **``JuryPanel`` is the same argument at a larger size, and it draws the line in a different
 place.** ``jury`` cannot call N models for the same reason ``pii_check`` cannot call one, so the
-panel is the edge's: it holds the composition, the task statement out of ``config/prompts/``, the
-retries and the rate limiting. What crosses is the *filled slots* and the record's materialised
-answer schema -- never the record, so nothing about provenance, quarantine or a previous scan leaves
-with the prompt (Requirement 51: the template is policy's and the values are the profile's).
+panel is the edge's, and an adapter of it *will* hold the composition, the task statement out of
+``config/prompts/``, the retries and the rate limiting -- none of which exists yet either. What
+crosses is the *filled slots* and the record's materialised answer **space** -- never the record, so
+nothing about provenance, quarantine or a previous scan leaves with the prompt (Requirement 51: the
+template is policy's and the values are the profile's).
+
+*Space* and not *schema*, because the space is what the record's answer is judged against and the
+schema is only the part of it a schema can express -- the distinction the member below is here for.
 
 **Whether a vote is usable is not the panel's to say.** The panel reports what each juror answered
 and the engine decides, because ``vote_consensus`` already refuses an answer the profile does not
