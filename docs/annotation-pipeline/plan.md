@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 858 tests, 308 of which are not
+Phase 5: T19, T20 and T21. `make check` is green over 56 modules and 862 tests, 312 of which are not
 guards — but **T34 is open and CI is red on a line neither `make check` nor any guard reads.** What
 each task changed is recorded at the end of the task below it. **Phase 6 opens with T22, and T34 is
 still the oldest thing on this list.**

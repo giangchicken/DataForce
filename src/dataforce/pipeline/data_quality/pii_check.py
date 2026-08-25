@@ -45,6 +45,7 @@ from typing import Any, NamedTuple
 from agent_toolkit.string_utils import normalize_text
 
 from dataforce.engine import Engine, ServiceResult
+from dataforce.errors import ConfigError
 from dataforce.ports import PersonalDataVerifier
 from dataforce.record import (
     PersonalDataScan,
@@ -156,11 +157,20 @@ def confirmed_in_window(
     `unverified`, and a `decision` of `withheld` -- which is a great deal louder than a log line.
     A class the verifier invents for a value nobody flagged is dropped: the window is evidence about
     the candidates, not an invitation to add some.
+
+    **A `ConfigError` is not read as a failed call.** It is the one exception this codebase raises and
+    it means *a human must change configuration* (P23) -- an adapter that cannot reach its endpoint
+    raises it on every record, and the run would complete with every hit `unverified` and every
+    record `withheld`. That fails safe, unlike `jury`'s version of the same hole, which fails
+    silent; but *safe* here means nothing ships and no line says why, and the wrong reason for
+    holding a corpus back is the expensive kind of quiet.
     """
     if verifier is None or not guessed:
         return {}
     try:
         confirmed = verifier.confirmed_personal_data(window, dict(guessed))
+    except ConfigError:
+        raise
     except Exception:
         return {}
     return {value: str(named) for value, named in confirmed.items() if value in guessed}

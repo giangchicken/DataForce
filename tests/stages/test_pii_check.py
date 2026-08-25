@@ -84,6 +84,15 @@ def failing() -> ALayerTwo:
     return ALayerTwo(refuse)
 
 
+def misconfigured() -> ALayerTwo:
+    """An adapter reporting a fault a human has to fix, which is what `ConfigError` means."""
+
+    def refuse(window: str, found: Mapping[str, str]) -> Mapping[str, str]:
+        raise ConfigError("config/model/gemma-4-31B-it.json names no endpoint")
+
+    return ALayerTwo(refuse)
+
+
 def a_turn(text: str, role: str = "user") -> Part:
     """One turn of invented conversation."""
     return Part(type="text", role=role, text=text)
@@ -410,3 +419,16 @@ def test_a_mistyped_switch_is_refused_before_any_record_is_read() -> None:
     """`bool("no")` is `True`, so a coerced switch turns redaction on for a value meaning off."""
     with pytest.raises(ConfigError, match="enable_redact"):
         checked(a_turn("Xin chào."), engine=an_engine_that(redact="no"))
+
+
+def test_a_config_error_from_layer_two_stops_the_run() -> None:
+    """P23: `ConfigError` means a human must change configuration, not *this hit is unconfirmed*.
+
+    Swallowed, an adapter that cannot reach its endpoint leaves every hit `unverified` and every
+    record `withheld` -- which fails safe, and is the expensive kind of quiet: nothing ships and no
+    line says why. `jury` has the same one-line fix for the opposite reason, where it fails silent.
+    """
+    with pytest.raises(ConfigError, match="endpoint"):
+        checked(
+            a_turn(f"Mã của mình là {TYPED}."), engine=an_engine_that(misconfigured())
+        )
