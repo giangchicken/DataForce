@@ -43,8 +43,6 @@ from dataforce.record import (
     record_id_for,
 )
 
-from .test_text2text import A_LANGUAGE
-
 QUESTION = "Những tool nào cần được gọi?"
 
 CATALOG: list[dict[str, Any]] = [
@@ -147,7 +145,7 @@ def a_text2text() -> Text2Text:
             version="1",
             declarations={
                 "embedding": {"model": "m", "exclude_roles": []},
-                "personal_data": A_LANGUAGE,
+                "language": "vi",
             },
         ),
         lambda document: (0.0,),

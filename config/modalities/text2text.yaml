@@ -23,36 +23,12 @@ embedding:
   # without the system role, over a declared corpus.
   exclude_roles: [system]
 
-# Layer one's language and this corpus's two lengths. The pattern *shapes* stay in
-# `utils.py` -- a regular expression is tested, and those six are tested against
-# adversarial fixtures (spec.md § *Testing Strategy* item 6). What a corpus decides
-# is here: the words its speakers dictate with, and how long a run has to be before
-# it is a candidate. A modality provides the framework for a task family and may not
-# also decide the family's language, which is what these lines are for.
-personal_data:
-  spoken:
-    # Every word this corpus says a digit with. `mốt`, `tư` and `lăm` are the spoken
-    # variants of one, four and five, which is why this is a set and not ten entries.
-    # Each entry must be alphanumeric: they are written into a regular expression, so
-    # a `.` here would be read as syntax and `re` would still compile it.
-    digits: [không, một, mốt, hai, ba, bốn, tư, năm, lăm, sáu, bảy, tám, chín]
-    # The word for the digit a phone number is dictated from.
-    zero: không
-    # `@` and `.`, said aloud. Joined on whitespace when built, so `a  còng` matches.
-    at: a còng
-    dot: chấm
-  # Six digits is the shortest identifier this corpus's sample carries (`480215`).
-  # Raising it drops short ids from layer one; lowering it makes every price a hit.
-  identifier_digits: 6
-  phone:
-    # The national trunk prefix, written. A Vietnamese mobile number is this and nine
-    # more digits.
-    prefix: "0"
-    # Total digits, and total dictated words, shortest first. **These two disagree by
-    # one and that is inherited, not chosen**: before these lines existed the written
-    # pattern matched ten or eleven digits and the spoken one nine or ten words.
-    # Declaring them preserved both, because moving a literal must not move a
-    # boundary -- a detector's reach decides what gets redacted. What settles it is a
-    # measurement of layer one's recall over a declared corpus.
-    written_digits: [10, 11]
-    spoken_words: [9, 10]
+
+# Which language layer one's patterns are filled with. One word, because the words a
+# language dictates digits with do not vary between two corpora of it -- the shapes
+# are `utils.py`'s and the table behind this name is `spoken_forms`, which is where a
+# second language is added. `vi` and `en` are written down today; a name nobody has
+# written down is a ConfigError rather than a silent fallback, because scanning a
+# Spanish corpus with Vietnamese digit words finds nothing and finding nothing looks
+# exactly like a clean corpus.
+language: vi

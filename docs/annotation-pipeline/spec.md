@@ -903,16 +903,24 @@ normalisation, covering the spoken forms an off-the-shelf scrubber misses: digit
 `.` said aloud. It is tuned for recall and is *allowed* to be noisy — a digit run is also a price, a
 date, an order reference.
 
-**The shapes are the modality's and the language is the corpus's.** Six pattern shapes live in
+**The shapes are the modality's and the language is a parameter.** Six pattern shapes live in
 `text2text/utils.py`, because a regular expression is tested and these are tested against the
-adversarial fixtures § *Testing Strategy* item 6 asks for. What fills them is declared:
-`config/modalities/text2text.yaml` carries the words this corpus dictates digits with
-(`không`…`chín`, plus `mốt`, `tư`, `lăm`), the words for `@` and `.` (`a còng`, `chấm`), and the two
-lengths a run must reach. They were literals in the module until § *The two axes*' definition was
-written properly — a modality that provides a task family's *framework* cannot also decide the
-family's language, and an English `text2text` corpus registering this one got Vietnamese digit words
-and nothing usable. Every declared word must be alphanumeric, because it is written into a regular
-expression and a `.` would compile as syntax. Layer two is a
+adversarial fixtures § *Testing Strategy* item 6 asks for. What fills them is a language: the
+manifest declares one word (`language: vi`) and `spoken_forms` is the table behind it, holding the
+words a language dictates digits with (`không`…`chín`, plus `mốt`, `tư`, `lăm`), the words for `@`
+and `.` (`a còng`, `chấm`), the trunk prefix and the two phone lengths. `vi` and `en` are written
+down; a name with no entry is a `ConfigError` rather than a fallback, because scanning a Spanish
+corpus with Vietnamese digit words finds nothing and finding nothing looks exactly like a clean
+corpus.
+
+Those words were literals in the module until § *The two axes*' definition was written properly — a
+modality that provides a task family's *framework* cannot also decide the family's language, and an
+English `text2text` corpus registering this one got Vietnamese digit words and nothing usable.
+**Declaring the vocabulary per corpus was the first fix and it was wrong:** the words for the digits
+do not vary between two Vietnamese corpora, so a manifest block bought sixty lines of reader,
+validation and fixture for a fact nobody should be able to get wrong. **The table belongs in
+`agent-toolkit`** — it is a language fact with no connection to this pipeline — and it is here
+because this repository pins that library by git tag; the move is an import and a deletion. Layer two is a
 model pass over a bounded window that marks each hit verified or not. The placeholder→original map is
 returned to the edge and written to a path the edge chooses, which `.gitignore` covers.
 
@@ -1253,9 +1261,8 @@ refuses to guess and the number is provisional with its re-measurement named bes
 profile manifest's `max_calls` is. The three empty blocks belong to stages that are not built yet.
 
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
-`embedding.model`, `embedding.exclude_roles` and the `personal_data` block — `spoken.digits`,
-`spoken.zero`, `spoken.at`, `spoken.dot`, `identifier_digits` and `phone.prefix`,
-`phone.written_digits`, `phone.spoken_words`; the profile's are `shape`, `answer_control`,
+`embedding.model`, `embedding.exclude_roles` and `language`; the profile's are `shape`,
+`answer_control`,
 `max_calls`, `label.at`, `roles.target` and `prompts.question`, plus `gold.from`, whose only reader is
 the pilot's gold accuracy in T31. A declaration is read once, at composition, so a wrong *type* is
 still a `ConfigError` there: `exclude_roles: system` — one character from `[system]` — used to become

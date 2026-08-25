@@ -41,7 +41,7 @@ decide what an answer is.
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, final
+from typing import TYPE_CHECKING, Any, NamedTuple, final
 
 from agent_toolkit.string_utils import normalize_text
 
@@ -61,17 +61,7 @@ type Encoder = Callable[[str], Sequence[float]]
 # The keys this modality reads: its own manifest's, and the declared source shape's.
 EMBEDDING = "embedding"
 MODEL = "model"
-PERSONAL_DATA = "personal_data"
-SPOKEN = "spoken"
-DIGITS = "digits"
-ZERO = "zero"
-AT = "at"
-DOT = "dot"
-IDENTIFIER_DIGITS = "identifier_digits"
-PHONE = "phone"
-PREFIX = "prefix"
-WRITTEN_DIGITS = "written_digits"
-SPOKEN_WORDS = "spoken_words"
+LANGUAGE = "language"
 EXCLUDE_ROLES = "exclude_roles"
 MESSAGES = "messages"
 ROLE = "role"
@@ -98,8 +88,108 @@ DISPLAY_TAGS = (
 )
 
 # `@` and `.` are written the same way in every language that writes an address at all, so the one
-# shape that needs nothing declared is a constant.
+# shape that needs no language is a constant.
 EMAIL = r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
+
+# Six digits is the shortest identifier this corpus's sample carries (`480215`). Not a language
+# fact and not declared with the rest: raising it drops short ids out of layer one and lowering it
+# makes every price a hit, and what re-measures it is layer one's recall over a declared corpus.
+IDENTIFIER_DIGITS = 6
+
+
+class SpokenForms(NamedTuple):
+    """How one language dictates the things layer one looks for.
+
+    **Everything here is a fact about a language, and nothing is a fact about a corpus.** That is
+    what makes this a table keyed by a name rather than a block in a manifest: the words for the
+    digits do not change between two Vietnamese corpora, and a corpus that declares them is a
+    corpus that can get them wrong.
+
+    `phone_digits` and `phone_words` are counts of the whole number, written and dictated. **They
+    disagree by one, and that is inherited rather than chosen**: the two patterns matched ten-or-
+    eleven digits and nine-or-ten words respectively before either was named, and a refactor that
+    moves a literal may not move a boundary -- a detector's reach decides what gets redacted. What
+    settles it is a measurement of layer one's recall, which is the pilot's.
+    """
+
+    digits: tuple[str, ...]  # every word this language says a digit with
+    zero: str  # the word a phone number is dictated from
+    at: str  # `@`, said aloud
+    dot: str  # `.`, said aloud
+    phone_prefix: str  # the national trunk prefix, written
+    phone_digits: tuple[int, int]  # total digits written, shortest first
+    phone_words: tuple[int, int]  # total words dictated, shortest first
+
+
+# The language packs. `mốt`, `tư` and `lăm` are the spoken variants of one, four and five, and
+# `oh` is English's, which is why `digits` is a set of words and not ten entries.
+#
+# **This table belongs in `agent-toolkit`** -- it is a language fact with no connection to this
+# pipeline, and `spoken_forms` is the signature it would keep there. It is here because DataForce
+# pins the library by git tag and consuming a new function means cutting one; the move is an import
+# and a deletion the day a tag is cut for other reasons.
+SPOKEN_FORMS: Mapping[str, SpokenForms] = {
+    "vi": SpokenForms(
+        digits=(
+            "không",
+            "một",
+            "mốt",
+            "hai",
+            "ba",
+            "bốn",
+            "tư",
+            "năm",
+            "lăm",
+            "sáu",
+            "bảy",
+            "tám",
+            "chín",
+        ),
+        zero="không",
+        at="a còng",
+        dot="chấm",
+        phone_prefix="0",
+        phone_digits=(10, 11),
+        phone_words=(9, 10),
+    ),
+    "en": SpokenForms(
+        digits=(
+            "zero",
+            "oh",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+        ),
+        zero="zero",
+        at="at",
+        dot="dot",
+        phone_prefix="0",
+        phone_digits=(10, 11),
+        phone_words=(9, 10),
+    ),
+}
+
+
+def spoken_forms(language: str) -> SpokenForms:
+    """How that language dictates a digit, an `@` and a `.`, or a `ConfigError` naming the ones
+    this table knows.
+
+    A language nobody has written down is refused rather than falling back to any particular one:
+    silently scanning a Spanish corpus with Vietnamese digit words finds nothing, and finding
+    nothing is the one failure layer one cannot tell from a clean corpus.
+    """
+    if language not in SPOKEN_FORMS:
+        known = ", ".join(sorted(SPOKEN_FORMS))
+        raise ConfigError(
+            f"no spoken forms are written down for language {language!r}; known: {known}"
+        )
+    return SPOKEN_FORMS[language]
 
 
 def a_detector(name: str, personal_data_class: str, pattern: str) -> Detector:
@@ -168,69 +258,6 @@ def declared_name(manifest: Manifest, *path: str) -> str:
     return value
 
 
-def declared_words(manifest: Manifest, *path: str) -> tuple[str, ...]:
-    """The words a declaration names, in the order it names them.
-
-    **Every token has to be alphanumeric**, and that is not tidiness: these words are written into
-    a regular expression, so a declaration holding `.` or `(` would be read as syntax rather than
-    as a word -- silently, since `re` would still compile. It is also what makes the tone-stripped
-    twin derivable: `normalize_text` over a pattern is safe exactly while the only literals in it
-    came from here.
-    """
-    value = declaration(manifest, *path)
-    if (
-        not isinstance(value, list)
-        or not value
-        or any(
-            not isinstance(word, str)
-            or not word.split()
-            or any(not token.isalnum() for token in word.split())
-            for word in value
-        )
-    ):
-        raise ConfigError(
-            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
-            f"{value!r}, which is not a non-empty list of words"
-        )
-    return tuple(value)
-
-
-def declared_count(manifest: Manifest, *path: str) -> int:
-    """One declared whole number above zero, or a `ConfigError` naming what is there instead.
-
-    `bool` is excluded before `int` because `True` *is* an `int` in Python, which is the slip
-    `tool_decision`'s own reader records paying for.
-    """
-    value = declaration(manifest, *path)
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise ConfigError(
-            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
-            f"{value!r}, which is not a count"
-        )
-    return value
-
-
-def declared_span(manifest: Manifest, *path: str) -> tuple[int, int]:
-    """Two declared counts, shortest first: how long a run may be and still be one thing.
-
-    A pair rather than two keys, because the two are only meaningful together -- a floor above its
-    ceiling matches nothing at all, and a detector that matches nothing is the failure this whole
-    layer is least able to notice (it looks exactly like a clean corpus).
-    """
-    value = declaration(manifest, *path)
-    if (
-        not isinstance(value, list)
-        or len(value) != 2
-        or any(isinstance(edge, bool) or not isinstance(edge, int) for edge in value)
-        or not 1 <= value[0] <= value[1]
-    ):
-        raise ConfigError(
-            f"config/modalities/{manifest.name}.yaml declares {'.'.join(path)} as "
-            f"{value!r}, which is not two counts, shortest first"
-        )
-    return (value[0], value[1])
-
-
 def declared_roles(manifest: Manifest, *path: str) -> frozenset[str]:
     """The roles a declaration names, or a `ConfigError` for anything that is not a list of them.
 
@@ -260,58 +287,54 @@ def embedding_model(manifest: Manifest) -> str:
 
 
 def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
-    """The six shapes layer one scans for, filled with the words and lengths a corpus declares.
+    """The six shapes layer one scans for, filled with the words the declared language dictates.
 
-    **The shapes are here and the language is not, and the split is the point.** A regular
+    **The shapes are here and the language is a parameter, and the split is the point.** A regular
     expression is tested, and these six are tested against the adversarial fixtures § *Testing
     Strategy* item 6 asks for -- so the shape of a dictated phone number (the word for the trunk
-    prefix, then eight or nine more digit words) stays in code where a test can hold it. What a
-    *corpus* supplies is which words its speakers use and how long its identifiers run, and those
+    prefix, then eight or nine more digit words) stays in code where a test can hold it. The words
     were Vietnamese literals in this module until it was pointed out that a modality claiming to
     provide "the common processing framework for a task family" cannot also decide the family's
     language: an English `text2text` corpus registered this and got `không|một|mốt|...`.
 
-    **Written and spoken phone lengths disagree by one and are declared as they are.** The written
-    shape matches ten or eleven digits and the spoken shape nine or ten words, which is what the two
-    patterns did before they were parameterised. Moving a literal must not move a boundary -- a
-    detector's reach decides what gets redacted -- so the discrepancy is declared, visible in
-    `config/modalities/text2text.yaml`, and left for whoever measures layer one's recall to settle.
+    The manifest declares one word -- which language -- and `spoken_forms` is the table. A block of
+    declared vocabulary was the other build and it is worse: the words for the digits do not vary
+    between two Vietnamese corpora, so declaring them per corpus adds sixty lines of reader,
+    validation and fixture for a fact nobody should be able to get wrong.
 
-    The two overlap on purpose: a phone number matches the identifier shape too, layer one is tuned
-    for recall, and layer two is what decides which class it was.
+    The identifier and phone shapes overlap on purpose: a phone number matches both, layer one is
+    tuned for recall, and layer two is what decides which class it was.
     """
-    digits = "|".join(
-        spaced(word) for word in declared_words(manifest, PERSONAL_DATA, SPOKEN, DIGITS)
-    )
-    zero = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, ZERO))
-    at = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, AT))
-    dot = spaced(declared_name(manifest, PERSONAL_DATA, SPOKEN, DOT))
-    least = declared_count(manifest, PERSONAL_DATA, IDENTIFIER_DIGITS)
-    prefix = declared_name(manifest, PERSONAL_DATA, PHONE, PREFIX)
-    written = declared_span(manifest, PERSONAL_DATA, PHONE, WRITTEN_DIGITS)
-    dictated = declared_span(manifest, PERSONAL_DATA, PHONE, SPOKEN_WORDS)
+    spoken = spoken_forms(declared_name(manifest, LANGUAGE))
+    digits = "|".join(spaced(word) for word in spoken.digits)
+    least = IDENTIFIER_DIGITS - 1
+    written = spoken.phone_digits
+    dictated = spoken.phone_words
     return (
         a_detector(
             "phone_digits",
             "PHONE",
-            rf"\b{prefix}\d(?:[\s.-]?\d){{{written[0] - 2},{written[1] - 2}}}\b",
+            rf"\b{spoken.phone_prefix}\d(?:[\s.-]?\d){{{written[0] - 2},{written[1] - 2}}}\b",
         ),
         a_detector(
             "phone_spoken",
             "PHONE",
-            rf"{zero}(?:[\s.,]+(?:{digits})){{{dictated[0] - 1},{dictated[1] - 1}}}",
+            rf"{spaced(spoken.zero)}(?:[\s.,]+(?:{digits}))"
+            rf"{{{dictated[0] - 1},{dictated[1] - 1}}}",
         ),
         a_detector(
-            "customer_id_digits", "CUSTOMER_ID", rf"\d(?:[\s.-]?\d){{{least - 1},}}"
+            "customer_id_digits", "CUSTOMER_ID", rf"\d(?:[\s.-]?\d){{{least},}}"
         ),
         a_detector(
             "customer_id_spoken",
             "CUSTOMER_ID",
-            rf"(?:{digits})(?:[\s.,]+(?:{digits})){{{least - 1},}}",
+            rf"(?:{digits})(?:[\s.,]+(?:{digits})){{{least},}}",
         ),
         a_detector("email_written", "EMAIL", EMAIL),
         a_detector(
-            "email_spoken", "EMAIL", rf"[\w.+-]+\s+{at}\s+[\w.\s-]+?\s+{dot}\s+\w+"
+            "email_spoken",
+            "EMAIL",
+            rf"[\w.+-]+\s+{spaced(spoken.at)}\s+[\w.\s-]+?\s+{spaced(spoken.dot)}\s+\w+",
         ),
     )
 

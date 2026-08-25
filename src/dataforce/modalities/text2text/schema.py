@@ -50,15 +50,15 @@ class Detector(BaseModel):
         ...,
         description=(
             "The regular expression over the raw text: a shape from `utils.py` filled "
-            "with the words the manifest declares, in the corpus's own spelling."
+            "with the words of the language the manifest names."
         ),
     )
     tone_stripped_pattern: str = Field(
         ...,
         description=(
             "The same expression over `normalize_text(text, remove_tone_marks=True)`, "
-            "derived from `pattern` so a pattern is written once. Safe only because "
-            "every declared word is alphanumeric: normalising syntax would not be."
+            "derived from `pattern` so a pattern is written once. Safe because every "
+            "word a language pack holds is a word: normalising syntax would not be."
         ),
     )
 
