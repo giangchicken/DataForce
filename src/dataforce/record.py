@@ -147,7 +147,9 @@ def record_id_for(content: Sequence[Part]) -> str:
     whitespace -- and not about the text: two turns differing by one space are two records, and
     grouping the near-duplicates is `duplicate_check`'s job rather than this function's. Order
     within a record is content (Requirement 7); position in the source file is not, so a shuffled
-    re-ingest produces the same set of ids (I9).
+    re-ingest produces the same set of ids (I9). The three options below are written twice more, as
+    `canonical_json` in each axis, and I24 holds the copies to one form -- flipping `ensure_ascii`
+    in any one of them re-keys every Vietnamese record there is, and I9 would not notice.
 
     Two records whose content is identical therefore share an id, which is the design's own
     consequence: `duplicate_check` reports such a pair rather than the id pretending they differ.

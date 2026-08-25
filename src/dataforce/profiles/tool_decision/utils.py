@@ -139,6 +139,9 @@ def canonical_json(value: Any) -> str:
 
     Argument values are compared through this rather than with `==` because an argument may itself
     be an object or an array, and two dicts that differ only in key order are one value.
+
+    The same three options are the modality's and `record_id_for`'s, and I24 is what holds the three
+    copies to one form -- a `record_id` is the hash of the string this shape produces.
     """
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 

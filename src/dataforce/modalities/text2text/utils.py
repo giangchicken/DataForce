@@ -219,7 +219,8 @@ def canonical_json(value: Any) -> str:
     Duplicated from `tool_decision/utils.py` on the same terms as `declaration` below -- the two
     axes share `name`, `version`, `Part` and one separator, and nothing else. A third shared helper
     would be a fourth, and the first key one axis needed and the other did not would put a
-    profile's vocabulary in a module the modality imports.
+    profile's vocabulary in a module the modality imports. What that costs is copies that can
+    drift, and I24 is what pays it rather than the seam.
     """
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
