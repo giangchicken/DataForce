@@ -704,6 +704,13 @@ class ToolDecision:
         """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""
         return answer_distance(a, b)
 
+    def answer_is_permitted(self, answer: StoredAnswer, record: Record) -> bool:
+        """Does this answer belong to this record's answer space: the schema, and what it
+        cannot say. The ceiling is this profile's, which is why the free function takes it and
+        the member does not -- a caller counting a jury's invalid votes has no business knowing
+        it."""
+        return answer_is_permitted(record, answer, self._max_calls)
+
     def vote_consensus(
         self, votes: Sequence[StoredAnswer], record: Record
     ) -> StoredAnswer | None:

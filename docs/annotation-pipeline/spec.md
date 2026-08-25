@@ -128,6 +128,11 @@ class Profile(Protocol):
     def answer_distance(self, a: Answer, b: Answer) -> float:
         """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""
 
+    def answer_is_permitted(self, answer: Answer, record: Record) -> bool:
+        """Does this answer belong to this record's answer space: the schema, and what it
+        cannot say. `answer_schema` materialises the space and a schema cannot express *at most
+        one call per tool name*, so the member is the whole question and not the schema alone."""
+
     def vote_consensus(self, votes: Sequence[Answer], record: Record) -> Answer | None:
         """The panel's answer; `[]` where it agreed on none; None where none is defensible."""
 
@@ -149,7 +154,7 @@ class Profile(Protocol):
         """The record in the shape a trainer expects."""
 ```
 
-Fifteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
+Sixteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`.
 
@@ -409,8 +414,12 @@ Each is a statement a test can be pointed at.
 ### ai_review
 
 24. `jury` records one vote per model: the model name, whether the existing label is right, the model's
-    own answer, and its reasoning. A vote that does not validate against the record's materialised
-    answer schema is an **invalid vote**, counted and never silently dropped.
+    own answer, and its reasoning. A vote whose answer is not in the record's answer space is an
+    **invalid vote**, counted and never silently dropped. *In the answer space* is the profile's
+    `answer_is_permitted` and not the materialised schema alone, because a schema cannot say *at most
+    one call per tool name* and `vote_consensus` already refuses an answer on that ground — two
+    readings of *valid* on one record is how `invalid_votes: 0` comes to sit beside a null
+    `final_prediction`.
 25. `cohesion` computes two numbers and makes no model call: agreement of the jury with itself, and
     agreement of the jury with the existing label. Re-running it costs nothing.
 26. `triage` turns those numbers into a bucket, a stratum and a quota using thresholds from
@@ -552,8 +561,10 @@ renamed the package puts the second shell inside it rather than beside it (Decis
 the first run. The abstraction belongs to the inner layer, so `Engine` and `Registry` are
 `dataforce/engine.py`, holding a resolved pair and no I/O; the composition root that reads config to
 build one is `edge/bootstrap.py`. `ports.py` moves for the same reason: `QuestionStore` is what the
-*engine* demands of the edge, so an adapter cannot be where it is declared. It holds one port, because
-a port with no adapter is a guess about a future caller — see Decision 17.
+*engine* demands of the edge, so an adapter cannot be where it is declared. It held one port when that
+sentence was written, because a port with no adapter is a guess about a future caller — see Decision 17.
+It holds three, and each arrived with the caller that made it real: `PersonalDataVerifier` with
+`pii_check`, `JuryPanel` with `jury`.
 
 ```
 src/dataforce/              the package; its docstring states the import direction and the five module kinds
@@ -562,7 +573,7 @@ src/dataforce/              the package; its docstring states the import directi
   record.py                 DEFINITION · Record, and Part — the bus, and the content it carries.
   manifest.py               DEFINITION · Manifest — one axis's declaration, already parsed.
   engine.py                 DEFINITION · Engine, Registry and ServiceResult — what a service takes and returns; no I/O.
-  ports.py                  DEFINITION · QuestionStore and PersonalDataVerifier — what the engine demands of the edge.
+  ports.py                  DEFINITION · QuestionStore, PersonalDataVerifier and JuryPanel — what the engine demands of the edge.
 
   pipeline/                 the flow: one module per stage, and the fold that runs a phase's stages in order
     __init__.py             façade · the flow's table, its fold, and the phases under it; holds nothing of its own.
@@ -916,13 +927,21 @@ defect.
 
 | stage | reads | writes | skips when |
 |---|---|---|---|
-| `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken |
+| `jury` | `content`, `label`, materialised answer schema, `jury_slots` | `ai_review.jury` | `data_quality.label_check.quarantined` — no point paying a panel to judge a record already known broken; and a record `label_check` never saw at all, for the reason its own row gives |
 | `cohesion` | `ai_review.jury`, `label` | `ai_review.cohesion` | `ai_review.jury` is absent |
 | `triage` | `ai_review.cohesion`, `data_quality` | `ai_review.triage` | `ai_review.cohesion` is absent |
 
 Three stages rather than one, because they fail and re-run for different reasons: `jury` costs money and
 is cached, `cohesion` is pure arithmetic, and `triage` is re-run on **exactly one** threshold re-tuning
 pass after the pilot. A bucket whose precision the pilot cannot establish gets **no quota**.
+
+**The panel is a port and the judgment is not.** `JuryPanel` holds the composition, the task statement
+out of `config/prompts/` and the retries, because a model call opens a socket and no engine module makes
+one; what crosses is the filled slots and this record's materialised answer space, never the record.
+What comes back is what each juror said, and whether a vote is *usable* is decided here, by the profile.
+Letting the panel decide it by the schema alone would put two readings of *valid* on one record —
+Requirement 24. An engine opened with no panel is a `ConfigError` from `jury` before the first record:
+layer two's absence leaves `pii_check` a layer one to run, and this one leaves nothing.
 
 #### `human_review`
 
@@ -1614,6 +1633,8 @@ Each names the check that holds it, not a file that used to.
 | A declared count has moved | a line in the `metrics.json` diff. **Nothing stops.** This is the cost of Decision 10 |
 | A jury vote does not validate | counted as an invalid vote, kept with `valid: false`, never silently dropped; a noisy panel shows up as a high `invalid_votes` fold |
 | A model call fails after retries | `agent-toolkit` owns retry and rate limiting; an exhausted call is one missing vote, and `cohesion` computes over the votes that arrived |
+| The whole panel fails for one record | read as *no votes*, for the reason above: the record carries no vote, a null `final_prediction` and a bucket that sends it to a person, and the run completes |
+| `ai_review` run on an engine with no panel | `ConfigError` from `jury` before the first record. It is a fact about the configuration, not about a record, and writing a key that says the panel agreed on nothing would be a lie about a call nobody made |
 | `enable_redact: false` and personal data found | `pii_check` reports, `content` untouched, `decision: "reported"`. The run completes. `export`'s precondition is what keeps it out of a release — and export is not built yet, so **until it is, nothing prevents a reported-but-unredacted corpus reaching an artifact** |
 | Label Studio unreachable during sync | the sync fails; no record key changes, no `publication` row is written, every other endpoint is unaffected |
 | A question is synced twice | the unique constraint makes the second a no-op |

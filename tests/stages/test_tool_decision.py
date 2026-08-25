@@ -346,6 +346,46 @@ def test_the_space_is_materialised_and_never_written_down() -> None:
     assert profile.answer_schema(record) == profile.answer_schema(record)
 
 
+# --- what the space permits, which is more than the schema can say ---
+
+
+def test_a_permitted_answer_is_one_the_materialised_schema_accepts() -> None:
+    """The ordinary case: the member and the schema agree, and the schema is the whole of it."""
+    profile, record = a_profile(), a_record()
+
+    assert profile.answer_is_permitted((SENT,), record)
+    assert profile.answer_is_permitted((), record)
+    assert not profile.answer_is_permitted(("SendStatement",), record)
+
+
+def test_two_calls_on_one_tool_are_refused_where_the_schema_cannot_refuse_them() -> (
+    None
+):
+    """`uniqueItems` compares whole calls, so two calls on one tool with different arguments are
+    unique to the schema and still name one tool twice. `jury` counts an invalid vote on this
+    member for that reason: `vote_consensus` refuses the same answer, and a stage reading the
+    schema alone would call a vote usable that no consensus could be built from."""
+    profile, record = a_profile(), a_record()
+    twice = (
+        SENT,
+        {
+            "name": "SendStatement",
+            "arguments": {"ma_khach": "480216", "ky": "thang_truoc"},
+        },
+    )
+
+    assert a_validator(profile, record).is_valid(list(twice))
+    assert not profile.answer_is_permitted(twice, record)
+
+
+def test_an_answer_over_the_declared_ceiling_is_refused() -> None:
+    """The ceiling is the manifest's, which is why the member does not take one: a caller
+    counting a jury's invalid votes has no business knowing what this profile permits."""
+    profile = a_profile(max_calls=1)
+
+    assert not profile.answer_is_permitted((SENT, LOOKED_UP), a_record())
+
+
 # --- consensus, per name and then per argument ---
 
 
@@ -948,14 +988,15 @@ def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
 def test_it_answers_every_member_its_protocol_declares() -> None:
     """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
 
-    An equality, not a containment: the fifteen are *closed*, and the containment version of this
+    An equality, not a containment: the sixteen are *closed*, and the containment version of this
     test is what let `final_label` ship as an undeclared extra. I23 checks the same closure off the
     tree; this checks it off a live instance. Fifteen since T16, which brought `redact_label` the
-    caller T13 refused to add it without.
+    caller T13 refused to add it without; sixteen since T19, which brought `jury` -- a stage that
+    cannot count an invalid vote without asking what a permitted answer is.
     """
     declared = {name for name in dir(Profile) if not name.startswith("_")} | set(
         Profile.__annotations__
     )
 
-    assert len(declared) == 15
+    assert len(declared) == 16
     assert {name for name in dir(a_profile()) if not name.startswith("_")} == declared

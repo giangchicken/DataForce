@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 4 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-`make check` is green over 56 modules and 715 tests, 242 of which are not guards — but **T34 is open
+`make check` is green over 56 modules and 819 tests, 269 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 5 opens with T19, and T34 is still the oldest thing on this
 list.**
@@ -132,7 +132,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T16 | `pii_check` | 4 | T2, T14 | L | ✓ |
 | T17 | `duplicate_check` | 4 | T12, T14 | M | ✓ |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | ✓ |
-| T19 | `jury` | 5 | T2, T13, T15 | M | |
+| T19 | `jury` | 5 | T2, T13, T15 | M | ✓ |
 | T20 | `cohesion` | 5 | T19 | S | |
 | T21 | `triage` | 5 | T20 | S | |
 | T22 | `question_generate` | 6 | T21 | M | |
@@ -1928,6 +1928,41 @@ limiting; an exhausted call is one missing vote.
 **Source.** `spec.md` § *Per-service contracts* row 4, Requirements 24 and 28.
 
 **Verify.** `uv run pytest tests/stages/test_jury.py -q` — stubbed panel, no network.
+
+**Landed.** 24 tests, a third port and a sixteenth profile member. Two decisions and one thing this
+task could not do.
+
+**`JuryPanel` is the third port, on `PersonalDataVerifier`'s own terms.** A model call opens a socket
+and no engine module may (I1), so the edge holds the composition, the task statement out of
+`config/prompts/` and the retries. What crosses is the filled slots and the record's materialised
+answer space — never the record, so nothing about provenance or a previous scan leaves with the
+prompt. An engine opened with no panel is a `ConfigError` from `jury` before the first record, which
+is where the two ports part: layer two's absence leaves `pii_check` a layer one to run, and this one
+leaves nothing to run at all.
+
+**Deciding a vote's validity is the profile's, and that is the sixteenth member.** The obvious
+build has the panel report `valid` — `complete_structured` validates against the schema it is handed
+and returns `ok` — and it is wrong for a reason the codebase had already written down: `answer_schema`
+cannot say *at most one call per tool name*, because `uniqueItems` compares whole calls, and
+`vote_consensus` refuses an answer on exactly that ground. Two readings of *valid* on one record is
+how `invalid_votes: 0` comes to sit beside a null `final_prediction`, with nothing on the record to
+say which reading was wrong. So `answer_is_permitted(answer, record)` joins the protocol, with the
+caller that made it real — the same rule T16 applied to `redact_label` and T2 to `jury_slots`.
+Requirement 24 was reworded to say *answer space* rather than *answer schema*. The alternative was
+`jsonschema` in `pipeline/` under a P30 exemption, which buys a weaker check for a second exemption.
+
+**T27 still owes Requirement 28.** The cross-border precondition is on *opening the engine* and there
+is no `open_engine` yet, so nothing enforces it today; `jury` is the call it is about, and the check
+belongs beside the one that reads `config/`. Worth widening while it is written: the requirement names
+jury calls, and layer two is the pipeline's other model call carrying unredacted content — `jury` sees
+redacted content wherever `enable_redact` is on, and `pii_check` by construction never does.
+
+Two smaller things. `plurality` groups by δ rather than by `==`, for `duplicate_check`'s reason: two
+votes naming the same two tools in a different order are one answer, and a tie goes to the juror that
+voted first so two runs write the same value. And a juror that never answered is *absent* while one
+that decoded nothing is *present and invalid* — the first moves the vote count, the second moves
+`invalid_votes`, and collapsing them would make a panel that half failed read like a panel that half
+misbehaved.
 
 ---
 

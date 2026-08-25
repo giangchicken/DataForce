@@ -10,7 +10,14 @@ and the digest of every policy file that produced them, which is what makes two 
 configuration comparable (Requirement 45). It holds no clock and no path, and it opens
 nothing -- I1 is the scan that says so. What it does hold is the **ports** the edge supplied, because
 every service's signature is ``(engine, records)`` and a port has no other way to reach a stage:
-``personal_data_verifier`` is layer two's interface, never a client this module builds.
+``personal_data_verifier`` is layer two's interface and ``jury_panel`` is the panel's, never a
+client this module builds.
+
+**Both ports default to ``None`` and the two absences mean different things.** Layer two is a
+*second* layer, so an engine without one still scans: ``pii_check`` runs its patterns and the record
+says `unverified`. A jury without a panel has nothing to run at all, so ``jury`` refuses the run
+rather than writing a key that says the panel agreed on nothing -- the field is optional here
+because the type cannot express *required for one phase*, and the stage is where that is said.
 
 **``ServiceResult`` is here because this is where a service's signature is written.** ``Engine``
 is what a stage is handed and ``ServiceResult`` is what it hands back, and the two are one sentence:
@@ -29,7 +36,7 @@ from typing import Any, final
 
 from dataforce.errors import ConfigError
 from dataforce.modalities import Modality
-from dataforce.ports import PersonalDataVerifier
+from dataforce.ports import JuryPanel, PersonalDataVerifier
 from dataforce.profiles import Profile
 from dataforce.record import Record
 
@@ -102,6 +109,7 @@ class Engine:
     personal_data_verifier: PersonalDataVerifier | None = (
         None  # layer two; None runs layer one alone
     )
+    jury_panel: JuryPanel | None = None  # the panel; None is `jury`'s `ConfigError`
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 """DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
 
-Fifteen members, closed. The three named types are aliases here and concrete pydantic models in
+Sixteen members, closed. The three named types are aliases here and concrete pydantic models in
 an implementation's ``schema.py`` (Requirement 47). This module imports no implementation of its
 own axis (I16).
 """
@@ -50,6 +50,12 @@ class Profile(Protocol):
 
     def answer_distance(self, a: Answer, b: Answer) -> float:
         """δ: 0.0 identical, 1.0 unrelated. Name-first, soft over arguments. `δ(∅, ∅) = 0`."""
+        ...
+
+    def answer_is_permitted(self, answer: Answer, record: Record) -> bool:
+        """Does this answer belong to this record's answer space: the schema, and what it
+        cannot say. `answer_schema` materialises the space and a schema cannot express *at most
+        one call per tool name*, so the member is the whole question and not the schema alone."""
         ...
 
     def vote_consensus(self, votes: Sequence[Answer], record: Record) -> Answer | None:
