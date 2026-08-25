@@ -23,7 +23,7 @@ import pytest
 
 from dataforce.engine import Engine
 from dataforce.errors import ConfigError
-from dataforce.pipeline.ai_review.jury import jury
+from dataforce.pipeline.ai_review.jury import answered, jury
 from dataforce.pipeline.data_quality.label_check import label_check
 from dataforce.ports import JurorAnswer
 from dataforce.record import PanelVerdict, Record, StoredAnswer
@@ -75,6 +75,29 @@ class AFailingPanel(APanel):
         self, slots: Mapping[str, Any], answer_schema: Mapping[str, Any]
     ) -> Sequence[JurorAnswer]:
         raise RuntimeError("the endpoint is not answering")
+
+
+class AMisconfiguredPanel(APanel):
+    """An adapter reporting a fault a human has to fix, which is what `ConfigError` means."""
+
+    def votes(
+        self, slots: Mapping[str, Any], answer_schema: Mapping[str, Any]
+    ) -> Sequence[JurorAnswer]:
+        raise ConfigError("config/model/DeepSeek-V4-Flash.json names no endpoint")
+
+
+class ARaisingProfile:
+    """Only the two members `answered` calls, and one of them is broken.
+
+    Not a whole `Profile`: what is under test is which side of the seam a raise came from, and
+    fifteen unused members would make the fixture the thing a reader has to understand.
+    """
+
+    def jury_slots(self, record: Record) -> Mapping[str, Any]:
+        raise KeyError("a profile bug, on the engine's side of the port")
+
+    def answer_schema(self, record: Record) -> Mapping[str, Any]:
+        return {}
 
 
 def a_juror(
@@ -365,3 +388,26 @@ def test_the_refusal_does_not_depend_on_there_being_a_record() -> None:
     """An empty batch is not a reason to accept a configuration that cannot run."""
     with pytest.raises(ConfigError, match="panel"):
         jury(an_engine_that(None), [])
+
+
+def test_a_config_error_from_the_panel_stops_the_run() -> None:
+    """P23: `ConfigError` means a human must change configuration, so it is not one missing vote.
+
+    An adapter that cannot reach its endpoint raises on record 1 and on all twenty thousand.
+    Caught, the run completes with every record scoring `0.0` in `cohesion` and landing in
+    `contested` -- a corpus-shaped lie, and louder than the failure it hid.
+    """
+    engine = an_engine_that(AMisconfiguredPanel())
+
+    with pytest.raises(ConfigError, match="endpoint"):
+        jury(engine, label_check(engine, [a_record()]).records)
+
+
+def test_a_raise_on_the_engine_side_of_the_port_is_not_a_panel_failure() -> None:
+    """The `try` fences the call across the seam and nothing on this side of it. A profile bug
+    read as *the panel did not answer* is a bug that produces a plausible record instead of a
+    stack trace."""
+    engine = replace(an_engine_that(a_panel_of((SENT,))), profile=ARaisingProfile())  # type: ignore[arg-type]
+
+    with pytest.raises(KeyError):
+        answered(engine, a_panel_of((SENT,)), a_record())

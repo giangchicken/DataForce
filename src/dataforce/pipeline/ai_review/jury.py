@@ -47,8 +47,13 @@ from dataforce.record import JurorVote, PanelVerdict, Record, StoredAnswer
 STAGE = "jury"
 
 
-def judged(record: Record) -> bool:
+def needs_jury(record: Record) -> bool:
     """This stage's precondition: the record has a label verdict, and it did not fail.
+
+    Named for the decision and not for the state, because at the call site the state reads as the
+    past tense of this stage -- *judged* is what a record is on the way out. `pii_check`'s
+    `label_check_has_run` keeps the state form for the opposite reason: what it has to make visible
+    is that the *value* is not its condition, and this one reads a value.
 
     Two absences and one verdict, and only the verdict is in § *Per-service contracts*' cell. A
     record `label_check` never saw is skipped here for `pii_check`'s reason rather than for this
@@ -69,16 +74,29 @@ def answered(engine: Engine, panel: JuryPanel, record: Record) -> Sequence[Juror
 
     The record does not leave: what crosses is the filled slots and this record's materialised
     answer space, which is Requirement 51's own division of the prompt.
+
+    **Both profile calls are made outside the `try`**, on `pii_check`'s line: what is being caught
+    is a call across the seam, and a profile that raised would be a bug on this side of it read as
+    a panel that did not answer. Neither can raise today -- `catalog_of` skips a malformed entry
+    rather than refusing it -- which makes this a fence and not a fix.
+
+    **A `ConfigError` is not caught**, because it is the one exception this codebase raises and it
+    means *a human must change configuration* (P23). An adapter that cannot reach its endpoint
+    raises on record 1 and on all twenty thousand: swallowed, the run completes with every record
+    scoring `0.0` and landing in `contested`, which is a corpus-shaped lie. Every other failure is
+    one missing panel answer and the record carries the consequence.
     """
+    slots = engine.profile.jury_slots(record)
+    space = engine.profile.answer_schema(record)
     try:
-        return panel.votes(
-            engine.profile.jury_slots(record), engine.profile.answer_schema(record)
-        )
+        return panel.votes(slots, space)
+    except ConfigError:
+        raise
     except Exception:
         return ()
 
 
-def votes_of(
+def juror_votes(
     engine: Engine, record: Record, said: Sequence[JurorAnswer]
 ) -> tuple[JurorVote, ...]:
     """Every juror's answer with the one thing the panel does not decide added: is it usable.
@@ -127,7 +145,7 @@ def plurality_of(engine: Engine, votes: Sequence[JurorVote]) -> StoredAnswer:
     return max(grouped, key=len)[0] if grouped else ()
 
 
-def verdict_of(engine: Engine, panel: JuryPanel, record: Record) -> PanelVerdict:
+def panel_verdict(engine: Engine, panel: JuryPanel, record: Record) -> PanelVerdict:
     """One record's panel: every vote it cast, what most of them said, and what it is taken to say.
 
     The panel is a parameter rather than something read off the engine again, because `jury` has
@@ -138,7 +156,7 @@ def verdict_of(engine: Engine, panel: JuryPanel, record: Record) -> PanelVerdict
     composition is a fact about the run, and both reach the record because a change to either
     invalidates every comparison drawn across them.
     """
-    votes = votes_of(engine, record, answered(engine, panel, record))
+    votes = juror_votes(engine, record, answered(engine, panel, record))
     usable = [vote.answer for vote in votes if vote.valid]
     return PanelVerdict(
         panel_version=panel.panel_version,
@@ -167,11 +185,11 @@ def jury(engine: Engine, records: Iterable[Record]) -> ServiceResult:
             record.model_copy(
                 update={
                     "ai_review": record.ai_review.model_copy(
-                        update={STAGE: verdict_of(engine, panel, record)}
+                        update={STAGE: panel_verdict(engine, panel, record)}
                     )
                 }
             )
-            if judged(record)
+            if needs_jury(record)
             else record
             for record in records
         )
