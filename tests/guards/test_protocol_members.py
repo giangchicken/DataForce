@@ -21,7 +21,7 @@ import pytest
 from dataforce.modalities import Modality
 from dataforce.profiles import Profile
 
-from .tree import SPEC, SRC, module_at
+from .tree import SPEC, SRC, module_at, plain
 
 # The document writes its counts in words, and so do the two modules. A word this tuple does not
 # know fails loudly rather than being skipped -- a silent skip is how the count stops being checked.
@@ -77,6 +77,15 @@ def drawn_members(heading: str) -> set[str]:
     }
 
 
+def drawn_sentence(heading: str) -> str:
+    """What the document says the protocol *is*: the class docstring inside its own block."""
+    block = section(heading).split("```python")[1].split("```")[0]
+    declared = next(
+        node for node in ast.parse(block).body if isinstance(node, ast.ClassDef)
+    )
+    return plain(ast.get_docstring(declared) or "")
+
+
 def stated_count(text: str) -> int:
     """The number a "<word> members, closed" sentence states, as a number."""
     written = COUNT.search(text)
@@ -111,11 +120,27 @@ def test_the_count_in_the_module_docstring_is_the_same_number(
     assert stated_count(docstring) == len(protocol.__protocol_attrs__)
 
 
+@pytest.mark.parametrize(("axis", "heading", "protocol"), AXES)
+def test_the_sentence_defining_the_protocol_is_the_same_on_both_sides(
+    axis: str, heading: str, protocol: type
+) -> None:
+    """The fourth statement, and the one the member list cannot check.
+
+    A protocol's docstring says what the axis *is*, and it is written twice -- in the document's
+    block and on the class. Nothing compared them until a reader asked why `Modality` promises an
+    output half that no member delivers, which is a question about this sentence and not about the
+    six names above it (P31).
+    """
+    assert drawn_sentence(heading) == plain(protocol.__doc__ or "")
+
+
 def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
     """Guards the parse: an empty set on both sides would make the comparison vacuous."""
     assert len(drawn_members("### Modality")) == 6
     assert "content_parts" in drawn_members("### Modality")
     assert "answer_from_response" in drawn_members("### Profile")
+    assert drawn_sentence("### Modality").startswith("One input")
+    assert drawn_sentence("### Profile").startswith("One dataset task")
 
 
 @pytest.mark.parametrize(

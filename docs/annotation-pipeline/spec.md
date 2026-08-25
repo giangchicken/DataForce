@@ -66,10 +66,25 @@ Everything downstream is a composition of exactly two named things, and neither 
 
 ### Modality — how content is read and shown
 
-**A modality is an input→output pair, named as one string.** `text2text`, `speech2text`, `image2text`,
-`video2text`. `text`, `audio`, `image` and `video` are the vocabulary those names are built from; they
-are not themselves registrable. This is what `objective.md` §3 writes on the record:
-`branch.modality == "text2text"`.
+**A modality names a family of input-to-output tasks, and provides the common processing framework
+for that family.** `text2text`, `speech2text`, `image2text`, `video2text`. The name is the family
+boundary; the six members are the framework, and the specific task inside the family is the *profile*.
+This is why nothing below answers anything: what the output half declares is which tasks are *in* the
+family, not an operation the modality performs. `tool_decision` is in `text2text` because a juror is
+prompted with text and answers with text — its answer is a list of calls, and a list of calls emitted
+by a model is text.
+
+**The two halves name different things, and neither is a `PartType`.** The first half is the content's
+*genre* and `text`, `audio`, `image`, `video` are the *media* a part can carry: `speech2text` is not
+`audio2text` because an audio part can be music or a room tone and no transcription task wants those.
+The second half is the representation every member then works on. Neither half is registrable on its
+own, and nothing validates a name against either vocabulary — the manifest filename is the identity
+(Requirement 40), which is what `objective.md` §3 writes on the record: `branch.modality ==
+"text2text"`.
+
+**All four names declared today end in `2text`, so the second half currently discriminates nothing.**
+That is why it reads as redundant, and it is not: it is a declared boundary waiting for its first
+sibling that does not reduce to text. `text2text` is the case where the reduction is the identity.
 
 ```python
 class Modality(Protocol):
@@ -1262,11 +1277,21 @@ two shells over one implementation. *Reversible:* yes — deleting `edge/routers
 engine intact.
 
 **2 · A modality is the input→output pair, named as one string.**
-*Alternative:* the atomic input medium, with the output half coming from the profile. *Why this:*
-`objective.md` §3 writes `branch.modality = "text2text"` on the record, and the display half of the
-annotation config genuinely depends on both halves. *Cost:* `speech2text` and `text2text` will share
-text-rendering code, which goes in a shared helper rather than a base class. *Reversible:* costly — the
-name is stamped into every record's `branch` and `provenance`.
+*Alternative:* the atomic input medium, with the output half coming from the profile. *Why this:* the
+pair is what determines **which processing framework applies**, and a profile cannot supply half of
+the identity of the framework it is run under — `speech2text` needs audio loading, an audio embedding
+and audio detectors, and that is settled by the pair and not by the task inside it. *Cost:*
+`speech2text` and `text2text` will share text-rendering code, which goes in a shared helper rather
+than a base class. *Reversible:* costly — the name is stamped into every record's `branch` and
+`provenance`.
+
+*Two justifications were struck in Phase 5 and the choice stands without them.* One was that
+`objective.md` §3 writes `branch.modality = "text2text"` on the record: that establishes the string
+and is silent on what its halves mean, which was the only thing in question. The other was that the
+display half of the annotation config depends on both halves — `display_config` returns the
+conversation and nothing else, and what is being judged reaches an annotator through the profile's
+*capture* half (Requirement 31). It may become true when a family arrives whose output is not text;
+today it described an intention as a fact (AGENTS.md §7).
 
 **3 · `ai_review` is three stages, not one.**
 `jury` → `cohesion` → `triage`. *Alternative:* one stage writing votes, agreement and bucket together,

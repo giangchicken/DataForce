@@ -61,8 +61,10 @@ class RecordModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-# Which kind of turn a part is. The four are the vocabulary modality names are built from --
-# `text2text`, `speech2text` -- and are not themselves registrable (spec.md § *The two axes*).
+# Which kind of turn a part is: the *medium* a part carries, and not the vocabulary a modality
+# name is built from -- `speech2text` is not `audio2text`, because an audio part can be music or a
+# room tone and no transcription task wants those. A modality name's first half is the content's
+# genre; these four are what a part can hold. Neither is registrable (spec.md § *The two axes*).
 PartType = Literal["text", "audio", "image", "video"]
 
 # An answer as the record stores it: one entry per call. What is inside a call is the profile's
