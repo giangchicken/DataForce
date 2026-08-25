@@ -114,8 +114,10 @@ NOTE = "note"
 INCORRECT = "incorrect"
 
 # The permitted answers to a question. `unsure` is a real answer and not a skip: a skip is
-# `was_skipped` and is counted separately (Requirement 50).
-VERDICTS = ("correct", "incorrect", "unsure")
+# `was_skipped` and is counted separately (Requirement 50). The first is the one that says the
+# label as it stands is right, which `curate` reads off `answer_config` rather than naming.
+CORRECT = "correct"
+VERDICTS = (CORRECT, INCORRECT, "unsure")
 
 # The capture half of the annotation config. `visibleWhen` + `required` is how Requirement 29 --
 # answering `incorrect` requires the corrected value -- becomes something the tool enforces rather
@@ -343,7 +345,12 @@ def agreed_arguments(called: Sequence[Call]) -> dict[str, Any]:
 def vote_consensus(
     votes: Sequence[StoredAnswer], record: Record, max_calls: int
 ) -> StoredAnswer | None:
-    """The panel's answer; `()` where it agreed on none; None where none is defensible.
+    """What N answers about one record come to; `()` where none; None where none is defensible.
+
+    Two callers, and they are a panel and a room of people: `jury` folds model votes and `curate`
+    folds the corrections annotators typed. The fold is the same question either way -- given
+    several answers to one record, which one is defensible -- and having one owner for it is what
+    keeps the two from drifting into two ideas of what agreement means.
 
     Per name, then per argument. Step 1 -- a strict majority voting the empty answer *is* the empty
     answer -- is what keeps `()` and `None` apart: *the panel agreed to call nothing* and *the panel
@@ -670,6 +677,7 @@ class ToolDecision:
             verdicts=VERDICTS,
             tags=CAPTURE_TAGS,
             data={TOOL_NAMES: [{VALUE: tool.name} for tool in catalog_of(record)]},
+            endorsing_verdict=CORRECT,
         )
 
     def build_record(

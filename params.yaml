@@ -40,6 +40,17 @@ thresholds:
 
   pilot: {}         # alpha, flag rate, gold accuracy, bucket precision (T31)
 
+  # How many people must have answered before a verdict is folded out of them. `aggregate`
+  # skips a record with fewer and it keeps its answers, so raising this does not lose one.
+  #
+  # It is the same number as the annotation project's `maximum_annotations`, and the two
+  # cannot be allowed to drift: a project collecting one answer and a floor of two would
+  # produce a corpus where nothing is ever aggregated, and nothing would say why. Smoke is
+  # 1 and Pilot is 2 -- this is Smoke's, and the pilot's re-tuning pass moves it with the
+  # project setting in the same commit.
+  aggregate:
+    overlap_floor: 1
+
   # Two floors and one row per cell they make. Every value here is provisional: `objective.md`
   # §8 calls bucket thresholds provisional until the pilot measures them, and `triage` gets
   # exactly one re-tuning pass afterwards. What re-measures them is the pilot's own question --

@@ -1035,10 +1035,29 @@ layer two's absence leaves `pii_check` a layer one to run, and this one leaves n
 | `publish` | `human_review.question_generate`, modality display half, profile capture half | `human_review.publish` | there is no question to publish |
 | `annotator_answers` | `human_review.publish`, and the store through `annotation_response` | `human_review.annotator_answers` | nothing in the store names this record's questions |
 | `aggregate` | `human_review.annotator_answers` | `human_review.aggregate` | fewer responses than the rung's overlap floor; the record keeps its answers and gets no verdict |
-| `curate` | `human_review.aggregate`, `label` | `human_review.curate` | there is no verdict, or the verdict is `incorrect` with no corrected value — recorded as `status: "unresolved"` |
+| `curate` | `human_review.aggregate`, `human_review.annotator_answers`, `label` | `human_review.curate` | there is no verdict, and — through a hand-made body only — no answers under one. A verdict that the label is wrong with no corrected value is **not** a skip: it is written as `status: "unresolved"` |
 
 `question_generate` reads `triage` **only to decide which records get a question**. Nothing it reads
 from `ai_review` reaches the payload, which is what Requirement 30 asserts.
+
+**`curate` reads the answers as well as the verdict, because `aggregate` does not carry a person or a
+correction.** A verdict, a confidence and three counts are what a fold produces; who decided, when,
+and what they proposed instead are on the responses. The alternative was four more fields on
+`OverlapVerdict`, copied from the key beside it — one more place for the same fact.
+
+**`aggregate` writes one number that is not about its record.** `overlap` and `confidence` are the
+record's; `alpha` is Krippendorff's α over the batch, which is a fact about the annotation *design*
+and is written identically on every record the run aggregated. A record aggregated alone therefore
+carries the α of a corpus of one, and two records are comparable on it only inside one run. It is on
+the record because the records are the report (Requirement 44), and the alternative — computing it at
+the edge — would put the one statistic the pilot exists to read outside the artifact the pilot reads.
+
+**α is over the verdict and not over the correction.** It compares every value to every other to
+price the disagreement chance alone would produce, so it needs one value space every unit shares:
+the three verdicts are that space, and a *correction* is an answer to one record's own catalog. A
+coincidence matrix over answers from different records would be pricing the chance of agreeing about
+two different questions. The corrections feed `confidence` instead, per record, through the profile's
+δ — which is where Requirement 34's *agreement is not string equality* actually bites.
 
 **`publish` and `annotator_answers` are two stages because a person answers between them.** They read
 like halves of one exchange with the store, and whether to merge them is a fair question to ask of any
@@ -1289,7 +1308,15 @@ is a skip and carries no verdict.
 
 **The rungs are project settings, not prose.** Smoke is `maximum_annotations: 1`. Pilot is
 `maximum_annotations: 2` with `overlap_cohort_percentage: 100` — that *is* "two annotators at 100%
-overlap", and `aggregate`'s overlap floor reads the same number so the two cannot drift.
+overlap", and `aggregate`'s overlap floor reads the same number so the two cannot drift. That floor
+is `params.thresholds.aggregate.overlap_floor`, and the two moving together is a discipline until
+there is a project to read: a project collecting one answer and a floor of two produces a corpus
+where nothing is ever aggregated and nothing says why.
+
+**The capture half also declares which verdict endorses the label.** `answer_config().endorsing_verdict`
+is `correct`, and `curate` reads it rather than naming a value — so a fourth verdict is one
+directory's edit, which is what Decision 22 promises. Every other verdict leaves the label to a
+correction, and no correction anyone can act on is `unresolved`.
 
 **The cost, stated.** A set of calls with typed arguments has no widget in community Label Studio, so
 `corrected_arguments` is a JSON object an annotator types. That is a real burden on the person doing
@@ -1311,7 +1338,10 @@ both stay that way until a corpus is declared. `params.thresholds` is the same s
 exception: `duplicate_check.near_duplicate_cosine` carries a value, because a similarity has no
 defensible default — 0 groups every record with every other and 1 groups nothing — so the stage
 refuses to guess and the number is provisional with its re-measurement named beside it, the way the
-profile manifest's `max_calls` is. The three empty blocks belong to stages that are not built yet.
+profile manifest's `max_calls` is, and `aggregate.overlap_floor` carries one for a different reason:
+it is a rung's setting rather than a measurement, `1` is the Smoke rung, and a floor nobody declared
+would read as zero and fold a verdict out of no answers. The two empty blocks belong to `jury`, which
+reads no threshold, and to the pilot, which has not run.
 
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
 `embedding.model`, `embedding.exclude_roles` and `language`; the profile's are `shape`,

@@ -18,10 +18,10 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. Phase 6 is open: T22, T23 and T24 have landed. `make check` is green over
-56 modules and 957 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
+Phase 5: T19, T20 and T21. Phase 6 is open: T22 to T25 have landed. `make check` is green over 56
+modules and 997 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **T25 is next, and T34 is still the oldest thing on this list.**
+it. **T26 is next, and T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -139,7 +139,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T22 | `question_generate` | 6 | T21 | M | ✓ |
 | T23 | The question store | 6 | T3, T9 | M | ✓ |
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | ✓ |
-| T25 | `aggregate` and `curate` | 6 | T24 | M | |
+| T25 | `aggregate` and `curate` | 6 | T24 | M | ✓ |
 | T26 | The Label Studio sync | 6 | T23 | M | |
 | T27 | The edge | 7 | T9, T12, T13 | M | |
 | T28 | The routers | 7 | T10, T27 | M | |
@@ -2358,6 +2358,50 @@ profile's δ, not string equality.
 **Source.** `spec.md` § *Per-service contracts* rows 10–11, Requirements 34 and 35.
 
 **Verify.** `uv run pytest tests/stages/test_aggregate.py tests/stages/test_curate.py -q`.
+
+**Landed, and α turned out to be a corpus statistic on a per-record key.** `OverlapVerdict.alpha` is
+one number over the whole batch, written identically on every record the run aggregated — a record
+aggregated alone carries the α of a corpus of one, and two records are comparable on it only inside
+one run. That is what a corpus statistic is; it is on the record because the records are the report
+(Requirement 44), and the alternative would put the one number the pilot exists to read outside the
+artifact the pilot reads. Stated in `spec.md` and in the module rather than discovered later.
+
+**α is over the verdict; δ is where the corrections go.** α prices the disagreement chance alone
+would produce, so it needs one value space every unit shares — the three verdicts are that space,
+and a correction is an answer to one record's own catalog. A coincidence matrix over answers from
+different records would price the chance of agreeing about two different questions. So `confidence`
+is the per-record number and it *is* the profile's δ, which is where T25's "agreement uses the
+profile's δ, not string equality" actually bites: a near miss scores above a different tool, and
+string equality would score both zero. The α cases are hand-worked in the test file — unanimous is
+1.0, one disagreeing unit in two is exactly 0.0, and always-disagreeing is −0.5 — because a
+statistic nobody can redo on paper is one nobody notices going wrong.
+
+**`curate` reads the answers as well as the verdict**, and its contract cell now says so: a verdict,
+a confidence and three counts carry no person, no clock and no correction. Four more fields on
+`OverlapVerdict` was the alternative and it is one more place for the same fact.
+
+**Two more things `curate` does not name.** Which verdict endorses the label is
+`answer_config().endorsing_verdict`, so a fourth verdict stays one directory's edit (Decision 22);
+what it *does* name is the three statuses, because `FinalLabel.status` is a `Literal` of exactly
+them and `tool_decision`'s own `final_label` already reads one. The correction is folded through
+`vote_consensus` — the same member `jury` folds votes through, whose docstring now says *N answers*
+rather than *the panel's*: given several answers to one record, which one is defensible, is a
+question that does not care whether models or people produced them.
+
+**`()` is not `None`.** `vote_consensus` returns the empty answer for *the annotators agreed to call
+nothing* and `None` for *nothing here is defensible*. Testing the value for truth would file every
+call-nothing correction as unresolved, which is a wrong label rather than a missing one — the one
+line in this task where a `is not None` is load-bearing, and it has a test.
+
+**`decided_at` is the last annotator's clock.** No engine module holds one (I1) and an ingest-time
+stamp would be a value two runs disagree about (I15). `adjudicated_by` is always `None`, and that is
+a gap rather than a design: nothing here performs an adjudication, so a disagreement is `unresolved`
+and goes back to a person (AGENTS.md §7).
+
+**`human_review` joined the conservation property**, so all eleven built stages now fold over one
+corpus in the flow's order. It needed one fixture that models something a fold cannot contain — a
+store where a person answers the moment a question arrives — because `publish` and
+`annotator_answers` are two stages precisely *because* somebody answers in between.
 
 ---
 

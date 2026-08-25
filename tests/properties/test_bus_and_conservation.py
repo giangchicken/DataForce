@@ -11,11 +11,12 @@ flow exists in code and `stage_module_name` is the derivation the runner itself 
 to a phase is folded here the day it is written -- and if nobody says which paths it may write, this
 fails rather than passing vacuously.
 
-**Both built phases are folded, in the flow's order, over one corpus.** `ai_review` joined when its
-third stage landed, and it belongs in the same fold rather than a second one: its preconditions read
-what `data_quality` wrote, so a `jury` that judged a quarantined record or a `triage` that ran on a
-record with no cohesion figure is caught here against real upstream output instead of a fixture's
-idea of it. It also puts `jury` downstream of a `content` rewrite, which is the order a run has.
+**All three built phases are folded, in the flow's order, over one corpus.** Each joined when its
+last stage landed, and each belongs in the same fold rather than a second one: every phase's
+preconditions read what the one before it wrote, so a `jury` that judged a quarantined record, a
+`triage` that ran on a record with no cohesion figure, or a `publish` that published a question
+`triage` never selected is caught here against real upstream output instead of a fixture's idea of
+it. It also puts `jury` downstream of a `content` rewrite, which is the order a run has.
 
 **`PERMITTED` is Requirement 5, as data.** One key, and one exception: `pii_check` also rewrites
 `content` and the `label` and bumps `content_version`. Writing the exception down as a set is what
@@ -33,17 +34,19 @@ from dataforce.pipeline.ai_review.triage import CELLS
 from dataforce.pipeline.flow import STAGES
 from dataforce.pipeline.load_data import load_data
 from dataforce.pipeline.runner import Service, stage_module_name
+from dataforce.ports import QuestionToStore, StoredAnnotation, StoreReceipt
 from dataforce.record import DataQuality, Record
 
 from ..stages.test_jury import a_panel_of
 from ..stages.test_label_check import written_paths
 from ..stages.test_load_data import an_engine
 from ..stages.test_pii_check import TYPED, confirming_everything
-from ..stages.test_tool_decision import SENT, an_item
+from ..stages.test_publish import AStore
+from ..stages.test_tool_decision import SENT, an_annotation, an_item
 
 # Every phase whose stages are built, in the flow's order. `load_data` is not one: it mints the
 # records this fold starts from and its input is not the bus (`flow.py`'s `FROM_SOURCE`).
-PHASES = ("data_quality", "ai_review")
+PHASES = ("data_quality", "ai_review", "human_review")
 
 # Requirement 5, as data: the paths each stage may change, and no others. Keyed by stage rather
 # than by phase because a stage name is unique in the flow -- and the order is the flow's, which
@@ -55,7 +58,47 @@ PERMITTED = {
     "jury": {"ai_review.jury"},
     "cohesion": {"ai_review.cohesion"},
     "triage": {"ai_review.triage"},
+    "question_generate": {"human_review.question_generate"},
+    "publish": {"human_review.publish"},
+    "annotator_answers": {"human_review.annotator_answers"},
+    "aggregate": {"human_review.aggregate"},
+    "curate": {"human_review.curate"},
 }
+
+
+class AnAnsweringStore(AStore):
+    """A store where a person answers the moment a question reaches it.
+
+    The one fixture in this file that models something a fold cannot contain: `publish` and
+    `annotator_answers` are two stages *because a person answers in between* (Decision 22), so a
+    single fold over the phase would otherwise stop at a store nobody had visited. Answering on
+    write is the shortest honest stand-in, and it is what lets all five stages run over one corpus
+    against real upstream output rather than a fixture's idea of it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.answers: list[StoredAnnotation] = []
+
+    def stored_questions(self, questions: Sequence[QuestionToStore]) -> StoreReceipt:
+        receipt = super().stored_questions(questions)
+        self.answers.extend(
+            StoredAnnotation(
+                answer_id=f"a_{question.question_id}",
+                question_id=question.question_id,
+                annotator_id="u_14",
+                result=tuple(an_annotation()),
+                was_skipped=False,
+                lead_time_seconds=41.5,
+                submitted_at=datetime(2026, 8, 25, tzinfo=UTC),
+            )
+            for question in questions
+        )
+        return receipt
+
+    def answers_to(self, question_ids: Sequence[str]) -> Sequence[StoredAnnotation]:
+        wanted = set(question_ids)
+        return [answer for answer in self.answers if answer.question_id in wanted]
 
 
 class Step(NamedTuple):
@@ -91,11 +134,13 @@ def an_engine_for_a_run() -> Engine:
                             for cell in CELLS.values()
                         },
                     },
+                    "aggregate": {"overlap_floor": 1},
                 },
             }
         ),
         personal_data_verifier=confirming_everything(),
         jury_panel=a_panel_of((SENT,), (SENT,)),
+        question_store=AnAnsweringStore(),
     )
 
 
@@ -253,6 +298,13 @@ def test_every_state_the_corpus_was_built_to_hold_is_in_it() -> None:
     assert any(
         record.content_version == 2 and record.ai_review.jury for record in written
     ), "a record judged on content pii_check had already rewritten"
+    assert any(record.human_review.curate for record in written), (
+        "a record that reached the end of the flow with a label that ships"
+    )
+    assert any(
+        record.ai_review.triage is None and record.human_review.publish is None
+        for record in written
+    ), "a record no stage of human_review touched, for the absence upstream"
 
 
 def test_a_record_that_meets_no_precondition_travels_the_whole_flow() -> None:

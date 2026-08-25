@@ -126,6 +126,14 @@ class AnswerConfig(BaseModel):
             "why a static `<Choice>` list cannot express it (Requirement 52)."
         ),
     )
+    endorsing_verdict: str = Field(
+        ...,
+        description=(
+            "Which of `verdicts` says the label as it stands is right. `curate` reads "
+            "it rather than naming a value, so a fourth verdict stays one directory's "
+            "edit (Decision 22); every other verdict leaves the label to a correction."
+        ),
+    )
 
 
 class LabelCheck(NamedTuple):

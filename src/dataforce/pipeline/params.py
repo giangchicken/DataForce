@@ -78,6 +78,22 @@ def declared_ratio(engine: Engine, *path: str) -> float:
     return float(value)
 
 
+def declared_count(engine: Engine, *path: str) -> int:
+    """One declared whole number of things, at least one, or a `ConfigError` naming what is there.
+
+    Absent is not ordinary: an overlap floor of *nothing declared* would read as zero and fold a
+    verdict out of no answers at all. `bool` is excluded before `int` for `declared_ratio`'s
+    reason -- `True` is an `int` in Python, and `overlap_floor: true` would silently mean one.
+    """
+    value = declaration(engine, *path)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ConfigError(
+            f"params.yaml declares {'.'.join(path)} as {value!r}, which is not a "
+            "count of one or more"
+        )
+    return value
+
+
 def declared_text(engine: Engine, *path: str) -> str:
     """One declared name, or a `ConfigError` naming what is there instead.
 
