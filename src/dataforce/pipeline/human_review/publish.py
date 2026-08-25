@@ -154,8 +154,9 @@ def publish(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     store = engine.question_store
     if store is None:
         raise ConfigError(
-            "human_review needs a question store and this engine was opened without one; "
-            "the edge supplies it at composition"
+            "publish needs a question store and this engine was opened without one; the "
+            "edge supplies it at composition. A `stored` key naming a write nobody made "
+            "would be a lie about this record"
         )
     running = tuple(records)
     outgoing = [row for record in running for row in rows_for(engine, record)]

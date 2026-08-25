@@ -458,7 +458,11 @@ class Question(RecordModel):
         ..., description="Stable id; the join key to the store and to the answers."
     )
     question_name: str = Field(
-        ..., description="The short label an annotator sees beside it."
+        ...,
+        description=(
+            "Which question this is, in the pipeline's own vocabulary. Part of "
+            "the id, so a reworded question is a new one; shown to nobody."
+        ),
     )
     content: str = Field(
         ...,
@@ -502,8 +506,10 @@ class AnnotatorResponse(RecordModel):
     corrected_value: StoredAnswer | None = Field(
         default=None,
         description=(
-            "The corrected answer, required where the verdict is `incorrect` and "
-            "null everywhere else."
+            "What the annotator proposed instead, where they proposed something "
+            "that validated. Null where they proposed nothing and where what "
+            "they proposed did not parse, so an `incorrect` verdict does not "
+            "guarantee one (Requirement 49)."
         ),
     )
     note: str | None = Field(
@@ -534,7 +540,11 @@ class OverlapVerdict(RecordModel):
     overlap: int = Field(..., description="How many annotators saw this record.")
     alpha: float = Field(
         ...,
-        description="Krippendorff's alpha for the incomplete-overlap design.",
+        description=(
+            "Krippendorff's alpha over the batch this run aggregated, for the "
+            "incomplete-overlap design: the same number on every record of that "
+            "batch, and comparable only within one run."
+        ),
     )
 
 

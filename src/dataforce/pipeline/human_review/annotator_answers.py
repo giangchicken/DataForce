@@ -114,8 +114,9 @@ def annotator_answers(engine: Engine, records: Iterable[Record]) -> ServiceResul
     store = engine.question_store
     if store is None:
         raise ConfigError(
-            "human_review needs a question store and this engine was opened without one; "
-            "the edge supplies it at composition"
+            "annotator_answers needs a question store and this engine was opened without "
+            "one; the edge supplies it at composition. Reading no answers from nowhere "
+            "would write *nobody has answered* onto a corpus nobody was asked about"
         )
     running = tuple(records)
     asked = [

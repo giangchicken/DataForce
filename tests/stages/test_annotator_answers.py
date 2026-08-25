@@ -296,7 +296,7 @@ def test_an_engine_with_no_store_refuses_before_the_first_record() -> None:
     engine = an_engine_reading()
     published = publish(engine, asked(engine, a_record())).records
 
-    with pytest.raises(ConfigError, match="question store"):
+    with pytest.raises(ConfigError, match="annotator_answers needs a question store"):
         annotator_answers(replace(engine, question_store=None), published)
 
 

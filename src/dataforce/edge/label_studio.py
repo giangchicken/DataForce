@@ -127,8 +127,11 @@ class LabelStudioTool:
         """Every annotation on that task, per task rather than per project.
 
         One call per published question, which is the cost of not depending on how a project-wide
-        listing paginates or which fields it inlines. A sync is a batch of the questions one run
-        published, not of a whole corpus, so the count is bounded by the run.
+        listing paginates or which fields it inlines. **A sync is over the whole store and not over
+        one run** -- it takes no run id, and a person answers days after their task was made, so a
+        run-scoped pull would never reach last week's annotations. The count therefore grows with
+        the corpus and a task answered months ago is polled again; narrowing it is a decision about
+        when a task is done being polled, and T31 is where that has to be settled.
         """
         return tuple(
             ReturnedAnnotation(

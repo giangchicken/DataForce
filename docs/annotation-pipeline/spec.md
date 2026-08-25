@@ -838,11 +838,11 @@ prose, and nests `human_review` inside `ai_review`.
     "annotator_answers": { "responses": [ { "annotator_id": "u_14",    // who answered
                                             "question_id": "…",       // which question
                                             "verdict": "…",           // one of the question's enum values
-                                            "corrected_value": null,  // required when the verdict is "incorrect"
+                                            "corrected_value": null,  // what they proposed instead, where it validated
                                             "note": null,             // free text, never parsed
                                             "submitted_at": "…" } ] },
     "aggregate":         { "verdict": "…",          // the one verdict the overlap agreed on
-                           "method": "majority_gold_weighted", // how it was reached, since that is arguable
+                           "method": "plurality_verdict_mean_1_minus_delta", // how it was reached, since that is arguable
                            "confidence": 0.94,      // how much to trust it downstream
                            "overlap": 2,            // how many annotators saw this record
                            "alpha": 0.81 },         // Krippendorff's α for the incomplete-overlap design

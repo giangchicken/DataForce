@@ -40,9 +40,9 @@ beside ``final_prediction: null``, and nothing in the record would say which one
 
 **A port reaches a stage through the ``Engine``**, because every service's signature is
 ``(engine, records)`` and there is no other channel. ``Engine.personal_data_verifier`` and
-``Engine.jury_panel`` are that, and ``QuestionStore`` reaches one the same way when ``publish``
-lands in T24 -- **the field does not exist yet**, because a field with no reader is a guess and this
-module is where that rule is kept.
+``Engine.jury_panel`` are that, and ``Engine.question_store`` is how ``QuestionStore`` reaches
+``publish`` and ``annotator_answers``. It landed with its first reader in T23 and not before,
+because a field with no reader is a guess and this module is where that rule is kept.
 
 **``QuestionStore`` is the one port whose absence Requirement 32 settled rather than this module.**
 Whether a stage reaches the store through a port at all or hands rows back as side output was open

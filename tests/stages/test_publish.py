@@ -298,7 +298,7 @@ def test_an_engine_with_no_store_refuses_before_the_first_record() -> None:
     """P23: a fact about the configuration, and a receipt for a write nobody made would be a lie."""
     engine = replace(an_engine_publishing(), question_store=None)
 
-    with pytest.raises(ConfigError, match="question store"):
+    with pytest.raises(ConfigError, match="publish needs a question store"):
         publish(engine, asked(an_engine_publishing(), a_record()))
 
 

@@ -12,6 +12,11 @@ not keys. Everything else is compared, including through lists (`content`, `span
 `question_generate`) and including a field's alias, which is why `class` compares to `class` and
 not to `personal_data_class`.
 
+**One drawn *value* is compared, and it is named here.** `aggregate.method` is the name of an
+estimator rather than an example of one, and the drawing carried `majority_gold_weighted` --  a
+method this repository has never contained -- for as long as only the keys were compared. Every
+other value in the drawing is an illustration and stays uncompared.
+
 **A list draws its members' shape.** `content` draws a text part and a media part, and the union of
 what they carry is what `Part` has to hold: a comment saying "media types carry `uri` + `sha256`"
 is prose, and prose is what this guard exists to stop trusting.
@@ -25,6 +30,7 @@ from typing import Any, get_args
 import pytest
 from pydantic import BaseModel
 
+from dataforce.pipeline.human_review.aggregate import METHOD
 from dataforce.record import Record
 
 from .tree import SPEC
@@ -149,6 +155,13 @@ def test_the_two_free_form_keys_are_not_compared() -> None:
     drawn["meta"] = {"a_key_no_code_recognises": True}
 
     assert differences(drawn, model_keys(Record)) == []
+
+
+def test_the_method_the_drawing_names_is_the_method_aggregate_writes() -> None:
+    """The one drawn value that is a claim: it named an estimator that has never existed here."""
+    drawn = drawn_record()
+
+    assert drawn["human_review"]["aggregate"]["method"] == METHOD
 
 
 def test_a_media_part_is_drawn_and_not_only_described() -> None:

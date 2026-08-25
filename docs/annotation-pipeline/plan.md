@@ -2337,9 +2337,19 @@ was asked and declined* — which is the difference the pilot's skip rate is abo
 names a write and a call per record would make twenty thousand of them out of one publish. A phase
 that selected nothing returns before touching the database at all.
 
+**A sync is over the whole store, and that is the pull's only workable scope** — but the cost is
+unbounded. `synced_with_label_studio` takes no run id, and a person answers days after their task
+was made, so a run-scoped pull would never reach last week's annotations. The consequence is one
+`annotations_on` call per question ever published, every sync, including for tasks that were fully
+answered months ago. At a pilot corpus that is fine and at a real one it is not; narrowing it needs
+a rule for *when a task is done being polled* — the overlap floor being met is the obvious
+candidate — and **T31 cannot run a real corpus until that rule exists**. The docstring claimed the
+count was bounded by the run until this note was written.
+
 **The store double is a real second adapter.** `AStore` in `test_publish.py` and `AnAnsweredStore`
-in `test_annotator_answers.py` keep the port's promises; four tests run both stages against
-`SqlQuestionStore` on both backends, so *the two fit* is asserted rather than assumed (P20).
+in `test_annotator_answers.py` keep the port's promises; tests in both files run both stages
+against `SqlQuestionStore` on both backends, so *the two fit* is asserted rather than assumed
+(P20).
 
 ---
 
