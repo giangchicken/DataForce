@@ -38,6 +38,14 @@ dependencies = [
 [project.scripts]
 dataforce = "dataforce.edge.cli:main"
 
+[project.optional-dependencies]
+# Only the sync imports this, and only inside the function that builds a client -- so the
+# pipeline installs and `make check` runs with no annotation tool anywhere (Decision 6).
+# An install without the extra fails at `POST /human-review/publish/sync` and nowhere else.
+label-studio = [
+    "label-studio-sdk>=2.1.1",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1,0 +1,36 @@
+# Label Studio, for the one endpoint that needs an instance.
+#
+# Running it is optional. `POST /human-review/publish/sync` is the only route that talks
+# to this; every other endpoint, and the whole of `make check`, runs with nothing here
+# (Decision 6). The version is pinned because the sync is written against a release and
+# not against "latest" -- spec.md section *Versions* names the same one.
+#
+# No credentials in this file (AGENTS.md section 9). The variables below come from the
+# environment, and the API key is the one Label Studio mints for a user after first
+# login -- it is set in the shell that runs the sync, never written down here:
+#
+#   DATAFORCE_LABEL_STUDIO_URL       http://localhost:8080
+#   DATAFORCE_LABEL_STUDIO_API_KEY   from the instance, per user
+#   DATAFORCE_LABEL_STUDIO_PROJECT   the project id the questions go into
+#
+# The project itself is created by a person, because a project's settings *are* the rung:
+# `maximum_annotations` is 1 for Smoke and 2 for Pilot, and `aggregate`'s overlap floor in
+# params.yaml must be moved with it in the same commit.
+
+services:
+  label-studio:
+    image: heartexlabs/label-studio:1.23.0
+    ports:
+      - "8080:8080"
+    environment:
+      # Community edition, which is what Requirement 52 costs and what the composed
+      # annotation config is written for.
+      LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST:-http://localhost:8080}
+      # SQLite inside the volume by default. Point it at a Postgres if the pilot needs
+      # one; the store this repository owns is a different database either way.
+      LABEL_STUDIO_DATABASE: /label-studio/data/label_studio.sqlite3
+    volumes:
+      - label-studio-data:/label-studio/data
+
+volumes:
+  label-studio-data:

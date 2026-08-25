@@ -17,11 +17,11 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
-**Phases 1 to 5 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. Phase 6 is open: T22 to T25 have landed. `make check` is green over 56
-modules and 997 tests, 320 of which are not guards — but **T34 is open and CI is red on a line neither
+**Phases 1 to 6 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
+Phase 5: T19, T20 and T21. **Phase 6 is done:** T22 to T26. `make check` is green over 57 modules
+and 1016 tests, 325 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **T26 is next, and T34 is still the oldest thing on this list.**
+it. **Phase 7 is next — T27, and then T28, T29 and T49 — and T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -140,7 +140,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T23 | The question store | 6 | T3, T9 | M | ✓ |
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | ✓ |
 | T25 | `aggregate` and `curate` | 6 | T24 | M | ✓ |
-| T26 | The Label Studio sync | 6 | T23 | M | |
+| T26 | The Label Studio sync | 6 | T23 | M | ✓ |
 | T27 | The edge | 7 | T9, T12, T13 | M | |
 | T28 | The routers | 7 | T10, T27 | M | |
 | T29 | The CLI and the event stream | 7 | T3, T27 | M | |
@@ -2420,6 +2420,45 @@ key, writes no `publication` row, and leaves every other endpoint unaffected.
 
 **Verify.** `uv run pytest tests/stages -q -k sync` against a fake client; `make integration`
 against a real instance.
+
+**Landed, and it needed a module the layout did not have.** `edge/label_studio.py`, `TOOL ·`, with a
+row in § *Package layout*. The router package was the only place the tree offered and a router that
+made SDK calls would be a router doing I/O beyond HTTP; `edge/store/` is the database's. The route
+itself is **not** here — `POST /human-review/publish/sync` is T28's, and this task's own *Verify*
+says as much by testing against a fake client rather than over HTTP.
+
+**The SDK is imported inside the builder.** `label-studio-sdk` is the `[label-studio]` extra and
+`edge/main.py` will import this module to hang a route on it, so a top-level import would make an
+install without the extra fail at startup rather than at the one endpoint that needs it. Its surface
+was read off the installed 2.1.1 rather than remembered: `tasks.create(project=, data=)` returning a
+task with an `id`, and `annotations.list(task_id)` returning objects with `result`, `completed_by`,
+`lead_time`, `was_cancelled` and `created_at`. One thin adapter converts those into
+`ReturnedAnnotation`, so the sync reads one vocabulary and an SDK change is an edit in one class.
+
+**`AnnotationTool` is declared in the sync and not in `ports.py`.** The engine never calls it — a
+port is what the engine demands of the edge, and this is the edge talking outward, so the
+abstraction belongs to the module that consumes it (P18). Two adapters, the SDK client and the
+double, so it is a seam and not indirection (P20).
+
+**A `publication` row is committed as its task is created, one at a time.** The batched alternative
+is faster and wrong: a failure at question five rolls back the rows for tasks one to four that are
+already sitting in Label Studio, and the next sync creates them again — which no constraint can
+catch, because the row that would have caught it is the one that was rolled back. A test kills the
+tool partway and asserts the surviving row.
+
+**Idempotency is asserted against the real schema on both backends.** A fake client cannot prove it,
+because it is two unique constraints in a database; the tests use `conftest.py`'s `sessions`, so
+every one of them runs on SQLite in `make check` and on Postgres under `-m integration`. The second
+sync pushes nothing and pulls nothing, and both numbers are on the result rather than inferred.
+
+**`deploy/docker-compose.yml` arrived with it**, pinned to Label Studio 1.23.0, with no credential in
+the file and a note that the *project* is created by a person — because a project's settings are the
+rung, and `maximum_annotations` must move with `params.thresholds.aggregate.overlap_floor` in one
+commit.
+
+**What is not proved: a real instance.** `make integration` reports 38 skipped without one, which is
+*not run* rather than *passed* (AGENTS.md §7). The Postgres half of every store test is in that
+number too.
 
 ---
 

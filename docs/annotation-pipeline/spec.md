@@ -561,7 +561,7 @@ the next person guesses at, and a guess is how one acquires a second place to pu
 | `config/templates/` | Nothing, and nothing references it. An empty directory is the flexibility nobody asked for that AGENTS.md §2 forbids; it goes with the next task that touches `config/`. Recorded here rather than left to be found (AGENTS.md §8) |
 | `params.yaml` | Every threshold the pipeline reads at runtime. Code holds none: a number here is committed, reviewable and recorded by digest in the run manifest, so a change to it is attributable and a run that used the old value stays identifiable |
 | `data/` | What a run writes: `raw/` the source, then `interim/`, `processed/`, `release/`, `quarantine/`, and `run.json` — one run, one manifest, at the root of what it wrote. **Committed: none of it.** `raw/` is the privacy tier (I13) and the rest are artifacts the manifest identifies by digest. Ignored tier by tier rather than as `data/`, so one tier can be un-ignored on its own |
-| `deploy/` | The Label Studio compose file, which arrives with the first task that needs an instance. Empty until then, and named in § *Versions* so the placeholder has an owner |
+| `deploy/` | `docker-compose.yml` — Label Studio 1.23.0, pinned because the sync is written against a release. Optional: it is the one endpoint that needs an instance, and no credential is in the file. The project itself is created by a person, because a project's settings *are* the rung |
 | `AGENTS.md` | The conventions and design principles this repository is held to, `§1`–`§9` and `P0`–`P33`. A rule cited in a review or a commit message resolves here |
 | `README.md` | The front door: what this repository is, which spec to read first, and the build order across all of them |
 | `Makefile` | `make check` — ruff, `mypy --strict`, pytest without `-m integration`. What CI runs and what must pass before a commit. `make integration` is the half that needs a network |
@@ -661,6 +661,7 @@ src/dataforce/              the package; its docstring states the import directi
     policy.py               LOGIC · config/<axis>/*.yaml, params.yaml and prompts into declarations.
     artifacts.py            TOOL · the one place a record file, metrics.json or a run manifest is read or written.
     observability.py        TOOL · the stdout handler, and the three keys every event carries.
+    label_studio.py         TOOL · the Label Studio sync: questions out, annotations back, idempotent in both directions.
 
     routers/                one router per main endpoint; a package only where that endpoint has models of its own
       __init__.py           façade · one router per main endpoint, and the body three of them share.
@@ -1216,7 +1217,15 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
 - `POST /human-review/publish/sync` pushes unpublished questions into Label Studio through
   `label-studio-sdk`, writes the returned task ids into `publication`, then pulls new annotations into
   `annotator_answer`. It is idempotent in both directions: the two unique constraints are what make it
-  so.
+  so. `edge/label_studio.py` is the sync and the only module that imports the SDK, which it does
+  *inside* its builder — the extra is optional and an install without it must fail at that one
+  endpoint rather than at startup.
+- **Each `publication` row is committed as its task is created, one at a time.** Batching them into
+  one transaction would roll back the rows for tasks that already exist, and the next sync would
+  create those tasks a second time — which no constraint can catch, because the row that would have
+  caught it is the one that was rolled back. The row *is* the record that the task exists.
+- **The sync touches no record.** It moves rows between the store's three tables and an instance; the
+  bus never enters it, so a failed sync cannot leave a record saying something that did not happen.
 - Running the sync is optional. Every other endpoint works with no Label Studio anywhere.
 - `was_skipped` is Label Studio's `was_cancelled`: the annotator saw the question and declined it.
   That is not a verdict and not a missing row — a skip is evidence about the *question*, and the pilot
