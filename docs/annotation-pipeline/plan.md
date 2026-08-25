@@ -143,6 +143,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T27 | The edge | 7 | T9, T12, T13 | M | |
 | T28 | The routers | 7 | T10, T27 | M | |
 | T29 | The CLI and the event stream | 7 | T3, T27 | M | |
+| T49 | The two model adapters, and the cache the jury's design assumes | 7 | T27 | M | |
 | T30 | Smoke | 8 | T29 · **a declared corpus** | M | |
 | T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L | |
 
@@ -1934,8 +1935,8 @@ limiting; an exhausted call is one missing vote.
 
 **Verify.** `uv run pytest tests/stages/test_jury.py -q` — stubbed panel, no network.
 
-**Landed.** 24 tests, a third port and a sixteenth profile member. Two decisions and one thing this
-task could not do.
+**Landed.** 24 tests, a third port and a sixteenth profile member; 26 after the Phase 5 review. Two
+decisions and two things this task could not do — the second found by that review and now **T49**.
 
 **`JuryPanel` is the third port, on `PersonalDataVerifier`'s own terms.** A model call opens a socket
 and no engine module may (I1), so the edge holds the composition, the task statement out of
@@ -1956,11 +1957,14 @@ caller that made it real — the same rule T16 applied to `redact_label` and T2 
 Requirement 24 was reworded to say *answer space* rather than *answer schema*. The alternative was
 `jsonschema` in `pipeline/` under a P30 exemption, which buys a weaker check for a second exemption.
 
-**T27 still owes Requirement 28.** The cross-border precondition is on *opening the engine* and there
-is no `open_engine` yet, so nothing enforces it today; `jury` is the call it is about, and the check
-belongs beside the one that reads `config/`. Worth widening while it is written: the requirement names
-jury calls, and layer two is the pipeline's other model call carrying unredacted content — `jury` sees
-redacted content wherever `enable_redact` is on, and `pii_check` by construction never does.
+**T27 still owes Requirement 28, and T49 owes the cache.** The cross-border precondition is on
+*opening the engine* and there is no `open_engine` yet, so nothing enforces it today; `jury` is the
+call it is about, and the check belongs beside the one that reads `config/`. Worth widening while it is
+written: the requirement names jury calls, and layer two is the pipeline's other model call carrying
+unredacted content — `jury` sees redacted content wherever `enable_redact` is on, and `pii_check` by
+construction never does. **The cache this task's own Context names went unbuilt and unassigned**, which
+the review caught: it is the reason this phase is three stages, a cache is I/O so it cannot be the
+engine's, and re-running `jury` re-pays the panel in full until T49.
 
 Two smaller things. `plurality` groups by δ rather than by `==`, for `duplicate_check`'s reason: two
 votes naming the same two tools in a different order are one answer, and a tie goes to the juror that
@@ -2179,6 +2183,8 @@ against a real instance.
 **Goal.** `open_engine` composes a run, and one module is the only place a file is read or written.
 
 **Context.** `edge/bootstrap.py` is the composition root (P19) — the only builder of an `Engine`.
+It is also the only place the three ports can be handed over, and where Requirement 28's cross-border
+precondition is checked; the adapters behind two of them are **T49**, not this task.
 `edge/policy.py` turns `config/<axis>/*.yaml`, `params.yaml` and prompts into declarations.
 `edge/artifacts.py` is the one place a record file, `metrics.json` or a run manifest is touched.
 Corpus-level numbers are a fold here, for reading — never computed by a stage, never compared against
@@ -2192,6 +2198,51 @@ one unchanged configuration produce byte-identical run manifests.
 **Source.** `spec.md` § *Engine and edge*, § *Configuration*, Requirements 36, 44 and 45; Decision 12.
 
 **Verify.** `uv run pytest tests/shells -q`; `make check`.
+
+---
+
+### T49 · The two model adapters, and the cache the jury's design assumes
+
+**Goal.** Both model ports have a real adapter, and re-running `jury` over a record the panel has
+already answered costs nothing.
+
+**Context.** Found by the Phase 5 review. Three things are asserted in the documents and owned by no
+module:
+
+1. **`ports.py` claims two adapters make a seam real, and there is one** — the stand-in every test in
+   `make check` runs against. `PersonalDataVerifier` has had a caller since T16 and `JuryPanel` since
+   T19, and neither has a client. Until this lands, P20's *two adapters* is a claim and P26's parity
+   gate is the Smoke rung alone.
+2. **The panel is not cached.** Decision 3 and § *Per-service contracts* both say `jury` costs money
+   per record and **must be cached** — it is the entire reason `ai_review` is three stages rather than
+   one, since the argument is that a re-tuned boundary must not re-pay the panel. `grep -i cach` over
+   both documents finds those two assertions and no owner. Re-running `jury` today re-pays in full.
+3. **Requirement 28 is unenforced**, because it is a precondition on opening the engine and
+   `open_engine` arrives in T27. Worth widening while it is written: the requirement names *jury*
+   calls, and layer two is the pipeline's other model call — the one that by construction always
+   carries unredacted content, where `jury` sees redacted content wherever `enable_redact` is on.
+
+**Approach.** Both adapters go behind `complete_structured`, which validates against the schema it is
+handed and returns `(value, info)` — `info.ok` false is a juror whose answer did not decode, which the
+port reports as `answer: None` and the *engine* judges (T19's decision, and the reason validity is not
+the adapter's). The cache is the edge's because it is I/O: key on what actually determines a vote —
+`record_id`, `content_version`, `panel_version`, `prompt_version` and the profile version — so a
+redaction, a panel change or a prompt change all miss, and a re-tuned triage boundary does not.
+
+**Acceptance criteria.** A second `jury` run over unchanged records makes no model call and produces
+byte-identical keys. A changed `content_version` or `prompt_version` misses the cache. Opening an
+engine whose panel names an offshore endpoint with no recorded review raises `ConfigError`, and the
+same check covers layer two. `make check` still makes no network call, so the cache is exercised
+against the stand-in.
+
+**Source.** `spec.md` § *Per-service contracts* (`ai_review`), § *Out of Scope*, Requirements 28 and
+43; Decision 3; P20, P26; the T19 landed note.
+
+**Verify.** `uv run pytest tests/shells -q -k adapter`; `uv run pytest -q -m integration` for the live
+panel, which is Smoke's rung and not `make check`'s.
+
+**Out of scope.** The panel's own composition — which models, how many — is `params.yaml`'s and the
+pilot's, not this task's.
 
 ---
 
