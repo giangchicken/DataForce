@@ -363,8 +363,8 @@ class JurorVote(RecordModel):
     valid: bool = Field(
         ...,
         description=(
-            "Did it validate against the record's answer schema. An invalid vote is "
-            "kept and counted, never dropped."
+            "Is its answer in this record's answer space. An invalid vote is kept "
+            "and counted, never dropped."
         ),
     )
 
@@ -408,7 +408,7 @@ class AgreementScores(RecordModel):
     )
     method: str = Field(
         ...,
-        description="Which distance produced both numbers, so the pair is comparable.",
+        description="The estimator over δ, so two runs' pairs are comparable.",
     )
 
 

@@ -1,1 +1,105 @@
-"""STEP · cohesion · how much the jury agrees with itself, and with the existing label."""
+"""STEP · cohesion · how much the jury agrees with itself, and with the existing label.
+
+Arithmetic over what ``jury`` wrote, and no model call at all. That is the whole reason it is not
+folded into the stage above it (Decision 3): a panel that has answered is never asked again, and
+these two numbers can be recomputed for nothing every time the question they feed changes.
+
+**Both numbers are δ, because every number the pipeline produces is** (Decision 15). Agreement is
+``1 - answer_distance``, so a jury that called the right tool with one argument wrong scores above
+one that called the wrong tool -- which a verdict count would not, and ``label_is_right`` is a
+verdict count. The jurors' own opinion of the label is on the record and is not what this measures.
+
+**Only a usable vote is measured.** An invalid vote is an answer outside this record's answer
+space, and a distance to a point outside the space is not evidence about the panel; it is evidence
+about the panel's *plumbing*, which ``invalid_votes`` already carries. The two numbers stay
+comparable between a record whose panel misbehaved and one whose panel did not.
+
+**Absent evidence reads as absent agreement.** A panel with one usable vote has no pair to measure
+and a panel with none has nothing at all, and both get ``0.0`` rather than ``1.0``: a single juror
+scored as unanimous is a broken panel wearing a confident record's clothes, and ``triage`` would
+route it away from the person who should see it. The vote count sits beside the number for whoever
+needs to tell the two apart. This is also where ``δ(∅, ∅) = 0`` stops being tidy and starts being
+load-bearing -- the empty answer is a large share of a real corpus, and a mean over an empty
+sequence is the other way this stage could have produced ``NaN``.
+
+**``method`` is what makes two runs comparable, so a change to what these numbers mean changes
+it.** The δ itself is already identified per record, by the profile version in ``provenance``; what
+this string names is the estimator over it -- the fold, and which votes went in.
+"""
+
+from collections.abc import Iterable, Sequence
+from itertools import combinations
+
+from dataforce.engine import Engine, ServiceResult
+from dataforce.record import AgreementScores, Record, StoredAnswer
+
+# The key this stage owns, under `ai_review` (P16: one key, one writer).
+STAGE = "cohesion"
+
+# The estimator, named so that two runs producing different numbers can be told apart from two
+# runs measuring different things. It names the fold and the population, because both are choices.
+METHOD = "mean_1_minus_delta_over_valid_votes"
+
+
+def mean(values: Sequence[float]) -> float:
+    """The mean of those, and `0.0` over none of them -- never `NaN`, and never `1.0`."""
+    return sum(values) / len(values) if values else 0.0
+
+
+def usable_answers(record: Record) -> tuple[StoredAnswer, ...]:
+    """Every vote the panel cast that this record's answer space accepts, in the panel's order."""
+    verdict = record.ai_review.jury
+    return (
+        ()
+        if verdict is None
+        else tuple(vote.answer for vote in verdict.llm_votes if vote.valid)
+    )
+
+
+def agreement(engine: Engine, a: StoredAnswer, b: StoredAnswer) -> float:
+    """How much two answers agree: `1 - δ`, which is `1.0` for two the profile calls identical."""
+    return 1.0 - engine.profile.answer_distance(a, b)
+
+
+def scores_of(engine: Engine, record: Record) -> AgreementScores:
+    """This record's two numbers: the jurors against each other, and against the label it carries.
+
+    Pairwise for the first, because agreement among N is a property of the pairs and not of any
+    one of them; against the label for the second, over the same population, so the two numbers
+    are read on one scale.
+    """
+    answers = usable_answers(record)
+    return AgreementScores(
+        self_agreement=mean(
+            [agreement(engine, a, b) for a, b in combinations(answers, 2)]
+        ),
+        label_agreement=mean(
+            [agreement(engine, answer, record.label) for answer in answers]
+        ),
+        method=METHOD,
+    )
+
+
+def cohesion(engine: Engine, records: Iterable[Record]) -> ServiceResult:
+    """Every judged record, one key richer: how much its panel agreed, and with what.
+
+    The precondition is the key `jury` writes (P12), and it is the key rather than what is in it:
+    a record `jury` skipped has nothing to fold and comes back with no `cohesion` key either, so
+    `triage` sees one absence rather than two. A record whose panel *failed* is a different case
+    and is measured -- the key is there, the votes are not, and `0.0` against `0.0` is what a
+    record with no evidence should carry into a bucket.
+    """
+    return ServiceResult(
+        records=tuple(
+            record.model_copy(
+                update={
+                    "ai_review": record.ai_review.model_copy(
+                        update={STAGE: scores_of(engine, record)}
+                    )
+                }
+            )
+            if record.ai_review.jury is not None
+            else record
+            for record in records
+        )
+    )

@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 4 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-`make check` is green over 56 modules and 819 tests, 269 of which are not guards — but **T34 is open
+`make check` is green over 56 modules and 835 tests, 285 of which are not guards — but **T34 is open
 and CI is red on a line neither `make check` nor any guard reads.** What each task changed is recorded
 at the end of the task below it. **Phase 5 opens with T19, and T34 is still the oldest thing on this
 list.**
@@ -133,7 +133,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T17 | `duplicate_check` | 4 | T12, T14 | M | ✓ |
 | T18 | The bus and conservation properties | 4 | T14–T17 | S | ✓ |
 | T19 | `jury` | 5 | T2, T13, T15 | M | ✓ |
-| T20 | `cohesion` | 5 | T19 | S | |
+| T20 | `cohesion` | 5 | T19 | S | ✓ |
 | T21 | `triage` | 5 | T20 | S | |
 | T22 | `question_generate` | 6 | T21 | M | |
 | T23 | The question store | 6 | T3, T9 | M | |
@@ -1980,6 +1980,30 @@ because it re-runs for free while the panel does not.
 **Source.** `spec.md` § *Per-service contracts* row 5, Requirement 25.
 
 **Verify.** `uv run pytest tests/stages/test_cohesion.py -q`.
+
+**Landed.** 16 tests, no new anything. Three choices the task description left open, and the
+acceptance criteria named two of them.
+
+**Both numbers are δ, over the *usable* votes.** A count of `label_is_right` was the other build and
+Decision 15 refuses it: δ is soft, so *right tool, one argument wrong* scores above *wrong tool*, and
+a verdict count ranks them identically — which would put both in one triage bucket with no threshold
+change able to separate them again. Invalid votes are excluded for a different reason: a distance to
+a point outside the answer space measures the panel's plumbing, and `invalid_votes` already carries
+that.
+
+**Absent evidence reads as `0.0`, not `1.0`.** A panel with one usable vote has no pair to average
+and a mean over an empty sequence is the second way this stage could have produced the `NaN` the
+acceptance criteria forbid. `1.0` was tempting — one juror does agree with itself — and it is a
+broken panel wearing a confident record's clothes: `triage` would route it away from the person who
+should see it. A failed panel is *measured* rather than skipped, because `jury` wrote its key.
+
+**`method` names the estimator, not the distance.** The δ is already identified per record by the
+profile version in `provenance`, so a string repeating it would be P16 duplication; what varies
+independently is the fold and the population, and `mean_1_minus_delta_over_valid_votes` says both.
+The rule to keep: a change to what these numbers mean changes this string.
+
+Two comments in § *The record*'s drawing moved with T19 rather than with this task and are corrected
+here: `valid` says *answer space* now, and `method` no longer claims to name a distance.
 
 ---
 

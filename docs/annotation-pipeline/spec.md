@@ -777,13 +777,13 @@ prose, and nests `human_review` inside `ai_review`.
                                    "label_is_right": true,  // its verdict on the existing label
                                    "answer": [],            // its own answer, in the profile's answer shape
                                    "reasoning": "…",        // why, for the human who reads a disagreement
-                                   "valid": true } ],       // did it validate against the answer schema
+                                   "valid": true } ],       // is its answer in this record's answer space
                   "invalid_votes": 0,       // count of `valid: false`; a panel this noisy is visible in metrics.json
                   "plurality": [],          // the panel's most-common answer
                   "final_prediction": [] }, // what the panel is taken to have said; may differ from plurality
     "cohesion": { "self_agreement": 0.83,   // how much the jurors agree with each other
                   "label_agreement": 0.42,  // how much they agree with the existing label
-                  "method": "…" },          // which distance produced both, so the pair is comparable
+                  "method": "…" },          // the estimator over δ, so two runs' pairs are comparable
     "triage":   { "bucket": "…",            // which cell of the two numbers this record falls in
                   "stratum": "…",           // the sampling group the bucket belongs to
                   "selected_for_review": true, // does a human see it
@@ -934,6 +934,16 @@ defect.
 Three stages rather than one, because they fail and re-run for different reasons: `jury` costs money and
 is cached, `cohesion` is pure arithmetic, and `triage` is re-run on **exactly one** threshold re-tuning
 pass after the pilot. A bucket whose precision the pilot cannot establish gets **no quota**.
+
+**Both cohesion numbers are δ, over the usable votes.** Agreement is `1 - answer_distance`, so a
+jury that called the right tool with one argument wrong scores above one that called the wrong tool —
+which a count of `label_is_right` would not, and every bucket is written on these two numbers
+(Decision 15). An invalid vote is not measured: a distance to a point outside the answer space is
+evidence about the panel's plumbing, which `invalid_votes` already carries. **A panel with fewer than
+two usable votes scores `0.0` and not `1.0`** — absent evidence reads as absent agreement, because a
+single juror scored as unanimous is a broken panel that `triage` would route away from the person who
+should see it. `method` names the estimator rather than the distance, since the δ is already
+identified per record by the profile version in `provenance`.
 
 **The panel is a port and the judgment is not.** `JuryPanel` holds the composition, the task statement
 out of `config/prompts/` and the retries, because a model call opens a socket and no engine module makes
