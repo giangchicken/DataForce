@@ -145,6 +145,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T28 | The routers | 7 | T10, T27 | M | |
 | T29 | The CLI and the event stream | 7 | T3, T27 | M | |
 | T49 | The two model adapters, and the cache the jury's design assumes | 7 | T27 | M | |
+| T52 | One object, two identities, and the containment becomes a base class | 7 | T27 | M | |
 | T30 | Smoke | 8 | T29 · **a declared corpus** | M | |
 | T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L | |
 
@@ -2620,6 +2621,47 @@ with no edit to `cli.py`. A long run emits progress while running, not only afte
 **Source.** `spec.md` § *Running it*, § *Observability*, Requirement 46; I15; `AGENTS.md` P27.
 
 **Verify.** `uv run pytest tests/shells -q`; run the CLI over a fixture and watch the output.
+
+---
+
+### T52 · One object, two identities, and the containment becomes a base class
+
+**Goal.** `class ToolDecision(Text2Text)` — a module inside a concept says so in the type system and
+not only in a manifest — without a record losing which concept read it and which module answered it.
+
+**Context.** § *The two axes* says a modality is a concept and a profile is one module inside it, and
+Decision 24 records that the relationship is a declaration today for one concrete reason: both
+protocols declare `name` and `version`, they come from two different manifests, and every record
+stamps both as `Branch(modality=…, profile=…)`. One class has one `self.name`. The sharing argument
+for inheritance is real and is not what blocks it — subclasses share the base's six members rather
+than copying them, which is exactly what `summarize` and `classification` would want.
+
+**Blocked by.** T27, which is where the composition root and the pair check land; the identity split
+touches the same builder.
+
+**Approach.** Split the identity before touching the hierarchy. `name`/`version` become
+`modality_name`/`modality_version` on the `Modality` protocol and `profile_name`/`profile_version` on
+`Profile`, so one object can answer for both; `Branch` reads the two off the same instance. Only then
+does `ToolDecision` inherit `Text2Text`, taking two manifests at construction. The registry keeps two
+slots, because a concept must still be registrable without a module — a run that reads content and
+answers nothing is what `load_data` alone is.
+
+**Acceptance criteria.** `Branch` on a record built after the change is byte-identical to one built
+before: an identity refactor may not move a value that ends up in a `record_id`'s neighbourhood or in
+a run manifest. I21 still counts sixteen profile members and six modality members, and the two counts
+stay separate — inheritance must not let a modality member answer for a profile one. A second module
+in the same family, even a stub, subclasses the same concept and shares its six members without
+redeclaring them; that is the test the whole task exists for.
+
+**Source.** `spec.md` § *The two axes*, Decision 24, Decision 2 (which chose a shared helper over a
+base class for *concept-to-concept* sharing, a different question this task does not reopen);
+Requirement 40.
+
+**Verify.** `uv run pytest tests/guards/test_protocol_members.py tests/stages/test_manifest.py -q`;
+`make check`.
+
+**Out of scope.** Building a real second profile. This task proves the hierarchy holds with a stub;
+whether `summarize` is worth building is the pilot's question, and § *Out of Scope* keeps it there.
 
 ---
 

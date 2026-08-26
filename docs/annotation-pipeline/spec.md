@@ -9,7 +9,8 @@ the internal `agent-evaluation` service, which `agent-toolkit` was extracted fro
 
 DataForce turns a raw, model-labelled corpus into a training-ready dataset plus the evidence for
 trusting it. This spec fixes the buildable surface of that pipeline: **two axes** (a *modality* —
-`text2text`, `speech2text`, … — and a *profile* — function calling), **four main endpoints**
+`text2text`, `speech2text`, … — which is a family of tasks, and a *profile* — `tool_decision`,
+function calling — which is one task inside that family), **four main endpoints**
 (`load_data`, `data_quality`, `ai_review`, `human_review`) each exposing its services as sub-endpoints,
 and **one service per stage of the flow**, all with the same signature — records in, records out —
 driven two ways from one implementation: over HTTP, and in-process.
@@ -62,7 +63,16 @@ names one.
 
 ## The two axes
 
-Everything downstream is a composition of exactly two named things, and neither may do the other's job.
+**A modality is a concept and a profile is one module inside it.** `text2text` is a family of tasks;
+`tool_decision` is one task in that family, and `summarize` and `classification` would be others in
+the same one. The containment is the design and not an accident of packaging: a profile names the
+concept it belongs to, and a run pairing it with any other concept hard-stops.
+
+The two are *registered* as separate axes and composed at the edge. That is the containment's
+implementation, not a second idea about it — Decision 24 records why the relationship is a
+declaration today rather than a base class, and T52 is the task that would make it one. Within a
+run, neither may do the other's job: the concept reads and displays content, the module says what an
+answer is.
 
 ### Modality — how content is read and shown
 
@@ -1706,6 +1716,21 @@ the shape they exchange. *Cost, stated plainly:* a reader meeting the two files 
 question and the document did not answer it, which is why § *Per-service contracts* now carries the
 answer where that reader is. *Reversible:* merging is one row of the flow and one record key; the price
 of reversing is re-arguing this, and losing the ability to re-run either half alone.
+
+**24 · The containment is a declaration, not a base class — for now.**
+`tool_decision` belongs to `text2text`, a module inside a concept, and today that is
+`modality: text2text` in the profile's manifest, checked when the engine is composed, with two
+objects at runtime. *Alternative:* `class ToolDecision(Text2Text)`, which is what the containment
+reads like and would give every module in a family one shared implementation of the concept's six
+members — the sharing argument is real, and inheritance would not duplicate them. *Why this:* both
+protocols declare `name` and `version`, they come from two different manifests, and **every record
+stamps both** — `Branch(modality="text2text", profile="tool_decision")`. One class has one
+`self.name`, so inheriting collapses the pair and the record loses its ability to say which concept
+read it and which module answered it. Making it work is a rename of the identity across both
+protocols, both axes, `record.py`, the two manifests and the guards, which is a task and not a
+refactor in passing. *Cost:* the relationship lives in a config file rather than in the type system,
+so nothing but the composition check enforces it, and a reader of the classes alone cannot see it.
+*Reversible:* yes, and T52 is where — the identity split is the whole of the work.
 
 **23 · Layer two sets precision; recall is declared, not inferred.**
 `PersonalDataVerifier.confirmed_personal_data(window, found)` returns a **subset** of `found`. The model
