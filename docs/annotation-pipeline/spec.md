@@ -1900,6 +1900,15 @@ There is no test suite. It is written against this document, in this order, and 
 - **Real `speech2text`, `image2text`, `video2text`.** The seam is specified — media parts, the pair
   naming, and Requirement 16's resolver behaviour — and unenforced. The resolver *port* is deliberately
   not declared until a modality demands one (Decision 17). Only `text2text` is built.
+- **A second profile inside `text2text`.** `summarize`, `classification` and the rest of the family
+  are what this axis exists to hold — a modality is a family of tasks and a profile is one task in it
+  (§ *The two axes*) — and only `tool_decision` is built. Deferred rather than excluded, and named
+  here because the omission is louder than the modality one: **sixteen protocol members have been
+  designed against a single example.** What is unknown is not whether a second profile fits, but
+  whether all sixteen members are a *profile's* surface or whether some are `tool_decision`'s own,
+  leaked into the protocol because nothing else was ever asked to implement them. The second profile
+  is the measurement; until one exists, adding a seventeenth member is a guess about a task nobody has
+  written, and the count staying closed is what keeps the guess from being made.
 - **Our own annotation platform.** Deferred, not cancelled; the pilot decides.
 - **Model training and evaluation, synthetic data generation, active learning, fine-tuning a juror,
   Confident Learning**, and automatic write-back to any source file. Export produces an artifact; putting

@@ -2683,4 +2683,8 @@ accuracy, bucket precision — and the re-tuning pass is a single committed diff
 - **The web view.** One Vite + TypeScript SPA over these same endpoints, on the style reference's
   pattern. A later task by `objective.md` §9, and this plan keeps it one.
 - **Real `speech2text`, `image2text`, `video2text`.** The seam is specified and unenforced.
+- **A second profile inside `text2text`** — `summarize`, `classification`. What the profile axis
+  exists to hold, and only `tool_decision` is built. The sixteen members were designed against one
+  example, so the second profile is what tells us whether all sixteen belong to a profile or some
+  belong to this one; the pilot runs on `tool_decision`, so it is deferred and not scheduled here.
 - **Our own annotation platform.** Deferred, not cancelled; the pilot decides.
