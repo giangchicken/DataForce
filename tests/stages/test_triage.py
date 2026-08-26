@@ -24,7 +24,7 @@ from dataforce.engine import Engine
 from dataforce.errors import ConfigError
 from dataforce.pipeline.ai_review.cohesion import cohesion
 from dataforce.pipeline.ai_review.jury import jury
-from dataforce.pipeline.ai_review.triage import CELLS, share_of, triage
+from dataforce.pipeline.ai_review.triage import CELLS, sampling_position, triage
 from dataforce.pipeline.data_quality.label_check import label_check
 from dataforce.record import Record, ReviewSelection, StoredAnswer
 
@@ -208,7 +208,7 @@ def test_the_sample_is_stable_across_runs() -> None:
     function of the record's id and of nothing about the batch it arrived in."""
     record = a_record()
 
-    assert share_of(record.record_id) == share_of(record.record_id)
+    assert sampling_position(record.record_id) == sampling_position(record.record_id)
 
 
 def test_the_sample_is_a_share_and_not_a_count() -> None:
@@ -223,12 +223,12 @@ def test_the_sample_is_a_share_and_not_a_count() -> None:
     assert alone.model_dump() == crowded.model_dump()
 
 
-def test_a_share_is_inside_the_unit_interval() -> None:
-    """`[0, 1)`: a share of exactly 1.0 would make `quota: 1.0` miss a record."""
-    shares = [share_of(f"record-{seat}") for seat in range(20)]
+def test_a_sampling_position_is_inside_the_unit_interval() -> None:
+    """`[0, 1)`: a position of exactly 1.0 would make `quota: 1.0` miss a record."""
+    positions = [sampling_position(f"record-{seat}") for seat in range(20)]
 
-    assert all(0.0 <= share < 1.0 for share in shares)
-    assert len(set(shares)) == len(shares)
+    assert all(0.0 <= position < 1.0 for position in positions)
+    assert len(set(positions)) == len(positions)
 
 
 # --- the precondition, and the declarations read before it ---

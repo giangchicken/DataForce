@@ -56,11 +56,25 @@ must be nameable as a *result*, not as "part 2 of the thing above".
 **A name states what it returns, not the operation that produced it, and is long enough
 to be unambiguous read alone at the call site.**
 
-Three ways a name fails:
+Four ways a name fails:
 
 - **A bare operation names no object.** `of`, `parse`, `load`, `render`, `adapt`,
   `measure`, `export`, `embed`, `drift` — *parse what, into what?* Name the result:
   `read_manifest`, `catalog_to_tools`, `create_training_example`.
+- **A relational suffix standing in for the object.** `share_of`, `cell_of`, `data_for`.
+  `_of` and `_for` name the relation to an argument the signature already shows, and the
+  noun in front is then free to be wrong without looking wrong. Both of those were real:
+  `cell_of(scores, floors)` returned a *bucket*, which is a cell's name and not a cell,
+  and `share_of(record_id)` returned a position in `[0, 1)` that read at the call site as
+  one share being compared against another. Where the noun already is what comes back the
+  suffix adds nothing — `answer_id_for(annotation_id)` returns an answer id either way —
+  so a suffix is either redundant or hiding something. Correct the noun, and keep the
+  suffix where it reads: `share_of` became `sampling_position` because a position is not
+  a share, and `cell_of` became `bucket_for` because a bucket is what comes back —
+  `bucket = bucket_for(scores, floors)` is the call site saying it twice, which is the
+  point. What that one could *not* be is `triage_for`, however well it reads: `triage` is
+  already the module, the stage key, the service function and a constant in that file,
+  which is the next bullet.
 - **A one-word abbreviation of the concept.** Too short to mean anything on its own.
 - **A name shared with a step, stage, command, or table in the system.** It makes every
   sentence about the code ambiguous. If `load` is a pipeline stage, no function is called
@@ -68,6 +82,14 @@ Three ways a name fails:
 
 Test: read the call site with nothing else on screen. If you cannot say what comes back,
 the name is too short. A private `_` prefix is not an excuse — you still have to read it.
+Second test, for the fourth failure: say the name and the return type as one sentence.
+*`cell_of` returns a `str`* is not a sentence; *`placed_bucket` returns a bucket* is.
+
+**No guard enforces this section**, and that is the reason to read it twice rather than a
+gap to fill. Every other rule in this file that a script can check has one (P28), but a
+check here would have to allow `answer_id_for` while refusing `share_of` — the difference
+is whether the noun is the returned object, which is a judgement and not a pattern. So §5
+is caught in review or it is not caught.
 
 ## 6 · How to organise files
 

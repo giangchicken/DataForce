@@ -83,8 +83,12 @@ class Floors(NamedTuple):
     )
 
 
-def share_of(record_id: str) -> float:
+def sampling_position(record_id: str) -> float:
     """Where this record sits in `[0, 1)`: a digest of its id, read as a fraction in base sixteen.
+
+    Not `share_of`, which is what this was called: a *share* is what a quota is, and the call site
+    then read as one share compared against another. What comes back is the record's position in
+    the interval the quota cuts (AGENTS.md §5).
 
     Hashed rather than read straight off the id, for one reason: `record_id` is 16 lowercase hex by
     construction (Requirement 6) and `Record.record_id` is a string, so reading it as base sixteen
@@ -116,8 +120,18 @@ def declared_buckets(engine: Engine) -> Mapping[str, tuple[str, float]]:
     }
 
 
-def cell_of(scores: AgreementScores, floors: Floors) -> str:
-    """Which of the four cells this record's two numbers fall in."""
+def bucket_for(scores: AgreementScores, floors: Floors) -> str:
+    """The bucket this record's two numbers place it in: a cell's *name*, which is what comes back.
+
+    A cell is the pair of booleans and a bucket is what `CELLS` calls it -- the word `params.yaml`
+    declares a quota against, the field `ReviewSelection` carries, and the word the caller binds.
+    `cell_of` named the lookup rather than the result and disagreed with its own call site.
+
+    The suffix stays because §5 only refuses one that stands *in place of* the object: a bucket is
+    what this returns, so `bucket = bucket_for(scores, floors)` says so twice rather than hiding it.
+    `triage_for` would read as well and cannot be had -- `triage` is this module, its stage key, its
+    service function and already a constant here, which is the third bullet of the same section.
+    """
     return CELLS[
         (
             scores.self_agreement >= floors.self_agreement,
@@ -148,9 +162,9 @@ def review_selection(
     audit of a quota needs: count the records selected in one bucket, count the records in it, and
     the ratio is the declared share or the declaration is not being applied.
     """
-    bucket = cell_of(scores, floors)
+    bucket = bucket_for(scores, floors)
     stratum, quota = buckets[bucket]
-    selected = share_of(record.record_id) < quota
+    selected = sampling_position(record.record_id) < quota
     if selected:
         reason = f"{bucket}: within the declared quota"
     elif not quota:
