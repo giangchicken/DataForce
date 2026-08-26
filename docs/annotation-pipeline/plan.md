@@ -19,9 +19,10 @@ Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both p
 second review round — T39 to T43 — and then T12 and T13.
 **Phases 1 to 6 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
 Phase 5: T19, T20 and T21. **Phase 6 is done:** T22 to T26. `make check` is green over 57 modules
-and 1016 tests, 325 of which are not guards — but **T34 is open and CI is red on a line neither
+and 1074 tests, 516 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **Phase 7 is next — T27, and then T28, T29 and T49 — and T34 is still the oldest thing on this list.**
+it. **Phase 7 has started: T27 landed, and T28, T29, T49 and T52 are behind it — and T34 is still the
+oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -2526,6 +2527,71 @@ one unchanged configuration produce byte-identical run manifests.
 **Source.** `spec.md` § *Engine and edge*, § *Configuration*, Requirements 36, 44 and 45; Decision 12.
 
 **Verify.** `uv run pytest tests/shells -q`; `make check`.
+
+**Landed as three modules that already had rows.** `bootstrap.py`, `policy.py` and `artifacts.py` were
+docstrings in § *Package layout* and are now the code those docstrings describe, so I19 saw no change:
+this task filled the tree rather than growing it.
+
+**Two builders, and only one of them reads.** `composed_engine` takes two `Manifest` objects, a
+template string and an encoder; `open_engine` is the same call with the reading in front of it. One
+function taking either would have made *no filesystem anywhere* a promise, and two makes it a
+signature — a caller who already holds the declarations, in a request body or a fixture, cannot reach
+a disk through this module. The pair check sits in the builder rather than the reader for the same
+reason, which means it runs twice on the reading path: once to know which manifest to open, and once
+where a request body full of declarations would otherwise walk past it. The store follows the same
+line — `open_engine` constructs the pool, because P19 says a connection is reached for in one place,
+and `composed_engine` attaches nothing, because *no filesystem anywhere* has to cover a backing
+service or it means one layer of the world rather than the world.
+
+**Every reader hands back the digest beside the value.** The alternative was a value reader, a digest
+reader, and a composition root that remembers to call both; Requirement 45 says the manifest records
+*every* policy file, and a rule kept by remembering is one that is eventually not remembered. The
+same argument shapes `written_run`, which writes all three artifacts rather than exposing one writer
+each, and takes each digest by reading the file back — a digest of what we meant to write is not
+evidence about what a later reader will find.
+
+**A policy file is recorded under what it is, not where it was.**
+`config/profiles/tool_decision.yaml`, whatever directory `config_root` points at. A key built from the
+real path would differ between two checkouts of one commit, and I14 would then be failing for a reason
+that is not a configuration change. `params.yaml` keeps its own filename, because a deployment may
+really point at `pilot.yaml` and which file was read is exactly what a run manifest is for.
+
+**The library's default for a file it cannot read is the wrong one here.** `read_yaml` answers `{}`,
+`read_txt` answers `""` and `read_jsonlines` answers `[]` — right for a tool reading a corpus, and for
+configuration it means a missing `params.yaml` is an engine that holds no thresholds and says nothing
+about it. Both readers check the path first, so P23's *stop before the first record* holds.
+
+**Two reads per YAML file, on purpose.** `agent-toolkit` owns YAML (I6) and parses from a path, so the
+text a digest is taken over is read separately from the parse. Four small files once per run buys a
+digest over the file rather than over what was recovered from it: a reviewed comment moved is a policy
+file changed, and a manifest that could not see that would call two runs identically configured after
+a human had changed the reasoning behind a number.
+
+**The embedder is loaded on the first vector, not at composition.** `static_model` is cached, and
+imports `model2vec` inside itself: the import alone is two seconds on a subcommand that prints help,
+and the weights are a download a run of `label_check` alone should not pay for. `force_download=False`
+is model2vec's non-default and this project's requirement — a static embedding is a pure function of
+its input (Requirement 23), so re-fetching weights every run buys nothing and makes a run depend on a
+registry being up. **What this does not prove:** nothing in `make check` loads a model, so what is
+tested is the laziness and not the loader.
+
+**The run id's second half is a digest of the policy digests.** A random suffix says nothing and can
+be re-derived from nothing; this one makes a re-tuned threshold visible in the id itself. Stated
+cost: two runs of one configuration started inside the same second are one id.
+
+**Requirement 22's comparison landed in the fold**, which is where Decision 10 left it when it deleted
+the gates — each check's count beside what `params.invalid_counts` declares, both sides listed even
+where one is absent, and nothing stops. A malformed `invalid_counts` reads as *nothing declared*
+rather than raising, because the one thing a fold for reading may not do is become the reason a run
+does not finish.
+
+**Requirement 28 is not checked here.** This task's *Context* says the cross-border precondition is
+checked in this module and T49's acceptance criteria own it; until a panel has an adapter there is no
+declared endpoint for the check to read, so it would be a check over a declaration nobody writes. The
+module docstring records that where the next reader hits it (§8).
+
+**One test reads the repository's own `config/` and `params.yaml`**, because a shipped manifest nobody
+can compose is a broken run and nothing else in the suite would see it.
 
 ---
 
