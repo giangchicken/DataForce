@@ -55,9 +55,20 @@ REASON = "reason"
 STAGE = "load_data"
 
 
-def stamped_version(axis: Modality | Profile) -> str:
-    """One axis as its provenance names it -- `text2text@1` -- so a bump is visible per record."""
-    return f"{axis.name}@{axis.version}"
+def stamped_modality(modality: Modality) -> str:
+    """The concept as provenance names it -- `text2text@1` -- so a bump is visible per record."""
+    return f"{modality.modality_name}@{modality.modality_version}"
+
+
+def stamped_profile(profile: Profile) -> str:
+    """The module as provenance names it -- `tool_decision@1` -- on the same terms.
+
+    Two functions where one took `Modality | Profile` and read `.name` off either. That union was
+    only writable while both protocols spelled their identity the same way, and since T52 one object
+    answers both -- so a single function taking either would have had no way to say which of the two
+    identities on it was being asked for. The split is the point rather than a cost (P16).
+    """
+    return f"{profile.profile_name}@{profile.profile_version}"
 
 
 def refuse_an_undeclared_source(engine: Engine, digest: str) -> None:
@@ -99,8 +110,8 @@ def load_data(
             source_file_sha256=source_file_sha256,
             offset=offset,
             ingested_at=ingested_at,
-            modality=stamped_version(engine.modality),
-            profile=stamped_version(engine.profile),
+            modality=stamped_modality(engine.modality),
+            profile=stamped_profile(engine.profile),
             run_id=run_id,
         )
         try:

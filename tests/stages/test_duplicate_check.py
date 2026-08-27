@@ -64,8 +64,8 @@ def an_engine(near: Any = 0.95) -> Engine:
     )
     profile = a_profile()
     registry = Registry()
-    registry.register_modality(modality.name, modality)
-    registry.register_profile(profile.name, profile)
+    registry.register_modality(modality.modality_name, modality)
+    registry.register_profile(profile.profile_name, profile)
     return Engine(
         modality=modality,
         profile=profile,

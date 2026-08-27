@@ -27,6 +27,7 @@ import pytest
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
+from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Text2Text
 from dataforce.modalities.text2text.utils import stated_calls
 from dataforce.profiles import Profile
@@ -127,9 +128,32 @@ def a_manifest(**declared: Any) -> Manifest:
     )
 
 
+def a_modality_manifest() -> Manifest:
+    """The concept's half of the pair -- `config/modalities/text2text.yaml`, already parsed.
+
+    A profile is one module inside a concept and says so by subclassing it since T52, so building
+    one takes both declarations: this is what fills the base's half of the object.
+    """
+    return Manifest(
+        name="text2text",
+        version="1",
+        declarations={
+            "embedding": {"model": "m", "exclude_roles": []},
+            "language": "vi",
+        },
+    )
+
+
+def no_vector(document: str) -> tuple[float, ...]:
+    """The encoder the base takes. Nothing in this file embeds anything, so it is never called."""
+    return (0.0,)
+
+
 def a_profile(question: str = QUESTION, **declared: Any) -> ToolDecision:
-    """The profile under test, built the way a composition root will build it."""
-    return ToolDecision(a_manifest(**declared), question)
+    """The profile under test, built the way the composition root builds it: both manifests."""
+    return ToolDecision(
+        a_modality_manifest(), a_manifest(**declared), no_vector, question
+    )
 
 
 def parts(turns: Sequence[tuple[str, str]] = TURNS) -> tuple[Part, ...]:
@@ -138,18 +162,14 @@ def parts(turns: Sequence[tuple[str, str]] = TURNS) -> tuple[Part, ...]:
 
 
 def a_text2text() -> Text2Text:
-    """The modality this profile composes with. Its encoder is never called from here."""
-    return Text2Text(
-        Manifest(
-            name="text2text",
-            version="1",
-            declarations={
-                "embedding": {"model": "m", "exclude_roles": []},
-                "language": "vi",
-            },
-        ),
-        lambda document: (0.0,),
-    )
+    """The concept this profile is one module inside, on its own.
+
+    Still built separately here, and the separation is the point of the fixture: `a_profile()` is
+    also a `Text2Text` now, and a test that read a turn back through the same object would prove
+    the two ends agree only because they are one object. The seam below is real when it is crossed
+    between two of them.
+    """
+    return Text2Text(a_modality_manifest(), no_vector)
 
 
 def a_turn_that_calls(name: str, arguments: Any, said: str | None = None) -> Part:
@@ -959,15 +979,24 @@ def test_an_unresolved_review_ships_the_answer_the_record_arrived_with() -> None
 # --- identity, and every declaration this profile refuses to guess ---
 
 
-def test_identity_and_the_pair_come_from_the_manifest() -> None:
-    """Requirement 40, and the `modality:` a run naming another hard-stops against."""
+def test_both_identities_come_from_their_own_manifests() -> None:
+    """Requirement 40 twice over, which is the whole of what T52's identity split had to keep.
+
+    One object, two identities: `profile_name` is `config/profiles/tool_decision.yaml`'s filename
+    and `modality_name` is `config/modalities/text2text.yaml`'s, and neither can answer for the
+    other. A bare `name` on both protocols is what collapsing them would have looked like, and a
+    record would then have lost which concept read it.
+    """
     profile = a_profile()
 
-    assert (profile.name, profile.version, profile.modality) == (
-        "tool_decision",
-        "1",
-        "text2text",
-    )
+    assert (profile.profile_name, profile.profile_version) == ("tool_decision", "1")
+    assert (profile.modality_name, profile.modality_version) == ("text2text", "1")
+
+
+def test_a_profile_is_an_instance_of_the_concept_it_is_one_module_inside() -> None:
+    """Decision 24, at runtime. The containment used to be a string in a manifest and nothing a
+    reader of the classes could see; it is the type now, which is what T52 exists for."""
+    assert isinstance(a_profile(), Text2Text)
 
 
 @pytest.mark.parametrize(
@@ -975,9 +1004,8 @@ def test_identity_and_the_pair_come_from_the_manifest() -> None:
     [
         {"shape": "legacy_system_prompt"},
         {"answer_control": "free_text"},
-        {"modality": None},
     ],
-    ids=["retired-shape", "unknown-control", "no-pair"],
+    ids=["retired-shape", "unknown-control"],
 )
 def test_a_declaration_that_is_not_one_of_the_declared_values_is_refused(
     declared: dict[str, Any],
@@ -1003,7 +1031,7 @@ def test_a_missing_declaration_names_the_file_and_the_path(missing: str) -> None
     )
 
     with pytest.raises(ConfigError, match=r"config/profiles/tool_decision.yaml"):
-        ToolDecision(incomplete, QUESTION)
+        ToolDecision(a_modality_manifest(), incomplete, no_vector, QUESTION)
 
 
 @pytest.mark.parametrize(
@@ -1045,18 +1073,33 @@ def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
     )
 
 
-def test_it_answers_every_member_its_protocol_declares() -> None:
+def test_it_answers_every_member_of_both_protocols_and_nothing_else() -> None:
     """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
 
-    An equality, not a containment: the sixteen are *closed*, and the containment version of this
+    An equality, not a containment: both sets are *closed*, and the containment version of this
     test is what let `final_label` ship as an undeclared extra. I23 checks the same closure off the
-    tree; this checks it off a live instance. Fifteen since T16, which brought `redact_label` the
-    caller T13 refused to add it without; sixteen since T19, which brought `jury` -- a stage that
-    cannot count an invalid vote without asking what a permitted answer is.
+    tree; this checks it off a live instance.
+
+    **It is a union since T52, and the union is the point.** A profile is one module inside a
+    concept and says so by subclassing it, so one object answers both protocols -- and the two
+    member sets have to stay disjoint or inheritance has let a modality member answer for a profile
+    one. A bare `name` and `version` on both is exactly that failure, and prefixing the identity is
+    what this assertion holds.
+
+    Fifteen profile members: fourteen since T16, which brought `redact_label` the caller T13 refused
+    to add it without; fifteen since T19, which brought `jury`; sixteen while `modality` named the
+    pair as a string, and fifteen again since T52 took that string off the protocol because the base
+    class now says the same thing and cannot disagree with it.
     """
-    declared = {name for name in dir(Profile) if not name.startswith("_")} | set(
+    profile = {name for name in dir(Profile) if not name.startswith("_")} | set(
         Profile.__annotations__
     )
+    concept = {name for name in dir(Modality) if not name.startswith("_")} | set(
+        Modality.__annotations__
+    )
 
-    assert len(declared) == 16
-    assert {name for name in dir(a_profile()) if not name.startswith("_")} == declared
+    assert (len(profile), len(concept)) == (15, 6)
+    assert not profile & concept, "a member of one axis may not answer for the other"
+    assert {
+        name for name in dir(a_profile()) if not name.startswith("_")
+    } == profile | concept

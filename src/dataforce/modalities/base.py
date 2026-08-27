@@ -3,6 +3,14 @@
 Six members, closed. The two named types are aliases here and concrete pydantic models in an
 implementation's ``schema.py`` (Requirement 47). This module imports no implementation of its own
 axis (I16) -- that is what keeps the protocol a protocol.
+
+**The identity is prefixed, and that is what lets one object be both axes.** A profile is a module
+inside a concept and says so by subclassing it (Decision 24), so one instance answers this protocol
+and ``Profile`` at once -- and a bare ``name`` on both would be one attribute where a record needs
+two. ``modality_name`` and ``profile_name`` cannot collapse, which is what keeps
+``Branch(modality=…, profile=…)`` able to say which concept read a record and which module answered
+it. The two protocols stay separate for the same reason: this one is about reading content and that
+one is about answering, and a modality member may not answer for a profile one.
 """
 
 from collections.abc import Mapping, Sequence
@@ -21,8 +29,10 @@ type DisplayConfig = Any
 class Modality(Protocol):
     """One input→output pair: how its content is read, embedded, scanned and shown."""
 
-    name: str  # "text2text" -- comes from the manifest filename, never a class body
-    version: str  # stamped into every record's provenance; a string, never a number
+    modality_name: str  # "text2text" -- the manifest filename, never a class body
+    modality_version: (
+        str  # stamped into every record's provenance; a string, never a number
+    )
 
     def content_parts(self, item: Mapping[str, Any]) -> list[Part]:
         """One source item's turns, as ordered parts. Text verbatim, media by reference."""

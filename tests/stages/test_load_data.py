@@ -49,8 +49,8 @@ def an_engine(thresholds: Mapping[str, Any] | None = None, **declared: Any) -> E
     modality = a_text2text()
     profile = a_profile(**declared)
     registry = Registry()
-    registry.register_modality(modality.name, modality)
-    registry.register_profile(profile.name, profile)
+    registry.register_modality(modality.modality_name, modality)
+    registry.register_profile(profile.profile_name, profile)
     return Engine(
         modality=modality,
         profile=profile,

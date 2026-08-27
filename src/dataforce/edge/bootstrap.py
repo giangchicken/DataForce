@@ -11,11 +11,23 @@ with the reading in front of it. Splitting them is what makes *no filesystem any
 rather than a promise -- a caller who has the declarations already, in a request body or a fixture,
 cannot accidentally reach a disk through this module.
 
-**This is the only module that names a concrete axis** (Requirement 38). ``MODALITIES`` and
-``PROFILES`` map a manifest's name to the class that answers to it, and each class takes its
-manifest plus the one thing it cannot open: a model for the modality, a template for the profile.
-The symmetry is the point -- an axis is a declaration and the edge resolving what the declaration
-names.
+**This is the only module that names a concrete axis** (Requirement 38). ``BUILT_MODALITIES`` and
+``BUILT_PROFILES`` map a manifest's name to the class that answers to it, and the edge supplies the
+two things neither class can open for itself: an encoder for the concept, a template for the module.
+
+**One object fills both slots, because a profile is a subclass of its modality** (Decision 24).
+``ToolDecision`` *is* a ``Text2Text``, so a run resolves to one instance answering both protocols
+and the registry registers it twice -- under its modality name in one namespace and its profile name
+in the other. Two slots and one object: the namespaces stay separate because a name is only unique
+within the ``config/<axis>/`` directory it was read from, and a concept with three modules in it
+still needs one entry per module.
+
+**The pair is still checked against the manifests and not against the hierarchy.**
+``paired_modality`` compares the two declarations, which is what a request body full of them has to
+pass; the hierarchy says the same thing one level up and is proved where it costs nothing --
+``mypy --strict`` on the ``TYPE_CHECKING`` block in ``profiles/tool_decision/utils.py``, and a test
+over the two maps below. A runtime ``issubclass`` here would be a third statement of one fact,
+checked at the one moment both other statements have already been read (§2).
 
 **The registry holds what this run resolved, not everything installed.** An ``Engine`` is what a run
 resolved to, so both slots are filled from the pair that was asked for. Registering the whole of
@@ -61,7 +73,7 @@ shipped false is the same exposure a ``jury`` call on those records has.
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import openai  # guard-exempt: I6 · agent-toolkit exposes no embeddings call · the edge · 2026-08-27
 from agent_toolkit.llm import JsonDirConfigResolver, LLMConfig
@@ -94,14 +106,32 @@ from .store.session import sessions_to, store_engine
 # manifest records by, and this is the one file it deliberately does not record.
 MODEL = "model"
 
-# Which class answers to a manifest's name, per axis. Both take their manifest and the one thing
-# the axis cannot open for itself, which is the whole of what a composition root supplies.
+
+class ProfileInConcept(Modality, Profile, Protocol):
+    """One object answering both axes: a module, and the concept it is one module inside.
+
+    The type-system half of Decision 24. `Engine` keeps two slots and `Registry` keeps two
+    namespaces, but since T52 one instance fills both -- so the composition root needs a name for
+    *a thing that is both*, and Python has no intersection type to write it with inline.
+
+    A shape in a `LOGIC ·` module is §6 giving way to P18: the abstraction belongs to the layer that
+    consumes it, and this one has exactly one consumer. Putting it in `modalities/base.py` would
+    make the modality protocol name the profile one; putting it in `profiles/base.py` would make
+    every profile's contract mention a concept it does not have to be inside. Neither is true of
+    the engine, and both are true here, which is where it therefore lives (§8).
+    """
+
+
+# Which class answers to a manifest's name, per axis. A concept takes its manifest and an encoder;
+# a module inside one takes both manifests, because since T52 it is a subclass and construction
+# fills the base's half too. `BUILT_MODALITIES` is what a run with no module would build, and what
+# `implementation_named` checks a modality declaration against either way.
 BUILT_MODALITIES: Mapping[str, Callable[[Manifest, Encoder], Modality]] = {
     "text2text": Text2Text
 }
-BUILT_PROFILES: Mapping[str, Callable[[Manifest, str], Profile]] = {
-    "tool_decision": ToolDecision
-}
+BUILT_PROFILES: Mapping[
+    str, Callable[[Manifest, Manifest, Encoder, str], ProfileInConcept]
+] = {"tool_decision": ToolDecision}
 
 
 def implementation_named[Implementation](
@@ -221,17 +251,13 @@ def composed_engine(
     backing service too, or the phrase means one layer of the world and not the world.
     """
     pair = paired_modality(profile, modality.name)
+    implementation_named(MODALITIES, BUILT_MODALITIES, modality.name)
+    resolved = implementation_named(PROFILES, BUILT_PROFILES, profile.name)(
+        modality, profile, encode, question
+    )
     registry = Registry()
-    registry.register_modality(
-        modality.name,
-        implementation_named(MODALITIES, BUILT_MODALITIES, modality.name)(
-            modality, encode
-        ),
-    )
-    registry.register_profile(
-        profile.name,
-        implementation_named(PROFILES, BUILT_PROFILES, profile.name)(profile, question),
-    )
+    registry.register_modality(modality.name, resolved)
+    registry.register_profile(profile.name, resolved)
     return Engine(
         modality=registry.modality(pair),
         profile=registry.profile(profile.name),

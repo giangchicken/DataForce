@@ -68,11 +68,26 @@ names one.
 the same one. The containment is the design and not an accident of packaging: a profile names the
 concept it belongs to, and a run pairing it with any other concept hard-stops.
 
-The two are *registered* as separate axes and composed at the edge. That is the containment's
-implementation, not a second idea about it — Decision 24 records why the relationship is a
-declaration today rather than a base class, and T52 is the task that would make it one. Within a
-run, neither may do the other's job: the concept reads and displays content, the module says what an
-answer is.
+**The containment is a base class.** `class ToolDecision(Text2Text)` — Decision 24, taken in T52.
+A run resolves to *one object* answering both protocols, and the edge registers it in both of the
+registry's namespaces. That is what makes a second module in the family — `summarize`,
+`classification` — share the concept's six members rather than reimplementing them, and it is what
+lets a reader of the classes see a relationship that used to exist only as `modality: text2text` in
+a manifest.
+
+**The two protocols stay separate, and the identity is prefixed so they can.** `Modality` declares
+`modality_name`/`modality_version`, `Profile` declares `profile_name`/`profile_version`, and one
+object answers all four. A bare `name` on both would be one attribute where every record needs two —
+`Branch(modality="text2text", profile="tool_decision")` has to say which concept read a record *and*
+which module answered it. Within a run, neither axis may do the other's job: the concept reads and
+displays content, the module says what an answer is, and inheritance may not let a member of one
+answer for the other.
+
+**Two registry namespaces, one object.** A name is only unique inside the `config/<axis>/` directory
+it was read from, and a concept with three modules in it needs one entry per module — so the two
+slots survive the hierarchy. The pair is still checked against the *manifests* at composition
+(`paired_modality`), because a request body full of declarations may name a pair no class hierarchy
+was consulted about.
 
 ### Modality — how content is read and shown
 
@@ -100,8 +115,8 @@ sibling that does not reduce to text. `text2text` is the case where the reductio
 class Modality(Protocol):
     """One input→output pair: how its content is read, embedded, scanned and shown."""
 
-    name: str      # "text2text" — comes from the manifest filename, never a class body
-    version: str   # stamped into every record's provenance, so it is a string, not a number
+    modality_name: str     # "text2text" — the manifest filename, never a class body
+    modality_version: str  # stamped into every record's provenance; a string, not a number
 
     def content_parts(self, item: Mapping[str, Any]) -> list[Part]:
         """One source item's turns, as ordered parts. Text verbatim, media by reference."""
@@ -130,9 +145,8 @@ declares the modality it composes with, and a run naming a different one hard-st
 class Profile(Protocol):
     """One dataset task: what an answer is, how two answers differ, what makes one invalid."""
 
-    name: str       # "tool_decision" — from the manifest filename
-    version: str
-    modality: str   # "text2text" — the pair this profile composes with; a mismatch hard-stops
+    profile_name: str     # "tool_decision" — from the manifest filename
+    profile_version: str  # stamped into every record's provenance; a string, not a number
 
     def answer_schema(self, record: Record) -> dict:
         """This record's permitted answers: `oneOf` per offered tool. Never persisted."""
@@ -186,7 +200,7 @@ class Profile(Protocol):
         """The record in the shape a trainer expects."""
 ```
 
-Sixteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
+Fifteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
 is `tool_decision/utils.py`. `AnnotationResponse` is the exception and is **concrete** in
 `profiles/base.py`: a verdict, a correction and a note are the same three things for every profile
@@ -1116,8 +1130,8 @@ engine = open_engine(profile="tool_decision", modality="text2text",
 
 `Engine` is `dataforce/engine.py` — a resolved pair, a registry, thresholds, and the digests of the
 policy files that produced them. It opens nothing. `open_engine` is `edge/bootstrap.py`: it reads the
-two manifests, the thresholds and the prompt templates through `edge/policy.py`, registers both axes,
-and returns one. The type is the engine's because every service names it; the reader is the edge's
+two manifests, the thresholds and the prompt templates through `edge/policy.py`, builds the one
+object that answers both axes (Decision 24), registers it in both namespaces, and returns one. The type is the engine's because every service names it; the reader is the edge's
 because it reads. Naming no modality takes the profile at its word; naming a different one raises
 `ConfigError` saying which modality the profile composes with.
 
@@ -1733,20 +1747,25 @@ question and the document did not answer it, which is why § *Per-service contra
 answer where that reader is. *Reversible:* merging is one row of the flow and one record key; the price
 of reversing is re-arguing this, and losing the ability to re-run either half alone.
 
-**24 · The containment is a declaration, not a base class — for now.**
-`tool_decision` belongs to `text2text`, a module inside a concept, and today that is
-`modality: text2text` in the profile's manifest, checked when the engine is composed, with two
-objects at runtime. *Alternative:* `class ToolDecision(Text2Text)`, which is what the containment
-reads like and would give every module in a family one shared implementation of the concept's six
-members — the sharing argument is real, and inheritance would not duplicate them. *Why this:* both
-protocols declare `name` and `version`, they come from two different manifests, and **every record
-stamps both** — `Branch(modality="text2text", profile="tool_decision")`. One class has one
-`self.name`, so inheriting collapses the pair and the record loses its ability to say which concept
-read it and which module answered it. Making it work is a rename of the identity across both
-protocols, both axes, `record.py`, the two manifests and the guards, which is a task and not a
-refactor in passing. *Cost:* the relationship lives in a config file rather than in the type system,
-so nothing but the composition check enforces it, and a reader of the classes alone cannot see it.
-*Reversible:* yes, and T52 is where — the identity split is the whole of the work.
+**24 · The containment is a base class.**
+`tool_decision` belongs to `text2text`, a module inside a concept, and that is
+`class ToolDecision(Text2Text)`: one object answering both protocols, built from both manifests, in
+both of the registry's namespaces. *Alternative:* the declaration this used to be — `modality:
+text2text` in the profile's manifest, checked at composition, with two unrelated objects at runtime.
+*Why this:* the sharing is real and the type system is where a containment belongs. Every module in
+a family gets one implementation of the concept's six members instead of its own, and a reader of
+the classes can see the relationship without opening a config file. *What it cost, and it is what
+held this decision up for four phases:* both protocols spelled their identity `name` and `version`,
+they come from two different manifests, and **every record stamps both** —
+`Branch(modality="text2text", profile="tool_decision")`. One class has one `self.name`, so
+inheriting would have collapsed the pair. The identity is prefixed on both protocols now —
+`modality_name`, `profile_name` — which was a rename across both axes, `record.py`, the composition
+root and the guards, and was the whole of T52's work. *What it also cost:* `Profile.modality` is
+gone, taking the protocol from sixteen members to fifteen. It named the pair as a string off the
+profile's own manifest, and a subclass inherits `modality_name` from the object that actually read
+the content — one attribute, one writer (P16), and no way for the two to disagree. The manifest key
+stays, because `modality:` is what tells the composition root which manifest to open. *Reversible:*
+yes, and the reverse is the same rename backwards.
 
 **23 · Layer two sets precision; recall is declared, not inferred.**
 `PersonalDataVerifier.confirmed_personal_data(window, found)` returns a **subset** of `found`. The model
@@ -1816,7 +1835,7 @@ Each names the check that holds it, not a file that used to.
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
 | I3 | Code's phase and stage names are the flow's, and this document's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source. Changing either side alone fails the build |
 | I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
-| I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` assigned in a `ClassDef` |
+| I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` and their `modality_`/`profile_` prefixed forms assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for every function the installed library exports — read off the `__all__` of each front door, so a name the document forgets is still owned — plus the four owned roots and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
 | I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |

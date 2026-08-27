@@ -29,10 +29,16 @@ from pathlib import Path
 
 import pytest
 
-from dataforce.edge.bootstrap import composed_engine, open_engine
+from dataforce.edge.bootstrap import (
+    BUILT_MODALITIES,
+    BUILT_PROFILES,
+    composed_engine,
+    open_engine,
+)
 from dataforce.edge.policy import MODALITIES, PROFILES, read_manifest
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
+from dataforce.modalities.text2text import Encoder, Text2Text
 from dataforce.pipeline.params import declared_switch
 
 from .test_policy import ENDPOINT, PROFILE, TEMPLATE, a_config, a_params
@@ -70,10 +76,13 @@ def test_an_engine_is_built_from_two_manifests_and_a_template(tmp_path: Path) ->
         question=TEMPLATE,
     )
 
-    assert (engine.modality.name, engine.modality.version) == ("text2text", "1")
-    assert (engine.profile.name, engine.profile.modality) == (
-        "tool_decision",
+    assert (engine.modality.modality_name, engine.modality.modality_version) == (
         "text2text",
+        "1",
+    )
+    assert (engine.profile.profile_name, engine.profile.profile_version) == (
+        "tool_decision",
+        "1",
     )
 
 
@@ -154,7 +163,10 @@ def test_naming_no_modality_takes_the_profile_at_its_word(tmp_path: Path) -> Non
         params=a_params(tmp_path),
     )
 
-    assert (engine.modality.name, engine.profile.name) == ("text2text", "tool_decision")
+    assert (engine.modality.modality_name, engine.profile.profile_name) == (
+        "text2text",
+        "tool_decision",
+    )
 
 
 def test_naming_the_one_it_composes_with_is_the_same_run(tmp_path: Path) -> None:
@@ -166,7 +178,10 @@ def test_naming_the_one_it_composes_with_is_the_same_run(tmp_path: Path) -> None
         params=a_params(tmp_path),
     )
 
-    assert (engine.modality.name, engine.profile.name) == ("text2text", "tool_decision")
+    assert (engine.modality.modality_name, engine.profile.profile_name) == (
+        "text2text",
+        "tool_decision",
+    )
 
 
 def test_naming_a_different_modality_says_which_one_the_profile_composes_with(
@@ -251,7 +266,7 @@ def test_composing_an_engine_reaches_the_endpoint_it_resolved_not_at_all(
         params=a_params(tmp_path),
     )
 
-    assert engine.modality.name == "text2text"
+    assert engine.modality.modality_name == "text2text"
 
 
 def test_a_deployment_that_attached_no_embedder_is_told_before_the_first_record(
@@ -301,6 +316,73 @@ def test_the_embedders_file_is_not_one_of_the_policy_files(tmp_path: Path) -> No
     assert first.policy_digests == second.policy_digests
 
 
+# --- one object, two identities ---
+
+
+def test_one_object_fills_both_slots(tmp_path: Path) -> None:
+    """T52's shape: `ToolDecision` is a `Text2Text`, so a run resolves to one instance.
+
+    Two slots and one object. `Engine` keeps both because a stage asks for what it needs by axis,
+    and the registry keeps two namespaces because a name is only unique inside the
+    `config/<axis>/` directory it was read from.
+    """
+    engine = open_engine(
+        profile="tool_decision",
+        config_root=a_config(tmp_path),
+        params=a_params(tmp_path),
+    )
+
+    assert engine.modality is engine.profile
+    assert engine.registry.modality("text2text") is engine.registry.profile(
+        "tool_decision"
+    )
+
+
+def test_every_built_profile_is_built_on_a_built_modality() -> None:
+    """The wiring `composed_engine` no longer checks at runtime, checked where it costs nothing.
+
+    A runtime `issubclass` in the builder would be a third statement of one fact, read at the one
+    moment the manifests have already agreed. The fact worth holding is about these two literals:
+    the class answering to a profile name has to be a subclass of some class answering to a modality
+    name, or the containment is a claim in a docstring (P28 — the rule fails the build).
+    """
+    concepts = tuple(BUILT_MODALITIES.values())
+
+    assert concepts, "a scan over no modalities would pass whatever it was pointed at"
+    for name, module in BUILT_PROFILES.items():
+        assert issubclass(module, concepts), name  # type: ignore[arg-type]
+
+
+def test_a_second_module_in_the_family_shares_the_concept_it_is_inside(
+    tmp_path: Path,
+) -> None:
+    """The test the whole task exists for: sharing, without a second implementation of anything.
+
+    `Summarize` declares nothing. It is a `Text2Text`, so it reads content, embeds it, scans it and
+    displays it exactly the way `tool_decision` does — which is what "a modality is a concept and a
+    profile is one module inside it" is supposed to mean, and what it did not mean while the
+    relationship was a string in a manifest.
+    """
+
+    class Summarize(Text2Text):
+        """A second module in `text2text`, with nothing of its own but its identity."""
+
+        def __init__(self, modality: Manifest, encode: Encoder) -> None:
+            super().__init__(modality, encode)
+            self.profile_name = "summarize"
+            self.profile_version = "1"
+
+    declared = read_manifest(a_config(tmp_path), MODALITIES, "text2text").declares
+    shared = Summarize(declared, no_vector)
+
+    assert (shared.modality_name, shared.profile_name) == ("text2text", "summarize")
+    assert shared.content_parts({"messages": [{"role": "user", "content": "xin chào"}]})
+    assert Summarize.content_parts is Text2Text.content_parts, (
+        "a second module redeclaring a member of its concept is what inheritance was for"
+    )
+    assert shared.modality_version == Text2Text(declared, no_vector).modality_version
+
+
 # --- the configuration this repository ships ---
 
 
@@ -323,5 +405,8 @@ def test_the_configuration_this_repository_ships_composes(tmp_path: Path) -> Non
         params=REPOSITORY / "params.yaml",
     )
 
-    assert (engine.modality.name, engine.profile.name) == ("text2text", "tool_decision")
+    assert (engine.modality.modality_name, engine.profile.profile_name) == (
+        "text2text",
+        "tool_decision",
+    )
     assert engine.thresholds["thresholds"]["triage"]["self_agreement_floor"] == 0.7

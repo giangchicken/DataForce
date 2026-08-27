@@ -44,6 +44,7 @@ from agent_toolkit.string_utils import compute_hash
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
+from dataforce.modalities.text2text import Encoder, Text2Text
 from dataforce.profiles.base import AnnotationResponse
 from dataforce.profiles.tool_decision.schema import (
     AnswerConfig,
@@ -65,6 +66,7 @@ from dataforce.record import (
 )
 
 if TYPE_CHECKING:
+    from dataforce.modalities import Modality
     from dataforce.profiles import Profile
 
 # What the manifest declares, by key. Identity is `Manifest`'s own three fields and is not here.
@@ -618,16 +620,38 @@ def one_written_line(written: Any) -> str | None:
 
 
 @final
-class ToolDecision:
-    """Tool selection over Vietnamese call-centre text, composed with `text2text`.
+class ToolDecision(Text2Text):
+    """Tool selection over Vietnamese call-centre text: one module inside `text2text`.
 
     Everything a stage knows about this task comes from here: what an answer is, how two of them
     differ, what makes one invalid, what a person is asked and what comes back. None of it is
-    assigned in this class body (I5) -- identity, the pair, the source's vocabulary and the answer's
-    ceiling are the manifest's, and the question is a policy file's.
+    assigned in this class body (I5) -- identity, the source's vocabulary and the answer's ceiling
+    are the manifest's, and the question is a policy file's.
+
+    **The containment is the base class, and that is what T52 bought.** § *The two axes* has always
+    said a modality is a concept and a profile is one module inside it; until T52 that was
+    `modality: text2text` in a manifest and two unrelated objects at runtime, and a reader of the
+    classes alone could not see the relationship at all. It is `class ToolDecision(Text2Text)` now,
+    so the four modality members arrive by inheritance rather than by a second implementation, and
+    `summarize` beside this one would share them without redeclaring one.
+
+    **Two manifests, because there are two declarations and they are not interchangeable.**
+    `config/modalities/text2text.yaml` says how content is read; `config/profiles/tool_decision.yaml`
+    says what an answer to it is. One object holds both identities under prefixed names -- the base
+    writes `modality_name`, this writes `profile_name` -- which is what keeps
+    `Branch(modality=…, profile=…)` able to say which concept read a record and which module answered
+    it. The pair itself is still checked at composition (`edge/bootstrap.py`), because a request body
+    full of declarations may name a pair no class hierarchy was consulted about.
     """
 
-    def __init__(self, manifest: Manifest, question_template: str) -> None:
+    def __init__(
+        self,
+        modality: Manifest,
+        manifest: Manifest,
+        encode: Encoder,
+        question_template: str,
+    ) -> None:
+        super().__init__(modality, encode)
         shape = declaration(manifest, SHAPE)
         if shape not in SHAPES:
             raise ConfigError(
@@ -644,19 +668,13 @@ class ToolDecision:
                 f"config/profiles/{manifest.name}.yaml declares answer_control "
                 f"{control!r}, which is not one of {list(CONTROLS)}"
             )
-        if not manifest.modality:
-            raise ConfigError(
-                f"config/profiles/{manifest.name}.yaml names no modality; a profile "
-                "declares the pair it composes with, and a run naming another hard-stops"
-            )
         if "{{" in question_template:
             raise ConfigError(
                 f"the question template for {manifest.name} names a slot this profile "
                 "cannot fill; one question is asked per record and nothing else goes in it"
             )
-        self.name = manifest.name
-        self.version = manifest.version
-        self.modality = manifest.modality
+        self.profile_name = manifest.name
+        self.profile_version = manifest.version
         self._max_calls = declared_count(manifest, MAX_CALLS)
         self._label_at = declared_text(manifest, LABEL, AT)
         self._target_role = one_role(manifest, TARGET)
@@ -700,14 +718,14 @@ class ToolDecision:
         source_meta = dict(carried) if isinstance(carried, Mapping) else {}
         if self._label_at not in source_meta:
             raise ConfigError(
-                f"config/profiles/{self.name}.yaml declares the answer at "
+                f"config/profiles/{self.profile_name}.yaml declares the answer at "
                 f"{META}.{self._label_at}; the item at offset {provenance.offset} "
                 f"carries {sorted(source_meta)}"
             )
         return Record(
             record_id=record_id_for(parts),
             source_id=str(item.get(ID) or provenance.offset),
-            branch=Branch(modality=self.modality, profile=self.name),
+            branch=Branch(modality=self.modality_name, profile=self.profile_name),
             provenance=provenance,
             content=tuple(parts),
             label=entries_in(source_meta[self._label_at]),
@@ -876,10 +894,23 @@ class ToolDecision:
 
 if TYPE_CHECKING:
 
-    def _answers_its_protocol(manifest: Manifest, question: str) -> "Profile":
+    def _answers_its_protocol(
+        modality: Manifest, manifest: Manifest, encode: Encoder, question: str
+    ) -> "Profile":
         """`mypy --strict` checks this return, so a member that stops matching fails the build.
 
         The same check `text2text/utils.py` carries, and for the same reason: mypy reads `src/`
-        alone, and the composition root that would type the pair lands in T27.
+        alone, and `edge/bootstrap.py` types the pair only as far as the protocols do.
         """
-        return ToolDecision(manifest, question)
+        return ToolDecision(modality, manifest, encode, question)
+
+    def _is_also_its_concept(
+        modality: Manifest, manifest: Manifest, encode: Encoder, question: str
+    ) -> "Modality":
+        """The other half of the containment, checked the same way.
+
+        One object answers both protocols, and this is what says so to mypy rather than to a reader.
+        A `Text2Text` member renamed out from under this class fails here rather than at the first
+        record `duplicate_check` tries to embed.
+        """
+        return ToolDecision(modality, manifest, encode, question)

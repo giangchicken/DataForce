@@ -396,7 +396,7 @@ def test_identity_comes_from_the_manifest() -> None:
 
     modality = Text2Text(renamed, code_points)
 
-    assert (modality.name, modality.version) == ("text2text_v2", "7")
+    assert (modality.modality_name, modality.modality_version) == ("text2text_v2", "7")
 
 
 @pytest.mark.parametrize(
@@ -641,6 +641,11 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
     Asserted as an equality in both directions: I23 checks the same closure off the tree, and this
     checks it off a live instance, where a member arriving through a decorator or a base class would
     show up and an AST scan would not see it.
+
+    `modality_name` rather than `name` since T52: a profile is one module inside a concept and says
+    so by subclassing it, so one object answers this protocol and `Profile` at once -- and a bare
+    `name` on both is one attribute where `Branch(modality=…, profile=…)` needs two. This class is
+    the base and never sees the other half; `tests/stages/test_tool_decision.py` asserts the union.
     """
     declared = {name for name in dir(Modality) if not name.startswith("_")} | set(
         Modality.__annotations__
@@ -650,8 +655,8 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
         "content_parts",
         "display_config",
         "embedding",
-        "name",
+        "modality_name",
+        "modality_version",
         "personal_data_detectors",
-        "version",
     }
     assert {name for name in dir(a_modality()) if not name.startswith("_")} == declared

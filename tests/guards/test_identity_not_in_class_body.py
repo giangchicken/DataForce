@@ -5,6 +5,11 @@ identity (Requirement 40). A class that assigns one of them holds a second copy 
 manifest already states, and it is always the copy that goes stale -- the manifest gets renamed and
 the class keeps answering with the old string.
 
+**Seven names, not three, since T52 split the identity.** One object answers both axes now, so the
+axes spell their identity `modality_name` and `profile_name` -- and a rule that knew only the bare
+three would have gone quiet on exactly the classes it exists for, while still passing. The bare
+three stay because `Manifest` still declares them and pinning one there is the same mistake.
+
 Only a **pinned** value is a finding. `name: str` declares a field and says nothing about whose
 name it is, and `name: str = Field(..., description=…)` is a required field with no value in it.
 What this catches is a string written into the class body, in the three spellings that put one
@@ -29,7 +34,15 @@ import pytest
 
 from .tree import Module, called_name, module_from_source, modules_in, not_exempt
 
-IDENTITY = ("modality", "name", "version")
+IDENTITY = (
+    "modality",
+    "modality_name",
+    "modality_version",
+    "name",
+    "profile_name",
+    "profile_version",
+    "version",
+)
 
 
 def identity_findings(module: Module) -> list[str]:
@@ -88,6 +101,10 @@ def test_no_class_assigns_its_own_identity(module: Module) -> None:
         'class Text2Text:\n    name = "text2text"',
         'class Text2Text:\n    version: str = "1"',
         'class ToolDecision:\n    modality = "text2text"',
+        'class Text2Text:\n    modality_name = "text2text"',
+        'class Text2Text:\n    modality_version: str = "1"',
+        'class ToolDecision:\n    profile_name = "tool_decision"',
+        'class ToolDecision:\n    profile_version: str = Field("1", description="x")',
         'class Text2Text:\n    name: str = Field("text2text", description="the pair")',
         'class Text2Text:\n    version: str = Field(default="1", description="stamped")',
         'class ToolDecision:\n    modality: str = Field(default="text2text", description="x")',
@@ -96,6 +113,10 @@ def test_no_class_assigns_its_own_identity(module: Module) -> None:
         "name",
         "annotated-version",
         "modality",
+        "modality-name",
+        "modality-version",
+        "profile-name",
+        "profile-version",
         "field-positional",
         "field-default",
         "field-default-modality",

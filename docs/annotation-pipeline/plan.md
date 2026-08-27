@@ -18,9 +18,9 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13. Phase 4: T14, T15, T16, T17 and T18.
 Phase 5: T19, T20 and T21. Phase 6: T22 to T26. `make check` is green over 57 modules
-and 1080 tests, 519 of which are not guards — but **T34 is open and CI is red on a line neither
+and 1087 tests, 522 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **Phase 7 has started: T27 and T53 have landed, and T28, T29, T49 and T52 are behind them — and
+it. **Phase 7 has started: T27, T53 and T52 have landed, and T28, T29 and T49 are behind them — and
 T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
@@ -142,11 +142,11 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T25 | `aggregate` and `curate` | 6 | T24 | M | ✓ |
 | T26 | The Label Studio sync | 6 | T23 | M | ✓ |
 | T27 | The edge | 7 | T9, T12, T13 | M | ✓ `361b948` |
-| T53 | The embedder the deployment already has | 7 | T27 | M | ✓ |
+| T53 | The embedder the deployment already has | 7 | T27 | M | ✓ `752f6b9` |
+| T52 | One object, two identities, and the containment becomes a base class | 7 | T27 | M | ✓ |
 | T28 | The routers | 7 | T10, T27 | M | |
 | T29 | The CLI and the event stream | 7 | T3, T27 | M | |
 | T49 | The two model adapters, and the cache the jury's design assumes | 7 | T27 | M | |
-| T52 | One object, two identities, and the containment becomes a base class | 7 | T27 | M | |
 | T30 | Smoke | 8 | T29 · **a declared corpus** | M | |
 | T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L | |
 
@@ -2927,6 +2927,64 @@ Requirement 40.
 
 **Out of scope.** Building a real second profile. This task proves the hierarchy holds with a stub;
 whether `summarize` is worth building is the pilot's question, and § *Out of Scope* keeps it there.
+
+**Landed. The identity split was the work, exactly as the approach said, and it went first.**
+`name`/`version` are `modality_name`/`modality_version` on `Modality` and
+`profile_name`/`profile_version` on `Profile`; `ToolDecision` then took `Text2Text` as a base and
+both manifests at construction, and `Text2Text` gave up its `@final`. `Branch` did not move:
+`test_the_record_carries_what_the_item_and_load_data_gave_it` asserts
+`Branch(modality="text2text", profile="tool_decision")` and was not edited, which is the acceptance
+criterion this task was most at risk of failing quietly.
+
+**Two departures from the text above, both worth arguing with.**
+
+*`Profile` is fifteen members, not sixteen.* `modality: str` named the pair as a string off the
+profile's own manifest, and the criterion said the count stays. It cannot: a subclass inherits
+`modality_name` from the object that actually read the content, so keeping `modality` would leave one
+instance carrying two attributes with one value from two manifests — P16's *one key, one writer*
+broken on purpose, and broken in the one place the whole task exists to make consistent. It had no
+production reader either; `edge/bootstrap.py` reads `Manifest.modality`, which stays, because
+`modality:` is still what says which manifest to open. What the criterion was really protecting —
+*inheritance must not let a modality member answer for a profile one* — is now asserted directly:
+`test_it_answers_every_member_of_both_protocols_and_nothing_else` checks the two sets are disjoint
+and that the instance's surface is exactly their union.
+
+*The `load_data` justification for two registry slots is wrong and the conclusion is right.* The
+approach says *a run that reads content and answers nothing is what `load_data` alone is*;
+`load_data.py` calls `engine.profile.build_record`, so no run reads content without a profile. The
+two slots survive for a reason the approach did not give: a name is only unique inside the
+`config/<axis>/` directory it was read from, and a concept with three modules in it needs one entry
+per module. Two namespaces, one object.
+
+**One object needed a name, and Python has no intersection type.** `composed_engine` builds a single
+instance and registers it twice, so the builder has to say *a thing that is both* — `ProfileInConcept`,
+a `Protocol` inheriting both axes, in `edge/bootstrap.py`. A shape in a `LOGIC ·` module is §6 giving
+way to P18: it has exactly one consumer, and either `base.py` would have made one axis's contract
+mention the other. I21 does not see it, which is correct — it is not a third axis.
+
+**`stamped_version` became two functions.** It took `Modality | Profile` and read `.name` off either,
+which was only writable while both protocols spelled identity the same way — and is precisely the
+shape that says the two are interchangeable. With one object answering both, a single function would
+have had no way to say which identity was being asked for.
+
+**The runtime pair check stayed on the manifests.** `issubclass` in the builder was written and then
+removed: it is a third statement of one fact, read at the moment the other two have already been
+read, and typing `type[Profile]` to allow both the subclass test and the four-argument call needs
+either an `__init__` on the protocol — which would put `Encoder` into every future profile's
+contract — or a cast. What replaced it costs nothing at runtime: `mypy --strict` on a second
+`TYPE_CHECKING` stub in `profiles/tool_decision/utils.py` proving one object satisfies both
+protocols, and `test_every_built_profile_is_built_on_a_built_modality` over the two literal maps
+(P28 — the rule fails the build).
+
+**I5 was going quiet, which is the failure a renamed rule always has.** The scan looked for
+`name`/`version`/`modality` in a class body; after the split it would have passed a class pinning
+`modality_name = "text2text"` while still reporting green. Seven names now, four new P29 violations
+beside the three that were there.
+
+**Decision 24 is rewritten rather than annotated**, and § *The two axes* with it: both said the
+containment was a declaration *for now*, and a document that describes the design it used to have is
+the one thing P31 cannot catch. What the reversal cost is written where the decision is, because the
+four phases it waited is a fact about why the identity is prefixed and not an embarrassment to hide.
 
 ---
 

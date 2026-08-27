@@ -41,7 +41,7 @@ decide what an answer is.
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, NamedTuple, final
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from agent_toolkit.string_utils import normalize_text
 
@@ -463,9 +463,15 @@ def a_turn(turn: Mapping[str, Any]) -> Part:
     )
 
 
-@final
 class Text2Text:
     """Conversational text: read verbatim, embedded, shown to a person as dialogue.
+
+    **Not `@final`, and that is the whole of what T52 needed from this class.** A profile is one
+    module inside a concept and now says so by subclassing it (Decision 24), so `ToolDecision` is a
+    `Text2Text` and every later module in this family -- `summarize`, `classification` -- shares
+    these four members rather than redeclaring them. What a subclass may not do is answer for a
+    profile member: the two protocols stay separate and the identity is prefixed on both, which is
+    why `modality_name` is not `name`.
 
     **Built with what only the edge can produce.** Identity and both embedding choices come from
     `config/modalities/text2text.yaml`, whose filename is the identity (Requirement 40), and the
@@ -479,8 +485,8 @@ class Text2Text:
     """
 
     def __init__(self, manifest: Manifest, encode: Encoder) -> None:
-        self.name = manifest.name
-        self.version = manifest.version
+        self.modality_name = manifest.name
+        self.modality_version = manifest.version
         self._encode = encode
         self._not_embedded = declared_roles(manifest, EMBEDDING, EXCLUDE_ROLES)
         self._detectors = personal_data_detectors(manifest)

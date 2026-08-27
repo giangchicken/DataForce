@@ -1,8 +1,20 @@
 """DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
 
-Sixteen members, closed. The three named types are aliases here and concrete pydantic models in
+Fifteen members, closed. The three named types are aliases here and concrete pydantic models in
 an implementation's ``schema.py`` (Requirement 47). This module imports no implementation of its
 own axis (I16).
+
+**``modality`` was the sixteenth and is gone, because the containment is a base class now.** It
+declared *which concept this profile composes with* as a string off the profile's own manifest, and
+an implementation subclassing its concept (Decision 24) inherits ``modality_name`` from it instead
+-- one attribute, one writer (P16), and one that cannot disagree with the object that actually read
+the content. The manifest key it came from stays: ``modality:`` is what tells the composition root
+which manifest to open, and ``edge/bootstrap.py`` still reads it there.
+
+**The identity is prefixed for the same reason.** One instance answers this protocol and
+``Modality`` at once, so a bare ``name`` on both would be one attribute where a record needs two.
+The two protocols stay separate: this one is about what an answer is, that one about how content is
+read, and inheritance may not let a member of one answer for the other.
 """
 
 from collections.abc import Mapping, Sequence
@@ -51,9 +63,10 @@ class AnnotationResponse:
 class Profile(Protocol):
     """One dataset task: what an answer is, how two answers differ, what makes one invalid."""
 
-    name: str  # "tool_decision" -- from the manifest filename
-    version: str  # stamped into every record's provenance; a string, never a number
-    modality: str  # the pair this profile composes with; a mismatch hard-stops
+    profile_name: str  # "tool_decision" -- from the manifest filename
+    profile_version: (
+        str  # stamped into every record's provenance; a string, never a number
+    )
 
     def answer_schema(self, record: Record) -> dict[str, Any]:
         """This record's permitted answers: `oneOf` per offered tool. Never persisted."""

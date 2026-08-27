@@ -45,7 +45,7 @@ from pydantic import ValidationError
 from dataforce.engine import Engine
 from dataforce.errors import ConfigError
 from dataforce.pipeline.flow import DECLARED_ONLY, FROM_SOURCE, STAGES
-from dataforce.pipeline.load_data import stamped_version
+from dataforce.pipeline.load_data import stamped_modality, stamped_profile
 from dataforce.pipeline.params import declaration
 from dataforce.record import Record
 
@@ -170,14 +170,14 @@ def run_manifest(
     happened to be read would move for reasons that are not configuration changes, and then a
     changed threshold is one diff among several instead of the only one.
 
-    The pair is stamped by `load_data`'s own `stamped_version`, so the manifest and every record's
+    The pair is stamped by `load_data`'s own two stampers, so the manifest and every record's
     provenance say `text2text@1` the same way rather than twice.
     """
     return {
         RUN_ID: run_id,
         PRODUCER: {
-            "modality": stamped_version(engine.modality),
-            "profile": stamped_version(engine.profile),
+            "modality": stamped_modality(engine.modality),
+            "profile": stamped_profile(engine.profile),
         },
         POLICY: dict(sorted(engine.policy_digests.items())),
         ARTIFACTS: dict(sorted(artifacts.items())),
