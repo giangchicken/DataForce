@@ -2732,12 +2732,38 @@ quietly.
 | Where | What moves |
 |---|---|
 | `pyproject.toml`, `uv.lock` | the `model2vec` dependency and its comment |
-| `edge/bootstrap.py` | `static_model`, `static_encoder`, the `TYPE_CHECKING` import, and the docstring paragraph on why nothing loads at composition |
+| `edge/bootstrap.py` | `static_model`, `static_encoder`, the `TYPE_CHECKING` import, and the docstring paragraph on why nothing loads at composition — three things below that the row does not hold |
 | `modalities/text2text/utils.py` | four sentences: the `Encoder` comment, `embedding_model`'s docstring, the class docstring's *embedded statically*, and `embedding`'s *a static one is why Requirement 23 holds* |
 | `modalities/base.py`, `ports.py`, `duplicate_check.py` | one line each — the member docstring, *the encoder behind its static model*, and *the static `embedding` for near-identical content* |
 | `spec.md` | Requirement 23; § *Modality*'s protocol block; § *Per-service contracts*' *the static `embedding`*; Decision 23's *Requirement 23 took a static embedder*; the § *Versions* row |
 | `config/`, `params.yaml` | `embedding.model` and its `exclude_roles` note; `near_duplicate_cosine`'s *over a static multilingual embedding* |
 | `tests/` | `test_bootstrap.py`'s *loads no model*, which keeps its point and changes its reason; `test_text2text.py`'s two fixture lines, which are invented and only read oddly |
+
+**Three of those are decisions, not edits, and all three are in `edge/bootstrap.py`.**
+
+*Resolve on an instance, never `set_config_resolver`.* The library's directory resolver can be built
+and asked directly — `JsonDirConfigResolver(config_root / "model").resolve(name)` hands back an
+`LLMConfig` with `api_key` and `base_url` off the file — and its `api_key`/`base_url` then go to the
+call as explicit arguments, which `resolve_config` already ranks above any installed resolver. The
+installing form writes a module-level global, and Requirement 39 is in this design precisely because a
+process-wide anything makes two engines in one process fight over one slot. `config_root` is already a
+parameter of `open_engine`, so the directory needs no new one.
+
+*The model file is not a policy file.* Adding it to `policy_digests` is the natural next line —
+`open_engine` digests the four files it reads — and it breaks I14 in a way nobody would predict: the
+file holds the key, so two people pointed at one endpoint with two keys produce two different run
+manifests for one configuration, and a rotated key reads as a changed configuration. The recorded fact
+is already `embedding.model` inside the modality manifest, whose digest is in the manifest today. Leave
+the model file out, and say so where the next reader looks for it.
+
+*The laziness paragraph inverts rather than moves.* Today's docstring argues that nothing is loaded at
+composition because a download is expensive and most runs never embed. Hosted, there is nothing to
+load — but the config file **is** read at composition, on purpose, so a deployment whose file is
+missing stops before the first record (P23). That is the opposite claim in the same place, and editing
+the old sentence would preserve a design that no longer exists. What does survive is the caching
+question: `lru_cache` held a loaded model, and the hosted analogue is a per-document cache, without
+which a re-run of `duplicate_check` re-pays the whole corpus — the same argument T49 makes for the
+panel, arriving a second time.
 
 `objective.md` is deliberately not on that list. It records what was wanted before this design existed
 and `spec.md` already corrects its illustrative JSON elsewhere; editing it would erase the record
