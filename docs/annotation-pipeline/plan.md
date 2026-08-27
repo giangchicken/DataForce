@@ -21,8 +21,8 @@ second review round — T39 to T43 — and then T12 and T13.
 Phase 5: T19, T20 and T21. **Phase 6 is done:** T22 to T26. `make check` is green over 57 modules
 and 1074 tests, 516 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **Phase 7 has started: T27 landed, and T28, T29, T49 and T52 are behind it — and T34 is still the
-oldest thing on this list.**
+it. **Phase 7 has started: T27 landed, and T28, T29, T49, T52 and T53 are behind it — and T34 is
+still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -2637,6 +2637,82 @@ panel, which is Smoke's rung and not `make check`'s.
 
 **Out of scope.** The panel's own composition — which models, how many — is `params.yaml`'s and the
 pilot's, not this task's.
+
+---
+
+### T53 · The embedder the deployment already has
+
+**Goal.** `duplicate_check` groups on `bge-m3` from this deployment's own endpoint, and no run
+downloads a model.
+
+**Context.** `config/modalities/text2text.yaml` declares `minishlab/potion-multilingual-128M`, and T27
+built `static_encoder` and `static_model` in `edge/bootstrap.py` to load it through `model2vec`. The
+deployment already has a gateway — `LLM_BASE_URL` and `LLM_API_KEY`, the same pair `config/model/*.json`
+is resolved against — and it serves `bge-m3`, a multilingual bi-encoder. On a Vietnamese corpus it is a
+better embedder than a distilled static model, and it is already paid for.
+
+Three things bite.
+
+**`agent-toolkit` has no embeddings call.** `llm.__all__` is `complete`, `complete_structured`,
+`complete_with_reasoning`, `count_tokens` and the resolvers; nothing embedding-shaped, and no module in
+the package mentions one. I6's owned roots include `openai` *because it is the LLM client*, so reaching
+past the library to post to `/v1/embeddings` is exactly the re-implementation that rule exists to stop.
+Either the library grows an `embed` front door and the pin moves, or this repo carries an annotated
+exemption that is deleted when it does.
+
+**One call per record, because the signature is one document at a time.** `Encoder` is
+`Callable[[str], Sequence[float]]` and `duplicate_check.py` calls it inside a per-record comprehension.
+Against a local static model that costs nothing; against an endpoint it is one round trip per record,
+sequential, because a synchronous per-call signature has nothing to batch with. Twenty thousand records
+at 150 ms is fifty minutes. Smoke is a handful of records and will not feel it. The pilot will, and
+batching is the follow-up named below.
+
+**Requirement 23's guarantee changes shape.** *Near-duplicates use the modality's `embedding`, which is
+static, so two runs give identical groups* is why a static embedder was chosen at all, and Decision 23
+leans on the same sentence when it refuses a model pass that would make redaction irreproducible. A
+hosted model is deterministic only while the provider serves the same weights under one name. What
+survives: the manifest names the model and its digest reaches the run manifest, so a run says which
+model *name* produced its groups. What does not: it cannot say which weights. That is a requirement to
+rewrite, not a line to delete.
+
+**Approach.** Replace rather than add. Two embedders is two sets of near-duplicate groups and a
+`near_duplicate_cosine` that means different things depending on which one ran — one key with two
+writers (P16), wearing a configuration hat. So `model2vec` leaves `pyproject.toml`, `static_model`
+goes, and `static_encoder` builds a hosted encoder in its place. The modality does not change: it is
+handed an `Encoder` and has never known where one comes from, which is what I1 bought.
+
+The adapter belongs behind the library if the pin can move — `embed` beside `complete`, resolved
+through the same `resolve_config` that already reads `config/model/<name>.json` plus the two
+environment variables, so the key stays in the environment (§9) and one client serves the panel and the
+embedder both. If the pin cannot move, the fallback is one annotated exemption on the import in
+`edge/bootstrap.py`, `# guard-exempt: I6 · agent-toolkit exposes no embeddings call · the edge ·`, and
+that exemption is what the library task later deletes. `config/model/bge-m3.json` arrives with it,
+carrying `model` and `max_concurrency` and none of the sampling keys, which mean nothing to an embedder.
+
+**Acceptance criteria.** A run with `LLM_BASE_URL` set groups near-duplicates through the endpoint and
+downloads nothing. `make check` still makes no network call and still passes, because every test injects
+its own encoder. A deployment with no endpoint gets a `ConfigError` at composition naming the variable,
+not a stack trace at the first vector: an embedder is a resource a deployment attaches (P25), and an
+absent one is a configuration fault before the first record rather than a failure part-way through a
+stage. `near_duplicate_cosine` is marked provisional again, with what re-measures it on the new model
+named beside it — 0.95 was chosen against a static model's similarity distribution and does not carry
+across.
+
+**Source.** `spec.md` § *Configuration*, § *Versions*, Requirement 23, Decision 23; `AGENTS.md` I6,
+P25, P30, §9.
+
+**Verify.** `make check`; `uv run pytest -q -m integration` for one run of `duplicate_check` over a
+handful of records against the real endpoint, which is Smoke's rung and not `make check`'s.
+
+**Out of scope.** Batching. `Modality.embedding` takes one record's parts and returns one vector, and a
+plural sibling is a seventh member — I21 counts six in two places and § *Modality* draws them, so it is
+its own task, and it lands before the pilot rather than before Smoke.
+
+**Documents this moves when it lands**, listed so the next reader does not have to find them:
+Requirement 23's *which is static*; the `embedding` docstring in § *Modality* and in
+`modalities/base.py` — *a static vector … same input, same vector, every run*; the § *Versions* row for
+`model2vec`; and the `embedding.model` comment in `config/modalities/text2text.yaml`, whose
+`exclude_roles` note records a measurement taken on a model that will no longer be there.
 
 ---
 
