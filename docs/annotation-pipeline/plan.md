@@ -2647,9 +2647,11 @@ downloads a model.
 
 **Context.** `config/modalities/text2text.yaml` declares `minishlab/potion-multilingual-128M`, and T27
 built `static_encoder` and `static_model` in `edge/bootstrap.py` to load it through `model2vec`. The
-deployment already has a gateway — `LLM_BASE_URL` and `LLM_API_KEY`, the same pair `config/model/*.json`
-is resolved against — and it serves `bge-m3`, a multilingual bi-encoder. On a Vietnamese corpus it is a
-better embedder than a distilled static model, and it is already paid for.
+deployment serves `bge-m3`, a multilingual bi-encoder, on the endpoint it already runs, and a
+`config/model/<model>.json` beside `gemma-4-31B-it.json` carries its `model`, `base_url` and `api_key`
+— `JsonDirConfigResolver` keeps every `LLMConfig` field a file names and ignores the rest, so both of
+those resolve from the file with nothing to export. On a Vietnamese corpus it is a better embedder than
+a distilled static model, and it is already running.
 
 Three things bite.
 
@@ -2682,24 +2684,39 @@ goes, and `static_encoder` builds a hosted encoder in its place. The modality do
 handed an `Encoder` and has never known where one comes from, which is what I1 bought.
 
 The adapter belongs behind the library if the pin can move — `embed` beside `complete`, resolved
-through the same `resolve_config` that already reads `config/model/<name>.json` plus the two
-environment variables, so the key stays in the environment (§9) and one client serves the panel and the
-embedder both. If the pin cannot move, the fallback is one annotated exemption on the import in
+through the same `resolve_config` a panel call already goes through, so one client serves the panel and
+the embedder both. If the pin cannot move, the fallback is one annotated exemption on the import in
 `edge/bootstrap.py`, `# guard-exempt: I6 · agent-toolkit exposes no embeddings call · the edge ·`, and
-that exemption is what the library task later deletes. `config/model/bge-m3.json` arrives with it,
-carrying `model` and `max_concurrency` and none of the sampling keys, which mean nothing to an embedder.
+that exemption is what the library task later deletes.
 
-**Acceptance criteria.** A run with `LLM_BASE_URL` set groups near-duplicates through the endpoint and
-downloads nothing. `make check` still makes no network call and still passes, because every test injects
-its own encoder. A deployment with no endpoint gets a `ConfigError` at composition naming the variable,
-not a stack trace at the first vector: an embedder is a resource a deployment attaches (P25), and an
-absent one is a configuration fault before the first record rather than a failure part-way through a
-stage. `near_duplicate_cosine` is marked provisional again, with what re-measures it on the new model
+`config/model/<model>.json` is where the endpoint and the key live, resolved by `JsonDirConfigResolver`
+against `config/model/`, which is the one call-shaped thing this repository had no resolver installed
+for until now. It carries `model`, `base_url`, `api_key` and `max_concurrency`, and none of the
+sampling keys, which mean nothing to an embedder. **That file is git-ignored and a
+`<model>.json.example` beside it is what is committed**: §9 forbids a key or a hostname in a committed
+file and this repository is public, so the file exists on the machine that runs and never in the
+history. Nothing about how it is read changes — the resolver reads the same path either way.
+
+**Acceptance criteria.** A run whose `config/model/` holds the embedder's file groups near-duplicates
+through that endpoint and downloads nothing. `make check` still makes no network call and still passes,
+because every test injects its own encoder. A deployment whose file is absent gets a `ConfigError` at
+composition naming the path it looked at, not a stack trace at the first vector: an embedder is a
+resource a deployment attaches (P25), and an absent one is a configuration fault before the first
+record rather than a failure part-way through a stage. The committed tree holds the `.example` and no
+key, which `tests/guards` can assert as cheaply as it asserts the placeholder map is ignored (I13).
+`near_duplicate_cosine` is marked provisional again, with what re-measures it on the new model
 named beside it — 0.95 was chosen against a static model's similarity distribution and does not carry
 across.
 
-**Source.** `spec.md` § *Configuration*, § *Versions*, Requirement 23, Decision 23; `AGENTS.md` I6,
-P25, P30, §9.
+**One thing to record rather than resolve.** Embedding sends every record's content to that endpoint,
+and `duplicate_check` runs after `pii_check` with `enable_redact: false` shipped — so the exposure is
+the same as a `jury` call on the same records, and Requirement 28 names only jury calls. T49 already
+found that gap for layer two; an embedder is the third call the requirement does not name. Whether the
+endpoint is inside the border is a fact about the deployment and not about this task, which is why this
+is a line here and not a precondition.
+
+**Source.** `spec.md` § *Configuration*, § *Versions*, Requirement 23, Requirement 28, Decision 23;
+`AGENTS.md` I6, P25, P30, §9.
 
 **Verify.** `make check`; `uv run pytest -q -m integration` for one run of `duplicate_check` over a
 handful of records against the real endpoint, which is Smoke's rung and not `make check`'s.
