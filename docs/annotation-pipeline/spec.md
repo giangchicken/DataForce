@@ -1844,7 +1844,7 @@ Each names the check that holds it, not a file that used to.
 | I11 | No stage removes a record | run every service; assert `len(out) == len(in)` and that the id sets are equal |
 | I12 | No model output reaches an annotator | assert on the `publish` payload and the generated config |
 | I13 | The placeholder map is never read by a service and never committed | AST scan plus a `.gitignore` assertion |
-| I14 | Two runs of one unchanged configuration produce identical run manifests | run twice, compare bytes |
+| I14 | Two runs of one unchanged configuration produce identical run manifests **apart from the `run_id` that names them** | run twice under one id, compare bytes. The exception is not a weakening: `minted_run_id` stamps a clock, so two real runs never share an id, and the sentence without this clause is one no run can satisfy. The id is an argument to `run_manifest` rather than read inside it precisely so the rest of the manifest is comparable, and the id's own suffix is a digest of the policy digests — so *unchanged configuration* is still visible in the one field that moves |
 | I15 | HTTP and in-process produce the same record | same input both ways, asserted equal |
 | I16 | Nothing above an axis implementation names one | AST scan over each axis's `base.py` **and** its `__init__.py`. A façade that re-exports its implementations makes every importer of the axis load them, and no scan of the consumer can see that: the consumer's line is clean and the coupling is one hop away |
 | I17 | A phase's stage order exists once | AST scan: no module under `edge/routers/` or `edge/cli.py` names two stages in sequence; both call `run_phase` |

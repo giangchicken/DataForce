@@ -3,10 +3,14 @@
 `edge/artifacts.py` is the one place a record file, `metrics.json` or a run manifest is read or
 written. Three things are worth stating here:
 
-**I14 — two runs of one unchanged configuration produce byte-identical run manifests.** That is what
-makes a policy digest evidence rather than decoration: if the manifest moved for reasons of its own
-— a dict that iterates in insertion order, a float that formats differently — a changed threshold
-would be one more diff among several and nobody could point at it.
+**I14 — two runs of one unchanged configuration produce byte-identical run manifests, apart from the
+`run_id` naming them.** That is what makes a policy digest evidence rather than decoration: if the
+manifest moved for reasons of its own — a dict that iterates in insertion order, a float that formats
+differently — a changed threshold would be one more diff among several and nobody could point at it.
+The exception is why the id is an *argument* below rather than something `run_manifest` mints: a
+clock is the one thing in a manifest that has to move, so it moves in a place a test can hold still.
+The invariant's own row carries the same clause, because a sentence no run can satisfy is one nobody
+can check.
 
 **The fold is for reading and stops nothing** (Requirement 44). `label_check`'s counts are compared
 against `params.invalid_counts` here, which is where Decision 10 put that comparison when it deleted

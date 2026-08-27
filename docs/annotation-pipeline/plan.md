@@ -2522,7 +2522,8 @@ a threshold that stops anything.
 **Acceptance criteria.** An engine builds with **no filesystem anywhere** — both axes handed
 `Manifest` objects and a template string. Naming no modality takes the profile at its word; naming a
 different one raises `ConfigError` saying which modality the profile composes with. I14: two runs of
-one unchanged configuration produce byte-identical run manifests.
+one unchanged configuration produce byte-identical run manifests apart from the `run_id` naming
+them, which is the one field a clock writes.
 
 **Source.** `spec.md` § *Engine and edge*, § *Configuration*, Requirements 36, 44 and 45; Decision 12.
 
@@ -2844,9 +2845,17 @@ called `a-static-embedder`, and `spec.md` § *Configuration* had no row for the 
 **Goal.** Four main endpoints and their sub-endpoints, on the style reference's pattern.
 
 **Context.** `create_app()` factory, one `APIRouter(tags=[…])` per domain, kebab-case URLs, thin
-handlers mapping `ValueError` → 400 and anything else → 500. Request and response models live in
-`edge/routers/<domain>/schemas.py`, one per router, every field described. A phase route calls
-`run_phase`; it never names a stage sequence (I17).
+handlers mapping `ValueError` → 400 and anything else → 500. A phase route calls `run_phase`; it
+never names a stage sequence (I17).
+
+**Where the models live is Decision 20's and not this paragraph's.** This said
+`edge/routers/<domain>/schemas.py`, one per router; T36 landed the opposite and the spec agrees with
+T36 — `routers/schemas.py` holds `RecordsRequest`/`RecordsResponse`, which every route but
+`/load-data` speaks, and a per-router `schemas.py` exists only where one router speaks something no
+other does (`load_data/`, `human_review/`). Four modules would have been three duplicates of a shape
+that must stay identical. Every field carries its description either way (Requirement 1). This line
+is corrected rather than deleted because an agent reading only this task would otherwise recreate
+the four files T36 removed.
 
 **Acceptance criteria.** A stage route returns `200` with every record it was given, because a bad
 record is a marked record rather than a failed request. `ConfigError` is 400, a malformed body is
@@ -2874,8 +2883,11 @@ runs.
 **Context.** The CLI is a dispatch over `flow.py`, not fifteen hand-written subcommand bodies —
 every stage has one signature and Requirement 46 makes the in-process call the same call, so it stays
 roughly one screen however many stages exist. The event stream is now specified in § *Observability*:
-the engine emits through stdlib `logging`, `edge/main.py` and `cli.py` each install one stdout handler,
-and every event carries `run_id`, `record_id` and stage. Levels are part of the contract — INFO per
+the engine emits through stdlib `logging`, and `edge/observability.py` owns the handler and the three
+keys every event carries — `run_id`, `record_id` and the stage. `edge/main.py` and `cli.py` each
+install *what that module builds*; this said they each install one stdout handler, which is true and
+names no owner, and is the shape T37 landed a module to replace. Two shells implementing one contract
+from a paragraph is two copies of it. Levels are part of the contract — INFO per
 stage per batch, WARNING per record for what a human must look at, ERROR only for `ConfigError`, and no
 DEBUG per record, because twenty thousand records times fifteen stages is a log nobody reads.
 
