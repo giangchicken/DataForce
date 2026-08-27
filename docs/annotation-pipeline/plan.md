@@ -2725,11 +2725,28 @@ handful of records against the real endpoint, which is Smoke's rung and not `mak
 plural sibling is a seventh member — I21 counts six in two places and § *Modality* draws them, so it is
 its own task, and it lands before the pilot rather than before Smoke.
 
-**Documents this moves when it lands**, listed so the next reader does not have to find them:
-Requirement 23's *which is static*; the `embedding` docstring in § *Modality* and in
-`modalities/base.py` — *a static vector … same input, same vector, every run*; the § *Versions* row for
-`model2vec`; and the `embedding.model` comment in `config/modalities/text2text.yaml`, whose
-`exclude_roles` note records a measurement taken on a model that will no longer be there.
+**What it touches when it lands.** Scanned rather than remembered, because *static* is asserted in
+more places than the two that obviously hold it, and a sentence left behind is a document lying
+quietly.
+
+| Where | What moves |
+|---|---|
+| `pyproject.toml`, `uv.lock` | the `model2vec` dependency and its comment |
+| `edge/bootstrap.py` | `static_model`, `static_encoder`, the `TYPE_CHECKING` import, and the docstring paragraph on why nothing loads at composition |
+| `modalities/text2text/utils.py` | four sentences: the `Encoder` comment, `embedding_model`'s docstring, the class docstring's *embedded statically*, and `embedding`'s *a static one is why Requirement 23 holds* |
+| `modalities/base.py`, `ports.py`, `duplicate_check.py` | one line each — the member docstring, *the encoder behind its static model*, and *the static `embedding` for near-identical content* |
+| `spec.md` | Requirement 23; § *Modality*'s protocol block; § *Per-service contracts*' *the static `embedding`*; Decision 23's *Requirement 23 took a static embedder*; the § *Versions* row |
+| `config/`, `params.yaml` | `embedding.model` and its `exclude_roles` note; `near_duplicate_cosine`'s *over a static multilingual embedding* |
+| `tests/` | `test_bootstrap.py`'s *loads no model*, which keeps its point and changes its reason; `test_text2text.py`'s two fixture lines, which are invented and only read oddly |
+
+`objective.md` is deliberately not on that list. It records what was wanted before this design existed
+and `spec.md` already corrects its illustrative JSON elsewhere; editing it would erase the record
+rather than update it.
+
+**Coordinate with T34.** `.github/workflows/ci.yml` caches `potion-multilingual-128M` and imports
+`EMBEDDING_MODEL` and `_model` from a module renamed at `89292ce`. Whichever of the two lands first,
+the other *deletes* those lines rather than repairing them — T34 must not restore a cache step for a
+model this task removes.
 
 ---
 
