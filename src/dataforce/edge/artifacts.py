@@ -136,6 +136,15 @@ def corpus_counts(engine: Engine, records: Sequence[Record]) -> dict[str, Any]:
     diff and stops nothing. Both sides are listed even where one is absent: a check that fired for
     the first time and a declared check that stopped firing are the two interesting cases, and
     either would be invisible if the fold only reported what it happened to see.
+
+    **The `getattr` has no default, and that is a decision.** It carried `None`, which turned a flow
+    table that had drifted from the record into a stage reporting `0` for every record for ever --
+    silently, and with `make check` green, because I3 compared the flow to the document and I20 the
+    record to the document and nothing compared the two to each other. I3 closes that edge now, so
+    a missing key cannot ship; the default was the state §2 says not to handle. Requirement 44 is
+    about a *number* not stopping a run, and a phase model that has lost a stage is not a number --
+    it is the code condition P23 puts in configuration scope. Same shape as `cosine`'s
+    `strict=True`: an assertion rather than an error path.
     """
     failed = Counter(name for record in records for name in failed_check_names(record))
     # A malformed `invalid_counts` reads as *nothing declared* rather than raising: this fold is
@@ -149,7 +158,7 @@ def corpus_counts(engine: Engine, records: Sequence[Record]) -> dict[str, Any]:
             row.stage: sum(
                 1
                 for record in records
-                if getattr(getattr(record, row.phase), row.stage, None) is not None
+                if getattr(getattr(record, row.phase), row.stage) is not None
             )
             for row in STAGES
             if row.phase not in FROM_SOURCE and row.phase not in DECLARED_ONLY

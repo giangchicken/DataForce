@@ -5,9 +5,17 @@ The flow table is stated twice on purpose -- once as prose a person reads, once 
 test rather than trusted. Changing either side alone fails here, and the failure names which row
 and which side moved.
 
-Four things are compared: the whole row -- phase, stage *and* summary, in the table's order -- the
-phases that are declared and not built, the module each built stage is supposed to live in, and
-that module's ``STEP ·`` docstring (Requirement 3).
+Five things are compared: the whole row -- phase, stage *and* summary, in the table's order -- the
+phases that are declared and not built, the module each built stage is supposed to live in, that
+module's ``STEP ·`` docstring (Requirement 3), and the key each stage's output lands in on the
+record.
+
+**The fifth closes a triangle that was open.** I3 compared the flow to the document and I20 compares
+the record to the document, and nothing compared the flow to the record -- so a stage renamed in
+``flow.py``, in the spec table and in its module filename, but not on its phase model, passed every
+guard in this directory. What it produced was ``metrics.json`` reporting that stage as ``0`` for
+every record, for ever, with ``make check`` green. ``Stage.phase``'s own comment says the phase is
+"the record key its output lands in"; this is what makes that sentence a fact rather than a note.
 
 **Order is position, and nothing else states it.** Neither side numbers a stage, so the comparison
 is list-against-list rather than key-against-key: a row moved up is a row that fails here
@@ -21,14 +29,21 @@ looking for it.
 
 import ast
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from dataforce.pipeline.flow import DECLARED_ONLY, PHASES, STAGES
+from dataforce.pipeline.flow import DECLARED_ONLY, FROM_SOURCE, PHASES, STAGES
 from dataforce.pipeline.runner import stage_module_name
+from dataforce.record import Record
 
 from .tree import SPEC, SRC, module_at, plain
+
+# What a phase model holds besides one key per stage: the configuration that phase resolved. Named
+# by suffix rather than listed, because `human_review` calls its own `human_config` and a list here
+# would be a second statement of three field names.
+CONFIG = "_config"
 
 ROW = re.compile(r"^\|\s*(\w+)\s*\|\s*`(\w+)`\s*\|\s*(.+?)\s*\|$")
 DECLARED = re.compile(r"\*\*Declared, not built:\s*(?P<names>[^*]+?)\.\*\*")
@@ -75,6 +90,47 @@ def module_path(phase: str, stage: str) -> Path:
     """The file the runner will import for that row of the table."""
     dotted = stage_module_name(phase, stage)
     return SRC.parent / Path(*dotted.split(".")).with_suffix(".py")
+
+
+def folded_phases() -> list[str]:
+    """Every phase whose stages write a key on the record: the ones `corpus_counts` counts.
+
+    `load_data` makes records rather than writing on one, and `release` has no module -- the same
+    two exclusions `edge/artifacts.py` applies, read from the same two constants so the fold and
+    this guard cannot disagree about which phases it is about.
+    """
+    return [
+        phase
+        for phase in PHASES
+        if phase not in FROM_SOURCE and phase not in DECLARED_ONLY
+    ]
+
+
+def phase_keys(phase: str) -> tuple[str, ...]:
+    """The keys `Record.<phase>` holds, or `()` where the record declares no such phase at all."""
+    field = Record.model_fields.get(phase)
+    return tuple(getattr(field.annotation, "model_fields", {})) if field else ()
+
+
+def stage_key_findings(
+    phase: str, stages: Sequence[str], held: Sequence[str]
+) -> list[str]:
+    """Every stage of that phase the record has no key for, and every key no stage writes.
+
+    Both directions, because *closed* is the claim: a stage with no key reports zero for ever, and
+    a key no stage writes is a field nothing fills. A `<phase>_config` key is neither -- it is what
+    that phase was run under, and § *The record* draws it.
+    """
+    keys = set(held)
+    return [
+        f"{phase}.{stage} is a stage whose output the record has no key for"
+        for stage in stages
+        if stage not in keys
+    ] + [
+        f"{phase}.{name} is a record key no stage of that phase writes"
+        for name in sorted(keys - set(stages))
+        if not name.endswith(CONFIG)
+    ]
 
 
 def test_the_table_names_every_stage_once() -> None:
@@ -130,3 +186,42 @@ def test_each_stage_module_s_docstring_is_its_row_of_the_table(row: Row) -> None
 
     assert docstring, f"`{stage}` has no docstring"
     assert plain(docstring.splitlines()[0]) == plain(f"STEP · {stage} · {summary}")
+
+
+@pytest.mark.parametrize("phase", folded_phases(), ids=lambda p: p)
+def test_each_phase_model_holds_one_key_per_stage_and_nothing_else(phase: str) -> None:
+    """I3, flow -> record: the third edge, and the one `edge/artifacts.py` folds over."""
+    stages = [row.stage for row in STAGES if row.phase == phase]
+
+    assert stage_key_findings(phase, stages, phase_keys(phase)) == []
+
+
+def test_the_scan_found_the_phases_it_is_supposed_to_scan() -> None:
+    """Guards the discovery: an empty list would make the comparison above vacuous."""
+    folded = folded_phases()
+
+    assert folded and "load_data" not in folded and "release" not in folded
+    assert all(phase_keys(phase) for phase in folded)
+
+
+@pytest.mark.parametrize(
+    ("stages", "held"),
+    [
+        (("jury", "cohesion"), ("jury", "cohesion_scores")),
+        (("jury",), ("jury", "panel")),
+        (("jury",), ()),
+    ],
+    ids=["a-renamed-stage", "a-key-no-stage-writes", "a-phase-the-record-forgot"],
+)
+def test_the_scan_rejects_a_flow_the_record_does_not_match(
+    stages: tuple[str, ...], held: tuple[str, ...]
+) -> None:
+    """P29: the drift that used to report `0` for ever, and its two neighbours."""
+    assert stage_key_findings("ai_review", stages, held) != []
+
+
+def test_a_phase_s_own_config_key_is_not_a_stage_that_went_missing() -> None:
+    """`<phase>_config` is what that phase was run under; § *The record* draws it as a key."""
+    assert (
+        stage_key_findings("ai_review", ("jury",), ("jury", "ai_review_config")) == []
+    )
