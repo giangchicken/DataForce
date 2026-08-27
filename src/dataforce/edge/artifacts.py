@@ -18,7 +18,16 @@ three, and there is none: a shell either persists a run or answers over HTTP and
 
 **A digest is taken by reading the file back**, not by hashing the value on its way past. A digest
 of what we meant to write is not evidence about what a later reader will find, and the whole point
-of putting it in the manifest is that someone reads it later.
+of putting it in the manifest is that someone reads it later. It is spelled inline in ``written_run``
+-- ``compute_hash(read_txt(...))`` is the sentence, and wrapping one expression with one caller in a
+name costs a file to open and returns nothing for it (§4).
+
+**``read_records`` has no caller in ``src/`` until T29.** § *Package layout* says this module is the
+one place a record file is *read* or written, and reading is the half T2 assigned here, so the
+function is this module's job rather than a reader that arrived early. What has not arrived is the
+caller: the CLI runs one stage per invocation and the record file is the bus between two of them.
+Until then what proves it is the round trip -- a file ``written_run`` wrote that nothing could read
+back would make *written* a claim about bytes nobody has checked (§7).
 
 **Side output is not written here yet.** ``ServiceResult.side_output`` is keyed by the stage that
 produced it and each key wants its own destination -- ``pii_check``'s placeholder map is a file that
@@ -96,11 +105,6 @@ def minted_run_id(policy_digests: Mapping[str, str]) -> str:
     )
     started = datetime.now(UTC).strftime(STARTED_AT)
     return f"{RUN_PREFIX}{started}_{compute_hash(joined)[:RUN_LENGTH]}"
-
-
-def artifact_digest(path: Path) -> str:
-    """The digest of the file at that path, as the manifest records it."""
-    return compute_hash(read_txt(path))
 
 
 def read_records(path: Path) -> tuple[Record, ...]:
@@ -208,7 +212,7 @@ def written_run(
     manifest = run_manifest(
         engine,
         run_id,
-        {name: artifact_digest(directory / name) for name in (RECORDS, METRICS)},
+        {name: compute_hash(read_txt(directory / name)) for name in (RECORDS, METRICS)},
     )
     write_json(directory / MANIFEST, manifest)
     return manifest

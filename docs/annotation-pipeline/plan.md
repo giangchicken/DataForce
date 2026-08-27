@@ -18,7 +18,7 @@ T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T3
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
 second review round — T39 to T43 — and then T12 and T13. Phase 4: T14, T15, T16, T17 and T18.
 Phase 5: T19, T20 and T21. Phase 6: T22 to T26. `make check` is green over 57 modules
-and 1087 tests, 522 of which are not guards — but **T34 is open and CI is red on a line neither
+and 1095 tests, 522 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
 it. **Phase 7 has started: T27, T53 and T52 have landed, and T28, T29 and T49 are behind them — and
 T34 is still the oldest thing on this list.**
@@ -2593,6 +2593,14 @@ module docstring records that where the next reader hits it (§8).
 
 **One test reads the repository's own `config/` and `params.yaml`**, because a shipped manifest nobody
 can compose is a broken run and nothing else in the suite would see it.
+
+**`read_records` has no caller in `src/`, and that is not a reader landed early.** § *Package layout*
+says this module is the one place a record file is *read* or written and I19 pairs that sentence with
+the docstring, so reading is the half T2 assigned here — deleting it would make the layout row false.
+What has not arrived is the caller: the CLI runs one stage per invocation and the record file is the
+bus between two of them, which is T29's. Until then the round trip is what proves it, and that is
+worth something on its own — a file `written_run` wrote that nothing could read back would make
+*written* a claim about bytes nobody has checked.
 
 ---
 
