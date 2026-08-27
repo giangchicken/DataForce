@@ -107,7 +107,7 @@ class Modality(Protocol):
         """One source item's turns, as ordered parts. Text verbatim, media by reference."""
 
     def embedding(self, parts: Sequence[Part]) -> list[float]:
-        """A static vector for near-duplicate grouping. Same input, same vector, every run."""
+        """A vector for near-duplicate grouping, from the model the manifest names."""
 
     def personal_data_detectors(self) -> list[Detector]:
         """The high-recall pattern layer, in this modality's terms."""
@@ -439,8 +439,12 @@ Each is a statement a test can be pointed at.
     the first run over a declared source, and the comparison is a line in `metrics.json` — a number a
     human reads in a diff, not a stop.
 23. `duplicate_check` reports two groups per record: `duplicate_content_same_label` and
-    `duplicate_content_diff_label`. Near-duplicates use the modality's `embedding`, which is static, so
-    two runs give identical groups. **Two records are compared for near-duplication only where they
+    `duplicate_content_diff_label`. Near-duplicates use the modality's `embedding`, which the
+    deployment attaches rather than the run downloading: two runs give identical groups for as long as
+    that endpoint serves the same weights under the name `embedding.model` records. The run manifest
+    carries the name, and cannot say which weights answered to it — which is the whole of what was
+    given up when a static model was replaced by a hosted one that is better on this corpus and is
+    already running. **Two records are compared for near-duplication only where they
     pose the same task** — the same `scenario_hash` — because two identical prompts offering different
     tools are not duplicates *for this task*: the answer space differs, so a model choosing between
     them is being asked two different questions. An *exact*-content pair is compared regardless, since
@@ -919,7 +923,7 @@ The five label checks are the profile's, not the engine's — `label_checks()` i
 `params.invalid_counts`, and a check reading 0 is what tells you when it stops reading 0.
 
 **A duplicate needs both axes, and neither needed a new member.** The content side is the
-modality's — a shared `record_id` for identical content, the static `embedding` for near-identical —
+modality's — a shared `record_id` for identical content, the declared `embedding` for near-identical —
 and the answer side is the profile's δ: `answer_distance(a, b) == 0` is *the same answer* by the
 profile's own definition, which a `==` on the stored form would get wrong for a bare name and for the
 same call with reordered argument keys. `scenario_hash` is neither side: it names the task a record
@@ -1383,6 +1387,18 @@ it is a rung's setting rather than a measurement, `1` is the Smoke rung, and a f
 would read as zero and fold a verdict out of no answers. The two empty blocks belong to `jury`, which
 reads no threshold, and to the pilot, which has not run.
 
+**`config/model/<model>.json` is the fourth file a run reads, and the one it does not record.** It is
+where a deployment attaches an endpoint it already serves — `model`, `base_url`, `api_key` — read
+through `agent-toolkit`'s `JsonDirConfigResolver`, on an instance rather than through
+`set_config_resolver`, whose process-wide global is the same defect Requirement 39 makes a registry
+instance state to avoid. It is not a policy file, and adding it to the run manifest's digests would
+break I14 in a way nobody would predict: the file holds the key, so two people pointed at one
+endpoint with two keys would produce two manifests for one configuration and a rotated key would read
+as a changed configuration. What is recorded instead is `embedding.model` inside the modality
+manifest, whose digest is already there. The file is git-ignored and a `<model>.json.example` beside
+it is what the repository ships (AGENTS.md §9), so a checkout composes only once a deployment has
+attached one — an absent file is a `ConfigError` naming the path, before the first record.
+
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
 `embedding.model`, `embedding.exclude_roles` and `language`; the profile's are `shape`,
 `answer_control`,
@@ -1750,8 +1766,9 @@ poisoned training example, silently.** Requirement 17 rewrites content and label
 invented value is replaced in both and `export` ships the result; layer one's noise is bounded by a
 declared pattern set someone reviewed in a diff, a model's is bounded by nothing, and the one artifact
 that would show it is the placeholder map — which I13 forbids any service to read. **And the redaction
-stops being reproducible**, which is the reason Requirement 23 took a static embedder for the other
-stage in this phase. `record_id` survives, being computed at load and a field rather than a validator
+stops being reproducible**, which is the property Requirement 23 is about for the other stage in this
+phase — and holds less well since that embedder became a hosted one, which is a reason to spend the
+guarantee once rather than twice. `record_id` survives, being computed at load and a field rather than a validator
 over `content`, but two runs would export different text.
 *The gap is real, and it gets the other fix:* a form the patterns miss is a pattern to add.
 `personal_data_detectors()` is the modality's member and the place a form is named, so recall improves
@@ -1780,7 +1797,8 @@ change, and `scanned` calls the port for every part instead of only for the part
 | Label Studio (server) | 1.23.0 | the release the sync is written against, not a Python dependency. **Community edition** — Requirement 52 is what that costs. `deploy/` gets the compose file with T26, the first task that needs an instance |
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
 | agent-toolkit | `@v0.1.0` git tag | unchanged; the tag has moved once, so `uv.lock` is the record |
-| model2vec | `>=0.9` | unchanged; static embeddings keep dedup reproducible |
+| openai | `>=3.2` | the embeddings call `duplicate_check` groups through; `agent-toolkit` exposes none, so this is the one direct use, under one I6 exemption |
+| ~~model2vec~~ | removed | the deployment serves `bge-m3` on an endpoint it already runs, so no run downloads a model — Requirement 23 |
 | ~~dvc / pandera / pandas~~ | removed | none of the three had a job in this design — see Decision 18 |
 
 `fastapi`, `uvicorn`, `sqlalchemy` and `alembic` are runtime dependencies. `label-studio-sdk` goes in an

@@ -8,10 +8,10 @@ per record and nothing is removed (Requirement 41) -- dropping a duplicate is a 
 
 **What counts as a duplicate needs both axes, and this is where the plan said to settle it.** The
 content side is the modality's: an identical ``record_id`` for the same content, and the modality's
-static ``embedding`` for near-identical content, which is what makes two runs group identically
-(Requirement 23). The answer side is the profile's δ: ``answer_distance(a, b) == 0`` is *the same
-answer* by the profile's own definition, including the argument-order and bare-name cases a ``==``
-would miss. **No new member was needed for either**, and ``scenario_hash`` is not the answer side --
+``embedding`` for near-identical content, which is what makes two runs group identically as far as
+Requirement 23 still promises -- the model is named, its weights are the deployment's. The answer
+side is the profile's δ: ``answer_distance(a, b) == 0`` is *the same answer* by the profile's own
+definition, including the argument-order and bare-name cases a ``==`` would miss. **No new member was needed for either**, and ``scenario_hash`` is not the answer side --
 it names the task a record poses, which is the third thing:
 
 **Near-duplicates are only compared within one scenario.** Two identical prompts offering different

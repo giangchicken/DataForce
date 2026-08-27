@@ -53,9 +53,9 @@ from dataforce.record import SPOKEN_AND_STATED, Part, Record
 if TYPE_CHECKING:
     from dataforce.modalities import Modality
 
-# What turns one document into one vector. The static model behind it is loaded by
-# `edge/bootstrap.py` and handed over, because the engine opens no file (I1) -- the same shape
-# Requirement 16 gives a media modality's URI resolver, "declared when it is built".
+# What turns one document into one vector. The model behind it is an endpoint `edge/bootstrap.py`
+# resolves and hands over, because the engine opens no file and reaches no service (I1) -- the same
+# shape Requirement 16 gives a media modality's URI resolver, "declared when it is built".
 type Encoder = Callable[[str], Sequence[float]]
 
 # The keys this modality reads: its own manifest's, and the declared source shape's.
@@ -301,11 +301,12 @@ def declared_roles(manifest: Manifest, *path: str) -> frozenset[str]:
 
 
 def embedding_model(manifest: Manifest) -> str:
-    """Which static model this modality's vectors come from.
+    """Which model this modality's vectors come from, by the name its deployment serves it under.
 
     Read here rather than at the edge because the implementation that needs a key is the one that
-    knows what it means (`manifest.py`), and loaded there rather than here because loading it opens
-    a file (I1). `edge/bootstrap.py` calls this, builds the `Encoder`, and hands it over.
+    knows what it means (`manifest.py`), and resolved there rather than here because resolving it
+    opens `config/model/<model>.json` (I1). `edge/bootstrap.py` calls this, builds the `Encoder`,
+    and hands it over.
     """
     return declared_name(manifest, EMBEDDING, MODEL)
 
@@ -464,12 +465,12 @@ def a_turn(turn: Mapping[str, Any]) -> Part:
 
 @final
 class Text2Text:
-    """Conversational text: read verbatim, embedded statically, shown to a person as dialogue.
+    """Conversational text: read verbatim, embedded, shown to a person as dialogue.
 
     **Built with what only the edge can produce.** Identity and both embedding choices come from
     `config/modalities/text2text.yaml`, whose filename is the identity (Requirement 40), and the
-    static model that turns a document into a vector is loaded at the edge and handed over,
-    because no engine module opens a file (I1). `exclude_roles` is a measured choice and the
+    model that turns a document into a vector is resolved at the edge and handed over, because no
+    engine module opens a file or reaches a service (I1). `exclude_roles` is a measured choice and the
     manifest records what re-measures it; nothing about either is assigned in this class body (I5).
 
     **Layer one's language is a declaration too**, for the same reason and found later: the shapes
@@ -507,11 +508,12 @@ class Text2Text:
         return [a_turn(turn) for turn in turns]
 
     def embedding(self, parts: Sequence[Part]) -> list[float]:
-        """A static vector for near-duplicate grouping. Same input, same vector, every run.
+        """A vector for near-duplicate grouping, from the model the manifest names.
 
         The document is the conversation less the excluded roles, in order, which is the half of
-        this that has to be a pure function of the parts: the vector itself is only as reproducible
-        as the model the edge loaded, and a static one is why Requirement 23 holds.
+        this that is a pure function of the parts and the whole of what this module can promise:
+        the vector itself is only as reproducible as the endpoint the edge resolved, which is the
+        limit Requirement 23 now states.
         """
         document = TURN_SEPARATOR.join(
             part.text or ""

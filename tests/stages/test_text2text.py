@@ -5,10 +5,10 @@ it sits beside the record tests rather than in `tests/properties/`, which is I8 
 corpus.
 
 **The encoder is a stand-in in every test here**, and that is the boundary rather than a shortcut:
-`Text2Text` is handed the thing that turns a document into a vector because loading a static model
-opens a file and the engine opens none (I1). What is this modality's to get right is the *document*
--- the turns it keeps, in order, joined one way -- and a stand-in that reveals its input is what
-makes that assertable. The determinism test runs it in two processes under two hash seeds, which is
+`Text2Text` is handed the thing that turns a document into a vector because resolving the model
+opens a file and calling it opens a socket, and the engine does neither (I1). What is this modality's
+to get right is the *document* -- the turns it keeps, in order, joined one way -- and a stand-in that
+reveals its input is what makes that assertable. The determinism test runs it in two processes under two hash seeds, which is
 where a set iteration or an unsorted `json.dumps` would show up.
 
 Every fixture is invented (AGENTS.md §9), in `objective.md` §2's shape. The Vietnamese is the
@@ -76,8 +76,8 @@ ITEM: dict[str, Any] = {
     ],
 }
 
-# What `edge/bootstrap.py` will hand over, standing in for the loaded static model. It reveals its
-# input, so an assertion about a vector is an assertion about the document that produced it.
+# What `edge/bootstrap.py` hands over, standing in for a call to the deployment's embedder. It
+# reveals its input, so an assertion about a vector is an assertion about the document behind it.
 CODE_POINTS = "def encode(document):\n    return [float(ord(c)) for c in document]\n"
 
 
@@ -95,7 +95,7 @@ MANIFEST = (
 def a_manifest(**declared: Any) -> Manifest:
     """One `config/modalities/text2text.yaml`, already parsed, with the declarations it holds."""
     embedding = {
-        "model": "minishlab/potion-multilingual-128M",
+        "model": "bge-m3",
         "exclude_roles": ["system"],
     }
     language = declared.pop("language", "vi")
@@ -342,8 +342,9 @@ def test_the_same_input_gives_the_same_vector_in_two_processes(tmp_path: Path) -
     """T12's acceptance criterion, run where a hash-ordered set would actually show up.
 
     Two hash seeds, because that is what varies dict and set iteration between runs. What is being
-    proved is this modality's half: the document it composes and the order it composes it in. The
-    model behind the encoder is static (Requirement 23), which is the other half and is the edge's.
+    proved is this modality's half: the document it composes and the order it composes it in. What
+    the model behind the encoder answers is the other half, is the edge's, and is the half
+    Requirement 23 now qualifies.
     """
     script = tmp_path / "embed.py"
     script.write_text(
@@ -441,8 +442,8 @@ def test_a_model_that_is_not_a_name_is_refused(model: Any) -> None:
 
 
 def test_the_model_name_is_read_off_the_manifest() -> None:
-    """The key is read here and the model is loaded at the edge; this is the seam between them."""
-    assert embedding_model(a_manifest()) == "minishlab/potion-multilingual-128M"
+    """The key is read here and the endpoint is resolved at the edge; this is the seam between them."""
+    assert embedding_model(a_manifest()) == "bge-m3"
 
     with pytest.raises(ConfigError, match=r"embedding\.model"):
         embedding_model(

@@ -4,9 +4,9 @@ The row is § *Per-service contracts*' fourth: reads `content` and `label`, writ
 `data_quality.duplicate_check`, skips nothing, removes nothing. What this module has to pin down is
 the *definition*, because the task's own note says to settle it before writing either half.
 
-**The encoder is a lookup table here, and that is what makes a cosine assertable.** A static
-embedding model returns a fixed-length vector, so the fixtures are hand-written unit vectors two
-decimal places apart and the threshold is passed in per test — a real model's numbers would make
+**The encoder is a lookup table here, and that is what makes a cosine assertable.** An embedder
+returns a fixed-length vector, so the fixtures are hand-written unit vectors two decimal places apart
+and the threshold is passed in per test — a real model's numbers would make
 every assertion below a measurement of the model rather than of the grouping. What is this stage's to
 get right is which pairs are *compared*, and that is asserted directly.
 
@@ -212,7 +212,8 @@ def test_no_record_is_removed() -> None:
 
 
 def test_two_runs_over_one_corpus_group_identically() -> None:
-    """Requirement 23: the embedding is static, so the groups are a function of the corpus."""
+    """Requirement 23, as far as this stage owns it: one encoder, so the groups are a function of
+    the corpus. Which encoder is the edge's, and is where the requirement now stops promising."""
     records = [
         a_record_saying(ASKED),
         a_record_saying(ASKED_AGAIN),

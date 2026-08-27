@@ -17,10 +17,10 @@ data/run.json
 # Per-model LLM settings, read at the edge through `agent-toolkit`'s
 # `JsonDirConfigResolver` (`<model>.json`, the convention it preserves). Never committed:
 # a file naming an endpoint and holding a key is what AGENTS.md section 9 forbids, and the
-# library's own YAML resolver refuses both keys for the same reason. `LLM_API_KEY` and
-# `LLM_BASE_URL` are the environment's; what a model *does* -- temperature, ceilings --
-# belongs in a committed policy file whose digest reaches the run manifest.
-config/model/
+# library's own YAML resolver refuses both keys for the same reason. The pattern is the
+# files rather than the directory, so the `.example` beside them is committed -- an
+# endpoint a deployment must attach and nothing says so is the same fault one directory up.
+config/model/*.json
 
 # The default question store, for a developer who attached no database (Decision 7). It holds
 # questions about real records, which makes a committed one a corpus in the repository. A

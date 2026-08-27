@@ -22,22 +22,50 @@ resolved to, so both slots are filled from the pair that was asked for. Register
 ``MODALITIES`` would put implementations no manifest was read for into a run's own registry, and
 Requirement 39 is about a registry being instance state precisely so that cannot happen quietly.
 
-**Nothing is loaded that a run may never use.** The static embedder is a download and
-``duplicate_check`` is its only caller, so ``static_model`` is cached and called on the first vector
-rather than at composition: a run of ``label_check`` alone makes no network call, and neither does
-``make check``. The question store is the other way round -- ``create_engine`` opens no connection,
-so attaching the pool here costs nothing and P19 says the pool is reached for in one place.
+**The embedder is read at composition, and that is the opposite of what stood here.** It used to be
+a download, so nothing was loaded until the first vector and a run of ``label_check`` alone paid
+nothing. It is an endpoint this deployment already serves, so there is nothing to load and the only
+thing left to get wrong is the file saying where it is -- which is why ``config/model/<model>.json``
+is read *here*: an embedder is a resource a deployment attaches (P25), and one nobody attached is a
+configuration fault before the first record rather than a stack trace part-way through
+``duplicate_check`` (P23). Composing still makes no network call; a client is constructed and
+nothing is sent. The question store is the same shape -- ``create_engine`` opens no connection, so
+attaching the pool here costs nothing and P19 says the pool is reached for in one place.
+
+**The model file is not a policy file, and leaving it out of ``policy_digests`` is deliberate.**
+Digesting every file a run reads is Requirement 45's rule and this would be the fifth -- except that
+this one holds the key, so two people pointed at one endpoint with two keys would write two run
+manifests for one configuration and a rotated key would read as a changed configuration, which is
+I14 failing for a reason that is not a configuration change. What a run manifest records instead is
+``embedding.model`` inside the modality manifest, whose digest is already in it.
+
+**The embeddings call reaches ``openai`` directly, under one annotated exemption.** The library owns
+the LLM client (I6) and offers ``complete``, ``complete_structured``, ``complete_with_reasoning``,
+``count_tokens`` and the resolvers -- nothing embedding-shaped -- so there is no front door to go
+through, and the exemption on the import is what the library task deletes when an ``embed`` lands
+beside ``complete`` (P30).
+
+**What is not solved here: a second run re-pays the corpus.** ``lru_cache`` used to hold a loaded
+model, and the hosted analogue is a cache per document, without which running ``duplicate_check``
+twice embeds every record twice. That is Decision 3's argument for the panel arriving a second time,
+and T49 is where a cache and its key get designed; sizing one for twenty thousand documents is not a
+line to add in passing (§8: recorded where the next reader hits it).
 
 **Requirement 28 is not checked here yet.** The cross-border precondition is about a panel, and a
 panel has no adapter until T49 -- there is no endpoint declared anywhere for this to read. T49's own
 acceptance criteria own it, and this is the module it lands in (§8: the break is recorded where the
-next reader hits it).
+next reader hits it). The embedder is a third call that requirement does not name either: embedding
+sends every record's content to whatever ``config/model/`` points at, which with ``enable_redact``
+shipped false is the same exposure a ``jury`` call on those records has.
 """
 
 from collections.abc import Callable, Mapping
-from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+import openai  # guard-exempt: I6 · agent-toolkit exposes no embeddings call · the edge · 2026-08-27
+from agent_toolkit.llm import JsonDirConfigResolver, LLMConfig
+from agent_toolkit.llm.exceptions import LLMConfigError
 
 from dataforce.engine import Engine, Registry
 from dataforce.errors import ConfigError
@@ -61,10 +89,10 @@ from .policy import (
 from .store.repository import SqlQuestionStore
 from .store.session import sessions_to, store_engine
 
-# A type, not a load: the model itself is fetched inside `static_model`, and importing it here
-# would put two seconds on every subcommand that never embeds anything.
-if TYPE_CHECKING:
-    from model2vec import StaticModel
+# Where a deployment attaches the endpoints it serves, under the `<model>.json` convention
+# `JsonDirConfigResolver` keeps. Not in `policy.py` beside the other three: those name files a run
+# manifest records by, and this is the one file it deliberately does not record.
+MODEL = "model"
 
 # Which class answers to a manifest's name, per axis. Both take their manifest and the one thing
 # the axis cannot open for itself, which is the whole of what a composition root supplies.
@@ -120,34 +148,52 @@ def paired_modality(profile: Manifest, named: str | None) -> str:
     return declared
 
 
-@lru_cache(maxsize=None)
-def static_model(model_name: str) -> "StaticModel":
-    """The static embedder that name resolves to, fetched once per process.
+def attached_endpoint(config_root: Path, model: str) -> LLMConfig:
+    """Where this deployment serves that model, or a `ConfigError` naming the file it is not in.
 
-    Imported inside the function and cached outside it, for two different reasons. The import costs
-    seconds and `edge/cli.py` pays it on every subcommand, including the ones that print help. The
-    cache is because two engines over one corpus should be two engines and one model.
+    Resolved on an instance rather than through `set_config_resolver`, which writes a module-level
+    global: Requirement 39 makes a registry instance state precisely so two engines in one process
+    cannot fight over one slot, and a process-wide resolver is that slot again one layer down.
 
-    `force_download=False` is the library's non-default and this project's requirement: a static
-    embedding is a pure function of its input (Requirement 23), so re-fetching the weights every run
-    buys nothing and makes a run depend on a registry being up.
+    `base_url` is required here and optional in the library, because the two defaults mean different
+    things. An `LLMConfig` with none is a client pointed at the SDK's own API, so a deployment that
+    left the line out would send a corpus to an endpoint nobody chose instead of being told.
     """
-    from model2vec import StaticModel
+    directory = config_root / MODEL
+    try:
+        endpoint = JsonDirConfigResolver(directory).resolve(model)
+    except LLMConfigError as unattached:
+        raise ConfigError(
+            f"the {model!r} embedder is a resource this deployment attaches, and "
+            f"{unattached}"
+        ) from unattached
+    if not endpoint.base_url:
+        raise ConfigError(
+            f"{directory / model}.json declares no base_url; an embedder with none is a client "
+            "pointed at whatever the SDK defaults to, which is not an endpoint anyone chose"
+        )
+    return endpoint
 
-    return StaticModel.from_pretrained(model_name, force_download=False)
 
+def hosted_encoder(endpoint: LLMConfig) -> Encoder:
+    """One document into one vector, from the endpoint that file named.
 
-def static_encoder(model_name: str) -> Encoder:
-    """One document into one vector, from the model that name resolves to when the first is asked.
+    A closure over one client and no filesystem, which is the same split as the two builders below:
+    reading where the endpoint is and calling it are two things, and only the first opens a file.
+    Constructing a client sends nothing, so composing an engine still makes no network call.
 
-    A closure and not a loaded model: the modality's signature is *hand me an encoder* precisely so
-    the file behind it is the edge's business, and most runs never embed anything.
+    **One call per document**, because `Encoder` is one document at a time and a synchronous
+    per-call signature has nothing to batch with. Against a local model that cost nothing; against
+    an endpoint it is a round trip per record. The plural member that would fix it is a seventh on a
+    protocol I21 says has six, so it is its own task and it lands before the pilot.
     """
+    client = openai.OpenAI(
+        api_key=endpoint.api_key, base_url=endpoint.base_url, timeout=endpoint.timeout
+    )
 
     def encode(document: str) -> list[float]:
-        return [
-            float(value) for value in static_model(model_name).encode([document])[0]
-        ]
+        answered = client.embeddings.create(model=endpoint.model, input=document)
+        return list(answered.data[0].embedding)
 
     return encode
 
@@ -225,6 +271,9 @@ def open_engine(
     )
     declared_thresholds = read_thresholds(params)
     declared_question = read_question_template(config_root, declared_profile.declares)
+    embedder = attached_endpoint(
+        config_root, embedding_model(declared_modality.declares)
+    )
     files = (
         declared_modality,
         declared_profile,
@@ -234,7 +283,7 @@ def open_engine(
     return composed_engine(
         modality=declared_modality.declares,
         profile=declared_profile.declares,
-        encode=static_encoder(embedding_model(declared_modality.declares)),
+        encode=hosted_encoder(embedder),
         question=declared_question.declares,
         thresholds=declared_thresholds.declares,
         policy_digests={file.path: file.digest for file in files},

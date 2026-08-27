@@ -21,7 +21,7 @@ def a_manifest(**overrides: Any) -> Manifest:
     fields: dict[str, Any] = {
         "name": "text2text",
         "version": "1",
-        "declarations": {"embedding": {"model": "a-static-embedder"}},
+        "declarations": {"embedding": {"model": "an-attached-embedder"}},
     }
     return Manifest(**{**fields, **overrides})
 
@@ -47,7 +47,7 @@ def test_an_unquoted_version_is_refused() -> None:
 def test_a_key_the_reader_did_not_route_is_refused() -> None:
     """An axis's own vocabulary belongs in `declarations`, not on the type both axes share."""
     with pytest.raises(ValidationError):
-        a_manifest(embedding={"model": "a-static-embedder"})
+        a_manifest(embedding={"model": "an-attached-embedder"})
 
 
 def test_what_it_declares_is_kept_without_being_read() -> None:

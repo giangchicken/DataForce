@@ -6,7 +6,7 @@ diagram turns out to be false.
 
 **A port is what the engine calls *back* into during a run; what it is constructed with is a
 value.** Since T12 an axis implementation is *built with* what only the edge can produce --
-``text2text`` with the encoder behind its static model, ``tool_decision`` with the question template
+``text2text`` with the encoder behind its declared model, ``tool_decision`` with the question template
 out of ``config/prompts/`` -- and those are constructor arguments ``edge/bootstrap.py`` hands over,
 not interfaces anything implements. That is the line this module is drawn on, and it is why an
 encoder is not declared here.

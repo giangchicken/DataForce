@@ -29,7 +29,7 @@ class Modality(Protocol):
         ...
 
     def embedding(self, parts: Sequence[Part]) -> list[float]:
-        """A static vector for near-duplicate grouping. Same input, same vector, every run."""
+        """A vector for near-duplicate grouping, from the model the manifest names."""
         ...
 
     def personal_data_detectors(self) -> list[Detector]:

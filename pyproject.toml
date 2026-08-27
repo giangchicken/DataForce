@@ -11,9 +11,14 @@ dependencies = [
     # rather than as a release built from a tree nobody chose -- which matters,
     # because this tag has already been moved once.
     "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0",
-    # The text modality's embedder. Static embeddings, so a vector is a pure
-    # function of its input and dedup is reproducible run to run.
-    "model2vec>=0.9",
+    # The embeddings call `duplicate_check` groups through. `agent-toolkit` owns the
+    # LLM client but exposes nothing embedding-shaped -- `complete`, `complete_structured`,
+    # `complete_with_reasoning`, `count_tokens` and the resolvers, and no `embed` -- so
+    # there is no front door to go through and the edge posts to the deployment's own
+    # endpoint. It arrives transitively through `agent-toolkit[llm]` anyway; declared here
+    # because `src/` imports it, under one annotated I6 exemption in `edge/bootstrap.py`
+    # that the library task deletes when an `embed` lands beside `complete`.
+    "openai>=3.2",
     "pydantic>=2.13",
     # Requirement 49: a corrected value an annotator typed by hand either validates
     # against that record's own `answer_schema` or is `None`. `agent-toolkit` owns

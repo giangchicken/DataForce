@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy to bge-m3.json and fill in. This one file says where the embedder runs and what authenticates it, which is why the real one is git-ignored and this example is what the repository ships (AGENTS.md section 9). `duplicate_check` groups near-duplicates through it, and a deployment that has attached none gets a ConfigError at composition rather than a failure part-way through the stage.",
+  "model": "bge-m3",
+  "base_url": "https://embeddings.invalid/v1",
+  "api_key": "the deployment's key, from wherever it keeps secrets",
+  "timeout": 120.0
+}

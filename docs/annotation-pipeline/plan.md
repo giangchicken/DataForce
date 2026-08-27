@@ -12,17 +12,16 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phases 1, 2 and 3 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
+**Phases 1 to 6 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
-second review round — T39 to T43 — and then T12 and T13.
-**Phases 1 to 6 are done. Phase 0 still has one task left.** Phase 4: T14, T15, T16, T17 and T18.
-Phase 5: T19, T20 and T21. **Phase 6 is done:** T22 to T26. `make check` is green over 57 modules
-and 1074 tests, 516 of which are not guards — but **T34 is open and CI is red on a line neither
+second review round — T39 to T43 — and then T12 and T13. Phase 4: T14, T15, T16, T17 and T18.
+Phase 5: T19, T20 and T21. Phase 6: T22 to T26. `make check` is green over 57 modules
+and 1080 tests, 519 of which are not guards — but **T34 is open and CI is red on a line neither
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
-it. **Phase 7 has started: T27 landed, and T28, T29, T49, T52 and T53 are behind it — and T34 is
-still the oldest thing on this list.**
+it. **Phase 7 has started: T27 and T53 have landed, and T28, T29, T49 and T52 are behind them — and
+T34 is still the oldest thing on this list.**
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -142,7 +141,8 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T24 | `publish` and `annotator_answers` | 6 | T2, T22, T23 | M | ✓ |
 | T25 | `aggregate` and `curate` | 6 | T24 | M | ✓ |
 | T26 | The Label Studio sync | 6 | T23 | M | ✓ |
-| T27 | The edge | 7 | T9, T12, T13 | M | |
+| T27 | The edge | 7 | T9, T12, T13 | M | ✓ `361b948` |
+| T53 | The embedder the deployment already has | 7 | T27 | M | ✓ |
 | T28 | The routers | 7 | T10, T27 | M | |
 | T29 | The CLI and the event stream | 7 | T3, T27 | M | |
 | T49 | The two model adapters, and the cache the jury's design assumes | 7 | T27 | M | |
@@ -2773,6 +2773,69 @@ rather than update it.
 `EMBEDDING_MODEL` and `_model` from a module renamed at `89292ce`. Whichever of the two lands first,
 the other *deletes* those lines rather than repairing them — T34 must not restore a cache step for a
 model this task removes.
+
+**Landed, and the fallback is the one that ran.** `agent-toolkit@v0.1.0` exposes `complete`,
+`complete_structured`, `complete_with_reasoning`, `count_tokens` and the four resolvers, and no
+module in it mentions an embedding — so the pin could not move and `edge/bootstrap.py` carries the
+annotated exemption the task named, `# guard-exempt: I6 · agent-toolkit exposes no embeddings call ·
+the edge · 2026-08-27`. Two exemptions now stand against a ceiling of five, which is the number that
+gets raised only as a decision. `openai` is declared in `pyproject.toml` on `jsonschema`'s terms:
+transitive through `agent-toolkit[llm]` either way, declared because `src/` imports it.
+
+**`import openai`, not `from openai import OpenAI`, and the reason is the guard.** The `from` form
+plus a four-field exemption is 110 characters, so ruff's import sort wraps it in parentheses and
+moves the comment to the second line — while `tree.py` reads an `ImportFrom`'s `node.lineno`, which
+is the first. The exemption would have been silently ignored and I6 red. A plain `import` cannot be
+wrapped, which is why `profiles/tool_decision/utils.py` already looks like that.
+
+**The engine did not change at all, which is what I1 bought.** `Text2Text` is handed an `Encoder`
+and has never known where one comes from, so replacing a loaded model with a client behind the same
+`Callable[[str], Sequence[float]]` touched no signature — the diff in `modalities/`, `ports.py` and
+`duplicate_check.py` is prose about what the guarantee now is, and nothing else.
+
+**`base_url` is required here and optional in the library.** An `LLMConfig` with none is a client
+pointed at the SDK's own API, so a deployment that left the line out of a hand-written file would
+post a Vietnamese corpus to an endpoint nobody chose and the run would look like it worked. That is
+the one check this task added beyond an absent file, and it is one branch.
+
+**Requirement 23 was rewritten rather than trimmed**, and what replaced it is the weaker sentence:
+two runs group identically *for as long as that endpoint serves the same weights under the name
+`embedding.model` records*. § *Configuration* grew the paragraph the model file never had — that it
+is the fourth file a run reads and the one the run manifest deliberately does not digest — because
+the decision to leave it out of `policy_digests` is exactly the kind a reader looks for and does not
+find.
+
+**The per-document cache was recorded, not built.** T27's `lru_cache` held a loaded model; the
+hosted analogue costs the whole corpus on a second `duplicate_check`. Sizing one for twenty thousand
+documents is a threshold in `params.yaml` and a key with a version in it, which is T49's shape and
+not a line to add in passing — so `edge/bootstrap.py`'s docstring says so where the next reader hits
+it, the way T27's said Requirement 28 was not checked yet.
+
+**`.gitignore` moved from the directory to the files.** `config/model/` would have taken the
+committed `.example` down with the keys — git cannot re-include anything under an excluded directory
+— and the failure would have been silent: a checkout with no example, an engine that refuses to
+compose, and nothing saying which file to write. `tests/guards/test_no_endpoint_is_committed.py` is
+what holds the pattern, and it was proved red against the directory form.
+
+**One test changed what it reads.** `test_the_configuration_this_repository_ships_composes` used to
+open `config/` directly and now copies it, attaching the `.example` as the endpoint file — because
+the shipped configuration genuinely does not compose until a deployment attaches one, which is P25
+and not a gap. It gained a second job in exchange: an example that stops naming what the resolver
+reads now fails here rather than on somebody's first run.
+
+**What is not proved: a real endpoint.** `make check` injects an encoder in every test and composes
+against `.invalid`, so what is tested is that nothing is called and that an absent file stops the
+run. That one run of `duplicate_check` groups anything through `bge-m3` is `make integration`'s and
+has not been run (AGENTS.md §7). `near_duplicate_cosine` is provisional again for the same reason.
+
+**`.github/workflows/ci.yml` was left alone**, per the paragraph above: it still caches
+`potion-multilingual-128M` and still imports from a module renamed at `89292ce`. T34 lands second
+and deletes both.
+
+**Three additions to the *What it touches* table**, found by grep rather than by memory:
+`tests/stages/test_duplicate_check.py` asserted *the embedding is static* as Requirement 23's reason
+in a docstring, `tests/stages/test_manifest.py` and `tests/shells/test_policy.py` both invent a model
+called `a-static-embedder`, and `spec.md` § *Configuration* had no row for the model file at all.
 
 ---
 

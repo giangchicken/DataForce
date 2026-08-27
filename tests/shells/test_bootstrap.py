@@ -11,15 +11,20 @@ honoured, because a profile reads content one modality produced.
 string, and that is the whole of what a web handler and an in-process caller share -- the reader
 above it is what turns paths into those three things, and nothing below it can tell which one ran.
 
-**Nothing is loaded that a run may never use.** Composing an engine makes no network call: the
-static embedder behind `duplicate_check` is a download, and a run of `label_check` alone should not
-pay for one. The modality below names a model nobody has published, so an eager loader fails here.
+**The embedder is read at composition and called nowhere near it.** That is the opposite of what
+these tests used to prove: the model was a download, so the point was that nothing was loaded until
+the first vector. It is an endpoint now, so the point is that a deployment which attached none is
+told before the first record, and that composing still sends nothing -- the endpoint below is
+`.invalid`, which resolves nowhere.
 
 The one test that reads the repository is deliberate: `config/` and `params.yaml` are what a
-deployment actually composes, and a configuration that no longer composes is a break nothing else
-in this suite would see. Every other fixture is invented (AGENTS.md §9).
+deployment actually composes, and a configuration that no longer composes is a break nothing else in
+this suite would see. It attaches the committed `.example` because the endpoint file itself is not in
+the history (§9), which makes it the test that would also notice an example that stopped being a
+usable file. Every other fixture is invented (AGENTS.md §9).
 """
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -30,9 +35,11 @@ from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.pipeline.params import declared_switch
 
-from .test_policy import MODALITY, PROFILE, TEMPLATE, a_config, a_params
+from .test_policy import ENDPOINT, PROFILE, TEMPLATE, a_config, a_params
 
 REPOSITORY = Path(__file__).resolve().parents[2]
+SHIPPED = REPOSITORY / "config"
+EXAMPLE = "*.json.example"
 
 
 def a_pair(root: Path) -> tuple[Manifest, Manifest]:
@@ -233,27 +240,86 @@ def test_opening_an_engine_attaches_the_question_store(tmp_path: Path) -> None:
     assert engine.question_store is not None
 
 
-def test_composing_an_engine_loads_no_model(tmp_path: Path) -> None:
-    """`a-static-embedder` is published nowhere: an eager loader would go to the network here."""
-    named = MODALITY.replace("a-static-embedder", "nobody/has-published-this", 1)
-
+def test_composing_an_engine_reaches_the_endpoint_it_resolved_not_at_all(
+    tmp_path: Path,
+) -> None:
+    """The point survived the design and the reason did not: there is nothing to download now, so
+    what would go wrong is a call. `.invalid` is reserved and resolves nowhere, so one would fail."""
     engine = open_engine(
         profile="tool_decision",
-        config_root=a_config(tmp_path, modality=named),
+        config_root=a_config(tmp_path),
         params=a_params(tmp_path),
     )
 
     assert engine.modality.name == "text2text"
 
 
+def test_a_deployment_that_attached_no_embedder_is_told_before_the_first_record(
+    tmp_path: Path,
+) -> None:
+    """P25 and P23: the file is a resource a deployment attaches, and an absent one stops the run
+    at composition rather than part-way through `duplicate_check`."""
+    with pytest.raises(ConfigError, match="an-attached-embedder"):
+        open_engine(
+            profile="tool_decision",
+            config_root=a_config(tmp_path, endpoint=None),
+            params=a_params(tmp_path),
+        )
+
+
+def test_an_embedder_that_names_no_endpoint_is_refused_rather_than_defaulted(
+    tmp_path: Path,
+) -> None:
+    """The library's default for `base_url` is the SDK's own API, which for a corpus of real
+    conversations is the one wrong answer that looks like a working run."""
+    nowhere = ENDPOINT.replace('"base_url": "https://embeddings.invalid/v1", ', "", 1)
+
+    with pytest.raises(ConfigError, match="base_url"):
+        open_engine(
+            profile="tool_decision",
+            config_root=a_config(tmp_path, endpoint=nowhere),
+            params=a_params(tmp_path),
+        )
+
+
+def test_the_embedders_file_is_not_one_of_the_policy_files(tmp_path: Path) -> None:
+    """It holds the key, so digesting it would make two people at one endpoint two configurations
+    and a rotated key a changed one -- I14 failing for something that is not a change."""
+    config = a_config(tmp_path)
+    rekeyed = ENDPOINT.replace('"invented"', '"invented-again"', 1)
+
+    first = open_engine(
+        profile="tool_decision", config_root=config, params=a_params(tmp_path)
+    )
+    (config / "model" / "an-attached-embedder.json").write_text(
+        rekeyed, encoding="utf-8"
+    )
+    second = open_engine(
+        profile="tool_decision", config_root=config, params=a_params(tmp_path)
+    )
+
+    assert first.policy_digests == second.policy_digests
+
+
 # --- the configuration this repository ships ---
 
 
-def test_the_configuration_this_repository_ships_composes() -> None:
-    """The one test here that reads `config/`: a manifest nobody can compose is a broken run."""
+def test_the_configuration_this_repository_ships_composes(tmp_path: Path) -> None:
+    """The one test here that reads `config/`: a manifest nobody can compose is a broken run.
+
+    The endpoint file is the deployment's and never in the history (§9), so the `.example` beside it
+    stands in -- which is also what makes an example that has stopped naming what the resolver reads
+    a failure here rather than on somebody's first run.
+    """
+    attached = tmp_path / "config"
+    shutil.copytree(SHIPPED, attached, ignore=shutil.ignore_patterns("model"))
+    (attached / "model").mkdir()
+    for example in (SHIPPED / "model").glob(EXAMPLE):
+        shutil.copy(example, attached / "model" / example.stem)
+
     engine = open_engine(
         profile="tool_decision",
-        config_root=REPOSITORY / "config",
+        config_root=attached,
         params=REPOSITORY / "params.yaml",
     )
 

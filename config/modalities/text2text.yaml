@@ -9,18 +9,23 @@ name: text2text
 version: "1"
 
 embedding:
-  # Static embeddings, so a vector is a pure function of its input and two runs over
-  # one corpus dedup identically (Requirement 23).
-  model: minishlab/potion-multilingual-128M
+  # The name this deployment serves its bi-encoder under, resolved to an endpoint by
+  # `config/model/<model>.json`, which is attached rather than committed. Multilingual
+  # and a better embedder over Vietnamese than a distilled static model, and already
+  # running -- so no run downloads weights. What Requirement 23 can still promise is
+  # this name: a run manifest records which model produced its groups, and cannot say
+  # which weights answered to it.
+  model: bge-m3
   # Roles left out of the vector. Provisional. The measurement that chose this was
   # taken on a corpus that is no longer declared, where the tool catalog arrived as a
   # ~4,000-character instruction block in the system turn and swamped a ~780-character
   # conversation. The input shape this spec declares carries the catalog as `tools`
   # data (Requirement 13), so that system turn no longer exists in the form the
-  # measurement was about. The setting is kept because excluding an instruction turn
-  # from a content vector is defensible on its own; the number behind it is not
-  # inherited. What re-measures it: retrieval of known near-duplicate pairs, with and
-  # without the system role, over a declared corpus.
+  # measurement was about, and it was taken against a static model this deployment no
+  # longer runs. The setting is kept because excluding an instruction turn from a
+  # content vector is defensible on its own; the number behind it is not inherited.
+  # What re-measures it: retrieval of known near-duplicate pairs, with and without the
+  # system role, over a declared corpus and through the embedder above.
   exclude_roles: [system]
 
 

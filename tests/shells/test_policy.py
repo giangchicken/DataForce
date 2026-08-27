@@ -38,9 +38,16 @@ MODALITY = """\
 name: text2text
 version: "1"
 embedding:
-  model: a-static-embedder
+  model: an-attached-embedder
   exclude_roles: [system]
 language: vi
+"""
+
+# What a deployment attaches beside its manifests, under the `<model>.json` name
+# `JsonDirConfigResolver` resolves the declaration above to. Not a policy file -- nothing here reads
+# it and no digest records it -- and it is here because `open_engine` refuses to compose without one.
+ENDPOINT = """\
+{"model": "an-attached-embedder", "base_url": "https://embeddings.invalid/v1", "api_key": "invented"}
 """
 
 PROFILE = """\
@@ -76,8 +83,14 @@ def a_config(
     modality: str = MODALITY,
     profile: str = PROFILE,
     template: str | None = TEMPLATE,
+    endpoint: str | None = ENDPOINT,
 ) -> Path:
-    """A `config/` tree holding both manifests and the template the profile's manifest names."""
+    """A `config/` tree a deployment could run: both manifests, the template, and the embedder.
+
+    The endpoint file is not `policy.py`'s -- it is read in `bootstrap.py` and no digest records it
+    -- but it lives here because it is part of what makes a `config/` tree composable, and every
+    caller of this helper that goes on to `open_engine` would otherwise write one itself.
+    """
     config = root / "config"
     (config / MODALITIES).mkdir(parents=True)
     (config / MODALITIES / "text2text.yaml").write_text(modality, encoding="utf-8")
@@ -87,6 +100,11 @@ def a_config(
         asked = config / "prompts" / "profiles" / "tool_decision"
         asked.mkdir(parents=True)
         (asked / "question.v2.txt").write_text(template, encoding="utf-8")
+    if endpoint is not None:
+        (config / "model").mkdir(parents=True)
+        (config / "model" / "an-attached-embedder.json").write_text(
+            endpoint, encoding="utf-8"
+        )
     return config
 
 
