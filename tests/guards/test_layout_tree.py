@@ -2,7 +2,7 @@
 
 `spec.md` § *Package layout* draws the whole package and says what each module is for. That is where
 a person looks to find out where something lives, so it is also the first thing to go stale: a module
-added without a row is invisible, and a row left behind after a rename points at nothing. P31 -- a
+added without a row is invisible, and a row left behind after a rename points at nothing. §41 -- a
 fact stated in a document and in code is compared by a test.
 
 **A row is the module's own docstring, not a second description of it.** Two summaries of one module
@@ -11,7 +11,7 @@ text for `errors.py` *is* the first line of `errors.py`'s docstring, and this gu
 for word. A directory row describes a directory, which has no docstring, and its text is not checked;
 the modules under it carry the meaning.
 
-**No P30 hatch.** An exemption annotates a line, and "this module has no row" has no line to annotate
+**No §40 hatch.** An exemption annotates a line, and "this module has no row" has no line to annotate
 -- the same shape as I4's file-set half. The fix is the row.
 """
 
@@ -98,7 +98,7 @@ def test_the_tree_and_the_package_hold_the_same_modules() -> None:
 
 
 def test_the_scan_rejects_a_module_with_no_row() -> None:
-    """P29: the common one -- a module added and the drawing not touched."""
+    """§39: the common one -- a module added and the drawing not touched."""
     rows = dict(layout_rows())
     rows.pop("errors.py")
 
@@ -117,7 +117,7 @@ def test_the_scan_rejects_a_module_with_no_row() -> None:
     ],
 )
 def test_the_scan_rejects_a_tree_that_has_drifted(mutation: dict[str, str]) -> None:
-    """P29: a row that outlived its module, and a row reworded on one side only."""
+    """§39: a row that outlived its module, and a row reworded on one side only."""
     assert layout_findings({**layout_rows(), **mutation}) != []
 
 

@@ -8,7 +8,7 @@ implementation may have on top.
 That is not a hypothetical. ``final_label`` shipped as a public method on ``ToolDecision``, used no
 ``self``, and appeared in neither § *Profile*'s members nor the plan. It is a conversion over a
 record, so it belongs beside the other module-level ones; what made it a method was that a method was
-the closest thing to hand. T13's own note had refused ``redact_label`` a place on the protocol on P20
+the closest thing to hand. T13's own note had refused ``redact_label`` a place on the protocol on §30
 grounds -- *a member with no caller is a guess about a future one* -- so the argument existed and this
 one arrived without it. That is what this guard says. (``redact_label`` is a member as of T16, which
 brought the caller: ``pii_check`` cannot rewrite a label without knowing what an answer is.)
@@ -136,7 +136,7 @@ def test_the_scan_reads_the_classes_it_is_supposed_to_find() -> None:
 def test_the_scan_rejects_a_member_the_protocol_does_not_declare(
     violation: str,
 ) -> None:
-    """P29: the shape `final_label` had -- public, on the class, in no contract."""
+    """§39: the shape `final_label` had -- public, on the class, in no contract."""
     declared = classes_in([module_from_source(violation)])["Text2Text"]
 
     assert public_surface(declared) - set(Modality.__protocol_attrs__)

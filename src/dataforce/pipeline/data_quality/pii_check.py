@@ -159,7 +159,7 @@ def confirmed_in_window(
     the candidates, not an invitation to add some.
 
     **A `ConfigError` is not read as a failed call.** It is the one exception this codebase raises and
-    it means *a human must change configuration* (P23) -- an adapter that cannot reach its endpoint
+    it means *a human must change configuration* (§33) -- an adapter that cannot reach its endpoint
     raises it on every record, and the run would complete with every hit `unverified` and every
     record `withheld`. That fails safe, unlike `jury`'s version of the same hole, which fails
     silent; but *safe* here means nothing ships and no line says why, and the wrong reason for

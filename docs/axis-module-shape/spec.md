@@ -1,7 +1,7 @@
 # Axis module shape — Implementation Spec
 
 **Status:** awaiting review · **Reads from:** [`../annotation-pipeline/spec.md`](../annotation-pipeline/spec.md),
-`AGENTS.md` §4–§6 and P5, P8, P9, P10, P28, P32 · **Style reference:** the internal
+`AGENTS.md` §4–§6 and §15, §18, §19, §20, §38, §42 · **Style reference:** the internal
 `agent-evaluation` service, which `annotation-pipeline/spec.md` already names on its own line 3
 
 ---
@@ -56,8 +56,8 @@ condition and the guard that does read the package (I4) only counts files.
 - `tests/stages/test_tool_decision.py:32` imports `stated_calls` from `text2text.utils`
 - `tests/guards/test_one_canonical_form.py:35` imports `canonical_json` from `tool_decision.utils`
 
-Under P9 — *"no test imports a module's internals. If one must, that is a design finding, not a test
-problem"* — those three lines are the finding. Under P5 they are also the second consumer whose
+Under §19 — *"no test imports a module's internals. If one must, that is a design finding, not a test
+problem"* — those three lines are the finding. Under §15 they are also the second consumer whose
 absence was the stated reason not to split.
 
 **3 · The style reference this repository names does the split, and accepts the consumer count.**
@@ -90,7 +90,7 @@ shape, and should prefer to constrain the direction of an import over the number
 byte-identical to the ones in `text2text/utils.py:146–185`. The behaviour is not: the library raises
 `ToolkitError`, this repository raises `ConfigError`. `text2text/utils.py:105` states the duplication
 outright — *"holds this exact shape and these exact names on a branch already"* — and that sentence
-has stood as a justification rather than as a finding, which is what AGENTS.md P32 now names.
+has stood as a justification rather than as a finding, which is what AGENTS.md §42 now names.
 
 I6 cannot see it, and the merge did not change that. The guard reads owned names off the
 **installed** library; the pin resolves by tag, `v0.1.0` is at `2b603a6`, and the merge is two commits
@@ -115,7 +115,7 @@ by signature rather than by duplication — `declaration(manifest, *path: str)` 
 caller and names no key, and every key constant stays in the axis that means it.
 
 **What is not wrong with these files.** 38% of `src/` is docstring (2647 of 6905 lines) and that is
-P12 working as intended. `tool_decision/utils.py` is 423 lines of code, not 916. The problem is the
+§22 working as intended. `tool_decision/utils.py` is 423 lines of code, not 916. The problem is the
 number of unrelated jobs in one module, not its length, and this document does not delete one
 sentence of prose — every docstring moves with the code it documents.
 
@@ -164,7 +164,7 @@ generalised from "imports no `utils`" to "imports no sibling" — a `schema.py` 
 `detectors.py` would be the same defect under a new filename. The second half is AGENTS.md §6's
 condition, made mechanical for the first time: every top-level function in a module named `utils.py`
 must reference a name defined in the `schema.py` beside it.
-*Alternative:* a threshold — *most* functions must. *Why not:* a tuned literal in a guard is P25's
+*Alternative:* a threshold — *most* functions must. *Why not:* a tuned literal in a guard is §35's
 finding and there is no measurement behind any particular number. §6 says "and nothing else", so the
 rule is *every*, and a helper that touches no shape belongs with the thing it helps.
 *Alternative:* forbid `utils.py` outright. *Why not:* §6 grants it on purpose, and a new axis whose
@@ -187,7 +187,7 @@ the manifest rather than from a literal: `config/profiles/` when `manifest.modal
 `config/modalities/` when it is not — which is what that field already means.
 *Alternative:* leave both copies and add a guard holding them equal, the way I24 holds the three
 `json.dumps`. *Why not:* I24 exists because the canonical form is genuinely constrained from three
-directions; a config reader is constrained from none, and a guard pairing two copies is P8's
+directions; a config reader is constrained from none, and a guard pairing two copies is §18's
 pass-through with a test attached.
 *The check that keeps the vocabulary out:* `declarations.py` contains no string literal that is a
 manifest key. Its four functions take `*path: str`.
@@ -252,7 +252,7 @@ guard compares them word for word. These rows are what § *Package layout* gains
 | `canonical_json` ×2 | `dataforce/record.py` — one copy, and `record_id_for` calls it (D7) |
 | `one_role` | `tool_decision/profile.py` — its one caller is `ToolDecision.__init__` (`utils.py:680`), and the role it names is the profile's vocabulary, not a reader |
 
-**Each new module answers P8's deletion test in one sentence:**
+**Each new module answers §18's deletion test in one sentence:**
 
 - `turns.py` — delete it and every caller has to know that a turn's `content` may be a string, a null
   or a content-block array, and that a call's `arguments` may be a JSON string or an object.
@@ -273,7 +273,7 @@ guard compares them word for word. These rows are what § *Package layout* gains
 
 > | I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves. AST scan over both axis packages: `schema.py` must exist and import nothing from its own package — generalised from "imports no `utils`", because a `schema.py` importing `detectors.py` is the same defect under a new name. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md §6 grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. The file-set half is gone — it required exactly three files and so made §6's own remedy, *give it a real name*, a build failure |
 
-P29 applies: the new guard is proved red against a synthetic `schema.py` that imports a sibling, and
+§39 applies: the new guard is proved red against a synthetic `schema.py` that imports a sibling, and
 against a synthetic `utils.py` holding a function that touches no shape, **before** the packages are
 split. The existing `test_the_scan_rejects_a_fourth_module` is deleted with the rule it proves.
 
@@ -303,7 +303,7 @@ five kinds.
 These land **with the code, in the same commit**, because three guards parse that file and compare it
 to the tree: I19 (§ *Package layout*), I6 (§ *Context*'s ownership sentence) and I21/I20 (unaffected
 here). Editing it before the code turns the build red; editing it after leaves the build green while
-the document is wrong, which is what P31 exists to prevent.
+the document is wrong, which is what §41 exists to prevent.
 
 | § | line | change | task |
 |---|---|---|---|
@@ -345,7 +345,7 @@ library instead — the tests that assert *the two tables have the same keys* st
 still raises `ConfigError` with the same message. Every pattern is byte-identical: assert the six
 compiled patterns before and after, which is what proves D2 was honoured.
 
-**Source.** AGENTS.md P32, P14; I6; § *Context* item 5.
+**Source.** AGENTS.md §42, §24; I6; § *Context* item 5.
 
 **Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
 red on `text2text/utils.py:209`. A green run at that point means the tag does not contain the commit.
@@ -361,17 +361,17 @@ reviewable apart: after it, nothing has moved and the build is green.
 
 **Approach.** Rewrite `tests/guards/test_axis_module_shape.py` to D4's two halves. Delete
 `test_the_scan_rejects_a_fourth_module` — it proves a rule that no longer exists — and add the two
-P29 proofs D4 names. `docs/annotation-pipeline/spec.md` § *Invariants* row I4 and § *Package layout*
+§39 proofs D4 names. `docs/annotation-pipeline/spec.md` § *Invariants* row I4 and § *Package layout*
 lines 757–761 change in the same commit.
 
 **Acceptance criteria.** The new guard is red against both synthetic violations and green over the
 tree as it stands today, with both packages still holding exactly three files. The second half is
 therefore exercised against the two real `utils.py` **before** they move — and it will be red, since
 2 of 16 and 5 of 23 functions touch a shape. **So this task lands the rule with both modules carrying
-one annotated P30 exemption each, naming T56 as the fix and dated.** An exemption that is a scheduled
+one annotated §40 exemption each, naming T56 as the fix and dated.** An exemption that is a scheduled
 deletion is what the hatch is for; `test_exemptions.py`'s ceiling of 5 has room for two.
 
-**Source.** AGENTS.md §6, P28, P29, P30, and the Conflicts entry `§6`'s escape hatch vs a guard that
+**Source.** AGENTS.md §6, §38, §39, §40, and the Conflicts entry `§6`'s escape hatch vs a guard that
 closes it.
 
 **Verify.** `make check`, and `test_exemptions.py` shows four standing exemptions rather than two.
@@ -386,8 +386,8 @@ closes it.
 
 **Approach.** Pure moves, in this order so each step is green: `declarations.py` first with both axes
 importing it (D6); then `canonical_json` into `record.py` (D7); then `text2text/` into three modules;
-then `tool_decision/` into four. Every docstring travels with its code. The two P30 exemptions from
-T55 are deleted by this task, which is what P30 means by *shrinking*.
+then `tool_decision/` into four. Every docstring travels with its code. The two §40 exemptions from
+T55 are deleted by this task, which is what §40 means by *shrinking*.
 
 **Acceptance criteria.** I23 passes unchanged — the public surface of both façades is the same set of
 names before and after. `tests/stages/test_text2text.py` and `test_tool_decision.py` import from the
@@ -395,7 +395,7 @@ module that owns each name rather than from `utils`, and `test_one_canonical_for
 `canonical_json` from `record.py`. No test's assertions change: if one has to, the move was not a
 move and the task is wrong.
 
-**Source.** AGENTS.md §5, §6, P5, P8, P9, P10; I19, I23.
+**Source.** AGENTS.md §5, §6, §15, §18, §19, §20; I19, I23.
 
 **Verify.** `make check`. Then the byte check: run the smoke corpus before and after and compare
 `records.jsonl` and `metrics.json` byte for byte. §7 asks what proved that behaviour did not change,

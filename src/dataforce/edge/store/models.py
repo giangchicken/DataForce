@@ -41,7 +41,7 @@ class UtcDateTime(TypeDecorator[datetime]):
 
     ``DateTime(timezone=True)`` is an instant in Postgres and a naive string in SQLite, so the same
     row read through the default backend comes back as something that raises when compared to the
-    value that was written. That is the substitute-behaves-identically assumption P26 forbids, and
+    value that was written. That is the substitute-behaves-identically assumption §36 forbids, and
     it is on a column that reaches a record -- so it is normalised here rather than carried.
 
     **A naive datetime is refused, not assumed to be UTC.** Guessing a caller's timezone is how a

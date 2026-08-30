@@ -11,7 +11,7 @@ type makes to every stage -- a part carries what its type declares, and a record
 cannot be edited by it.
 
 That second promise is made by the module docstring about *every* model here, so it is checked over
-every model here rather than through the one field a single test happens to touch (P28). Both
+every model here rather than through the one field a single test happens to touch (§38). Both
 halves: frozen, and no mutable sequence inside the frozen thing. Twenty-two models inherit it from
 `RecordModel` today, and the first one to declare its own `model_config` is the one this catches.
 

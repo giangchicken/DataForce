@@ -38,7 +38,7 @@ from dataforce.errors import ConfigError
 from dataforce.ports import QuestionToStore, StoreReceipt
 from dataforce.record import PublishedQuestions, Question, Record
 
-# The key this stage owns, under `human_review` (P16: one key, one writer).
+# The key this stage owns, under `human_review` (§26: one key, one writer).
 STAGE = "publish"
 
 # The two payload keys neither axis owns, because neither axis knows a question. `question_id` rides
@@ -139,7 +139,7 @@ def publish(engine: Engine, records: Iterable[Record]) -> ServiceResult:
 
     A missing store is a `ConfigError` before the first record, on `jury`'s line: it is a fact about
     the configuration and not about any record, and a key claiming a question was published would be
-    a lie about a write nobody made (P23).
+    a lie about a write nobody made (§33).
     """
     store = engine.question_store
     if store is None:

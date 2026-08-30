@@ -21,7 +21,7 @@ not either of them, serialised differently.
 
 `dump` is scanned beside `dumps` because a value written to a file with other options is the same
 drift wearing a different name. A call that genuinely wants other options -- a manifest laid out for
-a person to read -- is what P30's hatch is for, annotated on the line; what it may not be is
+a person to read -- is what §40's hatch is for, annotated on the line; what it may not be is
 unremarked.
 """
 
@@ -132,12 +132,12 @@ def test_the_scan_reads_the_calls_it_is_supposed_to_find() -> None:
 def test_the_scan_rejects_a_serialisation_that_is_not_the_canonical_one(
     violation: str,
 ) -> None:
-    """P29: one per option, plus the two spellings that would slip past a shallower scan."""
+    """§39: one per option, plus the two spellings that would slip past a shallower scan."""
     assert form_findings(module_from_source(violation)) != []
 
 
 def test_an_annotated_exemption_covers_a_layout_meant_for_a_person() -> None:
-    """P30: the hatch exists so the first human-readable dump argues for itself instead of
+    """§40: the hatch exists so the first human-readable dump argues for itself instead of
     quietly widening the rule for the calls that define a `record_id`."""
     excused = (
         "import json\n\n\ndef f(v):\n"
@@ -163,7 +163,7 @@ def test_both_axes_serialise_one_value_the_same_way(value: Any) -> None:
 def test_each_option_changes_at_least_one_of_the_values(
     option: str, other: Any
 ) -> None:
-    """P29 for the comparison above: values that agreed under any options would prove nothing."""
+    """§39 for the comparison above: values that agreed under any options would prove nothing."""
     flipped = {**CANONICAL_KWARGS, option: other}
 
     assert any(

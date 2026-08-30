@@ -11,7 +11,7 @@ and what was written in its place was a check that races. No ``RETURNING`` and n
 default, so everything else the two disagree about is behaviour this module leans on -- which is why
 the tests run twice rather than why the code forks.
 
-**Writing a question the store already holds is a no-op, not an error** (P22). The id is a pure
+**Writing a question the store already holds is a no-op, not an error** (§32). The id is a pure
 function of the question, so a second publish of an unchanged corpus is the same rows and re-running
 a phase is not something a caller has to be careful about. Insert-if-absent rather than an upsert,
 and the difference is deliberate: an existing row records what was *published*, and overwriting its

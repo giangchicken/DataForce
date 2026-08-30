@@ -266,7 +266,7 @@ def test_a_record_with_no_two_numbers_is_skipped() -> None:
 def test_a_declaration_this_stage_cannot_run_on_stops_the_run(
     declared: Mapping[str, Any],
 ) -> None:
-    """P23: configuration scope, so it is raised before the first record rather than during."""
+    """§33: configuration scope, so it is raised before the first record rather than during."""
     engine = an_engine_that((SENT,), **declared)
 
     with pytest.raises(ConfigError, match="params.yaml"):

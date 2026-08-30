@@ -295,7 +295,7 @@ def test_an_answer_id_is_a_pure_function_of_the_annotation() -> None:
 
 
 def test_an_unnamed_instance_is_a_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """P23: a human must change something, and the message says which variable."""
+    """§33: a human must change something, and the message says which variable."""
     monkeypatch.delenv(BASE_URL, raising=False)
 
     with pytest.raises(ConfigError, match=BASE_URL):

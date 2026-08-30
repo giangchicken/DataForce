@@ -123,7 +123,7 @@ def duplicate_groups(
 def duplicate_check(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every record, one key richer: which records repeat it, split by whether they agree.
 
-    No precondition (P12) and no skip: a quarantined record is still a duplicate of something, and
+    No precondition (§22) and no skip: a quarantined record is still a duplicate of something, and
     knowing that is part of deciding which of a pair to keep. There is no side output -- a group is a
     value on the record, which is what keeps `output == input` structural (Requirement 41).
     """

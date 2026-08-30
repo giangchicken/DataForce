@@ -7,7 +7,7 @@ name AGENTS.md §6 exempts, and only under exactly this condition; a fourth modu
 that exemption starting to spread.
 
 This guard reads directories rather than the parsed tree, because the rule is about which files
-exist. The synthetic violation is therefore a directory too. Only the import half takes P30's
+exist. The synthetic violation is therefore a directory too. Only the import half takes §40's
 exemption -- an annotation lives on a line, and "there is a fourth module here" has none.
 """
 
@@ -50,14 +50,14 @@ def test_every_axis_implementation_has_the_three_modules(package: Path) -> None:
 
 
 def test_the_scan_rejects_a_fourth_module(tmp_path: Path) -> None:
-    """P29: `utils.py` is exempted for one job, and a fourth file is that exemption spreading."""
+    """§39: `utils.py` is exempted for one job, and a fourth file is that exemption spreading."""
     package = _implementation(tmp_path, extra="detectors.py")
 
     assert axis_shape_findings(package) != []
 
 
 def test_the_scan_rejects_a_missing_module(tmp_path: Path) -> None:
-    """P29: two modules is a shape too, and not this one."""
+    """§39: two modules is a shape too, and not this one."""
     package = _implementation(tmp_path)
     (package / "utils.py").unlink()
 
@@ -65,7 +65,7 @@ def test_the_scan_rejects_a_missing_module(tmp_path: Path) -> None:
 
 
 def test_the_scan_rejects_a_schema_that_imports_its_utils(tmp_path: Path) -> None:
-    """P29: the direction, proved both spellings of the import."""
+    """§39: the direction, proved both spellings of the import."""
     absolute = _implementation(
         tmp_path, schema="from dataforce.profiles.p.utils import to_schema"
     )

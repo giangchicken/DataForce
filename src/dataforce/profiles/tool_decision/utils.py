@@ -26,8 +26,8 @@ so a run still completes. ``modalities/text2text/utils.py`` carries the same not
 
 A second raise stood here until T14 and is gone rather than caught: provenance arrived under a
 magic ``__provenance__`` key on the item and was validated on the way in, which is connascence of
-meaning between a stage and one axis (P13). It is a parameter now, so *an item with no provenance*
-is unrepresentable and mypy checks what a message used to explain (P22).
+meaning between a stage and one axis (§23). It is a parameter now, so *an item with no provenance*
+is unrepresentable and mypy checks what a message used to explain (§32).
 
 **The manifest reader is duplicated from ``text2text/utils.py`` on purpose.** § *Package layout*
 says the two axes share ``name``, ``version`` and ``Part`` *and nothing else*; a shared

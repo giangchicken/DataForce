@@ -1,7 +1,7 @@
 """I3 · code's phase and stage names are the flow's, and the spec's.
 
 The flow table is stated twice on purpose -- once as prose a person reads, once as
-``pipeline/flow.py`` the code reads -- and P31 says a fact stated in both places is compared by a
+``pipeline/flow.py`` the code reads -- and §41 says a fact stated in both places is compared by a
 test rather than trusted. Changing either side alone fails here, and the failure names which row
 and which side moved.
 
@@ -144,7 +144,7 @@ def test_the_table_names_every_stage_once() -> None:
 def test_the_code_and_the_document_declare_the_same_rows() -> None:
     """I3: a row nobody implemented, a row renamed on one side, a reordering, or a reworded summary.
 
-    The summary is compared too. A field of the table that nothing checks is the fiction P31 is
+    The summary is compared too. A field of the table that nothing checks is the fiction §41 is
     about -- and it would be the fourth place this flow is written down."""
     document = [(phase, stage, plain(summary)) for phase, stage, summary in spec_rows()]
     code = [(s.phase, s.stage, plain(s.summary)) for s in STAGES]
@@ -216,7 +216,7 @@ def test_the_scan_found_the_phases_it_is_supposed_to_scan() -> None:
 def test_the_scan_rejects_a_flow_the_record_does_not_match(
     stages: tuple[str, ...], held: tuple[str, ...]
 ) -> None:
-    """P29: the drift that used to report `0` for ever, and its two neighbours."""
+    """§39: the drift that used to report `0` for ever, and its two neighbours."""
     assert stage_key_findings("ai_review", stages, held) != []
 
 

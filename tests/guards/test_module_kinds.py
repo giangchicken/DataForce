@@ -6,7 +6,7 @@ a module's docstring line to its row in the layout tree, which means a module an
 wrong *together* -- they are one edit apart and nothing else reads either.
 
 **The five words are read out of the requirement, not listed here.** A list in this file would be a
-second statement of the vocabulary, and P31 is the reason there is not one: the requirement's own
+second statement of the vocabulary, and §41 is the reason there is not one: the requirement's own
 sentence is parsed, so adding a sixth kind to the document is what makes a sixth kind legal in the
 tree.
 
@@ -94,7 +94,7 @@ def test_the_package_docstring_is_the_only_module_exempt() -> None:
     ids=["invented", "lowercased", "no-kind", "no-docstring"],
 )
 def test_the_scan_rejects_a_module_that_declares_no_kind(violation: str) -> None:
-    """P29: an invented kind, a miscased one, a prose docstring, and no docstring at all."""
+    """§39: an invented kind, a miscased one, a prose docstring, and no docstring at all."""
     assert kind_findings(module_from_source(violation), declared_kinds()) != []
 
 

@@ -73,7 +73,7 @@ def test_no_edge_module_folds_a_phase_itself(module: Module) -> None:
 
 
 def test_the_scan_rejects_a_handler_that_runs_a_phase_by_hand() -> None:
-    """P29: the thing this is here to stop."""
+    """§39: the thing this is here to stop."""
     by_hand = (
         "def data_quality(engine, records):\n"
         "    records = label_check(engine, records).records\n"
@@ -85,7 +85,7 @@ def test_the_scan_rejects_a_handler_that_runs_a_phase_by_hand() -> None:
 
 
 def test_the_scan_rejects_two_stages_however_they_are_reached() -> None:
-    """P29: through a module attribute, which is the same order spelled differently."""
+    """§39: through a module attribute, which is the same order spelled differently."""
     qualified = (
         "def data_quality(engine, records):\n"
         "    out = label_check.label_check(engine, records)\n"

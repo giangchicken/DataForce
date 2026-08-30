@@ -3,7 +3,7 @@
 Tasks for building what `spec.md` specifies. Read that first; this document schedules it and does
 not restate it. Where the two disagree, the spec wins and this file is wrong.
 
-**Source:** `docs/annotation-pipeline/spec.md` @ `9b9a3fe`, `AGENTS.md` §1–§9 and P0–P31 @ `a61f8cb`,
+**Source:** `docs/annotation-pipeline/spec.md` @ `9b9a3fe`, `AGENTS.md` §1–§9 and §10–§41 @ `a61f8cb`,
 `docs/annotation-pipeline/objective.md`.
 
 **State at the time of writing.** `src/` and `tests/` did not exist — both were deleted deliberately so
@@ -28,7 +28,7 @@ packages. It is specified in [`../axis-module-shape/spec.md`](../axis-module-sha
 than here, because it reverses Decision 14 and that needed a document with the measurements in it.
 These are the first tasks in this plan sourced from a second spec; § *Review round · the shape of the
 two axis packages* holds them, after T50, which scheduled T54 in its own last paragraph. AGENTS.md
-gained P32 in the same round.
+gained §42 in the same round.
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -69,7 +69,7 @@ depart from it.
 | `I8` | `spec.md` § *Invariants* — I1 to I24 |
 | `Decision 12` | `spec.md` § *Decisions* — 23 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
-| `P27` | `AGENTS.md` § *Design Principles* — P0 to P32 |
+| `§37` | `AGENTS.md` § *Design Principles* — §10 to §42 |
 | `§6` | a numbered section of `AGENTS.md` § *Conventions* |
 | `T16` | a task in this file. The number is its name, not its place in the order — inserting T32 renumbered nothing |
 | `D4` | a decision in a *second* spec, `docs/axis-module-shape/spec.md`, which T54–T56 serve. `Decision 12` without a document is always this file's source spec |
@@ -224,7 +224,7 @@ time.
   differs) = 0.5 < δ(different tools) = 1`.
 - `vote_consensus` takes the record, and the spec says why.
 - The ambiguity is either resolved or recorded: dropping every call yields `[]`, which is the same
-  value as a panel agreeing on the empty answer. Two different facts, one representation. P22 says
+  value as a panel agreeing on the empty answer. Two different facts, one representation. §32 says
   fix the type rather than the branch.
 
 **Verify.** `grep -n "Jaccard\|set of names" docs/annotation-pipeline/spec.md` returns nothing that
@@ -297,29 +297,29 @@ annotator types JSON.
 
 ### T3 · Settle the four standing principle conflicts
 
-**Goal.** Every P0–P31 principle either holds against the spec or is recorded as a knowing exception
+**Goal.** Every §10–§41 principle either holds against the spec or is recorded as a knowing exception
 with a reason.
 
 **Context.** An audit of all 32 principles against the spec leaves four conflicts. Four earlier ones
 dissolved when `AGENTS.md` was rewritten at `a61f8cb` — the `utils.py` exemption now stands
-explicitly, naming stays with §5, and P21's check (*no non-HTTP entry point imports from the HTTP
+explicitly, naming stays with §5, and §31's check (*no non-HTTP entry point imports from the HTTP
 package*) is satisfied by a flat `edge/`, which is not named for the HTTP layer.
 
 **Approach.**
 
 | Principle | Conflict | Resolution |
 |---|---|---|
-| **P20** | *A port with zero adapters is deleted.* `MediaResolver` has none — no media modality is built. | Delete the port. Keep the *Out of Scope* entry describing the seam; the modality protocol and the media part shape are the seam. |
-| **P26** | *Dev and production run the same implementations.* SQLite stands in for Postgres and a stubbed panel for the jury, and Decision 7 waves the first through on "the schema is small enough that the two behave identically" — the exact assumption P26 refuses. | Declare an `-m integration` suite against Postgres, and rewrite Decision 7 to carry the difference as a known risk rather than an argument. |
-| **P27** | *Logs are an event stream, observability built in from the start.* The spec contains no logging at all — every match for "log" in it is a substring of `catalog` or `LOGIC`. A 20,000-record run is unobservable until it finishes. | Add a § *Observability*: each stage returns what happened, the edge writes it, every event carries `run_id`, `record_id` and stage. Logging is I/O, so it stays outside under P17. Implementation is T29. |
-| **P31** | *A document fact the code also states is compared by a test.* Nothing compares the flow table to the code. | Declare the guard. Implementation is T7. |
+| **§30** | *A port with zero adapters is deleted.* `MediaResolver` has none — no media modality is built. | Delete the port. Keep the *Out of Scope* entry describing the seam; the modality protocol and the media part shape are the seam. |
+| **§36** | *Dev and production run the same implementations.* SQLite stands in for Postgres and a stubbed panel for the jury, and Decision 7 waves the first through on "the schema is small enough that the two behave identically" — the exact assumption §36 refuses. | Declare an `-m integration` suite against Postgres, and rewrite Decision 7 to carry the difference as a known risk rather than an argument. |
+| **§37** | *Logs are an event stream, observability built in from the start.* The spec contains no logging at all — every match for "log" in it is a substring of `catalog` or `LOGIC`. A 20,000-record run is unobservable until it finishes. | Add a § *Observability*: each stage returns what happened, the edge writes it, every event carries `run_id`, `record_id` and stage. Logging is I/O, so it stays outside under §27. Implementation is T29. |
+| **§41** | *A document fact the code also states is compared by a test.* Nothing compares the flow table to the code. | Declare the guard. Implementation is T7. |
 
-Two further principles from the rewrite need a line each. **P1** — *do not decompose along the flow of
+Two further principles from the rewrite need a line each. **§11** — *do not decompose along the flow of
 processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
 `AGENTS.md`'s own conflicts section resolves it (*step modules stand, but a decision spanning steps is
-extracted under P2 and the steps call it*); the spec should record that resolution and name the one
+extracted under §12 and the steps call it*); the spec should record that resolution and name the one
 such decision it already has: the answer type, which `jury`, `cohesion`, `aggregate` and `curate` all
-reason about. **P22** —
+reason about. **§32** —
 *define errors out of existence* — lands on the `[]`-versus-`None` ambiguity in T1.
 
 **Acceptance criteria.** All 32 principles hold, or the exception is written in the spec with its
@@ -328,15 +328,15 @@ reason. No conflict is resolved silently (§8).
 **Source.** `AGENTS.md` § *Design Principles* and § *Conflicts, written down*; `spec.md` § *Invariants*,
 § *Decisions*.
 
-**Verify.** Walk P0–P31 against the spec and produce the verdict table. Every `conflict` row has a
+**Verify.** Walk §10–§41 against the spec and produce the verdict table. Every `conflict` row has a
 spec line resolving it.
 
-**Landed — `9b9a3fe`,** as Decision 17. P20: the port is deleted, and the seam survives in the protocol,
-the media part shape and Requirement 16. P26: Decision 7 rewritten to carry the difference as a risk —
+**Landed — `9b9a3fe`,** as Decision 17. §30: the port is deleted, and the seam survives in the protocol,
+the media part shape and Requirement 16. §36: Decision 7 rewritten to carry the difference as a risk —
 the sync's idempotency rests on two unique constraints, which is exactly where SQLite and Postgres
-differ — and the store tests now run under both. P27: § *Observability*, with levels specified so the
-stream stays readable and I1 told to permit `logging` by name. P31: I3 now parses the flow table out of
-`spec.md` itself rather than comparing code to code. P1 and P22 got the line each they needed.
+differ — and the store tests now run under both. §37: § *Observability*, with levels specified so the
+stream stays readable and I1 told to permit `logging` by name. §41: I3 now parses the flow table out of
+`spec.md` itself rather than comparing code to code. §11 and §32 got the line each they needed.
 
 ---
 
@@ -414,7 +414,7 @@ Requirement 3 becomes `STEP · <stage> · <what the table says>`. In prose, name
 fails when either side of the table moves alone — including when a row only moves *position*, which the
 number used to catch for free.
 
-**Source.** `spec.md` Decision 19, Requirement 3, I3; AGENTS.md P16, P31.
+**Source.** `spec.md` Decision 19, Requirement 3, I3; AGENTS.md §26, §41.
 
 **Verify.** `grep -in "stage [0-9]" docs/annotation-pipeline/*.md` is empty. `make check` green.
 
@@ -453,7 +453,7 @@ document and compares it to the package in both directions.
 **Acceptance criteria.** Every module has a row and every row has a module, and the build fails when
 either stops being true — including when only the *text* of a row drifts from its docstring.
 
-**Source.** `spec.md` § *Repository layout*, § *Package layout*, I19; AGENTS.md P31, P29.
+**Source.** `spec.md` § *Repository layout*, § *Package layout*, I19; AGENTS.md §41, §39.
 
 **Verify.** `uv run pytest tests/guards/test_layout_tree.py -q`, then add a module with no row and
 confirm red.
@@ -518,7 +518,7 @@ true, and no more.
 **Goal:** `make check` is green over an empty engine, and every architectural rule is a red test
 first.
 
-P29: *write the guard before the code it constrains, and prove it fails.* Written after the services,
+§39: *write the guard before the code it constrains, and prove it fails.* Written after the services,
 a guard only ratifies whatever was already done.
 
 ### T5 · The package skeleton and the import direction
@@ -570,7 +570,7 @@ implementation), I17 (stage order exists once). I8 and I11 need services and are
 
 **Approach.** One module per guard in `tests/guards/`, each an AST scan or model introspection.
 Each is proved against a *synthetic* violation — a small source string the guard is run over — so it
-is known to go red. P30: permit an annotated exemption naming a reason and an owner; keep the list
+is known to go red. §40: permit an annotated exemption naming a reason and an owner; keep the list
 short and dated.
 
 **Acceptance criteria.** Each guard has a companion assertion that it rejects a synthetic violation.
@@ -578,7 +578,7 @@ short and dated.
 `slot_filling`, `extract_json_from_text`, `read_jsonlines`, `write_jsonlines`, `read_yaml`, and the
 LLM client surface.
 
-**Source.** `spec.md` § *Invariants*; AGENTS.md P28–P30.
+**Source.** `spec.md` § *Invariants*; AGENTS.md §38–§40.
 
 **Verify.** `uv run pytest tests/guards -q`. Then temporarily add a violating import to a
 `pipeline/` module and confirm I2 fails; revert.
@@ -600,13 +600,13 @@ reaches `run_phase`, has no handler to be asserted of yet and is left stated rat
 **I7** is vacuous over today's tree, which is the argument for writing it now rather than after
 `record.py`.
 
-I6's owned-name list *was* parsed out of the spec sentence that states it, not copied from it (P31). It
+I6's owned-name list *was* parsed out of the spec sentence that states it, not copied from it (§41). It
 is read off the installed library's `__all__` now: the sentence and the list agreed with each other while
 both disagreed with `agent-toolkit`, and seventeen exported functions were in neither. That is the one
 failure a pairing over two hand-kept copies of a fact cannot see, and it is why the third party has to be
 asked directly.
 
-P30's escape hatch arrived with the guards rather than after the first argument about one: a line names
+§40's escape hatch arrived with the guards rather than after the first argument about one: a line names
 an invariant, a reason, an owner and a date, and `test_exemptions.py` is the review. The list is empty.
 
 ---
@@ -615,7 +615,7 @@ an invariant, a reason, an owner and a date, and `test_exemptions.py` is the rev
 
 **Goal.** The flow table in `spec.md` and `pipeline/flow.py` cannot disagree without CI saying so.
 
-**Context.** P31 requires it; I3 already promises it. An earlier version of this test existed and was
+**Context.** §41 requires it; I3 already promises it. An earlier version of this test existed and was
 deleted with the rest of `tests/` under Decision 11 — the reason was that the old suite encoded a
 design that no longer holds, which was true of what it asserted and not of the idea.
 
@@ -626,7 +626,7 @@ its rows, in order, against `PHASES` and `STAGES` in `pipeline/flow.py`. Compare
 **Acceptance criteria.** Changing either side alone fails the build. The failure message names which
 row and which side.
 
-**Source.** `spec.md` § *The flow*, I3; AGENTS.md P31.
+**Source.** `spec.md` § *The flow*, I3; AGENTS.md §41.
 
 **Verify.** `uv run pytest tests/guards/test_flow_table.py -q`, then edit one stage name in the spec
 and confirm red.
@@ -635,14 +635,14 @@ and confirm red.
 place allowed to hold it, so the table had to exist before the guard that reads it. T7's stated
 dependencies are T3 and T5, not T6, so the swap cost nothing.
 
-Written in P29's order: the test first, red on an ImportError — a weak red, since a missing symbol proves
+Written in §39's order: the test first, red on an ImportError — a weak red, since a missing symbol proves
 nothing about the comparison — then `flow.py`, then seven mutations, one per way the two sides can drift.
 Six went red first time. Rewording a summary in `flow.py` did not, because only the `(phase, stage)`
 pair was compared — the row also carried a number then — which made `summary` a fourth statement of the
 flow that nothing checked. The row is now compared whole. T32 later took the number off both sides, and
 the ordering the number used to assert became a list-against-list comparison.
 
-`PHASES` is derived from `STAGES` rather than listed beside it (P16). Deriving a stage's module path
+`PHASES` is derived from `STAGES` rather than listed beside it (§26). Deriving a stage's module path
 stayed in the test: nothing in the engine dispatches over the table yet, and a function with no caller
 in `flow.py` would make a `DEFINITION` module hold logic.
 
@@ -672,7 +672,7 @@ implementation"* to *"nothing above an implementation names one"*, covering `bas
 **Acceptance criteria.** A façade that re-exports its implementation fails the build, in the relative
 spelling as well as the absolute one. `module_at` names no module `…__init__`.
 
-**Source.** `spec.md` Requirement 38, I16, § *Package layout*; AGENTS.md P18.
+**Source.** `spec.md` Requirement 38, I16, § *Package layout*; AGENTS.md §28.
 
 **Verify.** Put `from . import text2text` in `modalities/__init__.py` and confirm red.
 
@@ -756,7 +756,7 @@ that goes.
 **Acceptance criteria.** The format and the mandatory keys exist once. I1 still passes — no engine
 module reaches the edge to emit.
 
-**Source.** `spec.md` § *Observability*; AGENTS.md P27.
+**Source.** `spec.md` § *Observability*; AGENTS.md §37.
 
 **Verify.** `make check`. I19 requires the new module to have a row in the layout.
 
@@ -795,7 +795,7 @@ and declined, with its cost.
 **Acceptance criteria.** The next reader who asks this finds the answer beside the table, and the
 Decisions section says what was given up by not merging.
 
-**Source.** `spec.md` § *Per-service contracts*, Requirements 29–33 and 49, I18; AGENTS.md P1, P2, P16.
+**Source.** `spec.md` § *Per-service contracts*, Requirements 29–33 and 49, I18; AGENTS.md §11, §12, §26.
 
 **Verify.** `make check` — the flow table is unchanged, so I3 and I19 both still pass over the same
 fifteen rows and 55 modules.
@@ -828,7 +828,7 @@ sentence defines as `agent-toolkit`'s dependencies.
 `Field(default=None, …)` and `Field(default_factory=…, …)` stay green. `import hashlib` goes red and
 an annotated exemption is honoured. The whole tree still passes both scans.
 
-**Source.** Requirement 40, I5, I6; AGENTS.md P29, P30.
+**Source.** Requirement 40, I5, I6; AGENTS.md §39, §40.
 
 **Verify.** `uv run pytest tests/guards -q`.
 
@@ -844,7 +844,7 @@ constant, and special-casing `str(` reads like coverage while providing one name
 `hashlib` is a second list because the first one has a stated meaning. I6's docstring says the owned
 roots are `agent-toolkit`'s own dependencies; `hashlib` is the standard library and the library reaches
 for it itself, so putting it there would make the guard's own reason false. The spec's I6 row says so
-too now. P30's hatch is proved for the case that is coming: a media part's `sha256` is over bytes and
+too now. §40's hatch is proved for the case that is coming: a media part's `sha256` is over bytes and
 `compute_hash` takes a `str`.
 
 ---
@@ -868,7 +868,7 @@ runtime protocol.
 **Acceptance criteria.** Both guards are green over the tree as it stands. A key drawn with no field,
 a field with no key, a member renamed on one side, and a stale count each go red.
 
-**Source.** `spec.md` § *The record*, § *Modality*, § *Profile*; I20, I21; AGENTS.md P29, P31.
+**Source.** `spec.md` § *The record*, § *Modality*, § *Profile*; I20, I21; AGENTS.md §39, §41.
 
 **Verify.** `uv run pytest tests/guards -q`.
 
@@ -904,7 +904,7 @@ unassignable were `Record.content_version` and `Manifest.version`. All twenty-tw
 from `RecordModel`; the first one to declare its own `model_config`, or to subclass `BaseModel`
 directly, breaks the promise with nothing going red. Separately, `runner.py`'s docstring and T10's
 commit both argue for letting the `AttributeError` through, and both `ConfigError` branches had a test
-while that one did not — a documented interface with no proof (P12, §7).
+while that one did not — a documented interface with no proof (§22, §7).
 
 **Approach.** Introspect every model `record.py` defines: frozen, and no `list[…]` annotation. For the
 runner, install the stand-ins and then take one stage's function away again.
@@ -913,7 +913,7 @@ runner, install the stand-ins and then take one stage's function away again.
 runner test names the stage whose function is missing and passes both before and after Phase 4 builds
 it.
 
-**Source.** Requirement 41; AGENTS.md §7, P12, P28.
+**Source.** Requirement 41; AGENTS.md §7, §22, §38.
 
 **Verify.** `uv run pytest tests/stages -q`.
 
@@ -940,14 +940,14 @@ edit apart. And I7 introspects pydantic models, while Requirement 1 explicitly c
 comment on a plain dataclass attribute" — T9 and T10 created the first three, `Engine`,
 `ServiceResult` and `Stage`, all described by hand and none of them checked.
 
-**Approach.** Read the five words out of Requirement 2 rather than listing them again (P31). For the
+**Approach.** Read the five words out of Requirement 2 rather than listing them again (§41). For the
 dataclass half, scan every line a field's declaration spans rather than only its first.
 
 **Acceptance criteria.** An invented kind, a miscased one, a prose docstring and a missing docstring
 each go red, and the one exempt module is exempt by name. A dataclass field with no comment goes red;
 a parenthesised annotation whose comment sits on the next line stays green.
 
-**Source.** Requirements 1 and 2; I7, I22; AGENTS.md P28, P29, P31.
+**Source.** Requirements 1 and 2; I7, I22; AGENTS.md §38, §39, §41.
 
 **Verify.** `uv run pytest tests/guards -q`.
 
@@ -1000,7 +1000,7 @@ raises.
 fields, because § *The record* carries a comment on every key and Requirement 1 says the record is the
 place a key's meaning is written down next to the key. A record holding only the load-time half would
 leave the other eleven keys with no home, and no later task claims them. I7 stopped being vacuous on
-the same commit — it had nothing to find until this module existed, which is what P29 asked of it. The
+the same commit — it had nothing to find until this module existed, which is what §39 asked of it. The
 tests are `tests/stages/test_record.py` and `test_manifest.py`: a record is not a stage, but it is what
 every stage reads and returns, and this task's *Verify* already pointed there.
 
@@ -1035,7 +1035,7 @@ id takes something more than content and Requirement 6 changes.
 
 **Goal.** An `Engine` exists inside the engine and holds no I/O.
 
-**Context.** Decision 12 — the abstraction belongs to the layer that consumes it (P18). `Engine` and
+**Context.** Decision 12 — the abstraction belongs to the layer that consumes it (§28). `Engine` and
 `Registry` are `dataforce/engine.py`; `open_engine` is Phase 7. `ports.py` holds `QuestionStore`;
 `MediaResolver` was deleted under T3, so `ports.py` holds one port.
 
@@ -1099,7 +1099,7 @@ names two stages in sequence.
 `runner.py` and the façade — except that `run_phase` returns what a stage returns, and the spec names
 `ServiceResult` three times without ever putting it in § *Package layout*. It went into `engine.py`:
 what a service is handed and what it hands back are one sentence, and a module holding one dataclass
-and forwarding it is P8's pass-through. The layout row moved with the docstring, because I19 compares
+and forwarding it is §18's pass-through. The layout row moved with the docstring, because I19 compares
 them.
 
 **A stage is found by deriving its module, not by a table of imports.** A dispatch mapping in
@@ -1130,7 +1130,7 @@ packages". It is not: the three phase façades under it — `data_quality/`, `ai
 `human_review/` — are one-line docstrings that re-export nothing, and **nothing in `src/` or `tests/`
 imports through `dataforce.pipeline` at all**. So the re-export bought nothing and cost a third
 statement of the public surface, since a name added to `flow.py` also has to be added to `__all__` and
-nothing compares the two (P8's deletion test, and P5). The axis façades are a different thing: they
+nothing compares the two (§18's deletion test, and §15). The axis façades are a different thing: they
 hide implementations and I16 is the guard that makes that real.
 
 **Approach.** Delete the imports and the `__all__`. The docstring says what is under the package
@@ -1139,12 +1139,12 @@ instead of what it forwards, and the layout row moves with it (I19).
 **Acceptance criteria.** `make check` is green and no import changed anywhere, because there was
 nothing importing it.
 
-**Source.** AGENTS.md P5, P8; Requirement 2, which already names `pipeline/__init__.py` as the module
+**Source.** AGENTS.md §15, §18; Requirement 2, which already names `pipeline/__init__.py` as the module
 with no content of its own; I19.
 
 **Verify.** `make check`.
 
-**Landed.** Requirement 2 settles it more directly than P8 does. The fifth kind, `façade ·`, exists
+**Landed.** Requirement 2 settles it more directly than §18 does. The fifth kind, `façade ·`, exists
 because "none of the four describes a module with **no content**, and § *Package layout* below already
 writes it over `pipeline/__init__.py`" — so the document's own example of a contentless module was the
 one T10 filled with six names. Emptying it makes the module agree with the sentence that justified its
@@ -1189,7 +1189,7 @@ phase boundary.
 Two `Protocol` classes, five opaque aliases, and one re-export per façade. The aliases are
 `type X = Any` (PEP 695), which is what *opaque* means here: the base names the type so a signature can
 use it and says nothing about what is inside, because saying more would make the protocol a description
-of its single implementation (P18) and naming the model would be the import I16 forbids. `Answer` is
+of its single implementation (§28) and naming the model would be the import I16 forbids. `Answer` is
 the sharpest of the five — what an answer *is* is the whole of what a profile declares.
 
 The façades now hold what their docstrings already promised: `from .base import Modality`, and nothing
@@ -1353,7 +1353,7 @@ still would not validate. Half-building one puts a value no juror proposed into 
 5. **`redact_label` still has no home.** Requirement 17 and Decision 16 both name it a profile
    member; § *Profile* writes fourteen and calls them closed, and I21 compares that list to the code.
    Not added here: `pii_check` is its only consumer and lands in T16, and a fifteenth member with no
-   caller is the guess P20 refuses — the same argument that deleted `MediaResolver`. **T16 adds it to
+   caller is the guess §30 refuses — the same argument that deleted `MediaResolver`. **T16 adds it to
    the protocol, the count in both places I21 reads, and this implementation.**
 6. **Two payload keys have no assembler, and one of them has no producer either.** The capture
    half's dynamic choice list is per record and `answer_config()` takes none, so `$tool_names` has
@@ -1397,7 +1397,7 @@ task below adds an *Approach* of its own only where it departs from this.
 - **Preconditions, not gates.** A stage declares the upstream keys it needs and *skips* a record that
   lacks them, marking it. A run always completes. The only exception raised anywhere is
   `ConfigError`, before any record is read.
-- **Preconditions live in code** (P12) — beside the signature, not only in the spec's *skips when*
+- **Preconditions live in code** (§22) — beside the signature, not only in the spec's *skips when*
   column.
 - **One test module per stage** in `tests/stages/`, asserting that stage's row: it writes its key,
   writes nothing else, returns as many records as it got, and skips exactly the records its
@@ -1456,7 +1456,7 @@ that made it silent is a fact in one place with a test across it.
 turns — the check reported nothing on the shape it is most likely to see. Two defects in one: a
 `data_quality` check reading 0 on the common shape is worse than no check, because Requirement 22
 compares its count against `params.invalid_counts` and a zero reads as health; and the two ends were
-connascent by meaning (P13, P14) across a boundary neither may import, with every fixture
+connascent by meaning (§23, §24) across a boundary neither may import, with every fixture
 hand-writing `json.dumps([...])` so no test tied them.
 
 **Approach.** Move the separator to `record.py` and have both axes borrow it, then read the calls off
@@ -1466,7 +1466,7 @@ the segment after the last one. Rebuild every restating-turn fixture through
 **Acceptance criteria.** A turn carrying prose *and* the calls is a restatement. The crossing test
 fails when either end changes. § *The two axes* says four shared names, not three.
 
-**Source.** Requirement 18's neighbour — Requirement 22; § *The two axes*; AGENTS.md P13, P14, §8.
+**Source.** Requirement 18's neighbour — Requirement 22; § *The two axes*; AGENTS.md §23, §24, §8.
 
 **Verify.** `uv run pytest tests/stages -q -k tool_decision`.
 
@@ -1515,7 +1515,7 @@ and so earns a name at one caller (§4). Then delete the keys nothing reads.
 file and the path. `config/profiles/tool_decision.yaml` declares nothing without a reader, and
 § *Configuration* lists the readers.
 
-**Source.** Requirement 40, Requirement 43, AGENTS.md P12, P22; the T4 precedent for retired-corpus
+**Source.** Requirement 40, Requirement 43, AGENTS.md §22, §32; the T4 precedent for retired-corpus
 residue.
 
 **Verify.** `uv run pytest tests/stages -q`.
@@ -1542,7 +1542,7 @@ what makes the difference visible. `prompts.question` got the same treatment, na
 `final_label` shipped as a public method on `@final class ToolDecision`, used no `self`, and appeared
 in neither § *Profile*'s fourteen nor this plan — a conversion over a record that became a method
 because a method was the closest thing to hand. T13's note 5 had refused a fifteenth member for
-`redact_label` on P20 grounds, so the argument existed; this one arrived without it. I21 could not
+`redact_label` on §30 grounds, so the argument existed; this one arrived without it. I21 could not
 see it, because it compares the `Protocol` to the document and a protocol says nothing about what an
 implementation may add, and the runtime conformance test asserted containment rather than equality.
 
@@ -1559,7 +1559,7 @@ the tree and compares the surface of every class its façade exports to the prot
 public attribute. Both runtime conformance tests assert equality. Requirement 47 says why `Answer`'s
 satisfying model is `Call` and why the parsed form has a different name.
 
-**Source.** Requirement 47, § *Profile*; AGENTS.md §5, P20; I21's stated blind spot.
+**Source.** Requirement 47, § *Profile*; AGENTS.md §5, §30; I21's stated blind spot.
 
 **Verify.** `uv run pytest tests/guards/test_axis_surface.py -q`.
 
@@ -1603,7 +1603,7 @@ the copies against it. Then inline four functions and rename three.
 § *Profile* says which reader validates the shape. `ports.py` says why an encoder is not a port. No
 function in either axis is one expression with one caller and no exemption.
 
-**Source.** Requirement 31, Requirement 47, § *Profile*; AGENTS.md §4, §5, §8, P20.
+**Source.** Requirement 31, Requirement 47, § *Profile*; AGENTS.md §4, §5, §8, §30.
 
 **Verify.** `make check`.
 
@@ -1652,7 +1652,7 @@ records which justifications were struck. I21 compares the protocol's docstring,
 list cannot see.
 
 **Source.** `spec.md` § *The two axes*, § *PII, in two layers*, § *Configuration*, Decision 2;
-Requirements 18, 40, 47; P25, P31; AGENTS.md §7.
+Requirements 18, 40, 47; §35, §41; AGENTS.md §7.
 
 **Verify.** `uv run pytest tests/stages/test_text2text.py tests/guards/test_protocol_members.py -q`.
 
@@ -1726,7 +1726,7 @@ and `spoken_pii_forms`.
 and the fix is one import and one deletion."* That day has not come because the pin is `@v0.1.0` and
 the branch has not been tagged. Both `vi` and `en` tables are byte-identical across the two
 repositories today; the behaviour is not — the library raises `ToolkitError` and this repository
-raises `ConfigError`. AGENTS.md P32 is the rule that now names the standing comment as a finding
+raises `ConfigError`. AGENTS.md §42 is the rule that now names the standing comment as a finding
 rather than as its own excuse.
 
 **Approach.** In `agent-toolkit`: merge `spoken-forms` to `main`, cut a tag. Here: move the pin,
@@ -1741,7 +1741,7 @@ still raises `ConfigError` with the message it raises today. **The six compiled 
 before and after** — that is what proves D2 was honoured, and it is the only assertion in this task
 that is about behaviour rather than about names.
 
-**Source.** `../axis-module-shape/spec.md` D1, D2, D3 and § *Context* item 5; AGENTS.md P32, P14; I6;
+**Source.** `../axis-module-shape/spec.md` D1, D2, D3 and § *Context* item 5; AGENTS.md §42, §24; I6;
 T50, which scheduled it.
 
 **Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
@@ -1778,16 +1778,16 @@ it exists only to permit T56 and is worthless apart from it. The deviation is re
 imports nothing from its own package — generalised from *imports no `utils`*, because a `schema.py`
 importing `detectors.py` is the same defect under a new filename. Second half: for any module named
 `utils.py`, **every** top-level function must reference a name `schema.py` defines. Not *most* — a
-threshold would be a tuned literal in a guard with no measurement behind it (P25), and §6 says "and
+threshold would be a tuned literal in a guard with no measurement behind it (§35), and §6 says "and
 nothing else". Delete `test_the_scan_rejects_a_fourth_module`, which proves a rule that no longer
-exists, and add the two P29 proofs.
+exists, and add the two §39 proofs.
 
 **Acceptance criteria.** The new guard is red against both synthetic violations. It is green over
 `schema.py` in both packages. Its second half is **red** over both real `utils.py` — 2 of 16 and 5 of
-23 top-level functions touch a shape — so this task lands two annotated P30 exemptions naming T56 as
+23 top-level functions touch a shape — so this task lands two annotated §40 exemptions naming T56 as
 the fix, dated. `test_exemptions.py` then shows four standing exemptions against a ceiling of five.
 
-**Source.** `../axis-module-shape/spec.md` D4 and § *Invariants*; AGENTS.md §6, P28, P29, P30, and the
+**Source.** `../axis-module-shape/spec.md` D4 and § *Invariants*; AGENTS.md §6, §38, §39, §40, and the
 Conflicts entry *`§6`'s escape hatch vs a guard that closes it*.
 
 **Verify.** `make check`, and `test_exemptions.py` reports four exemptions rather than two.
@@ -1805,8 +1805,8 @@ either package.
 **Context.** The exemption §6 grants `utils.py` covers 2 of 16 top-level functions in
 `text2text/utils.py` and 5 of 23 in `tool_decision/utils.py`; the other 32 are a vocabulary table, two
 manifest readers, two JSON canonicalisers, turn rendering, answer arithmetic and annotation decoding.
-Three test files already import those internals directly, which is P9's design finding and the second
-consumer P5 asks for. Decision 14 refused this split on the grounds of *"three modules with one
+Three test files already import those internals directly, which is §19's design finding and the second
+consumer §15 asks for. Decision 14 refused this split on the grounds of *"three modules with one
 consumer each"* — a reason that was already false, and that the style reference named on `spec.md`
 line 3 contradicts by example.
 
@@ -1815,16 +1815,16 @@ both axes importing it (spec D6); `canonical_json` into `record.py`, with `recor
 which takes I24 from three call sites to one (spec D7); `text2text/` into `turns.py`, `detectors.py`
 and `modality.py`; `tool_decision/` into `answers.py`, `annotations.py`, `records.py` and `profile.py`.
 Every docstring travels with the code it documents, so the prose explaining a decision stays where the
-next reader hits it (§8). The two P30 exemptions T55 landed are deleted by this task, which is what
-P30 means by *shrinking*.
+next reader hits it (§8). The two §40 exemptions T55 landed are deleted by this task, which is what
+§40 means by *shrinking*.
 
 **Acceptance criteria.** I23 passes unchanged — both façades export the same set of names before and
 after. The three tests that reached into `utils.py` import from the module that owns each name.
 **No test's assertions change:** if one has to, the move was not a move and the task is wrong.
 
 **Source.** `../axis-module-shape/spec.md` D5, D6, D7 and § *The target layout*, which carries the
-per-name destination table and P8's deletion test for each new module; AGENTS.md §5, §6, P5, P8, P9,
-P10; I19, I23.
+per-name destination table and §18's deletion test for each new module; AGENTS.md §5, §6, §15, §18, §19,
+§20; I19, I23.
 
 **Verify.** `make check`. Then the byte check: run the smoke corpus before and after and compare
 `records.jsonl` and `metrics.json` byte for byte. §7 asks what proved behaviour did not change, and
@@ -1886,20 +1886,20 @@ naming why rather than a `TypeError` about keyword arguments.
 
 **Provenance became a parameter of `build_record`, which deleted two raises.** It arrived as
 `item["__provenance__"]`, a magic key one axis validated and one stage filled: connascence of meaning
-across a boundary neither side may import (P13), policed by two `ConfigError` branches and a test for
+across a boundary neither side may import (§23), policed by two `ConfigError` branches and a test for
 each. As a third argument the bad case cannot be spelled and mypy checks what a message used to
-explain (P22). This is a change to T13's landed surface, made here because T14 is the first caller and
+explain (§32). This is a change to T13's landed surface, made here because T14 is the first caller and
 the interface was wrong in a way only a caller could see.
 
 **And the item-scope raise is settled: counted, not raised.** The three raises T44 recorded are caught
 per item, and the offset and the message go to the edge as side output for the quarantine tier. What
 it gives up is written into § *Per-service contracts* rather than left implicit: where the
-*declaration* is wrong rather than the item — a manifest naming a label key no item carries — P23
+*declaration* is wrong rather than the item — a manifest naming a label key no item carries — §33
 would call that configuration scope and stop the run, and this instead reports twenty thousand counted
 items and no records. The stage cannot distinguish the two at item 1, so it reports the scope it can
 actually know. Requirement 43 holds at the level it is written about: **a run always completes.**
 
-`pipeline/params.py` lands with one caller. P5 asks for two or a written reason the second is
+`pipeline/params.py` lands with one caller. §15 asks for two or a written reason the second is
 imminent: T16 reads `enable_redact` and T17 reads a similarity threshold, both in this phase, and what
 the module holds is one rule — *a wrong declaration is a `ConfigError` before any record is read* —
 which is the rule both axes already keep their own copies of, for a reason that does not apply between
@@ -1978,7 +1978,7 @@ is side output returned to the edge, never written by the engine and never commi
 things had to be decided, and one of them is a defect the task would have shipped.
 
 **`redact_label` is the fifteenth member, and T13's own note said it would be.** It refused the member
-then on P20 grounds — *a member with no caller is a guess about a future one* — and named this task as
+then on §30 grounds — *a member with no caller is a guess about a future one* — and named this task as
 the caller. So the protocol, the count in both places I21 reads, the implementation and I23's own
 docstring all moved together. The alternative was a generic walk over the label's JSON inside
 `pii_check`, replacing every string it found: rejected because only the profile knows that a call's
@@ -2007,7 +2007,7 @@ has to pass for a clean record.
 **Layer two is a port, and the second one.** `ports.py` said *one port, because a port with no adapter
 is a guess about a future caller* and that sentence stands — what changed is that a model call opens a
 socket and a stage may not (I1), so the engine slices the window and the edge makes the call. Two
-adapters make the seam real (P20): the client `edge/bootstrap.py` builds in T27, and the stand-in
+adapters make the seam real (§30): the client `edge/bootstrap.py` builds in T27, and the stand-in
 every test in `make check` runs against. It reaches the stage through the `Engine`, because
 `(engine, records)` is the only channel a service has — which is how `QuestionStore` will arrive in
 T24. **No verifier is not confirmation by default:** every hit stays unverified and nothing is
@@ -2186,7 +2186,7 @@ how `invalid_votes: 0` comes to sit beside a null `final_prediction`, with nothi
 say which reading was wrong. So `answer_is_permitted(answer, record)` joins the protocol, with the
 caller that made it real — the same rule T16 applied to `redact_label` and T2 to `jury_slots`.
 Requirement 24 was reworded to say *answer space* rather than *answer schema*. The alternative was
-`jsonschema` in `pipeline/` under a P30 exemption, which buys a weaker check for a second exemption.
+`jsonschema` in `pipeline/` under a §40 exemption, which buys a weaker check for a second exemption.
 
 **T27 still owes Requirement 28, and T49 owes the cache.** The cross-border precondition is on
 *opening the engine* and there is no `open_engine` yet, so nothing enforces it today; `jury` is the
@@ -2238,7 +2238,7 @@ broken panel wearing a confident record's clothes: `triage` would route it away 
 should see it. A failed panel is *measured* rather than skipped, because `jury` wrote its key.
 
 **`method` names the estimator, not the distance.** The δ is already identified per record by the
-profile version in `provenance`, so a string repeating it would be P16 duplication; what varies
+profile version in `provenance`, so a string repeating it would be §26 duplication; what varies
 independently is the fold and the population, and `mean_1_minus_delta_over_valid_votes` says both.
 The rule to keep: a change to what these numbers mean changes this string.
 
@@ -2256,7 +2256,7 @@ measures them. This stage gets **exactly one** re-tuning pass after the pilot. A
 precision the pilot cannot establish gets **no quota**.
 
 **Acceptance criteria.** `reason` names which rule selected the record, so a quota can be audited.
-No numeric literal in the module (P25).
+No numeric literal in the module (§35).
 
 **Source.** `spec.md` § *Per-service contracts* row 6, Requirements 26 and 27; Decision 3.
 
@@ -2346,7 +2346,7 @@ tested, since neither is visible until T23 exists.
 **`enum` is a copy of the capture half, on purpose.** `answer_config().verdicts` is the one
 declaration; the record's copy is what keeps an answer legible against what was askable when it was
 asked. The cost is two statements of one tuple, and reading a *field* off an opaque axis type is the
-connascence `label_check` already has on `LabelCheck.name` (P14) — named in the module rather than
+connascence `label_check` already has on `LabelCheck.name` (§24) — named in the module rather than
 discovered.
 
 **`question_name` is a machine name and the record's drawing calls it *the short label an annotator
@@ -2375,7 +2375,7 @@ on two unique constraints, which is exactly the behaviour the two engines disagr
 rewritten under T3). The three tables carry `was_skipped` and `lead_time_seconds`: both are instruments
 the pilot reads, not bookkeeping.
 
-**Source.** `spec.md` § *The question store*; Decisions 6 and 7; T3's P26 row.
+**Source.** `spec.md` § *The question store*; Decisions 6 and 7; T3's §36 row.
 
 **Verify.** `uv run pytest tests/stages -q -k store` (SQLite in `tmp_path`); `make integration`.
 
@@ -2393,7 +2393,7 @@ tool's envelope, they answer nothing, and the pilot reads them as instruments. R
 and edge* says the engine returns rows and the edge writes them, which reads like side output.
 Requirement 32 says `publish` writes *through a port supplied at the edge* **and** records the receipt
 on the record, and only the port shape does both: a receipt names a write that has already happened,
-so a stage that merely returned rows could not write its own key and P16 would have the edge writing
+so a stage that merely returned rows could not write its own key and §26 would have the edge writing
 `human_review.publish`. Two members: `stored_questions` returns the receipt, `answers_to` returns the
 answers. `Engine.question_store` is deliberately **not** added — a field with no reader is the guess
 Decision 17 deleted `MediaResolver` for, and T24 is its first reader.
@@ -2418,7 +2418,7 @@ With no Postgres attached, `make integration` reports 22 skipped rather than gre
 
 **The schema comes from the migration, never `create_all`.** Every test's database is built by
 `alembic upgrade head`, so a column the migration forgot fails here rather than in the pilot, and
-`alembic check` runs as a test — P31 over a schema that is written in two places.
+`alembic check` runs as a test — §41 over a schema that is written in two places.
 
 ---
 
@@ -2459,7 +2459,7 @@ said *the inverse of the capture half*; the half emits three controls and it ans
 a stated precondition — *called only where the verdict is `incorrect`* — that no caller could
 satisfy, because nothing told a caller the verdict. The alternative was a seventeenth member, and it
 is the worse one: two members for one inverse is a shallower interface for the same functionality
-(P6), and the caller would have had to combine them. `AnnotationResponse` is **concrete** in
+(§16), and the caller would have had to combine them. `AnnotationResponse` is **concrete** in
 `profiles/base.py` rather than a fourth opaque alias, because a verdict, a correction and a note are
 the same three things for every profile — only the correction is the profile's own vocabulary, and
 it alone is typed `Answer`. `ports.JurorAnswer` is the same shape of value on the other side.
@@ -2514,7 +2514,7 @@ count was bounded by the run until this note was written.
 **The store double is a real second adapter.** `AStore` in `test_publish.py` and `AnAnsweredStore`
 in `test_annotator_answers.py` keep the port's promises; tests in both files run both stages
 against `SqlQuestionStore` on both backends, so *the two fit* is asserted rather than assumed
-(P20).
+(§30).
 
 ---
 
@@ -2624,8 +2624,8 @@ task with an `id`, and `annotations.list(task_id)` returning objects with `resul
 
 **`AnnotationTool` is declared in the sync and not in `ports.py`.** The engine never calls it — a
 port is what the engine demands of the edge, and this is the edge talking outward, so the
-abstraction belongs to the module that consumes it (P18). Two adapters, the SDK client and the
-double, so it is a seam and not indirection (P20).
+abstraction belongs to the module that consumes it (§28). Two adapters, the SDK client and the
+double, so it is a seam and not indirection (§30).
 
 **A `publication` row is committed as its task is created, one at a time.** The batched alternative
 is faster and wrong: a failure at question five rolls back the rows for tasks one to four that are
@@ -2657,7 +2657,7 @@ number too.
 
 **Goal.** `open_engine` composes a run, and one module is the only place a file is read or written.
 
-**Context.** `edge/bootstrap.py` is the composition root (P19) — the only builder of an `Engine`.
+**Context.** `edge/bootstrap.py` is the composition root (§29) — the only builder of an `Engine`.
 It is also the only place the three ports can be handed over, and where Requirement 28's cross-border
 precondition is checked; the adapters behind two of them are **T49**, not this task.
 `edge/policy.py` turns `config/<axis>/*.yaml`, `params.yaml` and prompts into declarations.
@@ -2686,7 +2686,7 @@ signature — a caller who already holds the declarations, in a request body or 
 a disk through this module. The pair check sits in the builder rather than the reader for the same
 reason, which means it runs twice on the reading path: once to know which manifest to open, and once
 where a request body full of declarations would otherwise walk past it. The store follows the same
-line — `open_engine` constructs the pool, because P19 says a connection is reached for in one place,
+line — `open_engine` constructs the pool, because §29 says a connection is reached for in one place,
 and `composed_engine` attaches nothing, because *no filesystem anywhere* has to cover a backing
 service or it means one layer of the world rather than the world.
 
@@ -2706,7 +2706,7 @@ really point at `pilot.yaml` and which file was read is exactly what a run manif
 **The library's default for a file it cannot read is the wrong one here.** `read_yaml` answers `{}`,
 `read_txt` answers `""` and `read_jsonlines` answers `[]` — right for a tool reading a corpus, and for
 configuration it means a missing `params.yaml` is an engine that holds no thresholds and says nothing
-about it. Both readers check the path first, so P23's *stop before the first record* holds.
+about it. Both readers check the path first, so §33's *stop before the first record* holds.
 
 **Two reads per YAML file, on purpose.** `agent-toolkit` owns YAML (I6) and parses from a path, so the
 text a digest is taken over is read separately from the parse. Four small files once per run buys a
@@ -2760,7 +2760,7 @@ module:
 
 1. **`ports.py` claims two adapters make a seam real, and there is one** — the stand-in every test in
    `make check` runs against. `PersonalDataVerifier` has had a caller since T16 and `JuryPanel` since
-   T19, and neither has a client. Until this lands, P20's *two adapters* is a claim and P26's parity
+   T19, and neither has a client. Until this lands, §30's *two adapters* is a claim and §36's parity
    gate is the Smoke rung alone.
 2. **The panel is not cached.** Decision 3 and § *Per-service contracts* both say `jury` costs money
    per record and **must be cached** — it is the entire reason `ai_review` is three stages rather than
@@ -2785,7 +2785,7 @@ same check covers layer two. `make check` still makes no network call, so the ca
 against the stand-in.
 
 **Source.** `spec.md` § *Per-service contracts* (`ai_review`), § *Out of Scope*, Requirements 28 and
-43; Decision 3; P20, P26; the T19 landed note.
+43; Decision 3; §30, §36; the T19 landed note.
 
 **Verify.** `uv run pytest tests/shells -q -k adapter`; `uv run pytest -q -m integration` for the live
 panel, which is Smoke's rung and not `make check`'s.
@@ -2834,7 +2834,7 @@ rewrite, not a line to delete.
 
 **Approach.** Replace rather than add. Two embedders is two sets of near-duplicate groups and a
 `near_duplicate_cosine` that means different things depending on which one ran — one key with two
-writers (P16), wearing a configuration hat. So `model2vec` leaves `pyproject.toml`, `static_model`
+writers (§26), wearing a configuration hat. So `model2vec` leaves `pyproject.toml`, `static_model`
 goes, and `static_encoder` builds a hosted encoder in its place. The modality does not change: it is
 handed an `Encoder` and has never known where one comes from, which is what I1 bought.
 
@@ -2856,7 +2856,7 @@ history. Nothing about how it is read changes — the resolver reads the same pa
 through that endpoint and downloads nothing. `make check` still makes no network call and still passes,
 because every test injects its own encoder. A deployment whose file is absent gets a `ConfigError` at
 composition naming the path it looked at, not a stack trace at the first vector: an embedder is a
-resource a deployment attaches (P25), and an absent one is a configuration fault before the first
+resource a deployment attaches (§35), and an absent one is a configuration fault before the first
 record rather than a failure part-way through a stage. The committed tree holds the `.example` and no
 key, which `tests/guards` can assert as cheaply as it asserts the placeholder map is ignored (I13).
 `near_duplicate_cosine` is marked provisional again, with what re-measures it on the new model
@@ -2871,7 +2871,7 @@ endpoint is inside the border is a fact about the deployment and not about this 
 is a line here and not a precondition.
 
 **Source.** `spec.md` § *Configuration*, § *Versions*, Requirement 23, Requirement 28, Decision 23;
-`AGENTS.md` I6, P25, P30, §9.
+`AGENTS.md` I6, §35, §40, §9.
 
 **Verify.** `make check`; `uv run pytest -q -m integration` for one run of `duplicate_check` over a
 handful of records against the real endpoint, which is Smoke's rung and not `make check`'s.
@@ -2914,7 +2914,7 @@ the model file out, and say so where the next reader looks for it.
 *The laziness paragraph inverts rather than moves.* Today's docstring argues that nothing is loaded at
 composition because a download is expensive and most runs never embed. Hosted, there is nothing to
 load — but the config file **is** read at composition, on purpose, so a deployment whose file is
-missing stops before the first record (P23). That is the opposite claim in the same place, and editing
+missing stops before the first record (§33). That is the opposite claim in the same place, and editing
 the old sentence would preserve a design that no longer exists. What does survive is the caching
 question: `lru_cache` held a loaded model, and the hosted analogue is a per-document cache, without
 which a re-run of `duplicate_check` re-pays the whole corpus — the same argument T49 makes for the
@@ -2974,7 +2974,7 @@ what holds the pattern, and it was proved red against the directory form.
 
 **One test changed what it reads.** `test_the_configuration_this_repository_ships_composes` used to
 open `config/` directly and now copies it, attaching the `.example` as the endpoint file — because
-the shipped configuration genuinely does not compose until a deployment attaches one, which is P25
+the shipped configuration genuinely does not compose until a deployment attaches one, which is §35
 and not a gap. It gained a second job in exchange: an example that stops naming what the resolver
 reads now fails here rather than on somebody's first run.
 
@@ -3049,7 +3049,7 @@ DEBUG per record, because twenty thousand records times fifteen stages is a log 
 `POST /data-quality/pii-check` produces equal records. Adding a stage to `flow.py` adds a subcommand
 with no edit to `cli.py`. A long run emits progress while running, not only after it stops.
 
-**Source.** `spec.md` § *Running it*, § *Observability*, Requirement 46; I15; `AGENTS.md` P27.
+**Source.** `spec.md` § *Running it*, § *Observability*, Requirement 46; I15; `AGENTS.md` §37.
 
 **Verify.** `uv run pytest tests/shells -q`; run the CLI over a fixture and watch the output.
 
@@ -3107,7 +3107,7 @@ criterion this task was most at risk of failing quietly.
 *`Profile` is fifteen members, not sixteen.* `modality: str` named the pair as a string off the
 profile's own manifest, and the criterion said the count stays. It cannot: a subclass inherits
 `modality_name` from the object that actually read the content, so keeping `modality` would leave one
-instance carrying two attributes with one value from two manifests — P16's *one key, one writer*
+instance carrying two attributes with one value from two manifests — §26's *one key, one writer*
 broken on purpose, and broken in the one place the whole task exists to make consistent. It had no
 production reader either; `edge/bootstrap.py` reads `Manifest.modality`, which stays, because
 `modality:` is still what says which manifest to open. What the criterion was really protecting —
@@ -3125,7 +3125,7 @@ per module. Two namespaces, one object.
 **One object needed a name, and Python has no intersection type.** `composed_engine` builds a single
 instance and registers it twice, so the builder has to say *a thing that is both* — `ProfileInConcept`,
 a `Protocol` inheriting both axes, in `edge/bootstrap.py`. A shape in a `LOGIC ·` module is §6 giving
-way to P18: it has exactly one consumer, and either `base.py` would have made one axis's contract
+way to §28: it has exactly one consumer, and either `base.py` would have made one axis's contract
 mention the other. I21 does not see it, which is correct — it is not a third axis.
 
 **`stamped_version` became two functions.** It took `Modality | Profile` and read `.name` off either,
@@ -3140,16 +3140,16 @@ either an `__init__` on the protocol — which would put `Encoder` into every fu
 contract — or a cast. What replaced it costs nothing at runtime: `mypy --strict` on a second
 `TYPE_CHECKING` stub in `profiles/tool_decision/utils.py` proving one object satisfies both
 protocols, and `test_every_built_profile_is_built_on_a_built_modality` over the two literal maps
-(P28 — the rule fails the build).
+(§38 — the rule fails the build).
 
 **I5 was going quiet, which is the failure a renamed rule always has.** The scan looked for
 `name`/`version`/`modality` in a class body; after the split it would have passed a class pinning
-`modality_name = "text2text"` while still reporting green. Seven names now, four new P29 violations
+`modality_name = "text2text"` while still reporting green. Seven names now, four new §39 violations
 beside the three that were there.
 
 **Decision 24 is rewritten rather than annotated**, and § *The two axes* with it: both said the
 containment was a declaration *for now*, and a document that describes the design it used to have is
-the one thing P31 cannot catch. What the reversal cost is written where the decision is, because the
+the one thing §41 cannot catch. What the reversal cost is written where the decision is, because the
 four phases it waited is a fact about why the identity is prefixed and not an embarrassment to hide.
 
 ---

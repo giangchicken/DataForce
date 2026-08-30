@@ -1,453 +1,370 @@
 # Conventions
 
-Rules for anyone — person or agent — writing code here. General enough to copy into
-another repo. Every rule has a test you can apply without asking me.
+Rules for anyone — person or agent — writing code here. General enough to copy into another
+repo. Every rule has a test you can apply without asking me. `§1`–`§9` are how you work;
+`§10`–`§42` are the shape the code ends up in. One series, so a rule is cited by number alone.
 
-## 1 · Think before coding
+## 1 · Think before you code
 
-State your assumptions. If two readings of the request produce different code, say both
-and pick one out loud — do not pick silently. If something is unclear, name what is
-confusing and ask. If a simpler approach exists, say so before writing the complex one.
-Push back when warranted; a reason I can check beats agreement.
+Say your assumptions out loud. If the request reads two ways, say both and pick one — never
+pick silently. If something is unclear, name the confusing part and ask. If a simpler way
+exists, say so before writing the complicated one. A reason I can check beats agreement.
 
-## 2 · Minimum code that solves the problem
+## 2 · Write the least code that solves it
 
-Nothing speculative. No features beyond what was asked. No abstraction for a single use.
-No flexibility or configurability that was not requested. No error handling for a state
-no caller can reach. If you wrote 200 lines and it could be 50, rewrite it.
+Nothing built for a future that has not arrived. No extra features. No abstraction for one use.
+No settings nobody asked for. No error handling for a state no caller can reach. If you wrote
+200 lines and 50 would do, write the 50.
 
-The check: *would a senior engineer call this overcomplicated?* If yes, simplify.
+**Check:** would a senior engineer call this overcomplicated? If yes, cut it.
 
-## 3 · Surgical changes
+## 3 · Change only what was asked
 
-Touch only what the request requires. Do not improve adjacent code, comments, or
-formatting. Do not refactor what is not broken. Match the existing style even where you
-would do it differently.
+Touch what the request needs and nothing else. Do not tidy nearby code or refactor working code.
+Match the style already there, even where you would write it differently. Delete what **your**
+change left unused; leave pre-existing dead code alone and mention it instead.
 
-Remove imports, variables and functions that **your** change orphaned. Leave
-pre-existing dead code alone — mention it instead.
+**Check:** every changed line traces back to the request.
 
-The test: every changed line traces to the request.
+## 4 · When something deserves to be a function
 
-## 4 · When to create a function
-
-**Create one when it has two or more callers, or when it holds a decision a reader needs
+**Make one when two or more places call it, or when it holds a decision a reader needs to see
 named — a check, a branch, a raise, a rule.**
 
-One expression with one caller is not a function. Inline it. A name that only forwards
-an argument costs a file to open and returns nothing for it.
+One expression with one caller is not a function. Inline it — a name that only forwards an
+argument costs a file to open and gives back nothing. These earn a name at a single caller:
 
-These are worth a name at a single caller, and nothing else is:
-
-| Reason | Why the name earns its keep |
+| Reason | Why the name pays for itself |
 |---|---|
-| Interface member | a protocol / ABC / base-class method — deleting it deletes the polymorphism |
-| Registered by name | a callback or check whose name appears in output, config, or metrics |
+| Interface member | a protocol / ABC / base-class method — delete it and the polymorphism goes |
+| Called by name | a callback or check whose name shows up in output, config or metrics |
 | Cached | `lru_cache` and friends — the decorator *is* the function |
-| Closure factory | it returns a function; that is not inlinable |
-| Not one expression | a loop, a `try/except`, a generator, an early return |
-| A test calls it directly | the behaviour is proved through this name |
+| Returns a function | a closure factory; you cannot inline that |
+| More than one expression | a loop, a `try/except`, a generator, an early return |
+| A test calls it | the behaviour is proved through this name |
 
-Splitting one long function into named steps is allowed and often right — but each step
-must be nameable as a *result*, not as "part 2 of the thing above".
+Splitting a long function into named steps is often right — but each step must be nameable as a
+**result**, not as "part 2 of the thing above".
 
 ## 5 · How to name things
 
-**A name states what it returns, not the operation that produced it, and is long enough
-to be unambiguous read alone at the call site.**
+**A name says what comes back, not what was done to get it, and is long enough to be clear read
+alone at the call site.**
 
 Four ways a name fails:
 
-- **A bare operation names no object.** `of`, `parse`, `load`, `render`, `adapt`,
-  `measure`, `export`, `embed`, `drift` — *parse what, into what?* Name the result:
-  `read_manifest`, `catalog_to_tools`, `create_training_example`.
-- **A relational suffix standing in for the object.** `share_of`, `cell_of`, `data_for`.
-  `_of` and `_for` name the relation to an argument the signature already shows, and the
-  noun in front is then free to be wrong without looking wrong. Both of those were real:
-  `cell_of(scores, floors)` returned a *bucket*, which is a cell's name and not a cell,
-  and `share_of(record_id)` returned a position in `[0, 1)` that read at the call site as
-  one share being compared against another. Where the noun already is what comes back the
-  suffix adds nothing — `answer_id_for(annotation_id)` returns an answer id either way —
-  so a suffix is either redundant or hiding something. Correct the noun, and keep the
-  suffix where it reads: `share_of` became `sampling_position` because a position is not
-  a share, and `cell_of` became `bucket_for` because a bucket is what comes back —
-  `bucket = bucket_for(scores, floors)` is the call site saying it twice, which is the
-  point. What that one could *not* be is `triage_for`, however well it reads: `triage` is
-  already the module, the stage key, the service function and a constant in that file,
-  which is the next bullet.
-- **A one-word abbreviation of the concept.** Too short to mean anything on its own.
-- **A name shared with a step, stage, command, or table in the system.** It makes every
-  sentence about the code ambiguous. If `load` is a pipeline stage, no function is called
-  `load`.
+- **A bare verb names no object.** `of`, `parse`, `load`, `render`, `measure`, `export`, `embed`
+  — *parse what, into what?* Name the result: `read_manifest`, `create_training_example`.
+- **`_of` or `_for` standing in for the object.** They name the relation to an argument the
+  signature already shows, leaving the noun in front free to be wrong without looking wrong.
+  `cell_of(scores, floors)` returned a *bucket*; `share_of(record_id)` returned a position in
+  `[0, 1)`. Fix the noun: `bucket_for`, `sampling_position`. Where the noun already is what comes
+  back the suffix is harmless (`answer_id_for`) — so it is either redundant or hiding something.
+- **A one-word shortening of the concept.** Too short to mean anything alone.
+- **A word already used for a step, stage, command or table.** Every sentence about the code
+  turns ambiguous. If `load` is a pipeline stage, no function is called `load`.
 
-Test: read the call site with nothing else on screen. If you cannot say what comes back,
-the name is too short. A private `_` prefix is not an excuse — you still have to read it.
-Second test, for the fourth failure: say the name and the return type as one sentence.
-*`cell_of` returns a `str`* is not a sentence; *`placed_bucket` returns a bucket* is.
+**Check:** read the call site with nothing else on screen. If you cannot say what comes back, the
+name is too short — a leading `_` is no excuse. For the fourth failure, say the name and the
+return type as one sentence: *`cell_of` returns a `str`* is not a sentence; *`placed_bucket`
+returns a bucket* is.
 
-**No guard enforces this section**, and that is the reason to read it twice rather than a
-gap to fill. Every other rule in this file that a script can check has one (P28), but a
-check here would have to allow `answer_id_for` while refusing `share_of` — the difference
-is whether the noun is the returned object, which is a judgement and not a pattern. So §5
-is caught in review or it is not caught.
+**No guard enforces this section** — a check would have to allow `answer_id_for` and refuse
+`share_of`, and that difference is a judgement, not a pattern. So `§5` is caught in review or it
+is not caught. Read it twice.
 
 ## 6 · How to organise files
 
-**One module, one job, and the job is one of four kinds. The first word of the module
-docstring says which:**
+**One module, one job, and the job is one of five kinds. The first word of the module docstring
+says which:**
 
 - `DEFINITION ·` one noun and its shape. Types, schemas, constants.
 - `LOGIC ·` the conversions and computations over that noun.
 - `STEP ·` serves exactly one step of the flow, and nothing else.
 - `TOOL ·` not in the flow at all.
+- `façade ·` an `__init__.py` that re-exports and holds nothing of its own.
 
 Then:
 
-- **A shape is a shape; turning one thing into another is logic.** They change for
-  different reasons, so they are different files: `schema.py` holds the types and
-  schemas, `utils.py` holds the conversions over them. One of each per feature folder.
-- **Group what changes together.** A reader follows a *path* — how does one input become
-  one output. A file per concern charges ten navigations for one step. Everything one
-  step does belongs in that step's module.
-- **Do not split a module until a second consumer needs half of it.** A module with
-  exactly one caller is that caller's code, not a module.
-- **Do not make a consumer depend on what it does not use.** If twenty things live in one
-  module and each consumer needs one, editing any of them puts every consumer in the
-  blast radius. Split by the boundary along which consumers actually import.
+- **A shape is a shape; turning one thing into another is logic.** `schema.py` holds the types,
+  `utils.py` the conversions over them. One of each per feature folder.
+- **Group what changes together.** A reader follows one input to one output; a file per concern
+  charges ten jumps for one step.
+- **Do not split until a second consumer needs half of it.** A module with one caller is that
+  caller's code, not a module.
+- **Do not make a consumer depend on what it does not use.** Twenty things in one module puts
+  every consumer in the blast radius of every edit. Split where consumers actually import.
 - **Name a module for its noun or its job**, never `helpers.py`, `common.py`, `misc.py`.
-  `utils.py` is the one allowed exception, and only for conversions over the shapes in
-  the `schema.py` beside it.
-- **`§5` applies to filenames.** A module inside a feature folder is named for what it
-  produces, and the test is `§5`'s: read the import with nothing else on screen and say what
-  comes back. When every module in a folder names a result, the folder listing is that
-  feature's table of contents and its façade re-exports one name from each.
-- **`utils.py` is where a feature starts, not where it ends.** The exemption above is for
-  conversions over the shapes in the `schema.py` beside it, and it is countable: how many of
-  the module's top-level functions mention a shape from that `schema.py`? When most of them
-  do not, the module is holding something else, the exemption has stopped covering it, and
-  the bullet above applies to whatever is left. A vocabulary table, a config reader and a
-  serialiser are not conversions over the shapes beside them — they are three modules that
-  have not been named yet.
-- **Declare the import direction once and never reverse it.** Write it in the top-level
-  package docstring — *these packages may import the engine; the engine may not import
-  them* — and enforce it with a test, not with discipline.
+  `utils.py` is the one exception, and only for conversions over the shapes in the `schema.py`
+  beside it.
+- **`§5` applies to filenames.** Read the import with nothing else on screen and say what comes
+  back. When every module names a result, the folder listing is that feature's table of contents.
+- **`utils.py` is where a feature starts, not where it ends.** The exception is countable: how
+  many top-level functions mention a shape from that `schema.py`? When most do not, it holds
+  something else — a vocabulary table, a config reader and a serialiser are three unnamed modules.
+- **Declare the import direction once and never reverse it.** Write it in the top-level package
+  docstring — *these packages may import the engine; the engine may not import them* — and
+  enforce it with a test, not with discipline.
 
 ## 7 · Verify, then report
 
-Define success as something runnable before you start: *write the failing test, then make
-it pass.* "Add validation" is not a goal; "invalid input raises, proved by a test" is.
+Decide what success is, as something you can run, before you start: *write the failing test, then
+make it pass.* "Add validation" is not a goal; "invalid input raises, proved by a test" is.
 
-- Add or change a test whenever behaviour changes. The test must prove the new behaviour,
-  not merely execute the new code.
-- Run the focused check, then the project's full check. Fix what they catch without
-  growing scope.
-- If behaviour must not change, say what proved that — a byte-identical output, an
-  unchanged golden file, the same test count passing.
-- Report what you ran and what it said. If something was skipped or is unverified, say
-  so plainly. Never describe unrun code as working.
+- Add or change a test whenever behaviour changes. It must prove the new behaviour, not merely
+  run the new code.
+- Run the focused check, then the project's full check. Fix what they catch without growing the
+  job.
+- If behaviour must not change, say what proved it — identical bytes, an unchanged golden file,
+  the same test count passing.
+- Report what you ran and what it said. If you skipped something, say so. Never call unrun code
+  working.
 
 ## 8 · When a rule is wrong
 
-Rules lose to reasons. If a rule makes the code worse here, break it — and record the
-break where the next reader will hit it: a sentence in the module docstring, and in the
-spec if there is one. Two rules that disagree in one place is a fact about the design and
-belongs written down, not resolved silently.
+Rules lose to reasons. If a rule makes the code worse here, break it — and write the break where
+the next reader will hit it: the module docstring, and the spec if there is one. Two rules
+disagreeing in one place is a fact about the design; write it down rather than settling it
+silently.
 
 ## 9 · Working agreement
 
 - One task at a time. Finish it, verify it, commit it, then tell me to push. I push.
-- Commit messages say **why**, not what the diff already shows: the alternative not
-  taken, the cost paid, the rule deviated from.
-- Never commit anything internal or personally identifying — this repo is public. No
-  absolute paths, no credentials, no hostnames. Test fixtures are invented, never
-  extracted from real data.
+- Commit messages say **why**, not what the diff already shows: the option not taken, the cost
+  paid, the rule bent.
+- Never commit anything internal or personally identifying — this repo is public. No absolute
+  paths, no credentials, no hostnames. Test fixtures are invented, never taken from real data.
 - Never write a live key or token into a file. Environment variables only.
 
 ---
 
 # Design Principles
 
-`§1`–`§9` above govern how a change is made. `P0`–`P31` below govern the shape the code
-ends up in. They are numbered separately so both can be cited in one review.
+`§1`–`§9` govern how a change is made. `§10`–`§42` govern the shape the code ends up in.
 
-Every principle traces to a published source, named inline. Where sources disagree, the
-disagreement is stated rather than hidden — per `§8`. Each principle ends with **Check:**,
-the way you tell whether it holds. A principle with no check is a preference, and
-preferences go in a PR comment, not here.
+Every principle traces to a published source, listed at the end. Where sources disagree, the
+disagreement is written down rather than hidden (`§8`). Each ends with **Check:** — how you tell
+whether it holds. A principle with no check is a preference, and preferences go in a PR comment.
 
-## Part 0 · Vocabulary
+## Part 0 · Words we agree on
 
-Design arguments waste time when two people mean different things by the same word.
+Design arguments waste time when two people mean different things by one word.
 
-| Term | Meaning here | Source | Don't say |
-|---|---|---|---|
-| **Module** | Anything with an interface and an implementation. Deliberately scale-agnostic: a function, a class, a package, a service. | Parnas 1972; Ousterhout 2018 | unit, component |
-| **Interface** | Everything a caller must know to use it correctly — signature, invariants, ordering constraints, error modes, required configuration, performance characteristics. Not just the type signature. | Ousterhout 2018 | API, signature |
-| **Depth** | How much functionality sits behind how little interface. Interface complexity is the cost the caller pays; functionality is the benefit they get. | Ousterhout 2018 | — |
-| **Seam** | A place where behaviour can be changed without editing in that place. | Feathers 2004 | boundary |
-| **Adapter** | A concrete implementation sitting at a seam. A role, not a substance — an in-memory fake and a production client are both adapters. | Cockburn, Ports & Adapters | — |
-| **Connascence** | Two things are connascent when changing one forces you to change the other. Measured on three axes: strength, locality, degree. | Page-Jones 1992 | "coupling" (too coarse) |
+| Term | What it means here | Don't say |
+|---|---|---|
+| **Module** | Anything with an interface and an implementation — a function, a class, a package, a service. Size deliberately unspecified. | unit, component |
+| **Interface** | Everything a caller must know to use it correctly: signature, invariants, ordering, error modes, required configuration, speed. Not just the types. | API, signature |
+| **Depth** | How much it does, divided by how much you must learn to call it. | — |
+| **Seam** | A place where behaviour can change without editing in that place. | boundary |
+| **Adapter** | A concrete thing plugged into a seam. A role, not a substance — a fake and a production client are both adapters. | — |
+| **Connascence** | Two things are connascent when changing one forces you to change the other. Three axes: strength, locality, degree. | "coupling" (too vague) |
 
-**P0.** If a design discussion produces the words *component*, *service* or *boundary*
-without a referent, restate it using the table above before continuing. Consistent
-language is the whole point; a term nobody uses consistently is worse than no term.
+**§10. Use these words, or define the one you want.**
+A word nobody uses the same way is worse than no word.
+**Check:** every term in the argument is in the table, or defined on the spot.
 
 ## Part 1 · Decomposition: where the lines go
 
-**P1. Do not decompose along the flow of processing.**
-Parnas's central finding in *On the Criteria To Be Used in Decomposing Systems into
-Modules* (CACM, 1972) is that starting from the flowchart is almost always wrong. Steps in
-a pipeline make bad module boundaries because a design decision usually spans several
-steps, so a change lands in all of them. Ousterhout names the same failure **temporal
-decomposition** — splitting by the order in which things happen rather than by what a
-module knows.
-**Check:** for each module, name the change that would touch it *alone*. If every
-realistic change touches three modules in a row, the lines are drawn on the flowchart.
-*See the conflicts section — this one argues with `§6`.*
+**§11. Do not split along the flow of processing.**
+One decision usually spans several steps, so splitting by step makes every change land in three
+files. Ousterhout calls it *temporal decomposition*.
+**Check:** name the change that touches each module *alone*. If every realistic change touches
+three modules in a row, the lines are on the flowchart. *Argues with `§6` — see Conflicts.*
 
-**P2. Decompose by the decisions most likely to change.**
-Parnas's alternative: list the difficult or volatile design decisions first, then give each
-one a module whose job is to hide it. Encoding format, storage engine, wire protocol,
-retry policy, pricing rule — each is a secret one module keeps.
-**Check:** every module can answer "what do you hide?" in one sentence. A module that hides
-nothing is not a module, it is a namespace.
+**§12. Split by the decisions most likely to change.**
+Encoding format, storage engine, wire protocol, retry policy, pricing rule — each is a
+secret one module keeps.
+**Check:** every module answers "what do you hide?" in one sentence. A module that hides
+nothing is a namespace.
 
-**P3. A module's interface should reveal as little as possible about its inside.**
-Information hiding. Its opposite is **information leakage**: one design decision duplicated
-across several modules. Leakage does not need a shared import — knowing the file format, or
-knowing that A must be called before B, is leakage through an implicit interface.
-**Check:** if you change the module's internal representation, does anything outside it
-need editing?
+**§13. An interface shows as little of the inside as possible.**
+The opposite is leakage, and it needs no shared import: knowing the file format, or that A
+must run before B, leaks through an implicit interface.
+**Check:** change the internals. Does anything outside need editing?
 
-**P4. Group by domain first, technical kind second.**
-Package-by-feature keeps things that change together in one place, giving high cohesion and
-low coupling by construction; package-by-layer gives the opposite, because a package
-holding every controller in the system has nothing in common except its shape. Martin's
-*Screaming Architecture* states the test: the top-level directory listing should tell a
-newcomer what the system is about, not which framework built it.
-**Check:** show the top two levels of the source tree to someone unfamiliar with the
-project. If they can name the domain, it passes. If they can only name the framework, it
-fails.
+**§14. Group by domain first, technical kind second.**
+A package holding every controller in the system has nothing in common but its shape.
+**Check:** show the top two levels of the tree to someone new. Naming the domain passes;
+naming only the framework fails.
 
-**P5. Split when a second consumer needs half of it, not before.**
-A module split in anticipation of a caller that never arrives costs the indirection forever
-and returns nothing. Same rule as `§6`, stated at package scale.
-**Check:** every extracted module has at least two callers, or a written reason why the
-second is imminent.
+**§15. Split when a second consumer needs half of it, not before.**
+A split for a caller that never arrives costs the extra jump forever and returns nothing.
+**Check:** every extracted module has two callers, or a written reason the second is
+imminent.
 
 ## Part 2 · Interfaces and depth
 
-**P6. Prefer deep modules: much functionality, small interface.**
-Ousterhout's canonical example is the Unix file API — a handful of calls hiding disk
-layout, permissions, caching and concurrency, with the implementation rewritten repeatedly
-over decades while the signatures stayed put.
-**Check:** ask what a caller must learn versus what they get. If the interface is nearly as
-complex as the implementation, the module is shallow and probably not earning its place.
+**§16. Prefer deep modules: a lot behind a small interface.**
+The Unix file API hides disk layout, permissions, caching and concurrency behind a handful of
+calls, rewritten inside for decades while the signatures stayed put.
+**Check:** weigh what a caller must learn against what they get. An interface nearly as
+complicated as its implementation is shallow.
 
-**P7. Depth is a property of the interface, not the implementation.**
-A deep module can be built internally from small swappable parts; they just do not surface
-to callers. A module may have internal seams its own tests use, and one external seam at
-its interface.
-**Caution:** Ousterhout defines depth as roughly the ratio of implementation complexity to
-interface complexity, which taken literally rewards a bloated implementation. Read it as
-*leverage per unit of interface learned*, not as a line-count ratio.
+**§17. Depth is about the interface, not the implementation.**
+A deep module may be built inside from small swappable parts; they just do not reach the
+caller.
+**Caution:** read depth as *leverage per unit of interface learned*. As a literal ratio it
+would reward a bloated implementation.
 
-**P8. The deletion test.**
-Before adding a module, imagine deleting it. If complexity disappears with it, it was a
-pass-through and should not exist. If the same complexity reappears in every caller, it
-earns its keep. Ousterhout flags pass-through methods and pass-through variables as red
-flags for exactly this reason. This is `§4` applied one level up.
-**Check:** the PR description answers the deletion test in one sentence.
+**§18. Delete it in your head first.**
+Imagine the module gone. If nothing gets harder, it was a pass-through — do not add it. If
+every caller has to do the work itself, keep it. This is `§4` one level up.
+**Check:** the PR says which one, in one sentence.
 
-**P9. The interface is the test surface.**
-Callers and tests cross the same seam. If a test must reach past the interface to set
-something up or observe a result, the module is the wrong shape — change the shape rather
-than reaching through it.
+**§19. The interface is the test surface.**
+Callers and tests cross the same seam; a test that must reach past it is telling you the
+shape is wrong.
 **Check:** no test imports a module's internals. If one must, that is a design finding, not
 a test problem.
 
-**P10. Expose narrow, caller-specific interfaces.**
-Interface Segregation, from SOLID. No caller should depend on members it never calls,
-because every member it does not call is a reason it can be forced to change. `§6`'s
-blast-radius rule is the file-level version of this.
-**Check:** for each interface, list which callers use which members. Two callers with
-disjoint member sets is a signal to split.
+**§20. Give each caller a narrow interface.**
+Every member a caller does not call is still a reason it can be forced to change.
+**Check:** list which callers use which members. Two callers with no overlap is a signal to
+split.
 
-**P11. Design it twice.**
-Ousterhout's most transferable practice: for any interface that matters, produce two or
-three genuinely different designs before choosing — not variations, different shapes. He
-reports that his second design for the Tk toolkit API beat his first.
+**§21. Design it twice.**
+Two or three genuinely different shapes before you choose — variations do not count.
 **Check:** for any interface expected to outlive a quarter, the rejected alternative is
 named in the PR or the spec.
 
-**P12. Document the interface where the interface lives.**
-Ousterhout is unusually firm here, against the "code should be self-documenting" fashion:
-comments stating invariants, units, ordering constraints and error modes are part of the
-interface, because that information exists nowhere in the signature. Comments restating
-what the code plainly does are a different thing and are still noise.
-**Check:** every public element states what a caller must know that the type does not say.
-In particular, a precondition that lives only in a design document is an undocumented
-interface.
+**§22. Document the interface where the interface lives.**
+Invariants, units, ordering and error modes are part of the interface because none of them are in
+the signature. Comments restating what the code plainly does are still noise.
+**Check:** every public element states what a caller must know that the type does not. A
+precondition living only in a design document is an undocumented interface.
 
 ## Part 3 · Coupling, measured
 
-Coupling is not binary. Page-Jones's connascence model (*Comparing Techniques by Means of
-Encapsulation and Connascence*, CACM 1992) gives three axes: **strength** (how hard the
-dependency is to change), **locality** (how far apart the two ends sit), **degree** (how
-many things are affected). Jim Weirich's rules of thumb follow from them.
+Coupling is not on or off. Connascence has three axes: **strength** (how hard the dependency
+is to change), **locality** (how far apart the ends sit), **degree** (how many things are
+affected).
 
-**P13. Rule of strength — prefer weaker forms.**
-Connascence of name is weaker than of type, which is weaker than of meaning, position or
-timing. Refactor toward the weaker form: a magic literal becomes a named constant,
-positional arguments become keyword arguments or a struct, an implicit ordering requirement
+**§23. Strength — prefer the weaker form.**
+Name is weaker than type, which is weaker than meaning, position or timing. A magic literal
+becomes a named constant; positional arguments become keyword arguments; an implied ordering
 becomes an explicit one.
-**Check:** any dependency on an undocumented shared assumption — a magic number, an
-argument order, an execution order — is a finding.
+**Check:** any dependency on an unwritten shared assumption — a magic number, an argument
+order, an execution order — is a finding.
 
-**P14. Rule of locality — the further apart, the weaker the coupling must be.**
-Strong connascence inside one small module is fine. The same strength across a package
-boundary is a problem; across a network boundary it is a defect. If you cannot weaken the
-coupling, move the two ends closer together instead.
+**§24. Locality — the further apart, the weaker the coupling must be.**
+Strong connascence inside one small module is fine, across a package boundary is a problem,
+across a network boundary is a defect. If you cannot weaken it, move the ends together.
 **Check:** for each cross-package dependency, name its connascence type. Anything stronger
 than name or type needs a stated reason.
 
-**P15. Maximise connascence inside a boundary; minimise it across.**
-Page-Jones's own rule, and simply cohesion and coupling stated as one sentence instead of
-two.
+**§25. Maximise connascence inside a boundary; minimise it across.**
+Cohesion and coupling in one sentence instead of two.
+**Check:** redraw a boundary and count both. If the numbers do not move in opposite
+directions, the boundary is in the wrong place.
 
-**P16. One key, one writer.**
-For any piece of derived or shared state, exactly one module writes it. Multiple writers is
-connascence of value and timing at maximum degree — the worst cell in the table.
+**§26. One key, one writer.**
+Several writers is connascence of value and timing at the highest degree — the worst cell in
+the table.
 **Check:** for each field of shared state, name its single writer.
 
 ## Part 4 · Dependency direction
 
-**P17. Dependencies point toward the domain.**
-The Dependency Rule from Clean Architecture, and the same rule in Hexagonal / Ports &
-Adapters and in Onion. Business logic depends on nothing framework-shaped; frameworks,
-databases and transports sit at the edges and depend inward. This is `§6`'s import-direction
-rule, named.
-**Check:** an import-graph rule in CI, not a diagram in a wiki (see P28).
+**§27. Dependencies point toward the domain.**
+Business logic depends on nothing framework-shaped; frameworks, databases and transports sit
+at the edges and point inward. This is `§6`'s import-direction rule, named.
+**Check:** an import-graph rule in CI, not a diagram in a wiki (see `§38`).
 
-**P18. An abstraction belongs to the layer that consumes it, not the layer that implements
-it.**
-Dependency Inversion, stated where it actually gets violated. If the domain takes `X` as a
-parameter, `X` is *defined* in the domain — even when the only thing that can construct an
-`X` is an adapter. Ports live inside; implementations live outside. Defining a port next to
-its database implementation is the most common way a clean-looking layer diagram turns out
-to be false.
-**Check:** no domain module imports from an adapter package, including for type
-annotations.
+**§28. An abstraction belongs to the layer that uses it, not the one that implements it.**
+If the domain takes an `X`, `X` is *defined* in the domain — even when only an adapter can build
+one. Ports inside, implementations outside. Defining a port beside its database implementation is
+the usual way a clean layer diagram turns out to be false.
+**Check:** no domain module imports from an adapter package, type annotations included.
 
-**P19. One composition root.**
-Exactly one place constructs concrete dependencies and wires them together. Nothing else
-reaches for a connection, a client, a clock or a file path.
+**§29. One composition root.**
+Exactly one place builds concrete dependencies and wires them together. Nothing else reaches
+for a connection, a client, a clock or a file path.
 **Check:** search for construction of adapters. More than one call site outside the
 composition root is a finding.
 
-**P20. One adapter is a hypothetical seam; two adapters make it real.**
-Do not cut a seam until something actually varies across it. A single-adapter seam is
-indirection with a better name. A test double counts only if the seam is genuinely
-exercised through it. This is `§2` applied to architecture.
+**§30. One adapter is a guess; two make the seam real.**
+A one-adapter seam is indirection with a nicer name. A test double counts only if the seam is
+genuinely exercised through it. This is `§2` applied to architecture.
 **Check:** for each port, name its adapters. Zero adapters means delete the port — the
-interface type is already enough of a seam for a future implementer.
+interface type is already seam enough for a future implementer.
 
-**P21. Name adapter packages for the kind of I/O, not for one transport.**
-A package named for the HTTP layer must not hold code the CLI and the batch job also need.
-When it does, everything ends up importing "the API package" and the layer diagram stops
+**§31. Name adapter packages for the kind of I/O, not for one transport.**
+Otherwise the CLI and the batch job import "the API package" and the layer diagram stops
 meaning anything.
 **Check:** no non-HTTP entry point imports from the HTTP package.
 
 ## Part 5 · Errors, state, configuration
 
-**P22. Define errors out of existence where you can.**
-Ousterhout's argument, and the least-followed idea in his book: the cheapest error is the
-one the design makes unrepresentable. Prefer a signature that cannot express the bad case,
-a default that makes the empty case ordinary, an operation that is idempotent. This is not
-licence to skip a check you actually need, and it is the constructive form of `§2`'s ban on
-error handling for unreachable states.
+**§32. Make errors impossible where you can.**
+The cheapest error is the one the design cannot express: a signature that cannot say the bad
+thing, a default that makes the empty case ordinary, an operation safe to repeat. Not licence to
+skip a check you need — it is the constructive form of `§2`.
 **Check:** for each error branch, ask whether a different interface would delete it.
 
-**P23. Failure about one item is data on that item; failure about the configuration is an
-exception.**
-A bad record should not stop a batch of twenty thousand. A missing credential should stop
-the process before the first record is read. Separating the two by *scope* rather than by
-severity gives one rule instead of a judgement call at every site.
-**Check:** exceptions escaping the domain are startup-time only. Everything else surfaces
-as a value.
+**§33. A bad item is data; a bad configuration is an exception.**
+One bad record should not stop a batch of twenty thousand; a missing credential should stop the
+process before the first record is read. Splitting by *scope* rather than severity gives one rule
+instead of a judgement call every time.
+**Check:** exceptions escaping the domain are startup-time only; everything else comes back as a
+value.
 
-**P24. Processes are stateless.**
-Twelve-Factor VI. Any state that must survive a request lives in a backing service, never
-in process memory or on the local disk. This is what makes restarts, scaling and crash
-recovery unremarkable.
-**Check:** killing a process mid-run and restarting it loses no committed work.
+**§34. Processes keep no state.**
+Anything that must survive a request lives in a backing service, never in process memory or
+on local disk. That is what makes restarts and crash recovery boring.
+**Check:** kill a process mid-run and restart it. No committed work is lost.
 
-**P25. Configuration lives in the environment, not in code.**
-Twelve-Factor III. Anything that varies between deployments is read at the edge and passed
-in. Behavioural constants belong in configuration too: logic containing tuned numeric
-literals means changing behaviour requires changing code, and the change is invisible in a
-config diff.
-**Check:** grep for tuned literals in business logic. Also, per `§9`: could this repository
-be open-sourced right now without leaking a credential?
+**§35. Configuration lives in the environment, not in code.**
+Tuned numbers count: a literal in the logic means changing behaviour takes a code change,
+invisible in a config diff.
+**Check:** grep for tuned literals in business logic. Also, per `§9`: could this repository be
+open-sourced right now without leaking a credential?
 
-**P26. Keep development and production as similar as possible.**
-Twelve-Factor X. The classic violation is a lightweight local substitute for a backing
-service — SQLite standing in for Postgres, an in-memory queue for the real broker. The
-substitute is fine; the assumption that they behave identically is not.
-**Check:** at least one test suite runs against the production implementation of every
-backing service, even if only in CI.
+**§36. Keep development and production alike.**
+SQLite for Postgres, an in-memory queue for the real broker — the stand-in is fine, assuming
+it behaves identically is not.
+**Check:** at least one test suite runs against the production implementation of every backing
+service, even if only in CI.
 
-**P27. Treat logs as an event stream, and build observability in from the start.**
-Twelve-Factor XI: the application writes structured events to stdout and never manages log
-files or rotation. "Predictable" in Dan North's CUPID makes the same point from the design
-side — code you cannot observe is code you cannot trust. Logging is I/O, so under P17 it
-happens at the edge: the domain returns what happened, the edge writes it.
-**Check:** a long-running job can be observed while it runs, not only audited after it
-stops. Every event carries the identifiers needed to correlate it with a unit of work.
+**§37. Logs are an event stream, and observability is built in from the start.**
+Structured events to stdout; the application never manages log files or rotation. Logging is
+I/O, so under `§27` it happens at the edge: the domain returns what happened, the edge writes
+it.
+**Check:** a long-running job can be watched while it runs, not only audited after it stops.
+Every event carries the identifiers needed to tie it to a unit of work.
 
 ## Part 6 · Enforcement
 
-**P28. Every rule above that can be checked mechanically, is.**
-An architecture fitness function (Ford, Parsons & Kua, *Building Evolutionary
-Architectures*) is any objective, automated, repeatable check that an architectural
-property still holds. Import rules, layering rules, cycle detection, naming rules and
-public-API snapshots all qualify. Tooling exists in every ecosystem — ArchUnit for Java,
-import-linter for Python, dependency-cruiser or ESLint boundaries for JavaScript,
-NetArchTest for .NET. Without them, rules degrade quietly: the diagram keeps saying the
-controller never touches the repository long after it started to.
+**§38. Every rule above that a machine can check, is checked by one.**
+Import rules, layering, cycle detection, naming, public-API snapshots. Without them rules rot
+quietly: the diagram keeps saying the controller never touches the repository long after it did.
 **Check:** the layering rule fails the build, not the review.
 
-**P29. Write the guard before the code it constrains, and prove it fails.**
-`§7` for architecture rules. A guard written afterwards is how a codebase acquires the
-thing the guard forbids. Each new rule is demonstrated against a synthetic violation before
-it is trusted. On an existing codebase, baseline instead: freeze current violations so the
-rule blocks new ones without demanding a big-bang cleanup.
+**§39. Write the guard before the code it constrains, and prove it fails.**
+`§7` for architecture rules — a guard written afterwards is how a codebase picks up the thing
+it forbids. On an existing codebase, baseline: freeze current violations so the rule blocks new
+ones without a big-bang cleanup.
 **Check:** every rule has a test showing it goes red.
 
-**P30. Allow tracked exemptions.**
-A rule with no escape hatch gets bypassed entirely — the import moves to a helper, or
-someone deletes the check. Permit an annotated exemption naming a reason and an owner, and
-review the list periodically. This is `§8` made mechanical.
+**§40. Allow tracked exemptions.**
+A rule with no escape hatch gets bypassed entirely — the import moves to a helper, or someone
+deletes the check. Permit an annotated exemption naming a reason and an owner. `§8`, made
+mechanical.
 **Check:** the exemption list is short, dated, and shrinking.
 
-**P31. Where a document states a fact the code also states, a test compares the two.**
+**§41. Where a document states a fact the code also states, a test compares the two.**
 Module lists, phase orders, supported formats, public API surfaces. Documentation nothing
-checks becomes fiction without anyone noticing, and unlike code, nobody gets a compile
-error about it.
+checks becomes fiction, and unlike code nobody gets a compile error about it.
 **Check:** the doc and the code are compared by CI, or the doc does not state that fact.
 
-**P32. A guard that reads the installed version cannot see a duplicate that has not shipped.**
-Reading a rule off the third party rather than off a list is right (P28) and it buys
-completeness only up to the pin. Where the library is one we also own — extracted from
-another repository of ours, and moving — the copy that matters is usually the one on a
-branch: the same table, the same names, written twice, with the pin holding the guard's eyes
-shut. Distance makes it worse rather than better (P14): two copies in one module drift in a
-review, two copies in two repositories drift in silence, and the second one is the one nobody
-runs the tests for.
-**Check:** any sentence in the code saying *this also lives in the library, on a branch* is
-the finding, not the excuse. Either move the pin and delete the copy, or land the branch. A
-comment promising a future deletion is connascence of value across a repository boundary with
-a date on it, and the date is what expires.
+**§42. A guard that reads the installed version cannot see a copy that has not shipped.**
+Reading a rule off the third party rather than off a list (`§38`) buys completeness only up to the
+pin. Where the library is one we also own and still moving, the copy that matters is on a branch —
+same table, same names, written twice, with the pin holding the guard's eyes shut. Distance makes
+it worse (`§24`): two copies in one module drift in a review, two in two repositories drift in
+silence.
+**Check:** any sentence in the code saying *this also lives in the library, on a branch* is the
+finding, not the excuse. Move the pin and delete the copy, or land the branch. A comment promising
+a future deletion is connascence of value across a repository boundary, and the date is what
+expires.
 
 ---
 
@@ -455,61 +372,54 @@ a date on it, and the date is what expires.
 
 Per `§8`, rules that disagree are recorded rather than silently resolved.
 
-**`§6` (`STEP ·` modules, "everything one step does belongs in that step's module") vs P1
-(do not decompose along the flow of processing).**
-These pull opposite ways and both are right about something. `§6` optimises for the reader
-following one input to one output: a file per concern charges ten navigations for one step.
-P1 optimises for the writer making a change: a volatile decision that spans three steps
-gets edited in three places. Resolution used here: **step modules are allowed, but a
-decision that spans steps is extracted to its own module under P2, and the steps call it.**
-If a change keeps landing in several steps at once, that is P1 telling you a module is
-missing, and it wins.
+**`§6` (`STEP ·` modules) vs `§11` (do not split along the flow).** `§6` optimises for the reader
+following one input to one output; `§11` optimises for the writer changing a decision that spans
+three steps. **Resolution: step modules are allowed, but a decision that spans steps is extracted
+to its own module under `§12`, and the steps call it.** If a change keeps landing in several steps
+at once, `§11` is telling you a module is missing, and it wins.
 
-**`§6` (`utils.py` permitted beside `schema.py`) vs P0 (names must mean something).**
-`§6` grants one exception on purpose. It stands, with a limit: `utils.py` holds conversions
-over the shapes in the `schema.py` beside it, and nothing else. The moment it holds
-something else, `§5` applies and it gets a real name.
+**`§6` (`utils.py` beside `schema.py`) vs `§10` (names must mean something).** `§6` grants one
+exception on purpose. It stands, with a limit: `utils.py` holds conversions over the shapes in the
+`schema.py` beside it and nothing else. The moment it holds something else, `§5` applies and it
+gets a real name.
 
-**`§6`'s escape hatch vs a guard that closes it.** The limit above only means something if
-the module *can* get a real name. A fitness function that fixes a package's **file list** —
-these three files exactly, a fourth is a violation — says the opposite of the rule above it:
-`§6` says split when the exemption stops covering the module, and the guard says the split
-is the violation. A rule that forbids its own remedy converts every later addition into
-`utils.py`, which is the outcome `§6` was written to prevent, and P28's "the layering rule
-fails the build, not the review" is not a licence for a guard to enforce something the
-conventions never asked for. Resolution: **a guard may fix a package's shape only where the
-conventions state that shape, and should prefer to constrain the direction of an import over
-the number of files.** Where it fixes more than that, the guard is the finding.
+**`§6`'s escape hatch vs a guard that closes it.** A guard that fixes a package's **file list** —
+these three files exactly, a fourth is a violation — turns every later addition into `utils.py`,
+which is what `§6` exists to prevent. **Resolution: a guard may fix a package's shape only where
+the conventions state that shape, and should prefer constraining import direction over file
+count.** Where it fixes more, the guard is the finding.
 
-**`§5` owns naming; the P-series does not.**
-There is no naming principle below because `§5` is already sharper than anything the
-sources offer. If a naming argument reaches the P-series, it has gone to the wrong section.
+**`§5` owns naming; `§10`–`§42` do not.** A naming argument that reaches the principles has gone
+to the wrong section.
 
-**Ousterhout vs SRP.** He argues that splitting by responsibility, taken far enough, yields
-many shallow modules and adds more interface than it removes. This document uses SRP as a
-decomposition heuristic — P2 is the sharper version — never as an instruction to make
-everything smaller. `§4` says the same thing about functions.
+**Ousterhout vs SRP.** He argues that splitting by responsibility, taken far enough, yields many
+shallow modules and adds more interface than it removes. SRP is used here as a heuristic — `§12`
+is the sharper version — never as an instruction to make everything smaller.
 
 **Ousterhout vs "self-documenting code".** He holds that comments are required interface
-documentation. P12 follows him; it is a real position with real opponents, not a neutral
-one.
+documentation. `§22` follows him; that is a real position with real opponents, not a neutral one.
 
-**Package-by-feature vs package-by-layer.** P4 takes a side. The counter-argument — that
-layers give newcomers an obvious place to put things, and that shared code has no natural
-home under feature packaging — is real, and is why P4 says "domain first, technical kind
-second" rather than "never layer".
+**Package-by-feature vs package-by-layer.** `§14` takes a side. The counter-argument — layers give
+newcomers an obvious place to put things, and shared code has no natural home under feature
+packaging — is why `§14` says "domain first, technical kind second" rather than "never layer".
 
 ## Sources
 
 | Source | Principles |
 |---|---|
-| Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*, CACM 1972 | P1, P2, P3 |
-| Ousterhout, *A Philosophy of Software Design*, 2018 | P1, P3, P6, P7, P8, P11, P12, P22 |
-| Page-Jones, *Comparing Techniques by Means of Encapsulation and Connascence*, CACM 1992; Weirich's rules of thumb | P13–P16 |
+| Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*, CACM 1972 | §11, §12, §13 |
+| Ousterhout, *A Philosophy of Software Design*, 2018 | §11, §13, §16, §17, §18, §21, §22, §32 |
+| Page-Jones, *Comparing Techniques by Means of Encapsulation and Connascence*, CACM 1992; Weirich's rules of thumb | §23–§26 |
 | Feathers, *Working Effectively with Legacy Code*, 2004 | seam |
-| Cockburn (Ports & Adapters); Martin, *Clean Architecture*; Palermo (Onion) | P17–P21 |
-| Martin, *Screaming Architecture*, 2011; Fowler, *PresentationDomainDataLayering* | P4 |
-| SOLID — SRP, ISP, DIP | P10, P18 |
-| Wiggins et al., *The Twelve-Factor App* | P24–P27 |
-| North, *CUPID — for joyful coding*, 2022 | P0, P27 |
-| Ford, Parsons & Kua, *Building Evolutionary Architectures*, 2nd ed. 2023 | P28–P30 |
+| Cockburn (Ports & Adapters); Martin, *Clean Architecture*; Palermo (Onion) | §27–§31 |
+| Martin, *Screaming Architecture*, 2011; Fowler, *PresentationDomainDataLayering* | §14 |
+| SOLID — SRP, ISP, DIP | §20, §28 |
+| Wiggins et al., *The Twelve-Factor App* | §34–§37 |
+| North, *CUPID — for joyful coding*, 2022 | §10, §37 |
+| Ford, Parsons & Kua, *Building Evolutionary Architectures* | §38 |
+
+## Renumbering
+
+The principles were `P0`–`P32` until 2026-08-30. They are now `§10`–`§42` — one series, so a rule
+is cited by number alone. The map is `Pn` → `§(n + 10)`. Every citation in this repository was
+rewritten in the same commit.

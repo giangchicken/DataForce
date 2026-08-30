@@ -33,7 +33,7 @@ two may not import each other. If they applied the replacements in different ord
 disagree: with ``{"480215": "<A_1>", "0215": "<B_1>"}`` a longest-first pass writes ``<A_1>`` and a
 shortest-first pass writes ``48<B_1>``, which manufactures exactly the ``label_assistant_mismatch``
 Requirement 17 exists to prevent. So *how* a value becomes its placeholder is one function here,
-called by both ends, rather than an algorithm spelled twice and agreed by luck (P13, P16).
+called by both ends, rather than an algorithm spelled twice and agreed by luck (§23, §26).
 
 **A key's model is named for what the key holds, never for the stage that writes it.** ``§5``: a
 name shared with a stage makes every sentence about the code ambiguous, and ``LabelCheck`` is
@@ -126,7 +126,7 @@ class Part(RecordModel):
 
         A media part with no `sha256` contributes nothing to `record_id` but its type and role,
         which every other such part also contributes -- two different recordings would share an
-        id. Requiring the field is cheaper than detecting the collision downstream (P22).
+        id. Requiring the field is cheaper than detecting the collision downstream (§32).
         """
         needed = ("text",) if self.type == "text" else ("uri", "sha256")
         carried = tuple(

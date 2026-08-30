@@ -4,7 +4,7 @@ Requirement 41 says `output == input` at every stage "structurally — not asser
 nothing to assert against". Once four stages exist there is: run them in the order the flow declares
 and watch the diff. This is the test that catches a stage quietly filtering, which is the failure the
 whole precondition design exists to prevent -- a stage that returns `records[:-1]` fails here rather
-than being noticed in review, and the scan is proved against exactly that below (P29).
+than being noticed in review, and the scan is proved against exactly that below (§39).
 
 **The stages are discovered from the flow table, not listed.** `pipeline/flow.py` is the one place the
 flow exists in code and `stage_module_name` is the derivation the runner itself uses, so a stage added
@@ -329,7 +329,7 @@ def test_a_record_that_meets_no_precondition_travels_the_whole_flow() -> None:
 
 
 def test_the_scan_rejects_a_step_that_dropped_a_record() -> None:
-    """P29, and T18's own verification step, as a test rather than as an instruction to try it."""
+    """§39, and T18's own verification step, as a test rather than as an instruction to try it."""
     engine = an_engine_for_a_run()
     corpus = a_corpus(engine)
 

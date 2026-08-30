@@ -452,7 +452,7 @@ def test_the_model_name_is_read_off_the_manifest() -> None:
 
 
 def test_the_shipped_manifest_names_a_language_that_is_written_down() -> None:
-    """P31: the fixture defaults to `vi` and the committed file declares one, and a name with no
+    """§41: the fixture defaults to `vi` and the committed file declares one, and a name with no
     entry in the table is a `ConfigError` on the first real run and on no test."""
     shipped = read_yaml(MANIFEST)
 

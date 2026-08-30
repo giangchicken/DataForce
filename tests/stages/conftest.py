@@ -1,7 +1,7 @@
 """The two fixtures a store test and a `publish` test both need, and the migration behind them.
 
 Here rather than in `test_store.py` because `test_publish.py` runs the stage against the real
-adapter too — P20's second half, since one adapter is a hypothetical seam. A fixture shared by
+adapter too — §30's second half, since one adapter is a hypothetical seam. A fixture shared by
 importing it is a name pytest then sees twice; a `conftest.py` is the mechanism that exists for this.
 
 `store_at` is what makes Decision 7's *run the tests twice* real: every test that takes it runs once

@@ -320,7 +320,7 @@ def test_reading_twice_writes_the_same_answers() -> None:
 
 
 def test_answers_written_to_the_real_store_reach_the_record(sessions: Any) -> None:
-    """P20: the same stage, the same port, the other adapter — on both backends."""
+    """§30: the same stage, the same port, the other adapter — on both backends."""
     from dataforce.edge.store.models import AnnotatorAnswer
     from dataforce.edge.store.repository import SqlQuestionStore
 

@@ -5,7 +5,7 @@ database from one version of the package's schema to the next. It imports `edge/
 the right direction: a migration is I/O about the edge's own tables.
 
 The DSN comes from `edge/store/session.py` and never from `alembic.ini`, so `alembic upgrade head`
-and a running process address the same database by the same rule (P25, P26).
+and a running process address the same database by the same rule (§35, §36).
 """
 
 from alembic import context

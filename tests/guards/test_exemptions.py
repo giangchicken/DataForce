@@ -1,4 +1,4 @@
-"""P30 · the escape hatch, and the list it is kept on.
+"""§40 · the escape hatch, and the list it is kept on.
 
 A rule with no exemption gets bypassed entirely: the import moves to a helper, or someone deletes
 the check. So a line may excuse itself from one invariant by naming that invariant, a reason, an
@@ -22,14 +22,14 @@ def test_no_exemption_is_missing_its_reason_its_owner_or_its_date() -> None:
 
 
 def test_the_list_is_short() -> None:
-    """P30: short, dated and shrinking. Raising this number is a decision, not a fix."""
+    """§40: short, dated and shrinking. Raising this number is a decision, not a fix."""
     standing = exemptions(modules_in())
 
     assert len(standing) <= CEILING, f"{len(standing)} exemptions: {standing}"
 
 
 def test_a_well_formed_exemption_is_read_as_one() -> None:
-    """P29, for the mechanism itself."""
+    """§39, for the mechanism itself."""
     assert exemptions([module_from_source(WELL_FORMED)]) != []
     assert malformed_exemptions([module_from_source(WELL_FORMED)]) == []
 

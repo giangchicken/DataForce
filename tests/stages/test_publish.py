@@ -4,7 +4,7 @@ The records reach this stage through the real `label_check`, `jury`, `cohesion`,
 `question_generate`, because what gets published is what got asked and a hand-written `Question`
 would let this module and `question_generate` agree about an id by luck.
 
-**The store here is a second adapter, and that is what makes the seam real** (P20). `AStore` holds
+**The store here is a second adapter, and that is what makes the seam real** (§30). `AStore` holds
 its rows in a dict and records what crossed; `SqlQuestionStore` holds them in a database. The two
 tests at the bottom run this stage against the real one, so *the two fit* is asserted rather than
 assumed -- an in-memory double that agrees with nothing is how a port comes to describe only its
@@ -295,7 +295,7 @@ def test_every_record_comes_back_whether_it_published_or_not() -> None:
 
 
 def test_an_engine_with_no_store_refuses_before_the_first_record() -> None:
-    """P23: a fact about the configuration, and a receipt for a write nobody made would be a lie."""
+    """§33: a fact about the configuration, and a receipt for a write nobody made would be a lie."""
     engine = replace(an_engine_publishing(), question_store=None)
 
     with pytest.raises(ConfigError, match="publish needs a question store"):
@@ -308,7 +308,7 @@ def test_an_engine_with_no_store_refuses_before_the_first_record() -> None:
 def test_the_stage_publishes_into_the_real_store(
     sessions: sessionmaker[Session],
 ) -> None:
-    """P20: one adapter is a hypothetical seam, and this is the test that makes it two.
+    """§30: one adapter is a hypothetical seam, and this is the test that makes it two.
 
     The `sessions` fixture is `test_store.py`'s, so this runs on SQLite in `make check` and on a
     real Postgres under `-m integration` like every other test that touches the store.

@@ -33,7 +33,7 @@ from itertools import combinations
 from dataforce.engine import Engine, ServiceResult
 from dataforce.record import AgreementScores, PanelVerdict, Record, StoredAnswer
 
-# The key this stage owns, under `ai_review` (P16: one key, one writer).
+# The key this stage owns, under `ai_review` (§26: one key, one writer).
 STAGE = "cohesion"
 
 # The estimator, named so that two runs producing different numbers can be told apart from two
@@ -51,7 +51,7 @@ def votes_to_fold(record: Record) -> PanelVerdict | None:
 
     A `bool` was the other shape and it is the worse one: it cannot narrow, so the caller reads
     `ai_review.jury` a second time and proves again that it is there -- which is the assert this
-    phase just finished deleting (P22). Named for what it returns, beside the signature, once.
+    phase just finished deleting (§32). Named for what it returns, beside the signature, once.
     """
     return record.ai_review.jury
 
@@ -100,7 +100,7 @@ def cohesion(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every judged record, one key richer: how much its panel agreed, and with what.
 
     The precondition is `votes_to_fold`, named beside the signature and not spelled inside the
-    fold (P12): what it has to make visible is that the *key* is the condition and not the votes
+    fold (§22): what it has to make visible is that the *key* is the condition and not the votes
     in it. The loop is `pii_check`'s shape for the same reason -- a skip is one readable statement.
     """
     written: list[Record] = []

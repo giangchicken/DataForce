@@ -1,6 +1,6 @@
 """TOOL · the store's connection and its lifetime.
 
-The DSN is read here and nowhere else, from ``DATAFORCE_DATABASE_URL`` (P25, Twelve-Factor III): a
+The DSN is read here and nowhere else, from ``DATAFORCE_DATABASE_URL`` (§35, Twelve-Factor III): a
 backing service is a resource a deployment attaches, so the store's address is the environment's and
 never a literal in a module. The default is a SQLite file in the working directory, which is
 Decision 7's whole point -- ``make check`` needs no database server -- and it is a default and not a
@@ -10,7 +10,7 @@ Postgres disagree about exactly the constraints this schema leans on.
 **One session per unit of work, not one per process.** ``sessions_to`` hands back a factory and the
 adapter opens a transaction around each call, so a run of twenty thousand records does not hold one
 transaction open across the whole of it and a process that dies mid-run loses no committed write
-(P24). The factory is what the composition root passes; the connection pool underneath it belongs to
+(§34). The factory is what the composition root passes; the connection pool underneath it belongs to
 the SQLAlchemy engine and is shared.
 
 ``StoreEngine`` is SQLAlchemy's ``Engine``, aliased on import. There is a ``dataforce.engine.Engine``
@@ -37,14 +37,14 @@ DEFAULT_URL = "sqlite+pysqlite:///dataforce.sqlite3"
 
 # The dialect that needs asking. SQLite has enforced foreign keys since 3.6.19 and ships with them
 # *off* for backwards compatibility, so a schema whose integrity Postgres enforces is decoration in
-# the default backend -- which is P26's classic violation and Decision 7's named risk, arriving in
+# the default backend -- which is §36's classic violation and Decision 7's named risk, arriving in
 # the one place a substitute is allowed to differ silently.
 SQLITE = "sqlite"
 
 # The other one, and the two together are what this store is written for (Decision 7). A list rather
 # than an assumption because `repository.py` forks on the dialect to spell its `ON CONFLICT`: a third
 # backend would reach that fork with nothing to do there. Read from the DSN when the pool is built,
-# which is before any record (P23), and by parsing rather than by connecting -- naming a database
+# which is before any record (§33), and by parsing rather than by connecting -- naming a database
 # nobody installed a driver for should say so, not fail importing the driver.
 POSTGRES = "postgresql"
 SUPPORTED = (SQLITE, POSTGRES)

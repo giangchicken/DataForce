@@ -1,7 +1,7 @@
 """I20 · the record's keys are the keys § *The record* draws.
 
 The drawing is the only place a record key's *meaning* is written next to it in prose, and
-`record.py` is the only place it is written next to the field. P31: two statements of one fact are
+`record.py` is the only place it is written next to the field. §41: two statements of one fact are
 compared or one of them is fiction. This is the largest uncompared fact left in the document --
 about a hundred keys -- and the plan already records two ways the two sides have drifted before
 anyone typed this guard.
@@ -136,12 +136,12 @@ def test_the_record_holds_the_keys_the_document_draws() -> None:
 def test_the_scan_rejects_a_drawing_that_has_drifted(
     drift: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> None:
-    """P29: a key in the document with no field, a key dropped, and a nested key dropped."""
+    """§39: a key in the document with no field, a key dropped, and a nested key dropped."""
     assert differences(drift(drawn_record()), model_keys(Record)) != []
 
 
 def test_the_scan_rejects_a_field_the_document_does_not_draw() -> None:
-    """P29, the other direction: `record.py` grows a key and § *The record* is not touched."""
+    """§39, the other direction: `record.py` grows a key and § *The record* is not touched."""
     coded = model_keys(Record)
     coded["answer_space"] = {}
 

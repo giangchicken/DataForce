@@ -21,7 +21,7 @@ from dataforce.record import Part, Record
 # Opaque on purpose. The base names these types so a member's signature can say what it takes and
 # returns; what is inside one is `text2text/schema.py`'s to say. Naming the model here is the
 # import I16 forbids, and describing it here would make the protocol a description of its single
-# implementation (P18).
+# implementation (§28).
 type Detector = Any
 type DisplayConfig = Any
 

@@ -219,10 +219,10 @@ paragraph is the other half, where a reader following the member lands (§8).
 
 **Provenance is a parameter and not a key on the item.** It was ``item["__provenance__"]`` for one
 phase -- ``load_data`` put the file's digest, the offset, the clock and the run there, and this member
-validated them on the way in. That is connascence of meaning between a stage and one axis (P13), and
+validated them on the way in. That is connascence of meaning between a stage and one axis (§23), and
 it cost two ``ConfigError`` branches to police. As a third argument the case *an item with no
 provenance* cannot be spelled, so both branches are gone rather than caught: the cheapest error is
-the one the interface makes unrepresentable (P22).
+the one the interface makes unrepresentable (§32).
 
 #### The answer, and the three operations over it
 
@@ -590,7 +590,7 @@ the next person guesses at, and a guess is how one acquires a second place to pu
 | `params.yaml` | Every threshold the pipeline reads at runtime. Code holds none: a number here is committed, reviewable and recorded by digest in the run manifest, so a change to it is attributable and a run that used the old value stays identifiable |
 | `data/` | What a run writes: `raw/` the source, then `interim/`, `processed/`, `release/`, `quarantine/`, and `run.json` — one run, one manifest, at the root of what it wrote. **Committed: none of it.** `raw/` is the privacy tier (I13) and the rest are artifacts the manifest identifies by digest. Ignored tier by tier rather than as `data/`, so one tier can be un-ignored on its own |
 | `deploy/` | `docker-compose.yml` — Label Studio 1.23.0, pinned because the sync is written against a release. Optional: it is the one endpoint that needs an instance, and no credential is in the file. The project itself is created by a person, because a project's settings *are* the rung |
-| `AGENTS.md` | The conventions and design principles this repository is held to, `§1`–`§9` and `P0`–`P33`. A rule cited in a review or a commit message resolves here |
+| `AGENTS.md` | The conventions and design principles this repository is held to, `§1`–`§42`. A rule cited in a review or a commit message resolves here |
 | `README.md` | The front door: what this repository is, which spec to read first, and the build order across all of them |
 | `Makefile` | `make check` — ruff, `mypy --strict`, pytest without `-m integration`. What CI runs and what must pass before a commit. `make integration` is the half that needs a network |
 | `pyproject.toml` | Dependencies, package metadata, and the configuration for every tool `make check` runs, in one file rather than four dotfiles |
@@ -626,7 +626,7 @@ see Decision 17. It holds three now, and each arrived with what made it real: `P
 with `pii_check`, `JuryPanel` with `jury`, and `QuestionStore` with its adapter and its three tables
 in T23. That last one is the exception the rule allows: its two members are what `publish` and
 `annotator_answers` demand, and neither stage exists yet — what it has instead of a caller is an
-adapter that is exercised, which is the half of P20 a guess never has.
+adapter that is exercised, which is the half of §30 a guess never has.
 
 ```
 src/dataforce/              the package; its docstring states the import direction and the five module kinds
@@ -916,7 +916,7 @@ both shells produce one record (Requirement 46, I15): nothing in the engine has 
 either axis, the only place that knows an item's offset, and therefore the only place that can turn
 one into data. It catches, records the offset and the message, and hands them to the edge as side
 output for the quarantine tier; the run completes (Requirement 43). What that gives up is stated:
-where the *declaration* is wrong rather than the item, P23 would call it configuration scope and
+where the *declaration* is wrong rather than the item, §33 would call it configuration scope and
 stop, and a manifest naming a label key no item carries instead produces twenty thousand counted
 items and no records. This stage cannot tell those apart at item 1 and does not guess — what it can
 know is per item, so per item is the scope it reports.
@@ -1104,7 +1104,7 @@ two different questions. The corrections feed `confidence` instead, per record, 
 like halves of one exchange with the store, and whether to merge them is a fair question to ask of any
 pair that talks to the same thing. Three answers. They cannot run in one call — `POST /human-review`
 stops after `publish` for exactly this reason — so one module would still owe two routes, two
-subcommands and two record keys, and P16 gives each key one writer. They re-run for different reasons,
+subcommands and two record keys, and §26 gives each key one writer. They re-run for different reasons,
 the same argument that keeps `ai_review` at three: republishing costs a write and a re-sync, re-reading
 answers is free and idempotent. And they read different things — `publish` reads
 `human_review.question_generate` and the two config halves, `annotator_answers` reads the store.
@@ -1247,7 +1247,7 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
   returns a receipt — which question ids the store holds, under which write, when — and `answers_to`
   returns every answer to a set of question ids. Whether a stage reaches the store through a port or
   hands rows back as side output was open until T23: only the first shape lets `publish` record its own
-  receipt, because a receipt names a write that has already happened, and P16 gives that key one writer.
+  receipt, because a receipt names a write that has already happened, and §26 gives that key one writer.
 - **Writing a question the store already holds is a no-op**, because a `question_id` is a pure function
   of the question: a second publish of an unchanged corpus is the same rows. Insert-if-absent and not an
   upsert — an existing row records what was *published*, and overwriting its payload would rewrite a
@@ -1636,11 +1636,11 @@ discovered in the pilot. *Reversible:* the capture half is one profile member an
 so replacing the widget — or the tool — is a change in two places.
 
 **17 · The four standing principle conflicts, settled — and one kept as an exception.**
-An audit of `AGENTS.md` P0–P31 against this document left four disagreements. AGENTS.md §8 says two
+An audit of `AGENTS.md` §10–§41 against this document left four disagreements. AGENTS.md §8 says two
 rules that disagree in one place is a fact about the design and belongs written down, so here they are
 with what each cost.
 
-*P20 — a port with zero adapters is deleted.* `MediaResolver` had none: no media modality is built, so
+*§30 — a port with zero adapters is deleted.* `MediaResolver` had none: no media modality is built, so
 nothing implements it and nothing calls it. **Deleted.** It was a guess about what a future caller will
 need, written before that caller exists, and a wrong guess would have been discovered by the first
 media modality having to work around it. The seam survives without it — `modalities/base.py`, the media
@@ -1648,28 +1648,28 @@ part shape, the pair naming, and Requirement 16's description of what a media `l
 port arrives with the modality that demands it. *Cost:* the tree no longer shows where media plugs in;
 Requirement 16 and *Out of Scope* say it in words instead.
 
-*P26 — dev and production run the same implementations.* Two substitutions, both kept, both now paid
+*§36 — dev and production run the same implementations.* Two substitutions, both kept, both now paid
 for. Decision 7 carries the SQLite/Postgres one as a risk rather than an argument, and the store tests
 run against both. The stubbed jury is the second and is not removable — `make check` cannot call a
 model — so the parity gate is the Smoke rung, which is the first time the real panel runs at all.
 Testing Strategy item 9 names both.
 
-*P27 — logs are an event stream, observability from the start.* The spec contained no logging: every
+*§37 — logs are an event stream, observability from the start.* The spec contained no logging: every
 match for "log" in it was a substring of `catalog` or `LOGIC`. **Fixed**, in § *Observability*. The
 engine emits through stdlib `logging` and the edge installs the one handler, which keeps Requirement 36
 intact — a logger call opens no file and names no path.
 
-*P31 — a document fact the code also states is compared by a test.* I3 promised the comparison but
+*§41 — a document fact the code also states is compared by a test.* I3 promised the comparison but
 described `flow.py` as the single source and compared only code to code, which leaves this document
 free to drift from it. **Fixed:** I3 now parses the § *The flow* table out of this file and compares
 its triples against `PHASES` and `STAGES`. Changing either side alone fails the build.
 
-Two more from the same audit needed a line rather than a change. *P1 — do not decompose along the flow
+Two more from the same audit needed a line rather than a change. *§11 — do not decompose along the flow
 of processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
 `AGENTS.md`'s own conflicts section resolves it: step modules stand, but a decision spanning steps is
-extracted under P2 and the steps call it. This design has exactly one such decision, and it is
+extracted under §12 and the steps call it. This design has exactly one such decision, and it is
 extracted: the answer type, which `jury`, `cohesion`, `aggregate` and `curate` all reason about and
-none of them owns — it lives on the profile. *P22 — define errors out of existence* — landed on the
+none of them owns — it lives on the profile. *§32 — define errors out of existence* — landed on the
 `[]`-versus-`None` ambiguity in `vote_consensus` and is closed by construction in § *The answer, and
 the three operations over it*, not by a branch.
 
@@ -1685,7 +1685,7 @@ queue (`celery`, `amqp`, `kombu`), three git implementations (`gitpython`, `dulw
 config framework (`hydra-core`, `omegaconf`) and a crypto stack — none of which a pipeline that reads
 JSONL and calls an LLM has any use for. Every one of those is supply-chain surface and install time.
 *Alternative:* keep them against a future need — corpus-level folds might want a dataframe, and a DAG
-runner might come back. *Why not:* AGENTS.md §2, and the same reasoning P20 applies to a port with no
+runner might come back. *Why not:* AGENTS.md §2, and the same reasoning §30 applies to a port with no
 adapter. `dvc init` is one command, and `metrics.json` is a fold the edge can write without pandas.
 *Reversible:* yes, one line each. *Cost:* if a metrics fold does want a dataframe, T27 adds pandas back
 with a reason, which is better than it being there without one.
@@ -1694,7 +1694,7 @@ with a reason, which is better than it being there without one.
 The flow table numbered its rows 0–14, each `STEP ·` docstring repeated its number, and the in-scope
 boundary was written as *stages 0–11*. *Why this changed:* a number is not a property of a stage, it is
 its position in a list — and `STAGES` is a tuple, which already holds that. Writing it down made the same
-fact exist twice, and P16 says the second copy is the one that goes wrong. Worse, it was a **shared**
+fact exist twice, and §26 says the second copy is the one that goes wrong. Worse, it was a **shared**
 index: inserting a stage into `human_review` renumbers every stage after it, so a one-row change becomes a
 diff across `flow.py`, five module docstrings, four contract tables, both documents and the drift guard —
 and every one of those files turns red having done nothing wrong. *What replaces each job the number
@@ -1763,7 +1763,7 @@ inheriting would have collapsed the pair. The identity is prefixed on both proto
 root and the guards, and was the whole of T52's work. *What it also cost:* `Profile.modality` is
 gone, taking the protocol from sixteen members to fifteen. It named the pair as a string off the
 profile's own manifest, and a subclass inherits `modality_name` from the object that actually read
-the content — one attribute, one writer (P16), and no way for the two to disagree. The manifest key
+the content — one attribute, one writer (§26), and no way for the two to disagree. The manifest key
 stays, because `modality:` is what tells the composition root which manifest to open. *Reversible:*
 yes, and the reverse is the same rename backwards.
 
@@ -1864,7 +1864,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|
 | Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
-| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break (§8) and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed (P22) |
+| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break (§8) and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed (§32) |
 | A turn's `content` is a content-block array, or any other non-string | read, never refused: a text block contributes its text and any other block its canonical JSON, so nothing leaves `record_id`. Requirement 13 declares the OpenAI chat-completion shape and this is that shape, so such an item is a declared item and becomes a record |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
 | Profile and modality disagree | `ConfigError`: "composes with modality 'text2text'" |
@@ -1874,7 +1874,7 @@ Each names the check that holds it, not a file that used to.
 | A jury vote does not validate | counted as an invalid vote, kept with `valid: false`, never silently dropped; a noisy panel shows up as a high `invalid_votes` fold |
 | A model call fails after retries | `agent-toolkit` owns retry and rate limiting; an exhausted call is one missing vote, and `cohesion` computes over the votes that arrived |
 | The whole panel fails for one record | read as *no votes*, for the reason above: the record carries no vote, a null `final_prediction` and a bucket that sends it to a person, and the run completes |
-| A port raises `ConfigError` mid-run | it is **not** caught. Both model ports promise not to raise, and `ConfigError` is the one exception this codebase defines: it means a human must change configuration (P23), so an adapter that cannot reach its endpoint stops the run rather than raising it twenty thousand times. Caught, `jury` completes with every record scoring `0.0` and landing in `contested`, and `pii_check` completes with every hit `unverified` — one fails silent and one fails safe, and neither says why |
+| A port raises `ConfigError` mid-run | it is **not** caught. Both model ports promise not to raise, and `ConfigError` is the one exception this codebase defines: it means a human must change configuration (§33), so an adapter that cannot reach its endpoint stops the run rather than raising it twenty thousand times. Caught, `jury` completes with every record scoring `0.0` and landing in `contested`, and `pii_check` completes with every hit `unverified` — one fails silent and one fails safe, and neither says why |
 | `ai_review` run on an engine with no panel | `ConfigError` from `jury` before the first record. It is a fact about the configuration, not about a record, and writing a key that says the panel agreed on nothing would be a lie about a call nobody made |
 | `enable_redact: false` and personal data found | `pii_check` reports, `content` untouched, `decision: "reported"`. The run completes. `export`'s precondition is what keeps it out of a release — and export is not built yet, so **until it is, nothing prevents a reported-but-unredacted corpus reaching an artifact** |
 | Label Studio unreachable during sync | the sync fails; no record key changes, no `publication` row is written, every other endpoint is unaffected |

@@ -27,7 +27,7 @@ item is unreadable* and neither knows the offset, so both recorded the break and
 is what *here* decided: the raise is caught per item, the offset and the message go to the edge as
 side output for the quarantine tier, and the run completes (Requirement 43). What is given up is the
 case where the *declaration* is wrong rather than the item -- a manifest naming a label key no item
-carries makes every item unreadable, and P23 would call that configuration scope and stop. This
+carries makes every item unreadable, and §33 would call that configuration scope and stop. This
 module cannot tell the two apart at item 1 and refuses to guess: what it can know is per item, so
 per item is the scope it reports, and twenty thousand entries against zero records says the rest
 loudly enough.
@@ -66,7 +66,7 @@ def stamped_profile(profile: Profile) -> str:
     Two functions where one took `Modality | Profile` and read `.name` off either. That union was
     only writable while both protocols spelled their identity the same way, and since T52 one object
     answers both -- so a single function taking either would have had no way to say which of the two
-    identities on it was being asked for. The split is the point rather than a cost (P16).
+    identities on it was being asked for. The split is the point rather than a cost (§26).
     """
     return f"{profile.profile_name}@{profile.profile_version}"
 

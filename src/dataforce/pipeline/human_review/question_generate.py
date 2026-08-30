@@ -26,7 +26,7 @@ from now has to be legible against what was askable when it was asked -- a live 
 re-read a question answered under three verdicts as one that offered four. The cost is two
 statements of one tuple, and the record's is the one that stays right about the past. Reading a
 *field* off a type this module may not import is the connascence ``label_check`` already carries on
-``LabelCheck.name``, named here for P14's reason rather than left to be noticed.
+``LabelCheck.name``, named here for §24's reason rather than left to be noticed.
 
 The call is per record and was hoisted out of the fold until T24, when the capture half gained the
 task data it owns and therefore a record to read it from. The verdicts are the same tuple every
@@ -47,7 +47,7 @@ from agent_toolkit.string_utils import compute_hash
 from dataforce.engine import Engine, ServiceResult
 from dataforce.record import Question, Record
 
-# The key this stage owns, under `human_review` (P16: one key, one writer).
+# The key this stage owns, under `human_review` (§26: one key, one writer).
 STAGE = "question_generate"
 
 # The one question this phase asks, under the name the panel's own vote already gives it

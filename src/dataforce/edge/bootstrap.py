@@ -1,6 +1,6 @@
 """LOGIC · open_engine -- the composition root; the only builder of an Engine.
 
-Exactly one place constructs concrete dependencies and wires them together (P19). It reads the two
+Exactly one place constructs concrete dependencies and wires them together (§29). It reads the two
 manifests, the thresholds and the prompt templates, registers both axes, and returns one Engine.
 An engine can also be built with no filesystem anywhere, which is what makes a web handler and an
 in-process caller the same caller.
@@ -38,11 +38,11 @@ Requirement 39 is about a registry being instance state precisely so that cannot
 a download, so nothing was loaded until the first vector and a run of ``label_check`` alone paid
 nothing. It is an endpoint this deployment already serves, so there is nothing to load and the only
 thing left to get wrong is the file saying where it is -- which is why ``config/model/<model>.json``
-is read *here*: an embedder is a resource a deployment attaches (P25), and one nobody attached is a
+is read *here*: an embedder is a resource a deployment attaches (§35), and one nobody attached is a
 configuration fault before the first record rather than a stack trace part-way through
-``duplicate_check`` (P23). Composing still makes no network call; a client is constructed and
+``duplicate_check`` (§33). Composing still makes no network call; a client is constructed and
 nothing is sent. The question store is the same shape -- ``create_engine`` opens no connection, so
-attaching the pool here costs nothing and P19 says the pool is reached for in one place.
+attaching the pool here costs nothing and §29 says the pool is reached for in one place.
 
 **The model file is not a policy file, and leaving it out of ``policy_digests`` is deliberate.**
 Digesting every file a run reads is Requirement 45's rule and this would be the fifth -- except that
@@ -55,7 +55,7 @@ I14 failing for a reason that is not a configuration change. What a run manifest
 the LLM client (I6) and offers ``complete``, ``complete_structured``, ``complete_with_reasoning``,
 ``count_tokens`` and the resolvers -- nothing embedding-shaped -- so there is no front door to go
 through, and the exemption on the import is what the library task deletes when an ``embed`` lands
-beside ``complete`` (P30).
+beside ``complete`` (§40).
 
 **What is not solved here: a second run re-pays the corpus.** ``lru_cache`` used to hold a loaded
 model, and the hosted analogue is a cache per document, without which running ``duplicate_check``
@@ -114,7 +114,7 @@ class ProfileInConcept(Modality, Profile, Protocol):
     namespaces, but since T52 one instance fills both -- so the composition root needs a name for
     *a thing that is both*, and Python has no intersection type to write it with inline.
 
-    A shape in a `LOGIC ·` module is §6 giving way to P18: the abstraction belongs to the layer that
+    A shape in a `LOGIC ·` module is §6 giving way to §28: the abstraction belongs to the layer that
     consumes it, and this one has exactly one consumer. Putting it in `modalities/base.py` would
     make the modality protocol name the profile one; putting it in `profiles/base.py` would make
     every profile's contract mention a concept it does not have to be inside. Neither is true of
@@ -288,7 +288,7 @@ def open_engine(
 
     The two model ports arrive from above and are `None` until T49 builds an adapter for either.
     The store does not: `SqlQuestionStore` exists and a connection pool is a concrete dependency,
-    so this is where it is constructed (P19) and `composed_engine` is where a caller says *not
+    so this is where it is constructed (§29) and `composed_engine` is where a caller says *not
     that one*.
     """
     declared_profile = read_manifest(config_root, PROFILES, profile)

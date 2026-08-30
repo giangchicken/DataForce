@@ -82,7 +82,7 @@ def test_the_walk_reaches_every_module() -> None:
 
 
 def test_the_rule_rejects_a_field_with_no_description() -> None:
-    """P29."""
+    """§39."""
 
     class Undescribed(BaseModel):
         described: str = Field(..., description="what it is for")
@@ -95,7 +95,7 @@ def test_the_rule_rejects_a_field_with_no_description() -> None:
 
 
 def test_the_rule_rejects_a_description_that_is_only_whitespace() -> None:
-    """P29: an empty string satisfies `description=` and says nothing."""
+    """§39: an empty string satisfies `description=` and says nothing."""
 
     class Blank(BaseModel):
         hollow: str = Field(..., description="  ")
@@ -182,7 +182,7 @@ def test_the_scan_looks_at_the_classes_it_is_supposed_to_find() -> None:
     ids=["dataclass", "qualified-and-called", "namedtuple"],
 )
 def test_the_scan_rejects_a_dataclass_field_with_no_comment(violation: str) -> None:
-    """P29, one per spelling of the two shapes."""
+    """§39, one per spelling of the two shapes."""
     assert uncommented_fields(module_from_source(violation)) != []
 
 

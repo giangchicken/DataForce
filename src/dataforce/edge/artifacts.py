@@ -147,7 +147,7 @@ def corpus_counts(engine: Engine, records: Sequence[Record]) -> dict[str, Any]:
     record to the document and nothing compared the two to each other. I3 closes that edge now, so
     a missing key cannot ship; the default was the state §2 says not to handle. Requirement 44 is
     about a *number* not stopping a run, and a phase model that has lost a stage is not a number --
-    it is the code condition P23 puts in configuration scope. Same shape as `cosine`'s
+    it is the code condition §33 puts in configuration scope. Same shape as `cosine`'s
     `strict=True`: an assertion rather than an error path.
     """
     failed = Counter(name for record in records for name in failed_check_names(record))

@@ -7,7 +7,7 @@ changed prompt is visible in a diff rather than only in an output (Requirement 4
 coming back beside what it said. The alternative was a pair of readers -- one for the value, one for
 the digest -- and a composition root that remembers to call both; Requirement 45 says the manifest
 records *every* policy file, and a rule kept by remembering is a rule that is eventually not
-remembered (P16: the digest and the value have one writer).
+remembered (§26: the digest and the value have one writer).
 
 **The path a ``Declared`` carries is the layout's, not the deployment's.** ``config_root`` may point
 anywhere -- a temporary directory in a test, an absolute path in a container -- and a run manifest
@@ -19,7 +19,7 @@ own filename, which is the one part a caller may really vary.
 **A file that is not there is a ``ConfigError``, not an empty declaration.** ``read_yaml`` answers
 ``{}`` for a file it cannot read and ``read_txt`` answers ``""``. That is the right default for a
 tool reading a corpus and the wrong one for a run's own configuration: a missing ``params.yaml``
-read as ``{}`` is an engine that holds no thresholds and says nothing about it, and P23 wants a
+read as ``{}`` is an engine that holds no thresholds and says nothing about it, and §33 wants a
 declaration that is missing to stop the run before the first record. So the path is checked here,
 before the library is asked.
 

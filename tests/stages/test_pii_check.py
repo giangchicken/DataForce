@@ -422,7 +422,7 @@ def test_a_mistyped_switch_is_refused_before_any_record_is_read() -> None:
 
 
 def test_a_config_error_from_layer_two_stops_the_run() -> None:
-    """P23: `ConfigError` means a human must change configuration, not *this hit is unconfirmed*.
+    """§33: `ConfigError` means a human must change configuration, not *this hit is unconfirmed*.
 
     Swallowed, an adapter that cannot reach its endpoint leaves every hit `unverified` and every
     record `withheld` -- which fails safe, and is the expensive kind of quiet: nothing ships and no

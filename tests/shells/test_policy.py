@@ -208,7 +208,7 @@ def test_a_changed_comment_is_a_changed_policy_file(tmp_path: Path) -> None:
 
 
 def test_the_thresholds_come_back_as_the_file_declares_them(tmp_path: Path) -> None:
-    """`Engine.thresholds` is this file, parsed, and no stage holds a number of its own (P25)."""
+    """`Engine.thresholds` is this file, parsed, and no stage holds a number of its own (§35)."""
     read = read_thresholds(a_params(tmp_path))
 
     assert read.declares["thresholds"]["aggregate"]["overlap_floor"] == 1
