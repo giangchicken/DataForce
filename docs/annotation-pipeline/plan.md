@@ -128,7 +128,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
 | T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit` containing `61fdf65`** | S | |
-| T55 | I4 stops counting files | 3 | T12, T13 | S | |
+| T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
@@ -1794,6 +1794,22 @@ Conflicts entry *`§6`'s escape hatch vs a guard that closes it*.
 
 **Out of scope.** Moving any code. After this task the tree is unchanged and both packages still hold
 exactly three files — which is the point: the guard rewrite is reviewable on its own.
+
+**Landed** (`c4798fd`). Both halves went red before they went green, and the numbers matched the
+spec: 14 of 16 top-level functions in `text2text/utils.py` and 18 of 23 in `tool_decision/utils.py`
+touch no shape from the `schema.py` beside them. One exemption was then removed and I4 confirmed red
+on that module alone, so neither annotation is decorative.
+
+**One thing D4 did not specify, decided here: the finding anchors on line 1.** Anchoring on the first
+offending `def` was built first and rejected — a long annotation on a real signature makes
+`ruff format` split it across three lines, and it picks one function to stand for a fact about all of
+them. Line 1 is the line that means *this module*, and the one place a `#` comment sits above a
+docstring without disturbing it. `unconverted` therefore returns one finding whose message names
+every offender, so the annotation is written by someone who has seen the list.
+
+`test_the_scan_rejects_a_fourth_module` is gone and `test_the_scan_permits_a_fourth_module` stands
+where it was, so the deleted rule cannot come back by accident. Standing exemptions: four, ceiling
+five.
 
 ---
 
