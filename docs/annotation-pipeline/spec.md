@@ -754,12 +754,18 @@ the media part shape, and the pair naming — and a directory holding nothing ad
 is the flexibility-nobody-asked-for that AGENTS.md §2 forbids. What is out of scope is listed in *Out of
 Scope*, not mimed in the tree.
 
-Every implementation of either axis is `__init__.py`, `schema.py` (`DEFINITION ·`) and `utils.py`
-(`LOGIC ·`). A shape is a shape and a conversion over it is logic — they change for different reasons,
-so `schema.py` does not import `utils.py`. `utils.py` is the one module name AGENTS.md §6 exempts by
-name, and only under exactly this condition: conversions over the shapes in the `schema.py` beside it.
-So `answer_schema` — a record turned into a JSON Schema — is `utils.py`, while the answer models it
-constrains are `schema.py`.
+Every implementation of either axis has a `schema.py` (`DEFINITION ·`) that imports nothing from its
+own package, an `__init__.py` that holds nothing of its own, and modules named for what they produce.
+A shape is a shape and a conversion over it is logic — they change for different reasons, so the
+dependency runs one way and never back. So `answer_schema` — a record turned into a JSON Schema — is
+logic, while the answer models it constrains are `schema.py`.
+
+**The file list is not fixed, and was until T55.** I4 required exactly three modules and failed on a
+fourth, which made AGENTS.md §6's own remedy — a `utils.py` that has outgrown its exemption gets a
+real name — a build failure; §6 is then a rule that forbids its own remedy, and every later addition
+lands in `utils.py`. `AGENTS.md` § *Conflicts* records it. `utils.py` is still the one module name §6
+exempts by name, under exactly one condition — conversions over the shapes in the `schema.py` beside
+it — and I4's second half is now that condition rather than a count of files.
 
 **An axis façade re-exports its protocol and nothing else.** `dataforce/modalities/__init__.py` holds
 `Modality` and not `text2text`. Re-exporting the implementation would make `import dataforce.modalities`
@@ -1834,7 +1840,7 @@ Each names the check that holds it, not a file that used to.
 | I1 | The engine opens no file and names no path | AST scan over every engine module, plus a subprocess import from an empty directory |
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
 | I3 | Code's phase and stage names are the flow's, this document's, and the record's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source; and each phase's stages are compared to the keys `Record.<phase>` holds, in both directions, a `<phase>_config` key excepted. Changing any side alone fails the build. That last comparison closes a triangle I3 and I20 left open: a stage renamed everywhere but on its phase model made `metrics.json` report it as `0` for ever, and no guard could see it |
-| I4 | Each axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils` | AST scan over both axis packages |
+| I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves, over both axis packages. `schema.py` must exist and import nothing from its own package — generalised from *imports no `utils`*, because a `schema.py` importing `detectors.py` is the same defect under a new filename and the old spelling could not see it. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md §6 grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. *Every*, not *most* — §6 says "and nothing else", and a threshold would be a tuned literal with no measurement behind it (§35). The second half reports one finding per module so one §40 annotation can excuse it; both implementations carry one today, and T56 deletes them. **The file-set half is gone**: it required exactly three files, which made §6's own remedy — give the module a real name — a build failure |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` and their `modality_`/`profile_` prefixed forms assigned in a `ClassDef` |
 | I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for every function the installed library exports — read off the `__all__` of each front door, so a name the document forgets is still owned — plus the four owned roots and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
 | I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |

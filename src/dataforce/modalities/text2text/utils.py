@@ -1,3 +1,4 @@
+# guard-exempt: I4 · 14 of 16 top-level functions are not conversions over schema.py; T56 splits this module · the modality · 2026-08-30
 """LOGIC · the conversions over the shapes in schema.py beside it.
 
 ``utils`` is the one module name AGENTS.md section 6 exempts, and only under this condition. A

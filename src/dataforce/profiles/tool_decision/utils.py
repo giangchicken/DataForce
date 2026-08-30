@@ -1,3 +1,4 @@
+# guard-exempt: I4 · 18 of 23 top-level functions are not conversions over schema.py; T56 splits this module · the profile · 2026-08-30
 """LOGIC · the conversions over the shapes in schema.py beside it.
 
 A record turned into a JSON Schema is a conversion, so ``answer_schema`` is here while the models

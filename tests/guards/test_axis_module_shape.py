@@ -1,98 +1,246 @@
-"""I4 · every axis implementation is `__init__`, `schema`, `utils`, and `schema` imports no `utils`.
+"""I4 · an axis's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions.
 
-Three modules, closed. A shape is a shape and a conversion over it is logic; they change for
-different reasons, so they are different files and the dependency runs one way -- ``utils.py`` may
-read the shapes beside it, ``schema.py`` may not read the conversions. ``utils`` is the one module
-name AGENTS.md §6 exempts, and only under exactly this condition; a fourth module in the package is
-that exemption starting to spread.
+A shape is a shape and a conversion over it is logic; they change for different reasons, so they are
+different files and the dependency runs one way -- a conversion may read the shapes beside it, a
+shape may not read the conversions.
 
-This guard reads directories rather than the parsed tree, because the rule is about which files
-exist. The synthetic violation is therefore a directory too. Only the import half takes §40's
-exemption -- an annotation lives on a line, and "there is a fourth module here" has none.
+**This guard counted files until T55, and that was the defect.** It required exactly `__init__.py`,
+`schema.py` and `utils.py`, and failed on a fourth. AGENTS.md §6 says the remedy for a ``utils.py``
+that has outgrown its exemption is to give it a real name -- so the guard made the convention's own
+remedy a build failure, and a rule that forbids its own remedy turns every later addition into
+``utils.py``, which is the outcome §6 exists to prevent. The Conflicts entry *`§6`'s escape hatch vs
+a guard that closes it* records it and resolves it: a guard may fix a package's shape only where the
+conventions state that shape, and should prefer to constrain the direction of an import over the
+number of files.
+
+So the file-set half is gone and two halves stand in its place.
+
+**One · ``schema.py`` exists and imports nothing from its own package.** Generalised from *imports no
+``utils``*: a ``schema.py`` that imports ``detectors.py`` is the same defect under a new filename, and
+the old spelling could not see it. Reading directories is still right for *exists*, because that half
+is about which files there are.
+
+**Two · every top-level function in a ``utils.py`` references a shape ``schema.py`` defines.** This is
+§6's condition on the one module name it exempts -- "only for conversions over the shapes in the
+``schema.py`` beside it" -- checked for the first time. *Every*, not *most*: §6 says "and nothing
+else", and a threshold would be a tuned literal in a guard with no measurement behind it (§35). A
+helper that touches no shape is not a conversion over one, and belongs in a module named for what it
+produces.
+
+The second half reports **one finding per module**, anchored on line 1 -- the line that means *this
+module* rather than one function chosen to stand for the rest, and the one place a `#` comment sits
+above a docstring without disturbing it. The message names every offender. Both
+implementations carry that annotation today and T56 is what deletes them: only 2 of 16 top-level
+functions in ``text2text/utils.py`` touch a shape, and 5 of 23 in ``tool_decision/utils.py``, so the
+annotation is excusing 14 and 18 -- the measurement that reopened this, and not a hypothetical.
+
+A package with no ``utils.py`` passes the second half with nothing to say, which is where T56 leaves
+both of them. The rule stands for the next axis someone writes, which is when it is worth having.
 """
 
+import ast
 from pathlib import Path
 
 import pytest
 
-from .tree import axis_implementations, imports, module_from_source, not_exempt
+from .tree import Module, axis_implementations, imports, module_from_source, not_exempt
 
-SHAPE = frozenset({"__init__.py", "schema.py", "utils.py"})
+SCHEMA = "schema.py"
+UTILS = "utils.py"
+
+
+def defined_shapes(schema: Module) -> frozenset[str]:
+    """Every name `schema.py` declares at module level: a class, a type alias, or an assignment.
+
+    Assignments count because a shape may be spelled as one -- `type Calls = tuple[Call, ...]` and a
+    module-level constant are both things a conversion converts over. Being generous here is the safe
+    direction: the finding is *this function touches nothing from schema.py at all*, and a name that
+    should not have counted can only turn a finding into a pass, never the reverse.
+    """
+    names: set[str] = set()
+    for node in schema.tree.body:
+        if isinstance(node, ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.TypeAlias):
+            names.add(ast.unparse(node.name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Assign):
+            names.update(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+    return frozenset(names)
+
+
+def names_in(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Every identifier this function mentions, in its signature or its body."""
+    return {node.id for node in ast.walk(function) if isinstance(node, ast.Name)} | {
+        node.attr for node in ast.walk(function) if isinstance(node, ast.Attribute)
+    }
+
+
+def unconverted(utils: Module, shapes: frozenset[str]) -> list[tuple[int, str]]:
+    """The one finding a `utils.py` earns when it holds something that is not a conversion.
+
+    **One finding, anchored on line 1.** Twelve findings in one file would need twelve annotations to
+    excuse and §40's hatch is a line, so the module gets one -- and the line that means *this module*
+    is its first, where a `#` comment sits above the docstring without disturbing it. Anchoring on the
+    first offending `def` was the other build: it puts a long comment on a real signature, which the
+    formatter then splits across three lines, and it picks one function to stand for a fact about all
+    of them. The message names every offender so the annotation is written by someone who saw the list.
+    """
+    functions = [
+        node
+        for node in utils.tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    ]
+    missing = [node for node in functions if not names_in(node) & shapes]
+    if not missing:
+        return []
+    named = ", ".join(node.name for node in missing)
+    return [
+        (
+            1,
+            f"{len(missing)} of {len(functions)} top-level functions touch no shape "
+            f"from {SCHEMA}, so {UTILS} is holding something §6 does not exempt: {named}",
+        )
+    ]
 
 
 def axis_shape_findings(package: Path) -> list[str]:
-    """Every way this implementation departs from the three modules and the one direction."""
-    found = []
-    present = {path.name for path in package.glob("*.py")}
-    if present != SHAPE:
-        found.append(f"{package.name} holds {sorted(present)}, not {sorted(SHAPE)}")
+    """Every way this implementation departs from the one direction and the one condition."""
+    schema_path = package / SCHEMA
+    if not schema_path.exists():
+        return [f"{package.name} has no {SCHEMA}"]
 
-    schema = package / "schema.py"
-    if schema.exists():
-        dotted = f"dataforce.{package.parent.name}.{package.name}.schema"
-        module = module_from_source(schema.read_text(encoding="utf-8"), dotted)
-        found += not_exempt(
-            module,
-            "I4",
-            [
-                (reached.line, "imports its own utils")
-                for reached in imports(module)
-                if reached.module.split(".")[-1] == "utils"
-            ],
+    dotted = f"dataforce.{package.parent.name}.{package.name}"
+    schema = module_from_source(
+        schema_path.read_text(encoding="utf-8"), f"{dotted}.{SCHEMA[:-3]}"
+    )
+    found = not_exempt(
+        schema,
+        "I4",
+        [
+            (reached.line, f"{SCHEMA} imports {reached.module}, a module beside it")
+            for reached in imports(schema)
+            if reached.module == dotted or reached.module.startswith(f"{dotted}.")
+        ],
+    )
+
+    utils_path = package / UTILS
+    if utils_path.exists():
+        utils = module_from_source(
+            utils_path.read_text(encoding="utf-8"), f"{dotted}.{UTILS[:-3]}"
         )
+        found += not_exempt(utils, "I4", unconverted(utils, defined_shapes(schema)))
     return found
 
 
 @pytest.mark.parametrize("package", axis_implementations(), ids=lambda p: p.name)
-def test_every_axis_implementation_has_the_three_modules(package: Path) -> None:
+def test_every_axis_implementation_keeps_the_direction_and_the_condition(
+    package: Path,
+) -> None:
     """I4, over both axes."""
     assert axis_shape_findings(package) == []
 
 
-def test_the_scan_rejects_a_fourth_module(tmp_path: Path) -> None:
-    """§39: `utils.py` is exempted for one job, and a fourth file is that exemption spreading."""
-    package = _implementation(tmp_path, extra="detectors.py")
+def test_the_scan_rejects_a_schema_that_imports_a_module_beside_it(
+    tmp_path: Path,
+) -> None:
+    """§39: the direction, in the three spellings that reach a sibling.
+
+    `utils` is the one the old rule named; `detectors` is the one it could not see, and is the whole
+    reason this half was generalised.
+    """
+    for number, source in enumerate(
+        (
+            "from dataforce.profiles.p.utils import to_schema",
+            "from .utils import to_schema",
+            "from .detectors import a_detector",
+        )
+    ):
+        package = _implementation(tmp_path / str(number), schema=source)
+
+        assert axis_shape_findings(package) != [], source
+
+
+def test_the_scan_rejects_a_utils_holding_something_that_is_not_a_conversion(
+    tmp_path: Path,
+) -> None:
+    """§39: §6's condition, which no guard checked until T55."""
+    package = _implementation(
+        tmp_path,
+        schema="class Detector:\n    pass\n",
+        utils="def spaced(phrase):\n    return phrase\n",
+    )
 
     assert axis_shape_findings(package) != []
 
 
-def test_the_scan_rejects_a_missing_module(tmp_path: Path) -> None:
-    """§39: two modules is a shape too, and not this one."""
+def test_the_scan_rejects_a_package_with_no_schema(tmp_path: Path) -> None:
+    """§39: the half that is still about which files exist, and the only one left."""
     package = _implementation(tmp_path)
-    (package / "utils.py").unlink()
+    (package / SCHEMA).unlink()
 
     assert axis_shape_findings(package) != []
 
 
-def test_the_scan_rejects_a_schema_that_imports_its_utils(tmp_path: Path) -> None:
-    """§39: the direction, proved both spellings of the import."""
-    absolute = _implementation(
-        tmp_path, schema="from dataforce.profiles.p.utils import to_schema"
+def test_the_scan_permits_a_fourth_module(tmp_path: Path) -> None:
+    """The rule this task deleted, kept as a green case so the deletion cannot be undone by accident.
+
+    A fourth file was a finding until T55 and is the shape T56 moves both packages to. If this ever
+    goes red again, §6's remedy has been made a build failure a second time.
+    """
+    package = _implementation(
+        tmp_path, schema="class Detector:\n    pass\n", extra="detectors.py"
     )
-    relative = _implementation(
-        tmp_path / "second", schema="from .utils import to_schema"
-    )
-
-    assert axis_shape_findings(absolute) != []
-    assert axis_shape_findings(relative) != []
-
-
-def test_the_scan_permits_a_utils_that_imports_its_schema(tmp_path: Path) -> None:
-    """The direction is one way, not no way: a conversion reads the shapes beside it."""
-    package = _implementation(tmp_path)
-    (package / "utils.py").write_text("from .schema import Call\n", encoding="utf-8")
 
     assert axis_shape_findings(package) == []
 
 
-def _implementation(root: Path, *, schema: str = "", extra: str = "") -> Path:
+def test_the_scan_permits_a_utils_that_converts_the_shapes_beside_it(
+    tmp_path: Path,
+) -> None:
+    """The green case for both halves: the direction is one way, not no way, and a conversion counts."""
+    package = _implementation(
+        tmp_path,
+        schema="class Call:\n    pass\n",
+        utils="from .schema import Call\n\n\ndef calls_in(stored) -> Call:\n    return Call()\n",
+    )
+
+    assert axis_shape_findings(package) == []
+
+
+def test_an_annotated_exemption_covers_a_utils_that_has_outgrown_the_condition(
+    tmp_path: Path,
+) -> None:
+    """§40: the hatch both implementations stand on until T56 splits them.
+
+    One annotation for the module, because the finding is one finding -- which is the whole reason
+    `unconverted` reports it that way.
+    """
+    excused = (
+        "# guard-exempt: I4 · not yet split · the modality · 2026-08-30\n"
+        '"""LOGIC · conversions."""\n\n\n'
+        "def spaced(phrase):\n"
+        "    return phrase\n"
+    )
+    package = _implementation(
+        tmp_path, schema="class Detector:\n    pass\n", utils=excused
+    )
+
+    assert axis_shape_findings(package) == []
+
+
+def _implementation(
+    root: Path, *, schema: str = "", utils: str = "", extra: str = ""
+) -> Path:
     """One synthetic axis implementation on disk, so the guard reads it the way it reads a real one."""
     package = root / "profiles" / "p"
     package.mkdir(parents=True)
-    for name in SHAPE:
-        (package / name).write_text(
-            schema if name == "schema.py" else "", encoding="utf-8"
-        )
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / SCHEMA).write_text(schema, encoding="utf-8")
+    (package / UTILS).write_text(utils, encoding="utf-8")
     if extra:
         (package / extra).write_text("", encoding="utf-8")
     return package
