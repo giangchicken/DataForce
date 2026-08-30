@@ -12,7 +12,7 @@ the rebuild has one answer to every question. `make check` was therefore red: it
 prompt. Four things in the tree contradicted the spec; they were Phase 0 rather than discoveries made
 in Phase 4.
 
-**Phases 1 to 6 are done. Phase 0 still has one task left.** Phase 0: T1 (`2c41599`),
+**Phases 1, 2 and 4 to 6 are done. Phase 0 still has one task left, and Phase 3 has reopened.** Phase 0: T1 (`2c41599`),
 T2 (`a2fc1df`), T3 (`9b9a3fe`), T4 (`7fa0432`, `f7f30f4`, `89292ce`), T32 and T33. Phase 1: T5
 (`64edb99`), T7 (`b1c49b6`), T6 (`c72e5a6`), then a review round — T35, T36, T37 and T38.
 Phase 2: T8, T9 and T10. Phase 3: T11, taken early because `Engine` names both protocols, then a
@@ -22,6 +22,13 @@ and 1095 tests, 522 of which are not guards — but **T34 is open and CI is red 
 `make check` nor any guard reads.** What each task changed is recorded at the end of the task below
 it. **Phase 7 has started: T27, T53 and T52 have landed, and T28, T29 and T49 are behind them — and
 T34 is still the oldest thing on this list.**
+
+**Phase 3 reopened on 2026-08-30 with T54, T55 and T56**, a review round on the shape of the two axis
+packages. It is specified in [`../axis-module-shape/spec.md`](../axis-module-shape/spec.md) rather
+than here, because it reverses Decision 14 and that needed a document with the measurements in it.
+These are the first tasks in this plan sourced from a second spec; § *Review round · the shape of the
+two axis packages* holds them, after T50, which scheduled T54 in its own last paragraph. AGENTS.md
+gained P32 in the same round.
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -62,9 +69,10 @@ depart from it.
 | `I8` | `spec.md` § *Invariants* — I1 to I24 |
 | `Decision 12` | `spec.md` § *Decisions* — 23 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
-| `P27` | `AGENTS.md` § *Design Principles* — P0 to P31 |
+| `P27` | `AGENTS.md` § *Design Principles* — P0 to P32 |
 | `§6` | a numbered section of `AGENTS.md` § *Conventions* |
 | `T16` | a task in this file. The number is its name, not its place in the order — inserting T32 renumbered nothing |
+| `D4` | a decision in a *second* spec, `docs/axis-module-shape/spec.md`, which T54–T56 serve. `Decision 12` without a document is always this file's source spec |
 
 ---
 
@@ -119,6 +127,9 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
+| T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit`** | S | |
+| T55 | I4 stops counting files | 3 | T12, T13 | S | |
+| T56 | Both axes get modules named for what they produce | 3 | T55 | L | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -150,9 +161,11 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T30 | Smoke | 8 | T29 · **a declared corpus** | M | |
 | T31 | Pilot | 8 | T30 · **a corpus, the transfer review, the glossary** | L | |
 
-The four **L** tasks are where a plan usually goes wrong. T6 is nine guards each proved against a
+The five **L** tasks are where a plan usually goes wrong. T6 is nine guards each proved against a
 synthetic violation; T13 is fourteen members of which four are real algorithms; T16 is two detection
-layers over a language most scrubbers do not cover; T31 is a measurement campaign, not code.
+layers over a language most scrubbers do not cover; T31 is a measurement campaign, not code; T56
+moves 1478 lines and may change none of them, which is a different way to go wrong and is why its
+verification is a byte comparison.
 
 ---
 
@@ -1688,6 +1701,136 @@ settles it is a measurement of layer one's recall over a declared corpus, which 
 `+84 90 123 4567` needs a pattern, not a table row. And `IDENTIFIER_DIGITS = 6` stays a module
 constant — six digits is the shortest identifier *this corpus's* sample carries, so it is neither a
 language fact nor a country's, and the comment beside it names what re-measures it.
+
+---
+
+## Review round · the shape of the two axis packages
+
+Three tasks from a second spec: [`../axis-module-shape/spec.md`](../axis-module-shape/spec.md). They
+are numbered in Phase 3 because that is the code they reshape — `text2text` and `tool_decision`, the
+two packages T12 and T13 built — and they are carried here rather than in that spec because this file
+is the standing task list and there is one of it.
+
+**They are a review round on a phase that is otherwise done**, the way T35–T43 were on Phases 1 and 2.
+No protocol member, record key, pattern, threshold, endpoint or config key moves in any of the three.
+T54 is the follow-up T50 scheduled in its own last paragraph. T55 unblocks T56 and lands alone. Read
+the spec's § *Context* first: it reverses Decision 14, and the four measurements are the reason.
+
+### T54 · The words a language dictates come from the library
+
+**Goal.** `agent_toolkit.string_utils` is the only definition of `SpokenPiiForms`, `SPOKEN_PII_FORMS`
+and `spoken_pii_forms`.
+
+**Context.** T50 ends by scheduling this task: *"the day the pin moves past `61fdf65`,
+`spoken_pii_forms` appears in the installed library's `__all__`, I6 fails on the duplicate `def` here,
+and the fix is one import and one deletion."* That day has not come because the pin is `@v0.1.0` and
+the branch has not been tagged. Both `vi` and `en` tables are byte-identical across the two
+repositories today; the behaviour is not — the library raises `ToolkitError` and this repository
+raises `ConfigError`. AGENTS.md P32 is the rule that now names the standing comment as a finding
+rather than as its own excuse.
+
+**Approach.** In `agent-toolkit`: merge `spoken-forms` to `main`, cut a tag. Here: move the pin,
+`uv lock`, delete the three names and `written_down`, import `spoken_pii_forms`, and translate
+`ToolkitError` to `ConfigError` at the one call site (spec D3). `written_down` loses one of its two
+callers and stops being a function under §4 — it is inlined into `phone_plan`. `PHONE_PLANS` stays,
+and stays wrong (spec D2): correcting the off-by-one shrinks what layer one redacts, and what settles
+it is the pilot's recall measurement.
+
+**Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS" src/` returns nothing. An undeclared language
+still raises `ConfigError` with the message it raises today. **The six compiled patterns are identical
+before and after** — that is what proves D2 was honoured, and it is the only assertion in this task
+that is about behaviour rather than about names.
+
+**Source.** `../axis-module-shape/spec.md` D1, D2, D3 and § *Context* item 5; AGENTS.md P32, P14; I6;
+T50, which scheduled it.
+
+**Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
+red on `text2text/utils.py:209`. A green run at that point means the tag does not contain `61fdf65`,
+and nothing else in this task is worth starting.
+
+**Out of scope.** Correcting `PHONE_PLANS`. Any change to a detector's reach.
+
+**Blocked by.** A tag in `agent-toolkit` containing `61fdf65`. One merge and one tag, in another
+repository, and not scheduled here.
+
+---
+
+### T55 · I4 stops counting files
+
+**Goal.** I4 constrains the direction of an import and the condition on `utils.py`, and a fourth
+module in an axis package is legal.
+
+**Context.** `tests/guards/test_axis_module_shape.py` requires exactly `__init__.py`, `schema.py` and
+`utils.py`, with a test named `test_the_scan_rejects_a_fourth_module`. AGENTS.md §6 says the remedy for
+a `utils.py` that has outgrown its exemption is to give it a real name — so the guard makes the
+convention's own remedy a build failure. **A rule that forbids its own remedy converts every later
+addition into `utils.py`**, which is the outcome §6 exists to prevent. The conflict is recorded in
+AGENTS.md § *Conflicts*, resolved as: a guard may fix a package's shape only where the conventions
+state that shape, and should prefer to constrain the direction of an import over the number of files.
+
+This is a guard task and it is numbered in Phase 3 rather than Phase 1, where T39 and T42 sit, because
+it exists only to permit T56 and is worthless apart from it. The deviation is recorded here (§8).
+
+**Approach.** Rewrite the guard to the two halves spec D4 states. First half: `schema.py` exists and
+imports nothing from its own package — generalised from *imports no `utils`*, because a `schema.py`
+importing `detectors.py` is the same defect under a new filename. Second half: for any module named
+`utils.py`, **every** top-level function must reference a name `schema.py` defines. Not *most* — a
+threshold would be a tuned literal in a guard with no measurement behind it (P25), and §6 says "and
+nothing else". Delete `test_the_scan_rejects_a_fourth_module`, which proves a rule that no longer
+exists, and add the two P29 proofs.
+
+**Acceptance criteria.** The new guard is red against both synthetic violations. It is green over
+`schema.py` in both packages. Its second half is **red** over both real `utils.py` — 2 of 16 and 5 of
+23 top-level functions touch a shape — so this task lands two annotated P30 exemptions naming T56 as
+the fix, dated. `test_exemptions.py` then shows four standing exemptions against a ceiling of five.
+
+**Source.** `../axis-module-shape/spec.md` D4 and § *Invariants*; AGENTS.md §6, P28, P29, P30, and the
+Conflicts entry *`§6`'s escape hatch vs a guard that closes it*.
+
+**Verify.** `make check`, and `test_exemptions.py` reports four exemptions rather than two.
+
+**Out of scope.** Moving any code. After this task the tree is unchanged and both packages still hold
+exactly three files — which is the point: the guard rewrite is reviewable on its own.
+
+---
+
+### T56 · Both axes get modules named for what they produce
+
+**Goal.** The layout in `../axis-module-shape/spec.md` § *The target layout*, and no `utils.py` in
+either package.
+
+**Context.** The exemption §6 grants `utils.py` covers 2 of 16 top-level functions in
+`text2text/utils.py` and 5 of 23 in `tool_decision/utils.py`; the other 32 are a vocabulary table, two
+manifest readers, two JSON canonicalisers, turn rendering, answer arithmetic and annotation decoding.
+Three test files already import those internals directly, which is P9's design finding and the second
+consumer P5 asks for. Decision 14 refused this split on the grounds of *"three modules with one
+consumer each"* — a reason that was already false, and that the style reference named on `spec.md`
+line 3 contradicts by example.
+
+**Approach.** Pure moves, in this order so every step is green: `declarations.py` at top level with
+both axes importing it (spec D6); `canonical_json` into `record.py`, with `record_id_for` calling it,
+which takes I24 from three call sites to one (spec D7); `text2text/` into `turns.py`, `detectors.py`
+and `modality.py`; `tool_decision/` into `answers.py`, `annotations.py`, `records.py` and `profile.py`.
+Every docstring travels with the code it documents, so the prose explaining a decision stays where the
+next reader hits it (§8). The two P30 exemptions T55 landed are deleted by this task, which is what
+P30 means by *shrinking*.
+
+**Acceptance criteria.** I23 passes unchanged — both façades export the same set of names before and
+after. The three tests that reached into `utils.py` import from the module that owns each name.
+**No test's assertions change:** if one has to, the move was not a move and the task is wrong.
+
+**Source.** `../axis-module-shape/spec.md` D5, D6, D7 and § *The target layout*, which carries the
+per-name destination table and P8's deletion test for each new module; AGENTS.md §5, §6, P5, P8, P9,
+P10; I19, I23.
+
+**Verify.** `make check`. Then the byte check: run the smoke corpus before and after and compare
+`records.jsonl` and `metrics.json` byte for byte. §7 asks what proved behaviour did not change, and
+for a task that is entirely moves, an identical artifact is the only answer that means anything.
+
+**Out of scope.** Splitting `record.py`. Any second axis — spec D4's second half exists for one, and
+nothing here anticipates it.
+
+**Blocked by.** T55. The fourth file is a build failure until it lands.
 
 ---
 

@@ -117,6 +117,17 @@ Then:
 - **Name a module for its noun or its job**, never `helpers.py`, `common.py`, `misc.py`.
   `utils.py` is the one allowed exception, and only for conversions over the shapes in
   the `schema.py` beside it.
+- **`§5` applies to filenames.** A module inside a feature folder is named for what it
+  produces, and the test is `§5`'s: read the import with nothing else on screen and say what
+  comes back. When every module in a folder names a result, the folder listing is that
+  feature's table of contents and its façade re-exports one name from each.
+- **`utils.py` is where a feature starts, not where it ends.** The exemption above is for
+  conversions over the shapes in the `schema.py` beside it, and it is countable: how many of
+  the module's top-level functions mention a shape from that `schema.py`? When most of them
+  do not, the module is holding something else, the exemption has stopped covering it, and
+  the bullet above applies to whatever is left. A vocabulary table, a config reader and a
+  serialiser are not conversions over the shapes beside them — they are three modules that
+  have not been named yet.
 - **Declare the import direction once and never reverse it.** Write it in the top-level
   package docstring — *these packages may import the engine; the engine may not import
   them* — and enforce it with a test, not with discipline.
@@ -425,6 +436,19 @@ checks becomes fiction without anyone noticing, and unlike code, nobody gets a c
 error about it.
 **Check:** the doc and the code are compared by CI, or the doc does not state that fact.
 
+**P32. A guard that reads the installed version cannot see a duplicate that has not shipped.**
+Reading a rule off the third party rather than off a list is right (P28) and it buys
+completeness only up to the pin. Where the library is one we also own — extracted from
+another repository of ours, and moving — the copy that matters is usually the one on a
+branch: the same table, the same names, written twice, with the pin holding the guard's eyes
+shut. Distance makes it worse rather than better (P14): two copies in one module drift in a
+review, two copies in two repositories drift in silence, and the second one is the one nobody
+runs the tests for.
+**Check:** any sentence in the code saying *this also lives in the library, on a branch* is
+the finding, not the excuse. Either move the pin and delete the copy, or land the branch. A
+comment promising a future deletion is connascence of value across a repository boundary with
+a date on it, and the date is what expires.
+
 ---
 
 ## Conflicts, written down
@@ -445,6 +469,17 @@ missing, and it wins.
 `§6` grants one exception on purpose. It stands, with a limit: `utils.py` holds conversions
 over the shapes in the `schema.py` beside it, and nothing else. The moment it holds
 something else, `§5` applies and it gets a real name.
+
+**`§6`'s escape hatch vs a guard that closes it.** The limit above only means something if
+the module *can* get a real name. A fitness function that fixes a package's **file list** —
+these three files exactly, a fourth is a violation — says the opposite of the rule above it:
+`§6` says split when the exemption stops covering the module, and the guard says the split
+is the violation. A rule that forbids its own remedy converts every later addition into
+`utils.py`, which is the outcome `§6` was written to prevent, and P28's "the layering rule
+fails the build, not the review" is not a licence for a guard to enforce something the
+conventions never asked for. Resolution: **a guard may fix a package's shape only where the
+conventions state that shape, and should prefer to constrain the direction of an import over
+the number of files.** Where it fixes more than that, the guard is the finding.
 
 **`§5` owns naming; the P-series does not.**
 There is no naming principle below because `§5` is already sharper than anything the
