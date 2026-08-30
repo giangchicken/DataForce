@@ -127,7 +127,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
-| T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit`** | S | |
+| T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit` containing `61fdf65`** | S | |
 | T55 | I4 stops counting files | 3 | T12, T13 | S | |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
@@ -1750,8 +1750,11 @@ and nothing else in this task is worth starting.
 
 **Out of scope.** Correcting `PHONE_PLANS`. Any change to a detector's reach.
 
-**Blocked by.** A tag in `agent-toolkit` containing `61fdf65`. One merge and one tag, in another
-repository, and not scheduled here.
+**Blocked by.** A tag in `agent-toolkit` containing `61fdf65`. The merge landed on `main` as
+`d0572c9` on 2026-08-30 and **that does not unblock this task**: the pin resolves by tag, `v0.1.0` is
+at `2b603a6` on the remote, and `uv.lock` records that commit. One tag, in another repository, and not
+scheduled here. Read the lockfile rather than a local tag to check — the checkout beside this
+repository has `v0.1.0` at `ec1f338` and `git fetch` will not correct it.
 
 ---
 

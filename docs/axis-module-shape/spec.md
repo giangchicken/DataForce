@@ -85,15 +85,16 @@ section, resolved as: *a guard may fix a package's shape only where the conventi
 shape, and should prefer to constrain the direction of an import over the number of files.*
 
 **5 · The spoken-PII vocabulary is a live duplicate, and it has already drifted.** `SpokenPiiForms`,
-`SPOKEN_PII_FORMS` and `spoken_pii_forms` exist in `agent-toolkit` on branch `spoken-forms`
-(`61fdf65`, `src/agent_toolkit/string_utils.py:390–507`). The two `vi` and `en` tables are
+`SPOKEN_PII_FORMS` and `spoken_pii_forms` are in `agent-toolkit`'s `main`, merged as `d0572c9` on
+2026-08-30 (`61fdf65`, `src/agent_toolkit/string_utils.py:390–507`). The two `vi` and `en` tables are
 byte-identical to the ones in `text2text/utils.py:146–185`. The behaviour is not: the library raises
 `ToolkitError`, this repository raises `ConfigError`. `text2text/utils.py:105` states the duplication
 outright — *"holds this exact shape and these exact names on a branch already"* — and that sentence
 has stood as a justification rather than as a finding, which is what AGENTS.md P32 now names.
 
-I6 cannot see it. The guard reads owned names off the **installed** library and the pin is
-`@v0.1.0`, which predates the commit. Verified: `spoken_pii_forms` is a `def` in the branch's
+I6 cannot see it, and the merge did not change that. The guard reads owned names off the
+**installed** library; the pin resolves by tag, `v0.1.0` is at `2b603a6`, and the merge is two commits
+past it. Verified: `spoken_pii_forms` is a `def` in the branch's
 `string_utils.__all__`, so **the pin move alone turns I6 red on
 `text2text/utils.py:209`** — the guard does the enforcement the moment it can see. `SPOKEN_PII_FORMS`
 and `SpokenPiiForms` are a constant and a class, which I6 does not scan, so those two come out by
@@ -128,10 +129,14 @@ sentence of prose — every docstring moves with the code it documents.
 would have to import a library the lockfile does not resolve, which is a second dependency graph for
 a test. *Alternative:* delete the branch and keep this the only home. *Why not:* the vocabulary is a
 fact about a language and has no connection to this pipeline — the branch commit says so and
-`text2text/utils.py:103` agrees. *Cost:* the pin move is not isolated to `string_utils`. It also
-brings `llm-yaml-config` (`201cf6e`), which adds `YamlConfigResolver` to `agent_toolkit.llm`. Checked:
-`JsonDirConfigResolver`, `LLMConfig` and `LLMConfigError` — the three names `edge/bootstrap.py`
-imports — are present and unchanged on the branch, and the `llm/__init__.py` `__all__` is additive.
+`text2text/utils.py:103` agrees. *Cost:* none beyond the vocabulary — corrected on
+2026-08-30, having first been written the other way. This entry said the move would drag
+`llm-yaml-config` along, which was read off a **stale local tag**: the checkout beside this repository
+has `v0.1.0` at `ec1f338`, the remote moved it to `2b603a6` some time ago, and `git fetch` refuses to
+clobber a local tag, so the difference is silent. `uv.lock` records `2b603a6` and the installed
+`agent_toolkit.llm.__all__` already carries `YamlConfigResolver`. `v0.1.0..main` is exactly two
+commits — `61fdf65` and its merge `d0572c9` — so the move brings the vocabulary and nothing else.
+**Read the lockfile, never a local tag, when deciding what a pin contains.**
 
 **D2 · `PHONE_PLANS` stays here, and stays wrong.**
 Only the language half leaves. A numbering plan is a fact about a country, and one of its numbers is
@@ -400,9 +405,11 @@ and for a task that is entirely moves, an identical artifact is the only answer 
 
 ## Risks
 
-**The pin move brings more than the vocabulary.** `llm-yaml-config` rides along. Checked additive on
-the three names `edge/bootstrap.py` imports (D1), but T54's verify step is a full `make check`, not
-just the PII tests.
+**The pin is a tag, and this tag moves.** `v0.1.0` has been moved once already: it is `2b603a6` on
+the remote and `ec1f338` in the checkout beside this repository, and nothing reports the difference.
+T54 changes the pin to a **new** tag rather than moving this one again, for the reason
+`pyproject.toml` already gives at the dependency — a moved tag is a release built from a tree nobody
+chose, and it reaches this repository as a `uv.lock` diff under an unchanged version string.
 
 **T55 lands a guard that is red on the tree it guards**, and pays for it with two exemptions that T56
 deletes. The alternative — land T55 and T56 as one commit — makes the reviewable unit a rewrite of a
