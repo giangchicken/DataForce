@@ -20,20 +20,20 @@ three, and there is none: a shell either persists a run or answers over HTTP and
 of what we meant to write is not evidence about what a later reader will find, and the whole point
 of putting it in the manifest is that someone reads it later. It is spelled inline in ``written_run``
 -- ``compute_hash(read_txt(...))`` is the sentence, and wrapping one expression with one caller in a
-name costs a file to open and returns nothing for it (§4).
+name costs a file to open and returns nothing for it.
 
 **``read_records`` has no caller in ``src/`` until T29.** § *Package layout* says this module is the
 one place a record file is *read* or written, and reading is the half T2 assigned here, so the
 function is this module's job rather than a reader that arrived early. What has not arrived is the
 caller: the CLI runs one stage per invocation and the record file is the bus between two of them.
 Until then what proves it is the round trip -- a file ``written_run`` wrote that nothing could read
-back would make *written* a claim about bytes nobody has checked (§7).
+back would make *written* a claim about bytes nobody has checked.
 
 **Side output is not written here yet.** ``ServiceResult.side_output`` is keyed by the stage that
 produced it and each key wants its own destination -- ``pii_check``'s placeholder map is a file that
 is never committed (I13), ``load_data``'s unreadable items are the quarantine tier. The shell that
 has one to write is T28's and T29's, and inventing a layout for them now would be a layout nobody
-has a caller for (§2).
+has a caller for.
 """
 
 from collections import Counter
@@ -145,9 +145,9 @@ def corpus_counts(engine: Engine, records: Sequence[Record]) -> dict[str, Any]:
     table that had drifted from the record into a stage reporting `0` for every record for ever --
     silently, and with `make check` green, because I3 compared the flow to the document and I20 the
     record to the document and nothing compared the two to each other. I3 closes that edge now, so
-    a missing key cannot ship; the default was the state §2 says not to handle. Requirement 44 is
+    a missing key cannot ship; the default was a state no caller can reach. Requirement 44 is
     about a *number* not stopping a run, and a phase model that has lost a stage is not a number --
-    it is the code condition §33 puts in configuration scope. Same shape as `cosine`'s
+    it is a code condition, which belongs in configuration scope. Same shape as `cosine`'s
     `strict=True`: an assertion rather than an error path.
     """
     failed = Counter(name for record in records for name in failed_check_names(record))

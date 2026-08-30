@@ -9,7 +9,7 @@ is is the whole of what a profile declares.
 **There is deliberately no ``Answer`` in this module.** ``base.Answer`` is the opaque alias every
 member's signature uses, and what actually crosses the boundary is ``record.StoredAnswer``. A second
 ``Answer`` here -- ``tuple[Call, ...]``, the parsed form -- meant one word naming two shapes inside one
-axis, so a reader following Requirement 47 got the wrong type for all four operations (§5). The parsed
+axis, so a reader following Requirement 47 got the wrong type for all four operations. The parsed
 form is ``Calls``, which is what ``calls_in`` returns and what it says.
 
 **An answer is a set of calls, and a call is a name and its arguments.** ``SendStatement`` alone

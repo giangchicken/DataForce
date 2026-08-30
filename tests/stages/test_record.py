@@ -11,11 +11,11 @@ type makes to every stage -- a part carries what its type declares, and a record
 cannot be edited by it.
 
 That second promise is made by the module docstring about *every* model here, so it is checked over
-every model here rather than through the one field a single test happens to touch (§38). Both
+every model here rather than through the one field a single test happens to touch. Both
 halves: frozen, and no mutable sequence inside the frozen thing. Twenty-two models inherit it from
 `RecordModel` today, and the first one to declare its own `model_config` is the one this catches.
 
-Every fixture below is invented (AGENTS.md §9). The Vietnamese is there because the corpus this
+Every fixture below is invented. The Vietnamese is there because the corpus this
 runs over is Vietnamese and an id over non-ASCII is worth exercising, not for flavour.
 """
 

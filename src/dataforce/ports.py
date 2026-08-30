@@ -1,7 +1,7 @@
 """DEFINITION · QuestionStore, PersonalDataVerifier and JuryPanel -- what the engine demands of the edge.
 
 Three ports. The abstraction belongs to the layer that consumes it, so each is declared here and
-implemented in ``edge/`` (§28) -- an adapter declaring its own port is how a clean-looking layer
+implemented in ``edge/`` -- an adapter declaring its own port is how a clean-looking layer
 diagram turns out to be false.
 
 **A port is what the engine calls *back* into during a run; what it is constructed with is a
@@ -12,14 +12,13 @@ not interfaces anything implements. That is the line this module is drawn on, an
 encoder is not declared here.
 
 **``PersonalDataVerifier`` arrived with a caller, which is the only reason it is here.** This module
-said *one port, because a port with no adapter is a guess about a future caller* (§30), and the
+said *one port, because a port with no adapter is a guess about a future caller*, and the
 sentence stands: what changed is that Requirement 18's second layer is a model pass, a model call
 opens a socket, and ``pii_check`` may not make one. So the engine slices the window and decides what
-to do with the answer, and the edge makes the call. Two adapters are what would make the seam real
-(§30), and **today there is one**: the stand-in every test in ``make check`` runs against, which is
+to do with the answer, and the edge makes the call. Two adapters are what would make the seam real, and **today there is one**: the stand-in every test in ``make check`` runs against, which is
 not a convenience -- *no network in `make check`* is § *Testing Strategy*'s rule. The client belongs
 to ``edge/bootstrap.py``, which is a docstring; T27 is where it lands and until then the second
-adapter is a claim (AGENTS.md §7).
+adapter is a claim.
 
 **``JuryPanel`` is the same argument at a larger size, and it draws the line in a different
 place.** ``jury`` cannot call N models for the same reason ``pii_check`` cannot call one, so the
@@ -49,8 +48,8 @@ Whether a stage reaches the store through a port at all or hands rows back as si
 until T23 -- § *Engine and edge* says the engine returns rows and the edge writes them, which reads
 like the second. Requirement 32 says ``publish`` writes *through a port supplied at the edge* **and
 records the receipt on the record**, and only the first shape can do both: a receipt names a write
-that has already happened, so a stage that only returned rows could not write its own key and §26
-would have the edge writing ``human_review.publish``.
+that has already happened, so a stage that only returned rows could not write its own key, and the edge
+would be writing ``human_review.publish`` -- a second writer for one key.
 
 **What crosses is a row and never a record.** The store holds one question's payload and one
 annotation's control values; it holds no content, no label and no verdict of any earlier phase,
@@ -183,7 +182,7 @@ class StoredAnnotation:
     `lead_time_seconds` are the pilot's instruments and are not an answer to anything.
 
     `external_annotation_id` does not cross. It is the store's own idempotency key and no stage has
-    a use for it, which is the whole of §20.
+    a use for it, which is the whole of a narrow interface.
     """
 
     answer_id: str  # the store's id for this answer; unique within the store
@@ -204,12 +203,12 @@ class QuestionStore(Protocol):
         **Writing a question the store already has is not an error.** The id is a pure function of
         the question (`question_generate`), so a second publish of an unchanged corpus is the same
         rows -- and a store that raised would make re-running a phase something a caller has to be
-        careful about, which is the error §32 says to design out. The receipt names every id the
+        careful about, which is the error to design out. The receipt names every id the
         store holds for this batch, whether this call wrote it or an earlier one did, because that
         is what `publish` records and what a person auditing a re-run reads.
 
         **It may not raise about one question.** A batch that reached a store and a batch that did
-        not are different facts, and the second is a `ConfigError` about the configuration (§33):
+        not are different facts, and the second is a `ConfigError` about the configuration:
         an unreachable database is one thing wrong, not twenty thousand.
         """
         ...

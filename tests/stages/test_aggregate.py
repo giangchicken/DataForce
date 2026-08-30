@@ -9,7 +9,7 @@ unanimous, chance, systematic disagreement, and one unit — because a statistic
 hand is a statistic nobody notices going wrong. The numbers below are the formula's, not this
 implementation's.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Sequence
@@ -368,7 +368,7 @@ def test_every_record_comes_back_whether_it_was_folded_or_not() -> None:
 
 
 def test_a_floor_that_is_not_a_count_stops_the_run() -> None:
-    """§33: read before the first record, because it is a fact about the configuration."""
+    """Read before the first record, because it is a fact about the configuration."""
     engine = replace(
         an_engine_folding(),
         thresholds={"thresholds": {"aggregate": {"overlap_floor": 0}}},
@@ -390,7 +390,7 @@ def test_a_floor_declared_true_is_not_a_floor_of_one() -> None:
 
 
 def test_the_params_file_this_repository_ships_declares_a_floor() -> None:
-    """§41: the shipped declaration is read by the reader that refuses a bad one."""
+    """The shipped declaration is read by the reader that refuses a bad one."""
     from pathlib import Path
 
     from agent_toolkit.file_utils import read_yaml

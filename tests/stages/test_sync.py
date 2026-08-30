@@ -14,7 +14,7 @@ database's answer and not the double's.
 already created question one's task, and the row for it has to survive: no constraint can catch a
 task nobody recorded, so the row is the record that it exists.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Mapping, Sequence
@@ -295,7 +295,7 @@ def test_an_answer_id_is_a_pure_function_of_the_annotation() -> None:
 
 
 def test_an_unnamed_instance_is_a_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """§33: a human must change something, and the message says which variable."""
+    """A human must change something, and the message says which variable."""
     monkeypatch.delenv(BASE_URL, raising=False)
 
     with pytest.raises(ConfigError, match=BASE_URL):

@@ -61,7 +61,7 @@ def test_the_scan_found_the_stages_it_is_supposed_to_scan() -> None:
 
 
 def test_the_scan_rejects_a_stage_that_reads_one() -> None:
-    """§39: the shape the rule forbids -- a stage folding what the edge is supposed to persist."""
+    """Proved red: the shape the rule forbids -- a stage folding what the edge is supposed to persist."""
     violation = (
         '"""STEP · pii_check · two-layer detection."""\n'
         "def pii_check(engine, records, earlier):\n"

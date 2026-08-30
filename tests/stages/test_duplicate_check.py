@@ -10,7 +10,7 @@ and the threshold is passed in per test — a real model's numbers would make
 every assertion below a measurement of the model rather than of the grouping. What is this stage's to
 get right is which pairs are *compared*, and that is asserted directly.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Sequence

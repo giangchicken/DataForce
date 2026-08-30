@@ -10,7 +10,7 @@ pipeline produces is written on δ (Decision 15), so a cohesion figure that rank
 argument wrong* level with *wrong tool* would put both in one triage bucket and no threshold change
 would separate them again.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 import pytest

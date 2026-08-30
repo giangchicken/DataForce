@@ -8,7 +8,7 @@ second `compute_hash` here is not a duplicate function, it is a second definitio
 hand-written tuple until this commit, and that tuple and the spec's sentence agreed with each other
 while both disagreed with `agent-toolkit`: seventeen exported functions appeared in neither, among
 them `split_thinking`, `read_json` and `get_logger`, and nothing would have stopped a module here
-from defining one. A §41 pairing over two hand-maintained copies of a fact proves the copies match;
+from defining one. A pairing over two hand-maintained copies of a fact proves the copies match;
 it cannot prove either is *true*. The third party -- the library a run actually imports -- is the
 only thing that can say, and it was the one party the rule never asked.
 
@@ -35,7 +35,7 @@ a root `agent-toolkit` owns, and the library reaches for it itself. It is scanne
 one import that makes a second `compute_hash` possible without naming one -- and since T8 that
 function *is* the definition of a `record_id`, so a digest computed any other way is a second answer
 to what a record is called. A digest over **bytes** is a real need the first media modality will
-have, since `compute_hash` takes a `str`; that is what §40's hatch is for, annotated on the line
+have, since `compute_hash` takes a `str`; that is what the exemption hatch is for, annotated on the line
 rather than by widening the rule for everyone.
 
 Importing the library is not a finding. Naming one of its functions as a `def` is.
@@ -147,7 +147,7 @@ def test_no_module_re_implements_the_library(module: Module) -> None:
     ],
 )
 def test_the_scan_rejects_a_module_that_does_the_library_s_job(violation: str) -> None:
-    """§39: proved red against a synthetic violation, one per root and one per shape of name.
+    """Proved red against a synthetic violation, one per root and one per shape of name.
 
     `split_thinking` and `read_json` are the two the hand-written tuple let through, kept here as
     the standing proof that the derivation is what makes them findings.
@@ -176,7 +176,7 @@ def test_the_scan_permits_using_the_library(permitted: str) -> None:
 
 
 def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
-    """§40: `compute_hash` takes a `str`, so the first media part's sha256 has nowhere else to go."""
+    """`compute_hash` takes a `str`, so the first media part's sha256 has nowhere else to go."""
     excused = (
         "import hashlib"
         "  # guard-exempt: I6 · a media digest is over bytes · the modality · 2026-08-24"
@@ -201,7 +201,7 @@ def test_the_derivation_reads_the_library_it_is_supposed_to_find() -> None:
 
 
 def test_the_document_claims_nothing_the_library_does_not_own() -> None:
-    """§41, in the one direction that is still the document's to get wrong.
+    """The comparison, in the one direction that is still the document's to get wrong.
 
     That sentence was compared for *equality* against a tuple in this file, which is what let the
     two of them be wrong together. Completeness belongs to the library now, so what is left for the

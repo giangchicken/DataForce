@@ -5,7 +5,7 @@ The last stage of the phase and the only one in the pipeline that is re-run on p
 this stage **exactly one** re-tuning pass afterwards. That is what Decision 3 bought -- a boundary
 that moves re-runs this module and never the panel.
 
-**No number is written here** (Requirement 27, §35). Both floors, every stratum and every quota are
+**No number is written here** (Requirement 27). Both floors, every stratum and every quota are
 lines in ``params.yaml``, so moving a boundary is a committed, attributable edit whose digest the
 run manifest records. What *is* here is the cell structure, because four cells of two floors is
 logic and not a threshold:
@@ -45,7 +45,7 @@ from dataforce.record import AgreementScores, Record, ReviewSelection
 
 from ..params import declared_ratio, declared_text
 
-# The key this stage owns, under `ai_review` (§26: one key, one writer).
+# The key this stage owns, under `ai_review`: one key, one writer.
 STAGE = "triage"
 
 # Where `params.yaml` declares the two floors and the row for each cell they make.
@@ -73,7 +73,7 @@ class Floors(NamedTuple):
     """The two boundaries, named rather than ordered.
 
     They are two floats of one type read from two adjacent lines and passed through three calls,
-    which is connascence of position at exactly the distance §23 says to convert: a swap type-checks,
+    which is connascence of position at exactly the distance to convert it: a swap type-checks,
     runs, and moves every record one cell sideways. `flow.py`'s `Stage` is the same conversion.
     """
 
@@ -88,7 +88,7 @@ def sampling_position(record_id: str) -> float:
 
     Not `share_of`, which is what this was called: a *share* is what a quota is, and the call site
     then read as one share compared against another. What comes back is the record's position in
-    the interval the quota cuts (AGENTS.md §5).
+    the interval the quota cuts.
 
     Hashed rather than read straight off the id, for one reason: `record_id` is 16 lowercase hex by
     construction (Requirement 6) and `Record.record_id` is a string, so reading it as base sixteen
@@ -107,7 +107,7 @@ def declared_buckets(engine: Engine) -> Mapping[str, tuple[str, float]]:
     """Every cell, with the stratum and the quota `params.yaml` gives it.
 
     Read once, before the first record: a cell the file does not answer for is a `ConfigError` at
-    that point rather than twenty thousand records into a run (Requirement 43, §33). Every cell is
+    that point rather than twenty thousand records into a run (Requirement 43). Every cell is
     read even where the corpus produces none of one, because *the file is incomplete* is worth
     knowing on the run that would otherwise have hidden it.
     """
@@ -127,7 +127,7 @@ def bucket_for(scores: AgreementScores, floors: Floors) -> str:
     declares a quota against, the field `ReviewSelection` carries, and the word the caller binds.
     `cell_of` named the lookup rather than the result and disagreed with its own call site.
 
-    The suffix stays because §5 only refuses one that stands *in place of* the object: a bucket is
+    The suffix stays because the rule only refuses one that stands *in place of* the object: a bucket is
     what this returns, so `bucket = bucket_for(scores, floors)` says so twice rather than hiding it.
     `triage_for` would read as well and cannot be had -- `triage` is this module, its stage key, its
     service function and already a constant here, which is the third bullet of the same section.
@@ -183,7 +183,7 @@ def triage(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every measured record, one key richer: where it landed, and whether a person sees it.
 
     The precondition is `scores_to_place`, named beside the signature rather than spelled inside
-    the fold (§22). The declarations are read before the first record, so a `params.yaml` this
+    the fold. The declarations are read before the first record, so a `params.yaml` this
     stage cannot run on stops the run rather than half of it.
     """
     floors = Floors(

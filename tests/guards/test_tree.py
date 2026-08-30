@@ -7,7 +7,7 @@ nothing, and a rule that finds nothing reads exactly like a rule nothing violate
 That is not hypothetical. `module_at` named a package's `__init__.py` `dataforce.modalities.__init__`
 and resolved its relative imports against that, so `from . import text2text` in a façade came out as
 `dataforce.modalities.__init__.text2text` and matched no implementation. I2 and I16 were both blind
-to it, and both were green. AGENTS.md §8: a rule that passes because there is nothing to check is a
+to it, and both were green. AGENTS.md: a rule that passes because there is nothing to check is a
 rule nobody has tested.
 """
 

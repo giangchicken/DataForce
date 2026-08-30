@@ -48,7 +48,7 @@ from dataforce.record import AnnotatorResponse, OverlapVerdict, Record
 
 from ..params import declared_count
 
-# The key this stage owns, under `human_review` (§26: one key, one writer).
+# The key this stage owns, under `human_review`: one key, one writer.
 STAGE = "aggregate"
 
 # The estimator, named so that two runs producing different numbers can be told apart from two runs

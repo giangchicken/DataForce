@@ -14,7 +14,7 @@ raise while records are being read, Requirement 43 permits that only before, and
 caller that knows the offset.
 
 The axes are the real ones, built through the fixtures in `test_tool_decision.py`: a stage that
-reads content through a double would prove the double. Every fixture is invented (AGENTS.md §9).
+reads content through a double would prove the double. Every fixture is invented.
 """
 
 from collections.abc import Mapping

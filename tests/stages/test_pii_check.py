@@ -1,7 +1,7 @@
 """T16 · pii_check: what the two layers find, what gets replaced, and what is held back.
 
 The adversarial fixtures § *Testing Strategy* item 6 asks for, and the three decisions T16 made.
-Every fixture is invented (AGENTS.md §9); the Vietnamese is the corpus's language and the spoken
+Every fixture is invented; the Vietnamese is the corpus's language and the spoken
 forms are the ones an off-the-shelf scrubber does not detect.
 
 **Layer two is a stand-in in every test here, and that is the boundary rather than a shortcut.**
@@ -422,7 +422,7 @@ def test_a_mistyped_switch_is_refused_before_any_record_is_read() -> None:
 
 
 def test_a_config_error_from_layer_two_stops_the_run() -> None:
-    """§33: `ConfigError` means a human must change configuration, not *this hit is unconfirmed*.
+    """`ConfigError` means a human must change configuration, not *this hit is unconfirmed*.
 
     Swallowed, an adapter that cannot reach its endpoint leaves every hit `unverified` and every
     record `withheld` -- which fails safe, and is the expensive kind of quiet: nothing ships and no

@@ -52,7 +52,7 @@ thresholds:
     overlap_floor: 1
 
   # Two floors and one row per cell they make. Every value here is provisional: `objective.md`
-  # §8 calls bucket thresholds provisional until the pilot measures them, and `triage` gets
+  # `objective.md` §8 calls bucket thresholds provisional until the pilot measures them, and `triage` gets
   # exactly one re-tuning pass afterwards. What re-measures them is the pilot's own question --
   # does each bucket predict what humans find -- and a bucket whose precision the pilot cannot
   # establish gets `quota: 0`, which is how a bucket is retired without deleting its row.

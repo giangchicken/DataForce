@@ -15,7 +15,7 @@ joins a row back to the bus is ``record_id``, and reading it is the pipeline's b
 annotation tool's shape is read* and three decomposed columns need a second reader of that shape --
 in the layer furthest from the capture half that defines it, and with no record to validate a
 corrected value against. The envelope is a different fact and stays decomposed: ``was_skipped`` and
-``lead_time_seconds`` are the pilot's instruments and answer nothing (§8; recorded in ``spec.md``).
+``lead_time_seconds`` are the pilot's instruments and answer nothing (recorded in ``spec.md``).
 
 **Two dialects, one schema, and the differences are carried rather than argued away** (Decision 7).
 ``JSON`` is a real type in Postgres and a text affinity in SQLite; a timezone-aware ``DateTime`` is
@@ -41,7 +41,7 @@ class UtcDateTime(TypeDecorator[datetime]):
 
     ``DateTime(timezone=True)`` is an instant in Postgres and a naive string in SQLite, so the same
     row read through the default backend comes back as something that raises when compared to the
-    value that was written. That is the substitute-behaves-identically assumption §36 forbids, and
+    value that was written. That is the substitute-behaves-identically assumption, and
     it is on a column that reaches a record -- so it is normalised here rather than carried.
 
     **A naive datetime is refused, not assumed to be UTC.** Guessing a caller's timezone is how a

@@ -4,7 +4,7 @@ Every guard is an AST scan or a model introspection over the same tree, so the w
 and the import resolution live here once and each rule lives in the ``test_*`` module that states
 it. Nothing here knows any rule.
 
-**Exemptions (§40).** A rule with no escape hatch gets bypassed entirely -- the import moves to a
+**Exemptions.** A rule with no escape hatch gets bypassed entirely -- the import moves to a
 helper, or someone deletes the check -- so a line may carry::
 
     # guard-exempt: I2 · why · who owns it · 2026-08-23
@@ -62,7 +62,7 @@ def plain(text: str) -> str:
 def module_from_source(
     source: str, name: str = "dataforce.synthetic", package: str | None = None
 ) -> Module:
-    """The module that source holds. A guard's §39 proof passes a violation in here.
+    """The module that source holds. A guard's red-first proof passes a violation in here.
 
     `package` is what a relative import inside it resolves against. The default is the parent, which
     is right for a module and wrong for an `__init__.py`, where the package *is* the name -- so a
@@ -154,7 +154,7 @@ def called_name(node: ast.Call) -> str:
 def not_exempt(
     module: Module, invariant: str, found: Iterable[tuple[int, str]]
 ) -> list[str]:
-    """The findings whose line carries no annotated exemption for that invariant (§40)."""
+    """The findings whose line carries no annotated exemption for that invariant."""
     return [
         f"{module.name}:{line} {message}"
         for line, message in found
@@ -163,7 +163,7 @@ def not_exempt(
 
 
 def exemptions(modules: Iterable[Module]) -> list[str]:
-    """Every well-formed exemption in those modules -- the list §40 asks to be kept short."""
+    """Every well-formed exemption in those modules -- the list that is meant to stay short."""
     return [
         f"{module.name}:{number} {match['invariant']} · {match['reason']} ·"
         f" {match['owner']} · {match['date']}"

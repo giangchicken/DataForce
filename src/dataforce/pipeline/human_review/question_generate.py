@@ -17,8 +17,7 @@ Requirement 29 says the question carries the evidence and the glossary. The conv
 annotator as task *data*, composed by ``publish`` out of the modality's display half; the glossary
 is a written document rather than a field, and a precondition on *opening the engine* checked once
 at composition. ``edge/bootstrap.py`` is still a docstring, so **nothing enforces the glossary
-yet** -- T27 is where that check lands, and saying so is cheaper than implying it is there
-(AGENTS.md §7).
+yet** -- T27 is where that check lands, and saying so is cheaper than implying it is there.
 
 **The permitted answers are copied onto the record, and the copy is the point.** They are the
 profile's capture half, read through ``answer_config(record).verdicts``, and an answer read a year
@@ -26,7 +25,7 @@ from now has to be legible against what was askable when it was asked -- a live 
 re-read a question answered under three verdicts as one that offered four. The cost is two
 statements of one tuple, and the record's is the one that stays right about the past. Reading a
 *field* off a type this module may not import is the connascence ``label_check`` already carries on
-``LabelCheck.name``, named here for §24's reason rather than left to be noticed.
+``LabelCheck.name``, named here because the two ends sit far apart, rather than left to be noticed.
 
 The call is per record and was hoisted out of the fold until T24, when the capture half gained the
 task data it owns and therefore a record to read it from. The verdicts are the same tuple every
@@ -47,7 +46,7 @@ from agent_toolkit.string_utils import compute_hash
 from dataforce.engine import Engine, ServiceResult
 from dataforce.record import Question, Record
 
-# The key this stage owns, under `human_review` (§26: one key, one writer).
+# The key this stage owns, under `human_review`: one key, one writer.
 STAGE = "question_generate"
 
 # The one question this phase asks, under the name the panel's own vote already gives it

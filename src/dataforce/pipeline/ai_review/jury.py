@@ -33,7 +33,7 @@ the verdict.
 **No panel is a `ConfigError`, and it is the one thing here that stops a run.** Layer two's absence
 leaves ``pii_check`` a layer one to run; this stage's absence leaves nothing, and writing a key
 that says the panel agreed on nothing would be a lie about a call nobody made. It is a fact about
-the configuration rather than about any record, so it is raised before the first one (§33).
+the configuration rather than about any record, so it is raised before the first one.
 """
 
 from collections.abc import Iterable, Sequence
@@ -43,7 +43,7 @@ from dataforce.errors import ConfigError
 from dataforce.ports import JurorAnswer, JuryPanel
 from dataforce.record import JurorVote, PanelVerdict, Record, StoredAnswer
 
-# The key this stage owns, under `ai_review` (§26: one key, one writer).
+# The key this stage owns, under `ai_review`: one key, one writer.
 STAGE = "jury"
 
 
@@ -81,7 +81,7 @@ def answered(engine: Engine, panel: JuryPanel, record: Record) -> Sequence[Juror
     rather than refusing it -- which makes this a fence and not a fix.
 
     **A `ConfigError` is not caught**, because it is the one exception this codebase raises and it
-    means *a human must change configuration* (§33). An adapter that cannot reach its endpoint
+    means *a human must change configuration*. An adapter that cannot reach its endpoint
     raises on record 1 and on all twenty thousand: swallowed, the run completes with every record
     scoring `0.0` and landing in `contested`, which is a corpus-shaped lie. Every other failure is
     one missing panel answer and the record carries the consequence.
@@ -150,7 +150,7 @@ def panel_verdict(engine: Engine, panel: JuryPanel, record: Record) -> PanelVerd
 
     The panel is a parameter rather than something read off the engine again, because `jury` has
     already refused a run without one -- passing it down is what makes *no panel here* a state
-    nothing below this line can be in (§32).
+    nothing below this line can be in.
 
     `panel_version` and `prompt_version` are read off the panel rather than returned per record: a
     composition is a fact about the run, and both reach the record because a change to either

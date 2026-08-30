@@ -40,7 +40,7 @@ contracts* says so. The import makes it visible instead of implied.
 says curate records who adjudicated where the validators disagreed; nothing in this system performs
 an adjudication, which would be a second trip through the store with a named arbiter. Until one
 exists a disagreement is ``unresolved`` and goes back to a person, and the field stays empty rather
-than being filled with the first annotator's name (AGENTS.md §7).
+than being filled with the first annotator's name.
 """
 
 from collections.abc import Iterable, Sequence
@@ -57,7 +57,7 @@ from dataforce.record import (
 
 from .aggregate import one_answer_each
 
-# The key this stage owns, under `human_review` (§26: one key, one writer).
+# The key this stage owns, under `human_review`: one key, one writer.
 STAGE = "curate"
 
 # The record's own three words for what happened to a label. `FinalLabel.status` is a `Literal` of
@@ -143,7 +143,7 @@ def curated_label(
 def curate(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every record with a verdict, one key richer: the label that ships and how it was decided.
 
-    Two conditions, each named beside the signature (§22): the verdict, which is the contract's
+    Two conditions, each named beside the signature: the verdict, which is the contract's
     own cell, and the answers it was folded from, which is where the validators and the clock come
     from. A record missing either is passed on untouched.
     """

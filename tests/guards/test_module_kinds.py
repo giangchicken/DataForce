@@ -6,12 +6,12 @@ a module's docstring line to its row in the layout tree, which means a module an
 wrong *together* -- they are one edit apart and nothing else reads either.
 
 **The five words are read out of the requirement, not listed here.** A list in this file would be a
-second statement of the vocabulary, and §41 is the reason there is not one: the requirement's own
+second statement of the vocabulary, and that is the reason there is not one: the requirement's own
 sentence is parsed, so adding a sixth kind to the document is what makes a sixth kind legal in the
 tree.
 
 **One module is exempt and says so in its own docstring.** `dataforce/__init__.py` opens with
-`DataForce —` because none of the five kinds describes the package itself; AGENTS.md §8 says a rule
+`DataForce —` because none of the five kinds describes the package itself; AGENTS.md says a rule
 broken on purpose is recorded where the next reader will hit it, and it is recorded there, in
 Requirement 2, and here. The exemption is one named module rather than a rule, so a second module
 claiming it fails.
@@ -94,7 +94,7 @@ def test_the_package_docstring_is_the_only_module_exempt() -> None:
     ids=["invented", "lowercased", "no-kind", "no-docstring"],
 )
 def test_the_scan_rejects_a_module_that_declares_no_kind(violation: str) -> None:
-    """§39: an invented kind, a miscased one, a prose docstring, and no docstring at all."""
+    """Proved red: an invented kind, a miscased one, a prose docstring, and no docstring at all."""
     assert kind_findings(module_from_source(violation), declared_kinds()) != []
 
 

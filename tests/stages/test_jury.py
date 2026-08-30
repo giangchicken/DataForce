@@ -4,7 +4,7 @@
 `make check` runs no network (§ *Testing Strategy* item 8), and what this stage owns is which
 records it pays for, what it hands the port, and what it makes of the answers -- all three are
 assertable against a stub that answers from a list. The live panel is `edge/bootstrap.py`'s and the
-Smoke rung's, which is where §36's parity gate sits.
+Smoke rung's, which is where the parity gate sits.
 
 **The case that decides who judges a vote is `test_two_calls_on_one_tool_...`.** That answer passes
 the materialised schema -- `uniqueItems` compares whole calls, and two calls on one tool with
@@ -12,7 +12,7 @@ different arguments are not equal -- and fails the profile, which is the notion 
 uses. A panel deciding validity for itself would write `valid: true` on a vote no consensus could
 be built from, and `invalid_votes: 0` would sit beside a null `final_prediction`.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -379,7 +379,7 @@ def test_a_run_of_many_records_completes_when_one_panel_call_fails() -> None:
 
 
 def test_an_engine_with_no_panel_refuses_before_the_first_record() -> None:
-    """§33: a fact about the configuration, raised before any record is touched."""
+    """A fact about the configuration, raised before any record is touched."""
     with pytest.raises(ConfigError, match="panel"):
         jury(an_engine_that(None), [a_record()])
 
@@ -391,7 +391,7 @@ def test_the_refusal_does_not_depend_on_there_being_a_record() -> None:
 
 
 def test_a_config_error_from_the_panel_stops_the_run() -> None:
-    """§33: `ConfigError` means a human must change configuration, so it is not one missing vote.
+    """`ConfigError` means a human must change configuration, so it is not one missing vote.
 
     An adapter that cannot reach its endpoint raises on record 1 and on all twenty thousand.
     Caught, the run completes with every record scoring `0.0` in `cohesion` and landing in

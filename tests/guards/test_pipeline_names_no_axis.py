@@ -66,7 +66,7 @@ def test_no_pipeline_module_names_a_concrete_axis(module: Module) -> None:
     ids=["from-impl", "from-axis", "import", "deep"],
 )
 def test_the_scan_rejects_a_module_that_names_an_implementation(violation: str) -> None:
-    """§39: proved red against a synthetic violation, one per spelling of the import."""
+    """Proved red against a synthetic violation, one per spelling of the import."""
     assert concrete_axis_findings(module_from_source(violation), registered()) != []
 
 

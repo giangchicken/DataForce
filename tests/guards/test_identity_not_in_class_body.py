@@ -123,7 +123,7 @@ def test_no_class_assigns_its_own_identity(module: Module) -> None:
     ],
 )
 def test_the_scan_rejects_a_class_that_hardcodes_an_identity(violation: str) -> None:
-    """§39: proved red against a synthetic violation, one per key and both spellings."""
+    """Proved red against a synthetic violation, one per key and both spellings."""
     assert identity_findings(module_from_source(violation)) != []
 
 

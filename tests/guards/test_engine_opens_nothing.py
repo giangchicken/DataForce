@@ -99,7 +99,7 @@ def test_no_engine_module_reads_the_world(module: Module) -> None:
     ids=["pathlib", "os", "os.path", "edge", "cli", "open", "clock", "time"],
 )
 def test_the_scan_rejects_a_module_that_reads_the_world(violation: str) -> None:
-    """§39: proved red against a synthetic violation, one per way in."""
+    """Proved red against a synthetic violation, one per way in."""
     assert world_reading_findings(module_from_source(violation)) != []
 
 
@@ -113,7 +113,7 @@ def test_the_scan_permits_logging_by_name() -> None:
 
 
 def test_an_annotated_exemption_is_honoured() -> None:
-    """§40: a rule with no escape hatch is a rule someone deletes."""
+    """A rule with no escape hatch is a rule someone deletes."""
     excused = "import os  # guard-exempt: I1 · a reason · an owner · 2026-08-23"
 
     assert world_reading_findings(module_from_source(excused)) == []

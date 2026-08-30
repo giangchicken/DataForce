@@ -2,7 +2,7 @@
 
 `Modality` and `Profile` are written three times: as a `Protocol` block in `spec.md`, as a count in
 words in that section *and* in the module's own docstring -- "Six members, closed" -- and as the
-class itself. Three statements, and until this guard nothing compared any two of them (§41).
+class itself. Three statements, and until this guard nothing compared any two of them.
 
 **The names are compared, not only the count.** A renamed member keeps the count and breaks every
 implementation, which is the drift worth catching; the count is compared as well because the word
@@ -129,7 +129,7 @@ def test_the_sentence_defining_the_protocol_is_the_same_on_both_sides(
     A protocol's docstring says what the axis *is*, and it is written twice -- in the document's
     block and on the class. Nothing compared them until a reader asked why `Modality` promises an
     output half that no member delivers, which is a question about this sentence and not about the
-    six names above it (§41).
+    six names above it.
     """
     assert drawn_sentence(heading) == plain(protocol.__doc__ or "")
 
@@ -164,7 +164,7 @@ def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
     ids=["dropped", "added"],
 )
 def test_the_scan_rejects_a_protocol_that_drifted(drawn: str, reason: str) -> None:
-    """§39, both directions, against a synthetic block rather than by editing the document."""
+    """Proved red, both directions, against a synthetic block rather than by editing the document."""
     declared = next(
         node for node in ast.parse(drawn).body if isinstance(node, ast.ClassDef)
     )
@@ -178,5 +178,5 @@ def test_the_scan_rejects_a_protocol_that_drifted(drawn: str, reason: str) -> No
 
 
 def test_the_scan_rejects_a_count_that_no_longer_matches() -> None:
-    """§39 for the word: "Five members, closed" over six members."""
+    """Proved red for the word: "Five members, closed" over six members."""
     assert stated_count("Five members, closed.") != len(Modality.__protocol_attrs__)

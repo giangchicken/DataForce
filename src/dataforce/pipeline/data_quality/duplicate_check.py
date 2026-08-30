@@ -47,7 +47,7 @@ def cosine(left: Sequence[float], right: Sequence[float]) -> float:
     """How alike two vectors point, from -1 to 1, and 0 where either has no direction at all.
 
     `strict=True` is an assertion rather than an error path: both vectors came from the one encoder
-    this engine was built with, so a length mismatch is not a state a caller can reach (§2).
+    this engine was built with, so a length mismatch is not a state a caller can reach.
     """
     scale = sqrt(sum(value * value for value in left)) * sqrt(
         sum(value * value for value in right)
@@ -123,7 +123,7 @@ def duplicate_groups(
 def duplicate_check(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every record, one key richer: which records repeat it, split by whether they agree.
 
-    No precondition (§22) and no skip: a quarantined record is still a duplicate of something, and
+    No precondition and no skip: a quarantined record is still a duplicate of something, and
     knowing that is part of deciding which of a pair to keep. There is no side output -- a group is a
     value on the record, which is what keeps `output == input` structural (Requirement 41).
     """

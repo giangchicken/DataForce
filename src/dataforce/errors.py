@@ -16,5 +16,5 @@ class ConfigError(Exception):
 
     The edge turns it into a 400 (spec.md § *Request and response models*). It is the only
     exception the engine raises: a bad *record* is marked on that record and travels on, which is
-    the scope split §33 asks for -- configuration stops the run, one item never does.
+    the scope split -- configuration stops the run, one item never does.
     """

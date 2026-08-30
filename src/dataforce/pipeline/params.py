@@ -1,6 +1,6 @@
 """LOGIC · the params.yaml declarations a stage reads, checked where they are read.
 
-Requirement 27 and §35: no stage holds a number. Every threshold and every switch is a line in
+Requirement 27: no stage holds a number. Every threshold and every switch is a line in
 ``params.yaml``, which is committed, reviewable and recorded by digest in the run manifest -- so a
 change to one is attributable and a run that used the old value stays identifiable.
 ``Engine.thresholds`` is that file, parsed, and nothing had read it until Phase 4.

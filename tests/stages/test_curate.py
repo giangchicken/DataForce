@@ -9,7 +9,7 @@ is it being replaced by something a majority of the annotators named, and `unres
 of not being able to say — a verdict of *unsure*, a correction nobody agreed on, and Requirement
 49's malformed one, which all arrive here by different routes and must all leave by the same one.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from dataforce.engine import Engine

@@ -5,7 +5,7 @@ one from files is ``edge/bootstrap.py``, because reading is the edge's job. A re
 state: two in one process hold different implementations (Requirement 39).
 
 **An ``Engine`` is what a run resolved to, not what it could resolve to.** It carries the pair, the
-registry it came out of, the thresholds a stage reads instead of holding a number of its own (§35),
+registry it came out of, the thresholds a stage reads instead of holding a number of its own,
 and the digest of every policy file that produced them, which is what makes two runs of one
 configuration comparable (Requirement 45). It holds no clock and no path, and it opens
 nothing -- I1 is the scan that says so. What it does hold is the **ports** the edge supplied, because
@@ -24,7 +24,7 @@ phase*, and the stage that needs one is where that is said.
 **``ServiceResult`` is here because this is where a service's signature is written.** ``Engine``
 is what a stage is handed and ``ServiceResult`` is what it hands back, and the two are one sentence:
 ``def pii_check(engine: Engine, records: Iterable[Record]) -> ServiceResult``. A module of its own
-would hold one dataclass and forward it, which is §18's pass-through.
+would hold one dataclass and forward it, which is a pass-through.
 
 **The registry takes the name rather than reading it off the implementation.** The two axes share
 ``name``, ``version`` and ``Part`` and nothing else, so a ``Registrable`` protocol holding the first

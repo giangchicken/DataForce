@@ -20,7 +20,7 @@ the gates: a declared count that moved is a line in a diff, not a crash.
 so two runs that read the same files are visibly the same configuration, and a clock in front of it
 so they are still two runs.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 import re

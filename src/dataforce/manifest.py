@@ -4,7 +4,7 @@ Identity comes from the manifest's filename and never from a class body (Require
 
 **One type for both axes**, because both files answer the same three questions -- who am I, which
 version am I, and what do I declare -- and only the last one differs. Splitting it would give two
-types with two fields in common and one consumer each, which is a split AGENTS.md §6 asks not to
+types with two fields in common and one consumer each, which is a split AGENTS.md asks not to
 make until a second consumer needs half of it.
 
 **What each axis declares stays a mapping.** ``embedding`` is the modality's, ``roles``, ``label``

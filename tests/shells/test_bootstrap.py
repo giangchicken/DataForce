@@ -1,6 +1,6 @@
 """T27 · the composition root: one run's pair, resolved, registered and handed its ports.
 
-`open_engine` is the only builder of an `Engine` (§29) and the only module that names a concrete
+`open_engine` is the only builder of an `Engine` and the only module that names a concrete
 axis (Requirement 38). Everything it does is a decision a test can state:
 
 **Which modality.** Naming none takes the profile at its word, which is what makes
@@ -20,8 +20,8 @@ told before the first record, and that composing still sends nothing -- the endp
 The one test that reads the repository is deliberate: `config/` and `params.yaml` are what a
 deployment actually composes, and a configuration that no longer composes is a break nothing else in
 this suite would see. It attaches the committed `.example` because the endpoint file itself is not in
-the history (§9), which makes it the test that would also notice an example that stopped being a
-usable file. Every other fixture is invented (AGENTS.md §9).
+the history, which makes it the test that would also notice an example that stopped being a
+usable file. Every other fixture is invented.
 """
 
 import shutil
@@ -233,7 +233,7 @@ def test_the_engine_carries_the_digest_of_every_policy_file_it_read(
 def test_the_thresholds_reach_the_engine_where_a_stage_reads_them(
     tmp_path: Path,
 ) -> None:
-    """§35: no stage holds a number, so the file has to arrive intact at `pipeline/params.py`."""
+    """No stage holds a number, so the file has to arrive intact at `pipeline/params.py`."""
     engine = open_engine(
         profile="tool_decision",
         config_root=a_config(tmp_path),
@@ -245,7 +245,7 @@ def test_the_thresholds_reach_the_engine_where_a_stage_reads_them(
 
 
 def test_opening_an_engine_attaches_the_question_store(tmp_path: Path) -> None:
-    """§29: the one place a connection is reached for. Building the pool connects to nothing."""
+    """The one place a connection is reached for. Building the pool connects to nothing."""
     engine = open_engine(
         profile="tool_decision",
         config_root=a_config(tmp_path),
@@ -272,7 +272,7 @@ def test_composing_an_engine_reaches_the_endpoint_it_resolved_not_at_all(
 def test_a_deployment_that_attached_no_embedder_is_told_before_the_first_record(
     tmp_path: Path,
 ) -> None:
-    """§35 and §33: the file is a resource a deployment attaches, and an absent one stops the run
+    """The file is a resource a deployment attaches, and an absent one stops the run
     at composition rather than part-way through `duplicate_check`."""
     with pytest.raises(ConfigError, match="an-attached-embedder"):
         open_engine(
@@ -344,7 +344,7 @@ def test_every_built_profile_is_built_on_a_built_modality() -> None:
     A runtime `issubclass` in the builder would be a third statement of one fact, read at the one
     moment the manifests have already agreed. The fact worth holding is about these two literals:
     the class answering to a profile name has to be a subclass of some class answering to a modality
-    name, or the containment is a claim in a docstring (§38 — the rule fails the build).
+    name, or the containment is a claim in a docstring — the rule fails the build.
     """
     concepts = tuple(BUILT_MODALITIES.values())
 
@@ -389,7 +389,7 @@ def test_a_second_module_in_the_family_shares_the_concept_it_is_inside(
 def test_the_configuration_this_repository_ships_composes(tmp_path: Path) -> None:
     """The one test here that reads `config/`: a manifest nobody can compose is a broken run.
 
-    The endpoint file is the deployment's and never in the history (§9), so the `.example` beside it
+    The endpoint file is the deployment's and never in the history, so the `.example` beside it
     stands in -- which is also what makes an example that has stopped naming what the resolver reads
     a failure here rather than on somebody's first run.
     """

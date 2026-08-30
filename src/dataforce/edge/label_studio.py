@@ -24,12 +24,12 @@ that was rolled back. The row *is* the record that the task exists.
 an optional extra and ``edge/main.py`` imports this module to hang a route on it, so a top-level
 import would make an install without the extra fail at startup rather than at the one endpoint that
 needs it. Anything that cannot reach the tool is a ``ConfigError``: a missing extra, a missing URL
-and an unreachable host are all *a human must change something* (§33).
+and an unreachable host are all *a human must change something*.
 
 **``AnnotationTool`` is declared here and not in ``ports.py``**, because the engine never calls it.
 A port is what the engine demands of the edge; this is the edge talking to the outside, so its
-abstraction belongs to the module that consumes it (§28) and that module is this one. It has two
-adapters -- the SDK client and the double the tests run -- which is what makes it a seam (§30).
+abstraction belongs to the module that consumes it and that module is this one. It has two
+adapters -- the SDK client and the double the tests run -- which is what makes it a seam.
 """
 
 import os
@@ -53,8 +53,8 @@ EXTERNAL_SYSTEM = "label_studio"
 # What a pushed task's row says happened. One word, in the sync's own vocabulary.
 PUSHED = "pushed"
 
-# Where a deployment says which instance, and which project inside it. Read here and nowhere else
-# (§35); a key is never written to a file (AGENTS.md §9).
+# Where a deployment says which instance, and which project inside it. Read here and nowhere
+# else; a key is never written to a file.
 BASE_URL = "DATAFORCE_LABEL_STUDIO_URL"
 API_KEY = "DATAFORCE_LABEL_STUDIO_API_KEY"
 PROJECT_ID = "DATAFORCE_LABEL_STUDIO_PROJECT"

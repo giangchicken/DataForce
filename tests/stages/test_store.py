@@ -11,7 +11,7 @@ this schema leans on two unique constraints for the sync's idempotency.
 an empty database is the acceptance criterion, and it is also what makes every test below a test of
 the migration: a column the migration forgot is a query that fails here rather than in the pilot.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from datetime import UTC, datetime
@@ -69,7 +69,7 @@ def test_the_migration_applies_to_an_empty_database(store_at: str) -> None:
 
 
 def test_the_migration_and_the_models_say_the_same_schema(store_at: str) -> None:
-    """§41 over a schema that is written twice: `alembic check` is the comparison, and it is run.
+    """A fact written twice, over a schema that is written twice: `alembic check` is the comparison, and it is run.
 
     A column added to `models.py` and never migrated passes every test whose database the migration
     built — right up to the first query that reads it, which is production. This is the day-one
@@ -104,7 +104,7 @@ def test_a_question_written_is_a_question_the_store_holds(
 def test_writing_one_question_twice_is_one_row(
     store: SqlQuestionStore, sessions: sessionmaker[Session]
 ) -> None:
-    """§32: re-running a phase is not something a caller has to be careful about."""
+    """Re-running a phase is not something a caller has to be careful about."""
     store.stored_questions([a_question()])
     store.stored_questions([a_question()])
 
@@ -130,7 +130,7 @@ def test_the_insert_leaves_a_held_question_to_the_constraint(dialect: str) -> No
     is a no-op under a check as well as under a constraint, and the difference only appears when two
     publishers overlap. So this reads the SQL instead. A genuine two-connection race is not asserted
     anywhere — it is not reliably reproducible on SQLite, and a flaky test about concurrency is worse
-    than a stated gap (AGENTS.md §7).
+    than a stated gap.
     """
     statement = insert_of(dialect, [{"question_id": "q_0000000000000001"}])
 
@@ -140,14 +140,14 @@ def test_the_insert_leaves_a_held_question_to_the_constraint(dialect: str) -> No
 
 
 def test_the_dialects_are_the_two_the_pool_admits() -> None:
-    """§39's other direction: the fork covers `SUPPORTED` and nothing reaches it that is not in it."""
+    """The other direction: the fork covers `SUPPORTED` and nothing reaches it that is not in it."""
     assert set(DIALECTS) == set(SUPPORTED)
 
 
 def test_a_dsn_this_store_is_not_written_for_is_refused_when_the_pool_is_built() -> (
     None
 ):
-    """§33: a fact about configuration, read before any record, and by parsing rather than by
+    """A fact about configuration, read before any record, and by parsing rather than by
     connecting — a driver nobody installed would otherwise fail as an `ImportError`."""
     with pytest.raises(ConfigError, match="mysql"):
         store_engine("mysql+pymysql://a_user@a_host/a_database")
@@ -253,7 +253,7 @@ def test_when_it_was_submitted_survives_the_round_trip(
     store: SqlQuestionStore, sessions: sessionmaker[Session]
 ) -> None:
     """The same instant, and still an instant: a naive datetime out of one backend and an aware one
-    out of the other is the substitution §36 forbids assuming away."""
+    out of the other is the substitution nobody may assume away."""
     store.stored_questions([a_question()])
     with sessions.begin() as session:
         session.add(an_answer())
@@ -371,7 +371,7 @@ def test_the_same_question_may_be_pushed_to_two_systems(
 def test_an_answer_to_a_question_the_store_does_not_hold_is_refused(
     sessions: sessionmaker[Session],
 ) -> None:
-    """The foreign key, which SQLite ships switched off — so this is the §36 test, not a formality."""
+    """The foreign key, which SQLite ships switched off — so this is the parity test, not a formality."""
     with pytest.raises(IntegrityError):
         with sessions.begin() as session:
             session.add(an_answer(question_id="q_nobody_published"))

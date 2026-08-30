@@ -8,7 +8,7 @@ be answered is what was published and the join is the `question_id` those two mi
 the two together — a config and payload composed for a fixture, an annotation fed back in Label
 Studio's shape, and the answer that comes out is the one that went in.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Sequence
@@ -320,7 +320,7 @@ def test_reading_twice_writes_the_same_answers() -> None:
 
 
 def test_answers_written_to_the_real_store_reach_the_record(sessions: Any) -> None:
-    """§30: the same stage, the same port, the other adapter — on both backends."""
+    """The same stage, the same port, the other adapter — on both backends."""
     from dataforce.edge.store.models import AnnotatorAnswer
     from dataforce.edge.store.repository import SqlQuestionStore
 

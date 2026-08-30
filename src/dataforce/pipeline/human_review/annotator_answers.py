@@ -33,7 +33,7 @@ from dataforce.errors import ConfigError
 from dataforce.ports import QuestionStore, StoredAnnotation
 from dataforce.record import AnnotatorResponse, Record, ReturnedAnswers
 
-# The key this stage owns, under `human_review` (§26: one key, one writer).
+# The key this stage owns, under `human_review`: one key, one writer.
 STAGE = "annotator_answers"
 
 
@@ -109,7 +109,7 @@ def annotator_answers(engine: Engine, records: Iterable[Record]) -> ServiceResul
 
     A missing store is a `ConfigError` before the first record, on `publish`'s line: reading no
     answers because there is nowhere to read from would write *nobody has answered yet* onto a
-    corpus nobody has asked about (§33).
+    corpus nobody has asked about.
     """
     store = engine.question_store
     if store is None:

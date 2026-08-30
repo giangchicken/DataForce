@@ -1,7 +1,7 @@
-"""§9 · the file that names an endpoint and holds a key is ignored, and the example beside it is not.
+"""The file that names an endpoint and holds a key is ignored, and the example beside it is not.
 
 `config/model/<model>.json` is where a deployment attaches the embedder `duplicate_check` groups
-through -- `base_url` and `api_key`, which is exactly the pair AGENTS.md §9 forbids a public
+through -- `base_url` and `api_key`, which is exactly the pair AGENTS.md forbids a public
 repository to carry. So the file is git-ignored and a `<model>.json.example` is what ships.
 
 **The ignore rule is over the files and not the directory**, which is the part worth a test: git
@@ -29,7 +29,7 @@ IGNORED = "config/model/*.json"
 EXAMPLE = "*.json.example"
 # What the endpoint file says, and the whole of what `edge/bootstrap.py` reads out of it.
 READ = ("model", "base_url", "api_key")
-# The reserved TLD, which is the one hostname §9 permits a committed file: it resolves nowhere.
+# The reserved TLD, which is the one hostname a committed file may hold: it resolves nowhere.
 NOWHERE = ".invalid/"
 
 
@@ -60,7 +60,7 @@ def test_an_example_ships_and_names_what_the_edge_reads() -> None:
 
 
 def test_no_example_carries_a_key_or_a_reachable_endpoint() -> None:
-    """§9, and the reason the real file is ignored: a placeholder is the only thing that may ship."""
+    """And the reason the real file is ignored: a placeholder is the only thing that may ship."""
     for example in examples():
         declared = read_json(example)
 

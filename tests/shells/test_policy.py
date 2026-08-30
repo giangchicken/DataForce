@@ -17,7 +17,7 @@ can see it, and this is the module that holds one.
 happened to use would differ between two checkouts of one commit, which is I14 failing for a reason
 that is not a configuration change.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from pathlib import Path
@@ -208,7 +208,7 @@ def test_a_changed_comment_is_a_changed_policy_file(tmp_path: Path) -> None:
 
 
 def test_the_thresholds_come_back_as_the_file_declares_them(tmp_path: Path) -> None:
-    """`Engine.thresholds` is this file, parsed, and no stage holds a number of its own (§35)."""
+    """`Engine.thresholds` is this file, parsed, and no stage holds a number of its own."""
     read = read_thresholds(a_params(tmp_path))
 
     assert read.declares["thresholds"]["aggregate"]["overlap_floor"] == 1

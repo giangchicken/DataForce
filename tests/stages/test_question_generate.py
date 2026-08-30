@@ -10,7 +10,7 @@ constraint is on, so an id that moves when nothing changed republishes a questio
 already answered, and an id that does not move when the words changed hides the new wording behind
 a no-op. Both directions are asserted here, because neither shows up until a store exists.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from dataclasses import replace

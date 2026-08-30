@@ -43,7 +43,7 @@ def label_verdict(engine: Engine, record: Record) -> LabelVerdict:
 def label_check(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every record, one key richer: what the checks that need no opinion found on its label.
 
-    No precondition (§22): this is the first stage of the phase and reads only what `load_data`
+    No precondition: this is the first stage of the phase and reads only what `load_data`
     wrote, so every record it is handed gets a verdict. There is no side output -- the records are
     the report.
     """

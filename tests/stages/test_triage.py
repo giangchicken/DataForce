@@ -9,7 +9,7 @@ cell the file does not answer for, so that test is what proves the shipped file 
 **No numeric literal is in the module under test** (Requirement 27), and the two below are in this
 file on purpose: a test that could not name a boundary could not prove one was read.
 
-Every fixture is invented (AGENTS.md §9).
+Every fixture is invented.
 """
 
 from collections.abc import Mapping
@@ -266,7 +266,7 @@ def test_a_record_with_no_two_numbers_is_skipped() -> None:
 def test_a_declaration_this_stage_cannot_run_on_stops_the_run(
     declared: Mapping[str, Any],
 ) -> None:
-    """§33: configuration scope, so it is raised before the first record rather than during."""
+    """Configuration scope, so it is raised before the first record rather than during."""
     engine = an_engine_that((SENT,), **declared)
 
     with pytest.raises(ConfigError, match="params.yaml"):

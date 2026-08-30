@@ -3,7 +3,7 @@
 The same mechanism as I2 and a different reason, which is why it is a different module. I2 keeps a
 *consumer* axis-blind so a second implementation costs nothing. This keeps everything *above* an
 implementation from depending on it -- a cycle, and an abstraction that has quietly become a
-description of its single implementation (§28).
+description of its single implementation.
 
 **Two modules per axis, because I2 cannot see through a re-export.** I2 reads imports, so it catches
 a stage that writes ``dataforce.modalities.text2text``. It permits
@@ -90,7 +90,7 @@ def test_nothing_above_an_implementation_names_one(axis: str, path: Path) -> Non
 def test_the_scan_rejects_a_protocol_that_names_its_implementation(
     axis: str, violation: str
 ) -> None:
-    """§39: proved red against a synthetic violation."""
+    """Proved red against a synthetic violation."""
     assert own_axis_findings(module_from_source(violation), axis) != []
 
 
@@ -106,7 +106,7 @@ def test_the_scan_rejects_a_protocol_that_names_its_implementation(
 def test_the_scan_rejects_a_facade_that_re_exports_its_implementation(
     axis: str, violation: str
 ) -> None:
-    """§39, the hole this rule grew to cover: a relative re-export, which is how a façade writes it.
+    """The hole this rule grew to cover: a relative re-export, which is how a façade writes it.
 
     `from . import text2text` in `modalities/__init__.py` makes every importer of the axis load the
     implementation. Nothing named it, so I2 sees a clean consumer and the registry becomes a fiction.

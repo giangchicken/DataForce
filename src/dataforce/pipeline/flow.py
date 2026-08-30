@@ -2,11 +2,10 @@
 
 The one place in code that this table exists. ``tests/guards/test_flow_table.py`` parses the same
 table out of ``docs/annotation-pipeline/spec.md`` and compares the two, so neither side can move
-alone (I3, §41).
+alone (I3).
 
 **A stage has a name, not a number.** ``STAGES`` is a tuple and a tuple already knows its order, so
-a number is the same fact written a second time and the second copy is the one that goes wrong
-(§26). It is also a *shared* index: inserting a stage renumbers every stage after it -- here, in
+a number is the same fact written a second time and the second copy is the one that goes wrong. It is also a *shared* index: inserting a stage renumbers every stage after it -- here, in
 each ``STEP ·`` docstring, and through half the spec -- for a change that is one row. Scope is
 named rather than cut at a number: ``DECLARED_ONLY`` holds the phases that are in the flow and
 have no module (Decision 19).
@@ -92,13 +91,13 @@ STAGES: tuple[Stage, ...] = (
 )
 
 # The distinct phases of the flow, in the flow's order. Derived rather than listed, because a
-# phase written down twice is a phase that can disagree with itself (§26: one key, one writer).
+# phase written down twice is a phase that can disagree with itself: one key, one writer.
 PHASES: tuple[str, ...] = tuple(dict.fromkeys(stage.phase for stage in STAGES))
 
 # The one phase whose stage does not read the bus. `load_data` is handed source items and mints
 # the records every other stage folds over, so there is nothing for `run_phase` to give it and its
 # signature is not § *Shared decisions*' one signature. `POST /load-data` is its own route for the
-# same reason, and § *Per-service contracts* records the break where a reader hits it (§8).
+# same reason, and § *Per-service contracts* records the break where a reader hits it.
 FROM_SOURCE: tuple[str, ...] = ("load_data",)
 
 # The phases that are in the flow and have no module -- declared so the record's key has an owner,
