@@ -127,7 +127,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
 | T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit` containing `61fdf65`** | S | |
 | T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
-| T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ |
+| T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ `2535a56` |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -1848,7 +1848,7 @@ nothing here anticipates it.
 
 **Blocked by.** T55. The fourth file is a build failure until it lands.
 
-**Landed.** Four steps, each green before the next was started: `declarations.py` at top level with
+**Landed** (`2535a56`). Four steps, each green before the next was started: `declarations.py` at top level with
 both axes importing it; `canonical_json` into `record.py`, with `record_id_for` calling it;
 `text2text/` into `turns.py`, `detectors.py` and `modality.py`; `tool_decision/` into `answers.py`,
 `annotations.py`, `records.py` and `profile.py`. `make check` is green over 63 modules and 1140
