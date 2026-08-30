@@ -31,7 +31,7 @@ embedding:
 
 # Which language layer one's patterns are filled with. One word, because the words a
 # language dictates digits with do not vary between two corpora of it -- the shapes
-# are `utils.py`'s and the table behind this name is `spoken_forms`, which is where a
+# are `detectors.py`'s and the table behind this name is `spoken_forms`, which is where a
 # second language is added. `vi` and `en` are written down today; a name nobody has
 # written down is a ConfigError rather than a silent fallback, because scanning a
 # Spanish corpus with Vietnamese digit words finds nothing and finding nothing looks

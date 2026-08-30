@@ -202,7 +202,7 @@ class Profile(Protocol):
 
 Fifteen members, closed. `Answer`, `AnswerConfig` and `LabelCheck` are opaque here; the pydantic models
 behind them are `tool_decision/schema.py`, and `answer_schema` — the conversion that materialises one —
-is `tool_decision/utils.py`. `AnnotationResponse` is the exception and is **concrete** in
+is `tool_decision/answers.py`. `AnnotationResponse` is the exception and is **concrete** in
 `profiles/base.py`: a verdict, a correction and a note are the same three things for every profile
 there could be, and only the correction is the profile's own vocabulary — which is why it alone is
 typed `Answer`. `ports.JurorAnswer` is the same shape of value on the other side of the engine.
@@ -215,14 +215,14 @@ the only side that refuses an undeclared shape, and the modality assumes a chat 
 So the declared input spans both axes with one end unvalidated, and since neither axis may hold the
 other's vocabulary there is nowhere to move the check to. The member docstring said *the only place a
 source shape is read* until T14 and now says *validated*, which is the half that is true; this
-paragraph is the other half, where a reader following the member lands (§8).
+paragraph is the other half, where a reader following the member lands.
 
 **Provenance is a parameter and not a key on the item.** It was ``item["__provenance__"]`` for one
 phase -- ``load_data`` put the file's digest, the offset, the clock and the run there, and this member
-validated them on the way in. That is connascence of meaning between a stage and one axis (§23), and
+validated them on the way in. That is connascence of meaning between a stage and one axis, and
 it cost two ``ConfigError`` branches to police. As a third argument the case *an item with no
 provenance* cannot be spelled, so both branches are gone rather than caught: the cheapest error is
-the one the interface makes unrepresentable (§32).
+the one the interface makes unrepresentable.
 
 #### The answer, and the three operations over it
 
@@ -287,6 +287,14 @@ version of a shared fact — so it is named in `record.py` where both can reach 
 a turn through the modality and reads it through the profile so neither end can move alone. Neither
 axis may drift into the other's job.
 
+**That sentence is about the two *contracts*, and it was read as being about the two modules.** The
+implementations have always shared more than four names — `Manifest`, `ConfigError`, `Record`, and
+since Decision 24 the concept's own class, which `ToolDecision` subclasses. Reading *and nothing
+else* as a rule about imports is what bought two copies of the manifest reader and three of the
+canonical JSON form, each carrying a docstring that cited this line as its reason. T56 removed them.
+What a module both axes import may not do is carry one axis's vocabulary — which is a property of its
+signature, checked by I25, and not of how many axes reach it.
+
 ---
 
 ## The surface: four main endpoints, and the services under them
@@ -327,7 +335,7 @@ record's `release` key has an owner; they are specified in a follow-up — see *
 stage in the table has a module. Scope is a named phase rather than a cut at a number for the same
 reason: a cut moves when anything above it moves.
 
-**`load_data`, not `load`.** AGENTS.md §5 forbids a bare operation that names no object: *load what?* The
+**`load_data`, not `load`.** AGENTS.md forbids a bare operation that names no object: *load what?* The
 stage reads a source item and returns record data, and its name says so.
 
 **`label_check`, not `validity`.** "Validity" names no object and no defect — everything in the pipeline
@@ -382,7 +390,7 @@ Each is a statement a test can be pointed at.
    its shape, `LOGIC ·` conversions over that noun, `STEP ·` serves exactly one stage of the flow,
    `TOOL ·` not in the flow at all. A fifth word, `façade ·`, marks an `__init__.py` that re-exports and
    holds nothing of its own: none of the four describes a module with no content, and § *Package layout*
-   below already writes it over `pipeline/__init__.py`. AGENTS.md §8 — the break is recorded rather than
+   below already writes it over `pipeline/__init__.py`. AGENTS.md — the break is recorded rather than
    resolved silently, here and in the top-level package docstring.
 3. A service module's docstring is its row of the flow table — `STEP · <stage> · <what it does>`, with
    the stage name and the summary matching § *The flow* word for word. I3 compares them. There is no
@@ -578,7 +586,7 @@ Each is a statement a test can be pointed at.
 ### Repository layout
 
 Every entry at the root, and the job it holds. A directory whose job is not written down is a directory
-the next person guesses at, and a guess is how one acquires a second place to put things (AGENTS.md §2).
+the next person guesses at, and a guess is how one acquires a second place to put things.
 
 | Entry | What it holds, and why it is its own thing |
 |---|---|
@@ -586,11 +594,11 @@ the next person guesses at, and a guess is how one acquires a second place to pu
 | `tests/` | Five directories, one per kind of check — § *Testing Strategy* says what each proves. Outside the package, so nothing that ships can reach a fixture |
 | `docs/annotation-pipeline/` | `objective.md` — why, and what one record looks like · `spec.md` — this file, what to build · `plan.md` — the order to build it in · `workflow.md` — how a run is driven end to end |
 | `config/` | What a run declares. `modalities/<name>.yaml` and `profiles/<name>.yaml` each carry an axis's identity in the filename, so it is not assigned anywhere else; `prompts/<axis>/<name>/<file>.vN.txt` holds every template a service sends to a model, versioned in the filename so a digest reaches the run manifest. § *Configuration* |
-| `config/templates/` | Nothing, and nothing references it. An empty directory is the flexibility nobody asked for that AGENTS.md §2 forbids; it goes with the next task that touches `config/`. Recorded here rather than left to be found (AGENTS.md §8) |
+| `config/templates/` | Nothing, and nothing references it. An empty directory is the flexibility nobody asked for that AGENTS.md forbids; it goes with the next task that touches `config/`. Recorded here rather than left to be found |
 | `params.yaml` | Every threshold the pipeline reads at runtime. Code holds none: a number here is committed, reviewable and recorded by digest in the run manifest, so a change to it is attributable and a run that used the old value stays identifiable |
 | `data/` | What a run writes: `raw/` the source, then `interim/`, `processed/`, `release/`, `quarantine/`, and `run.json` — one run, one manifest, at the root of what it wrote. **Committed: none of it.** `raw/` is the privacy tier (I13) and the rest are artifacts the manifest identifies by digest. Ignored tier by tier rather than as `data/`, so one tier can be un-ignored on its own |
 | `deploy/` | `docker-compose.yml` — Label Studio 1.23.0, pinned because the sync is written against a release. Optional: it is the one endpoint that needs an instance, and no credential is in the file. The project itself is created by a person, because a project's settings *are* the rung |
-| `AGENTS.md` | The conventions and design principles this repository is held to, `§1`–`§42`. A rule cited in a review or a commit message resolves here |
+| `AGENTS.md` | The conventions and design principles this repository is held to. A rule cited in a review or a commit message resolves here |
 | `README.md` | The front door: what this repository is, which spec to read first, and the build order across all of them |
 | `Makefile` | `make check` — ruff, `mypy --strict`, pytest without `-m integration`. What CI runs and what must pass before a commit. `make integration` is the half that needs a network |
 | `pyproject.toml` | Dependencies, package metadata, and the configuration for every tool `make check` runs, in one file rather than four dotfiles |
@@ -606,7 +614,7 @@ the next person guesses at, and a guess is how one acquires a second place to pu
 `core/` is gone. It held five things and only `errors.py` earned the package: `artifacts/` was the
 previous design's per-phase file shapes, and `record.py` and `manifest.py` are used by every layer —
 which makes them the package's own top level, not a sub-package. A package with one useful module is
-that module (AGENTS.md §6). `flow.py` comes back, not because the test that read it comes back, but
+that module. `flow.py` comes back, not because the test that read it comes back, but
 because a deleted test is no verdict on a module.
 
 **The edge is called `edge/`.** It was called `api/`, which was a lie: the package also held
@@ -626,7 +634,7 @@ see Decision 17. It holds three now, and each arrived with what made it real: `P
 with `pii_check`, `JuryPanel` with `jury`, and `QuestionStore` with its adapter and its three tables
 in T23. That last one is the exception the rule allows: its two members are what `publish` and
 `annotator_answers` demand, and neither stage exists yet — what it has instead of a caller is an
-adapter that is exercised, which is the half of §30 a guess never has.
+adapter that is exercised, which is the half a guess never has.
 
 ```
 src/dataforce/              the package; its docstring states the import direction and the five module kinds
@@ -634,6 +642,7 @@ src/dataforce/              the package; its docstring states the import directi
   errors.py                 DEFINITION · ConfigError — the one exception this codebase defines.
   record.py                 DEFINITION · Record, and Part — the bus, and the content it carries.
   manifest.py               DEFINITION · Manifest — one axis's declaration, already parsed.
+  declarations.py           LOGIC · the manifest declarations an axis reads, checked where they are read.
   engine.py                 DEFINITION · Engine, Registry and ServiceResult — what a service takes and returns; no I/O.
   ports.py                  DEFINITION · QuestionStore, PersonalDataVerifier and JuryPanel — what the engine demands of the edge.
 
@@ -669,18 +678,23 @@ src/dataforce/              the package; its docstring states the import directi
     base.py                 DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
 
     text2text/              the only modality built; *Out of Scope* says why there is no empty `speech2text/`
-      __init__.py           façade · the text2text modality; its shapes are schema.py and its conversions utils.py.
+      __init__.py           façade · the text2text modality; the object a composition root registers, and the encoder it is built with.
       schema.py             DEFINITION · the text2text shapes: what a detector is, and what its display config holds.
-      utils.py              LOGIC · the conversions over the shapes in schema.py beside it.
+      turns.py              LOGIC · one turn as one part: what it said, what it called, and the string that holds both.
+      detectors.py          LOGIC · the six shapes layer one scans for, filled with the words a declared language dictates.
+      modality.py           LOGIC · Text2Text — the object that answers the Modality protocol.
 
   profiles/                 the same shape as `modalities/`, and nothing shared between the two axes
     __init__.py             façade · the profile axis: the protocol, and nothing that implements it.
     base.py                 DEFINITION · the Profile protocol; Answer, AnswerConfig and LabelCheck, opaque.
 
     tool_decision/          the only profile built; the first dataset's task
-      __init__.py           façade · the tool_decision profile; its shapes are schema.py and its conversions utils.py.
+      __init__.py           façade · the tool_decision profile; the object a composition root registers.
       schema.py             DEFINITION · the tool_decision shapes: a call, an answer, and what constrains one.
-      utils.py              LOGIC · the conversions over the shapes in schema.py beside it.
+      answers.py            LOGIC · the answer space, and the three operations over an answer: distance, permitted, consensus.
+      annotations.py        LOGIC · what one annotation said, decoded from the controls the capture half emitted.
+      records.py            LOGIC · the answer a record carries: the one that ships, the one its turns restate, the redacted one.
+      profile.py            LOGIC · ToolDecision — the object that answers the Profile protocol.
 
   edge/                     everything that touches a file, a socket or a clock (Requirement 36)
     __init__.py             façade · the edge: everything that touches a file, a socket or a clock.
@@ -738,7 +752,7 @@ split until a second consumer needs half of it.
 records and returns records, so `RecordsRequest` and `RecordsResponse` are one module —
 `routers/schemas.py` — and not four copies of one shape (Decision 20). `load_data/` and `human_review/`
 stay packages because each speaks something no other router does; `data_quality` and `ai_review` speak
-nothing of their own and are one module each, which is AGENTS.md §6's rule and the same rule `pipeline/`
+nothing of their own and are one module each, which is AGENTS.md's rule and the same rule `pipeline/`
 already runs on. The cost is stated: giving `ai_review` a model of its own later promotes a module to a
 package. That is one `git mv` and it is visible in review, which is cheaper than three copies of a
 shape that must stay identical.
@@ -751,7 +765,7 @@ Requirement 1 puts a description on every field, which is the file doing its job
 
 **There is no empty `speech2text/` directory.** The seam is real and specified — `modalities/base.py`,
 the media part shape, and the pair naming — and a directory holding nothing adds none of it, which
-is the flexibility-nobody-asked-for that AGENTS.md §2 forbids. What is out of scope is listed in *Out of
+is the flexibility-nobody-asked-for that AGENTS.md forbids. What is out of scope is listed in *Out of
 Scope*, not mimed in the tree.
 
 Every implementation of either axis has a `schema.py` (`DEFINITION ·`) that imports nothing from its
@@ -761,11 +775,13 @@ dependency runs one way and never back. So `answer_schema` — a record turned i
 logic, while the answer models it constrains are `schema.py`.
 
 **The file list is not fixed, and was until T55.** I4 required exactly three modules and failed on a
-fourth, which made AGENTS.md §6's own remedy — a `utils.py` that has outgrown its exemption gets a
-real name — a build failure; §6 is then a rule that forbids its own remedy, and every later addition
-lands in `utils.py`. `AGENTS.md` § *Conflicts* records it. `utils.py` is still the one module name §6
+fourth, which made AGENTS.md's own remedy — a `utils.py` that has outgrown its exemption gets a
+real name — a build failure; the convention is then a rule that forbids its own remedy, and every later addition
+lands in `utils.py`. `AGENTS.md` records it. `utils.py` is still the one module name it
 exempts by name, under exactly one condition — conversions over the shapes in the `schema.py` beside
-it — and I4's second half is now that condition rather than a count of files.
+it — and I4's second half is now that condition rather than a count of files. Neither package has
+one as of T56: `text2text/` is `turns.py`, `detectors.py` and `modality.py`, and `tool_decision/` is
+`answers.py`, `annotations.py`, `records.py` and `profile.py`.
 
 **An axis façade re-exports its protocol and nothing else.** `dataforce/modalities/__init__.py` holds
 `Modality` and not `text2text`. Re-exporting the implementation would make `import dataforce.modalities`
@@ -922,7 +938,7 @@ both shells produce one record (Requirement 46, I15): nothing in the engine has 
 either axis, the only place that knows an item's offset, and therefore the only place that can turn
 one into data. It catches, records the offset and the message, and hands them to the edge as side
 output for the quarantine tier; the run completes (Requirement 43). What that gives up is stated:
-where the *declaration* is wrong rather than the item, §33 would call it configuration scope and
+where the *declaration* is wrong rather than the item, that is configuration scope and
 stop, and a manifest naming a label key no item carries instead produces twenty thousand counted
 items and no records. This stage cannot tell those apart at item 1 and does not guess — what it can
 know is per item, so per item is the scope it reports.
@@ -958,7 +974,7 @@ normalisation, covering the spoken forms an off-the-shelf scrubber misses: digit
 date, an order reference.
 
 **The shapes are the modality's and the language is a parameter.** Six pattern shapes live in
-`text2text/utils.py`, because a regular expression is tested and these are tested against the
+`text2text/detectors.py`, because a regular expression is tested and these are tested against the
 adversarial fixtures § *Testing Strategy* item 6 asks for. What fills them is a language: the
 manifest declares one word (`language: vi`) and `spoken_forms` is the table behind it, holding the
 words a language dictates digits with (`không`…`chín`, plus `mốt`, `tư`, `lăm`), the words for `@`
@@ -1110,7 +1126,7 @@ two different questions. The corrections feed `confidence` instead, per record, 
 like halves of one exchange with the store, and whether to merge them is a fair question to ask of any
 pair that talks to the same thing. Three answers. They cannot run in one call — `POST /human-review`
 stops after `publish` for exactly this reason — so one module would still owe two routes, two
-subcommands and two record keys, and §26 gives each key one writer. They re-run for different reasons,
+subcommands and two record keys, and each key has one writer. They re-run for different reasons,
 the same argument that keeps `ai_review` at three: republishing costs a write and a re-sync, re-reading
 answers is free and idempotent. And they read different things — `publish` reads
 `human_review.question_generate` and the two config halves, `annotator_answers` reads the store.
@@ -1253,7 +1269,7 @@ back out. Three tables, owned by `edge/store/`, every column carrying its purpos
   returns a receipt — which question ids the store holds, under which write, when — and `answers_to`
   returns every answer to a set of question ids. Whether a stage reaches the store through a port or
   hands rows back as side output was open until T23: only the first shape lets `publish` record its own
-  receipt, because a receipt names a write that has already happened, and §26 gives that key one writer.
+  receipt, because a receipt names a write that has already happened, and that key has one writer.
 - **Writing a question the store already holds is a no-op**, because a `question_id` is a pure function
   of the question: a second publish of an unchanged corpus is the same rows. Insert-if-absent and not an
   upsert — an existing row records what was *published*, and overwriting its payload would rewrite a
@@ -1416,7 +1432,7 @@ break I14 in a way nobody would predict: the file holds the key, so two people p
 endpoint with two keys would produce two manifests for one configuration and a rotated key would read
 as a changed configuration. What is recorded instead is `embedding.model` inside the modality
 manifest, whose digest is already there. The file is git-ignored and a `<model>.json.example` beside
-it is what the repository ships (AGENTS.md §9), so a checkout composes only once a deployment has
+it is what the repository ships, so a checkout composes only once a deployment has
 attached one — an absent file is a `ConfigError` naming the path, before the first record.
 
 **Every key a manifest declares has a reader, and the reader validates it.** The modality's are
@@ -1451,7 +1467,7 @@ against the surface it was measured on.
 **1 · HTTP is the surface; the engine is the same one function.**
 Four routers, one route per service, over the record-in/record-out functions an in-process caller uses.
 *Alternative:* functions and a CLI only, with HTTP later — which `objective.md` §9 leans toward when it
-calls the web view "a later task". *Why this:* §9 defers the *view*, not the API, and §8 already requires
+calls the web view "a later task". *Why this:* `objective.md` §9 defers the *view*, not the API, and its §8 already requires
 two shells over one implementation. *Reversible:* yes — deleting `edge/routers/` and `main.py` leaves the
 engine intact.
 
@@ -1470,7 +1486,7 @@ and is silent on what its halves mean, which was the only thing in question. The
 display half of the annotation config depends on both halves — `display_config` returns the
 conversation and nothing else, and what is being judged reaches an annotator through the profile's
 *capture* half (Requirement 31). It may become true when a family arrives whose output is not text;
-today it described an intention as a fact (AGENTS.md §7).
+today it described an intention as a fact.
 
 **3 · `ai_review` is three stages, not one.**
 `jury` → `cohesion` → `triage`. *Alternative:* one stage writing votes, agreement and bucket together,
@@ -1514,7 +1530,7 @@ SQLite and has never run on Postgres is not evidence. *Reversible:* yes — one 
 Standard OpenAI chat-completion records with `tools` as data — what `objective.md` §2 documents, and
 nothing else. *Alternative:* also read a catalog rendered as prose into the system prompt, which is what
 the deleted `legacy_system_prompt` reader did for `fc_train_final.json`. *Why this:* that corpus is out
-of use, so the second reader has no caller, and AGENTS.md §2 forbids flexibility nobody asked for.
+of use, so the second reader has no caller, and AGENTS.md forbids flexibility nobody asked for.
 *Reversible:* yes — the reader is recoverable at `ed84417^`, and re-admitting it means a second
 `catalog_from_*` function behind the manifest's `shape` key, not a change to any service. That key now
 reads `openai_chat_completion`; it declared the retired shape until `T4`, which is why the profile read
@@ -1567,7 +1583,7 @@ adapter declaring its own port. It is `dataforce/ports.py`. And once `Engine` le
 called `api/` was left holding `policy.py`, `artifacts.py` and `store/` under a name that describes one
 of the four; `edge/` is the word the rest of this document uses.
 *Alternative considered:* the full hexagonal tree — `adapters/{http,persistence,config}/`. *Why not:*
-three nested directories for eight modules, each with a single consumer, is the split AGENTS.md §6
+three nested directories for eight modules, each with a single consumer, is the split AGENTS.md
 tells you not to make until a second consumer needs half. The lie was in the name, not the shape.
 *Also added, for the same reason:* `pipeline/runner.py`, because `POST /data-quality` runs three
 services in order and nothing owned that order — a router composing them would put a piece of the flow
@@ -1591,15 +1607,28 @@ and not on the fields — one writer per key (I8) plus a declared `reads` column
 key written by `curate` reaches `load_data` only if `load_data` reads it, and the contract table says
 it does not. The way out, if that day comes: one table per phase, joined on `record_id`.
 
-**14 · `utils.py` stays.**
-It was challenged as violating the naming law — *"utils of what?"* — the same objection AGENTS.md §5
+**14 · `utils.py` stays.** **Reversed by T56**, and kept rather than deleted: the argument below is
+still the argument, and what changed is at the end of the entry.
+It was challenged as violating the naming law — *"utils of what?"* — the same objection AGENTS.md
 makes against `load`. It does not, and the distinction is worth recording because it will be raised
-again. §5 governs *function* names and is tested by reading a call site. §6 governs *module* names, and
+again. The naming rule governs *function* names and is tested by reading a call site. The file rule governs *module* names, and
 exempts this one by name: "`utils.py` is the one allowed exception, and only for conversions over the
 shapes in the `schema.py` beside it." That is exactly its use here, one per axis implementation, with
 I4 enforcing the direction. *Alternative:* split each into `parts.py`, `embedding.py`, `detectors.py`.
 *Why not:* three modules with one consumer each — the `__init__.py` that assembles the axis — which the
 sentence above the exemption forbids. *Reversible:* trivially, if a second consumer ever appears.
+
+*What changed:* four measurements, none of which existed when this was written, and they are set out
+in `../axis-module-shape/spec.md` § *Context*. The exemption covered 2 of 16 top-level functions in
+`text2text/utils.py` and 5 of 23 in `tool_decision/utils.py`, so *conversions over the shapes in the
+`schema.py` beside it* described about a seventh of what the two files held. The *one consumer each*
+reason was already false when it was written: `tests/stages/test_text2text.py`,
+`tests/stages/test_tool_decision.py` and `tests/guards/test_one_canonical_form.py` each imported
+those internals directly, which is the second consumer the file rule asks for. The naming distinction
+above still stands and is why this entry survives — the naming rule is about function names, the file
+rule exempts this filename — but an exemption is conditional, and these two modules had stopped
+meeting the condition. `utils.py` stays legal for the next axis whose conversions really are all over
+its own shapes, and I4's second half is what will say whether they are.
 
 **15 · An answer is a set of calls, and δ is soft — recovered, not re-derived.**
 This document first described an answer as a set of names, δ as `1 − |A∩B| / |A∪B|`, and consensus as a
@@ -1642,11 +1671,11 @@ discovered in the pilot. *Reversible:* the capture half is one profile member an
 so replacing the widget — or the tool — is a change in two places.
 
 **17 · The four standing principle conflicts, settled — and one kept as an exception.**
-An audit of `AGENTS.md` §10–§41 against this document left four disagreements. AGENTS.md §8 says two
+An audit of AGENTS.md against this document left four disagreements. AGENTS.md says two
 rules that disagree in one place is a fact about the design and belongs written down, so here they are
 with what each cost.
 
-*§30 — a port with zero adapters is deleted.* `MediaResolver` had none: no media modality is built, so
+*A port with zero adapters is deleted.* `MediaResolver` had none: no media modality is built, so
 nothing implements it and nothing calls it. **Deleted.** It was a guess about what a future caller will
 need, written before that caller exists, and a wrong guess would have been discovered by the first
 media modality having to work around it. The seam survives without it — `modalities/base.py`, the media
@@ -1654,28 +1683,28 @@ part shape, the pair naming, and Requirement 16's description of what a media `l
 port arrives with the modality that demands it. *Cost:* the tree no longer shows where media plugs in;
 Requirement 16 and *Out of Scope* say it in words instead.
 
-*§36 — dev and production run the same implementations.* Two substitutions, both kept, both now paid
+*Dev and production run the same implementations.* Two substitutions, both kept, both now paid
 for. Decision 7 carries the SQLite/Postgres one as a risk rather than an argument, and the store tests
 run against both. The stubbed jury is the second and is not removable — `make check` cannot call a
 model — so the parity gate is the Smoke rung, which is the first time the real panel runs at all.
 Testing Strategy item 9 names both.
 
-*§37 — logs are an event stream, observability from the start.* The spec contained no logging: every
+*Logs are an event stream, observability from the start.* The spec contained no logging: every
 match for "log" in it was a substring of `catalog` or `LOGIC`. **Fixed**, in § *Observability*. The
 engine emits through stdlib `logging` and the edge installs the one handler, which keeps Requirement 36
 intact — a logger call opens no file and names no path.
 
-*§41 — a document fact the code also states is compared by a test.* I3 promised the comparison but
+*A document fact the code also states is compared by a test.* I3 promised the comparison but
 described `flow.py` as the single source and compared only code to code, which leaves this document
 free to drift from it. **Fixed:** I3 now parses the § *The flow* table out of this file and compares
 its triples against `PHASES` and `STAGES`. Changing either side alone fails the build.
 
-Two more from the same audit needed a line rather than a change. *§11 — do not decompose along the flow
+Two more from the same audit needed a line rather than a change. *Do not decompose along the flow
 of processing* — is aimed squarely at `pipeline/`, which is fifteen step modules in flow order.
 `AGENTS.md`'s own conflicts section resolves it: step modules stand, but a decision spanning steps is
-extracted under §12 and the steps call it. This design has exactly one such decision, and it is
+extracted into its own module and the steps call it. This design has exactly one such decision, and it is
 extracted: the answer type, which `jury`, `cohesion`, `aggregate` and `curate` all reason about and
-none of them owns — it lives on the profile. *§32 — define errors out of existence* — landed on the
+none of them owns — it lives on the profile. *Define errors out of existence* — landed on the
 `[]`-versus-`None` ambiguity in `vote_consensus` and is closed by construction in § *The answer, and
 the three operations over it*, not by a branch.
 
@@ -1691,7 +1720,7 @@ queue (`celery`, `amqp`, `kombu`), three git implementations (`gitpython`, `dulw
 config framework (`hydra-core`, `omegaconf`) and a crypto stack — none of which a pipeline that reads
 JSONL and calls an LLM has any use for. Every one of those is supply-chain surface and install time.
 *Alternative:* keep them against a future need — corpus-level folds might want a dataframe, and a DAG
-runner might come back. *Why not:* AGENTS.md §2, and the same reasoning §30 applies to a port with no
+runner might come back. *Why not:* AGENTS.md, and the same reasoning applied to a port with no
 adapter. `dvc init` is one command, and `metrics.json` is a fold the edge can write without pandas.
 *Reversible:* yes, one line each. *Cost:* if a metrics fold does want a dataframe, T27 adds pandas back
 with a reason, which is better than it being there without one.
@@ -1700,7 +1729,7 @@ with a reason, which is better than it being there without one.
 The flow table numbered its rows 0–14, each `STEP ·` docstring repeated its number, and the in-scope
 boundary was written as *stages 0–11*. *Why this changed:* a number is not a property of a stage, it is
 its position in a list — and `STAGES` is a tuple, which already holds that. Writing it down made the same
-fact exist twice, and §26 says the second copy is the one that goes wrong. Worse, it was a **shared**
+fact exist twice, and the second copy is the one that goes wrong. Worse, it was a **shared**
 index: inserting a stage into `human_review` renumbers every stage after it, so a one-row change becomes a
 diff across `flow.py`, five module docstrings, four contract tables, both documents and the drift guard —
 and every one of those files turns red having done nothing wrong. *What replaces each job the number
@@ -1721,7 +1750,7 @@ what a single module would hold"*. Counting the routes retired that: every route
 them would have imported the pair from somewhere, and the layout had no somewhere — so the honest
 reading of four `schemas.py` files is three duplicates of a shape that must stay identical, which is a
 change that has to land in three places to be correct. *Why this:* one module for the shared pair, and a
-per-router module only for what one router alone speaks, which is the same §6 rule stated the other way
+per-router module only for what one router alone speaks, which is the same rule stated the other way
 round. *Cost:* `data_quality` and `ai_review` become one module each, so giving either a model of its own
 later promotes a module to a package. *Reversible:* yes, and cheaply — it is a `git mv`.
 
@@ -1769,7 +1798,7 @@ inheriting would have collapsed the pair. The identity is prefixed on both proto
 root and the guards, and was the whole of T52's work. *What it also cost:* `Profile.modality` is
 gone, taking the protocol from sixteen members to fifteen. It named the pair as a string off the
 profile's own manifest, and a subclass inherits `modality_name` from the object that actually read
-the content — one attribute, one writer (§26), and no way for the two to disagree. The manifest key
+the content — one attribute, one writer, and no way for the two to disagree. The manifest key
 stays, because `modality:` is what tells the composition root which manifest to open. *Reversible:*
 yes, and the reverse is the same rename backwards.
 
@@ -1840,9 +1869,9 @@ Each names the check that holds it, not a file that used to.
 | I1 | The engine opens no file and names no path | AST scan over every engine module, plus a subprocess import from an empty directory |
 | I2 | `pipeline/` imports no concrete axis | AST scan for any import matching a registered implementation |
 | I3 | Code's phase and stage names are the flow's, this document's, and the record's | the § *The flow* table is parsed out of this file and its `(phase, stage, summary)` rows compared in order against `PHASES` and `STAGES` in `pipeline/flow.py`; module filenames and `STEP ·` docstrings are compared to the same source; and each phase's stages are compared to the keys `Record.<phase>` holds, in both directions, a `<phase>_config` key excepted. Changing any side alone fails the build. That last comparison closes a triangle I3 and I20 left open: a stage renamed everywhere but on its phase model made `metrics.json` report it as `0` for ever, and no guard could see it |
-| I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves, over both axis packages. `schema.py` must exist and import nothing from its own package — generalised from *imports no `utils`*, because a `schema.py` importing `detectors.py` is the same defect under a new filename and the old spelling could not see it. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md §6 grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. *Every*, not *most* — §6 says "and nothing else", and a threshold would be a tuned literal with no measurement behind it (§35). The second half reports one finding per module so one §40 annotation can excuse it; both implementations carry one today, and T56 deletes them. **The file-set half is gone**: it required exactly three files, which made §6's own remedy — give the module a real name — a build failure |
+| I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves, over both axis packages. `schema.py` must exist and import nothing from its own package — generalised from *imports no `utils`*, because a `schema.py` importing `detectors.py` is the same defect under a new filename and the old spelling could not see it. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. *Every*, not *most* — the convention says "and nothing else", and a threshold would be a tuned literal with no measurement behind it. The second half reports one finding per module so one exemption annotation can excuse it; both implementations carried one between T55 and T56, and neither has a `utils.py` now, so this half binds the next axis someone writes. **The file-set half is gone**: it required exactly three files, which made the convention's own remedy — give the module a real name — a build failure |
 | I5 | Identity comes from the manifest filename, never a class body | AST scan for `name`/`version`/`modality` and their `modality_`/`profile_` prefixed forms assigned in a `ClassDef` |
-| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for every function the installed library exports — read off the `__all__` of each front door, so a name the document forgets is still owned — plus the four owned roots and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/utils.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
+| I6 | Nothing re-implements an `agent-toolkit` function or imports a dependency it owns | AST scan for every function the installed library exports — read off the `__all__` of each front door, so a name the document forgets is still owned — plus the four owned roots and `hashlib` — the one import a second `record_id` would come through. One annotated exemption stands, in `profiles/tool_decision/answers.py`: the library owns validation and exposes it only inside `complete_structured`, and Requirement 49 validates a human's corrected answer with no model call — a hand-written twin of a schema we materialise ourselves is the pair of definitions this rule exists to prevent |
 | I7 | Every field of every data class has a description | two halves, because Requirement 1 names two kinds of data class: model introspection over every pydantic field's `description`, and an AST scan for the trailing comment on every field of a `@dataclass` or a `NamedTuple`, read over every line the declaration spans |
 | I8 | One writer per record key | run every service over one record; assert each diff is exactly one key |
 | I9 | `record_id` is stable across a shuffled re-ingest and sensitive to content | property test over a synthetic corpus |
@@ -1859,7 +1888,8 @@ Each names the check that holds it, not a file that used to.
 | I20 | The record's keys are the keys § *The record* draws | the JSONC drawing is parsed out of this file and compared key by key against `Record`'s fields, nested models included. `label` and `meta` are free-form and named as exceptions: the drawing shows example contents of those two, not keys |
 | I21 | Each axis protocol has the members its section writes down | the `Protocol` block is parsed out of this file and compared to the runtime members, and the count both that section and the module's own docstring state in words is compared to the same number |
 | I23 | An axis implementation's public surface is exactly its protocol's members | AST scan over each axis package: every class its façade exports has, as methods and `self.…` assignments, precisely the protocol's member set. I21 compares the protocol to the document and so cannot see a member that is only in the *class* — a public method in neither contract, which is how `final_label` shipped as a fifteenth |
-| I24 | Every JSON serialisation in the package is the same one | two halves. AST scan for every `json.dumps` / `json.dump` in the tree, whose keyword set must be exactly `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False` — those three are part of what a `record_id` is, and the form is written three times, inline in `record_id_for` and as `canonical_json` in each axis for the reason § *The two axes* gives. I9 cannot see a change here: it re-derives both sides of its comparison through the same call, so a flip that re-keys the whole corpus moves its expectations with it. The second half runs the two `canonical_json`s over values chosen to tell each option apart, because a scan alone would be satisfied by three functions nobody calls |
+| I24 | Every JSON serialisation in the package is the same one | two halves. AST scan for every `json.dumps` / `json.dump` in the tree, whose keyword set must be exactly `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False` — those three are part of what a `record_id` is, and since T56 the form is written **once**, as `record.canonical_json`, which `record_id_for` and both axes call. I9 cannot see a change here: it re-derives both sides of its comparison through the same call, so a flip that re-keys the whole corpus moves its expectations with it. The second half runs `canonical_json` over values chosen to tell each option apart, because a scan of the source alone would be satisfied by a function nobody calls |
+| I25 | `declarations.py` names no manifest key | AST scan over that module's string literals, docstrings aside, against every string either axis assigns to a module-level constant — derived from the tree rather than listed here, so the two cannot drift into agreeing while both are wrong. The four functions take `*path: str` and every key stays in the axis that means it, which is what answers § *The two axes*' objection to a shared reader: there is nothing in it for either axis to learn about the other |
 | I22 | Every module's docstring opens with one of the five kinds | AST scan over the tree. The five words are read out of Requirement 2 rather than listed a second time, so a sixth kind becomes legal by being written down. `dataforce/__init__.py` is the one exception and says so in its own docstring |
 
 ---
@@ -1870,7 +1900,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|
 | Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
-| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break (§8) and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed (§32) |
+| An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed |
 | A turn's `content` is a content-block array, or any other non-string | read, never refused: a text block contributes its text and any other block its canonical JSON, so nothing leaves `record_id`. Requirement 13 declares the OpenAI chat-completion shape and this is that shape, so such an item is a declared item and becomes a record |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
 | Profile and modality disagree | `ConfigError`: "composes with modality 'text2text'" |
@@ -1880,7 +1910,7 @@ Each names the check that holds it, not a file that used to.
 | A jury vote does not validate | counted as an invalid vote, kept with `valid: false`, never silently dropped; a noisy panel shows up as a high `invalid_votes` fold |
 | A model call fails after retries | `agent-toolkit` owns retry and rate limiting; an exhausted call is one missing vote, and `cohesion` computes over the votes that arrived |
 | The whole panel fails for one record | read as *no votes*, for the reason above: the record carries no vote, a null `final_prediction` and a bucket that sends it to a person, and the run completes |
-| A port raises `ConfigError` mid-run | it is **not** caught. Both model ports promise not to raise, and `ConfigError` is the one exception this codebase defines: it means a human must change configuration (§33), so an adapter that cannot reach its endpoint stops the run rather than raising it twenty thousand times. Caught, `jury` completes with every record scoring `0.0` and landing in `contested`, and `pii_check` completes with every hit `unverified` — one fails silent and one fails safe, and neither says why |
+| A port raises `ConfigError` mid-run | it is **not** caught. Both model ports promise not to raise, and `ConfigError` is the one exception this codebase defines: it means a human must change configuration, so an adapter that cannot reach its endpoint stops the run rather than raising it twenty thousand times. Caught, `jury` completes with every record scoring `0.0` and landing in `contested`, and `pii_check` completes with every hit `unverified` — one fails silent and one fails safe, and neither says why |
 | `ai_review` run on an engine with no panel | `ConfigError` from `jury` before the first record. It is a fact about the configuration, not about a record, and writing a key that says the panel agreed on nothing would be a lie about a call nobody made |
 | `enable_redact: false` and personal data found | `pii_check` reports, `content` untouched, `decision: "reported"`. The run completes. `export`'s precondition is what keeps it out of a release — and export is not built yet, so **until it is, nothing prevents a reported-but-unredacted corpus reaching an artifact** |
 | Label Studio unreachable during sync | the sync fails; no record key changes, no `publication` row is written, every other endpoint is unaffected |
@@ -1941,7 +1971,7 @@ There is no test suite. It is written against this document, in this order, and 
    set of `record_id`s is identical at every step.
 4. **Both shells (I15)**: the same input through `pii_check(engine, records)` and
    `POST /data-quality/pii-check`, asserted equal.
-5. **Fixtures are invented, never extracted from real data** (AGENTS.md §9), in `objective.md` §2's
+5. **Fixtures are invented, never extracted from real data**, in `objective.md` §2's
    shape. There is no corpus-wide test until a source is declared; when one is, it asserts the label-check
    counts against `params.invalid_counts` under `-m integration` and nowhere else.
 6. **PII gets adversarial fixtures**: spoken digits with and without tone marks, `a còng`, `chấm`, a value

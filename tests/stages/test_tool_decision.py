@@ -14,7 +14,7 @@ fixtures against it rather than by reading the dict it returns, which is what ma
 `OpenTicket` carrying `LookupBalance`'s argument" a fact about the schema and not about our
 expectations of it.
 
-Every fixture is invented (AGENTS.md §9), in `objective.md` §2's shape.
+Every fixture is invented, in `objective.md` §2's shape.
 """
 
 import json
@@ -29,7 +29,7 @@ from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Text2Text
-from dataforce.modalities.text2text.utils import stated_calls
+from dataforce.modalities.text2text.turns import stated_calls
 from dataforce.profiles import Profile
 from dataforce.profiles.tool_decision import ToolDecision
 from dataforce.record import (

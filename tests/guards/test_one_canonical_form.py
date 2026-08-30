@@ -7,21 +7,23 @@ record's id starts depending on the order a mapping happened to be built in. I9 
 it re-derives both sides of its comparison through the same call, so a change that moves every id
 together moves its expectations with them.
 
-The form is written three times -- once inline in `record_id_for`, once as `canonical_json` in each
-axis -- and the duplication is deliberate. § *The two axes* says the two contracts share `name`,
-`version`, `Part` and one separator *and nothing else*, so a shared reader would be a fifth shared
-thing, and the first key one axis needed and the other did not would put a profile's vocabulary in a
-module the modality imports. What the duplication costs is that three copies can drift; this is what
-pays that cost, and it is cheaper than the seam.
+**The form was written three times until T56 and is written once now.** It was inline in
+`record_id_for` and a `canonical_json` in each axis, and the duplication was deliberate: § *The two
+axes* says the two contracts share `name`, `version`, `Part` and one separator *and nothing else*, so
+a shared one was a further shared thing and wanted an argument. The argument is that a `record_id`
+**is** the hash of the string this form produces, so the form is part of what a record is rather than
+a preference two axes happen to share -- it belongs in `record.py`, which both axes already import,
+and this rule now has one definition to hold rather than three to keep equal.
 
-**Both halves, because either alone passes the wrong thing.** The scan reads the call sites and
-would be satisfied by three functions nobody calls; the comparison runs the two `canonical_json`s
-over values chosen to tell each option apart and would be satisfied while `record_id_for`, which is
-not either of them, serialised differently.
+**Both halves, because either alone passes the wrong thing.** The scan reads source text and would be
+satisfied by a function nobody calls; the comparison runs `canonical_json` over values chosen to tell
+each option apart, and would be satisfied by a scan-shaped agreement while the function returned
+something else. The scan is over the whole package, so the half that used to matter most -- a fourth
+copy appearing somewhere -- is still what `DEFINING_MODULES` says out loud.
 
 `dump` is scanned beside `dumps` because a value written to a file with other options is the same
 drift wearing a different name. A call that genuinely wants other options -- a manifest laid out for
-a person to read -- is what §40's hatch is for, annotated on the line; what it may not be is
+a person to read -- is what the exemption hatch is for, annotated on the line; what it may not be is
 unremarked.
 """
 
@@ -31,8 +33,7 @@ from typing import Any
 
 import pytest
 
-from dataforce.modalities.text2text.utils import canonical_json as by_the_modality
-from dataforce.profiles.tool_decision.utils import canonical_json as by_the_profile
+from dataforce.record import canonical_json
 
 from .tree import Module, called_name, module_from_source, modules_in, not_exempt
 
@@ -50,13 +51,9 @@ CANONICAL_KWARGS: dict[str, Any] = {
     "separators": (",", ":"),
     "ensure_ascii": False,
 }
-# The three modules that may define the form. A fourth is a decision about what a `record_id`
-# covers, not an import someone added, so it fails here and gets made on purpose.
-DEFINING_MODULES = {
-    "dataforce.record",
-    "dataforce.modalities.text2text.utils",
-    "dataforce.profiles.tool_decision.utils",
-}
+# The one module that may serialise. A second is a decision about what a `record_id` covers, not an
+# import someone added, so it fails here and gets made on purpose.
+DEFINING_MODULES = {"dataforce.record"}
 
 # One value per option, each differing from its own canonical string in exactly that option, so a
 # comparison that agreed for the wrong reason has nowhere to hide.
@@ -132,12 +129,12 @@ def test_the_scan_reads_the_calls_it_is_supposed_to_find() -> None:
 def test_the_scan_rejects_a_serialisation_that_is_not_the_canonical_one(
     violation: str,
 ) -> None:
-    """§39: one per option, plus the two spellings that would slip past a shallower scan."""
+    """Proved red: one per option, plus the two spellings that would slip past a shallower scan."""
     assert form_findings(module_from_source(violation)) != []
 
 
 def test_an_annotated_exemption_covers_a_layout_meant_for_a_person() -> None:
-    """§40: the hatch exists so the first human-readable dump argues for itself instead of
+    """The hatch exists so the first human-readable dump argues for itself instead of
     quietly widening the rule for the calls that define a `record_id`."""
     excused = (
         "import json\n\n\ndef f(v):\n"
@@ -149,10 +146,15 @@ def test_an_annotated_exemption_covers_a_layout_meant_for_a_person() -> None:
 
 
 @pytest.mark.parametrize("value", DISCRIMINATING, ids=range(len(DISCRIMINATING)))
-def test_both_axes_serialise_one_value_the_same_way(value: Any) -> None:
-    """The half the AST cannot see: two functions written apart, agreeing at runtime."""
-    assert by_the_modality(value) == by_the_profile(value)
-    assert by_the_modality(value) == json.dumps(value, **CANONICAL_KWARGS)
+def test_the_form_serialises_a_value_the_way_the_options_say(value: Any) -> None:
+    """The half the AST cannot see: what the function returns, not how its call site is spelled.
+
+    It compared the two axes' copies against each other and against the options until T56 merged
+    them. With one definition left the comparison that means something is against the options
+    themselves -- `CANONICAL` is how the scan above spells them and `CANONICAL_KWARGS` is what they
+    do, and this is the only thing that says those two are the same three options.
+    """
+    assert canonical_json(value) == json.dumps(value, **CANONICAL_KWARGS)
 
 
 @pytest.mark.parametrize(
@@ -163,10 +165,10 @@ def test_both_axes_serialise_one_value_the_same_way(value: Any) -> None:
 def test_each_option_changes_at_least_one_of_the_values(
     option: str, other: Any
 ) -> None:
-    """§39 for the comparison above: values that agreed under any options would prove nothing."""
+    """The proof for the comparison above: values that agreed under any options would prove nothing."""
     flipped = {**CANONICAL_KWARGS, option: other}
 
     assert any(
-        by_the_modality(value) != json.dumps(value, **flipped)
+        canonical_json(value) != json.dumps(value, **flipped)
         for value in DISCRIMINATING
     )

@@ -5,11 +5,11 @@ different files and the dependency runs one way -- a conversion may read the sha
 shape may not read the conversions.
 
 **This guard counted files until T55, and that was the defect.** It required exactly `__init__.py`,
-`schema.py` and `utils.py`, and failed on a fourth. AGENTS.md §6 says the remedy for a ``utils.py``
+`schema.py` and `utils.py`, and failed on a fourth. AGENTS.md says the remedy for a ``utils.py``
 that has outgrown its exemption is to give it a real name -- so the guard made the convention's own
 remedy a build failure, and a rule that forbids its own remedy turns every later addition into
-``utils.py``, which is the outcome §6 exists to prevent. The Conflicts entry *`§6`'s escape hatch vs
-a guard that closes it* records it and resolves it: a guard may fix a package's shape only where the
+``utils.py``, which is the outcome the convention exists to prevent. AGENTS.md records the
+resolution: a guard may fix a package's shape only where the
 conventions state that shape, and should prefer to constrain the direction of an import over the
 number of files.
 
@@ -21,21 +21,24 @@ the old spelling could not see it. Reading directories is still right for *exist
 is about which files there are.
 
 **Two · every top-level function in a ``utils.py`` references a shape ``schema.py`` defines.** This is
-§6's condition on the one module name it exempts -- "only for conversions over the shapes in the
-``schema.py`` beside it" -- checked for the first time. *Every*, not *most*: §6 says "and nothing
-else", and a threshold would be a tuned literal in a guard with no measurement behind it (§35). A
+the convention's condition on the one module name it exempts -- "only for conversions over the shapes in the
+``schema.py`` beside it" -- checked for the first time. *Every*, not *most*: the convention says "and nothing
+else", and a threshold would be a tuned literal in a guard with no measurement behind it. A
 helper that touches no shape is not a conversion over one, and belongs in a module named for what it
 produces.
 
 The second half reports **one finding per module**, anchored on line 1 -- the line that means *this
 module* rather than one function chosen to stand for the rest, and the one place a `#` comment sits
-above a docstring without disturbing it. The message names every offender. Both
-implementations carry that annotation today and T56 is what deletes them: only 2 of 16 top-level
-functions in ``text2text/utils.py`` touch a shape, and 5 of 23 in ``tool_decision/utils.py``, so the
-annotation is excusing 14 and 18 -- the measurement that reopened this, and not a hypothetical.
+above a docstring without disturbing it. The message names every offender.
 
-A package with no ``utils.py`` passes the second half with nothing to say, which is where T56 leaves
-both of them. The rule stands for the next axis someone writes, which is when it is worth having.
+**Both implementations carried that annotation between T55 and T56, and neither does now.** Only 2 of
+16 top-level functions in ``text2text/utils.py`` touched a shape, and 5 of 23 in
+``tool_decision/utils.py``, so the two annotations were excusing 14 and 18 -- the measurement that
+reopened this, and not a hypothetical. T56 split both packages into modules named for what they
+produce, and the annotations went with the files that carried them.
+
+A package with no ``utils.py`` passes the second half with nothing to say, which is where both of
+them are. The rule stands for the next axis someone writes, which is when it is worth having.
 """
 
 import ast
@@ -83,7 +86,7 @@ def unconverted(utils: Module, shapes: frozenset[str]) -> list[tuple[int, str]]:
     """The one finding a `utils.py` earns when it holds something that is not a conversion.
 
     **One finding, anchored on line 1.** Twelve findings in one file would need twelve annotations to
-    excuse and §40's hatch is a line, so the module gets one -- and the line that means *this module*
+    excuse and an exemption annotates a line, so the module gets one -- and the line that means *this module*
     is its first, where a `#` comment sits above the docstring without disturbing it. Anchoring on the
     first offending `def` was the other build: it puts a long comment on a real signature, which the
     formatter then splits across three lines, and it picks one function to stand for a fact about all
@@ -102,7 +105,7 @@ def unconverted(utils: Module, shapes: frozenset[str]) -> list[tuple[int, str]]:
         (
             1,
             f"{len(missing)} of {len(functions)} top-level functions touch no shape "
-            f"from {SCHEMA}, so {UTILS} is holding something §6 does not exempt: {named}",
+            f"from {SCHEMA}, so {UTILS} is holding something the exemption does not cover: {named}",
         )
     ]
 
@@ -147,7 +150,7 @@ def test_every_axis_implementation_keeps_the_direction_and_the_condition(
 def test_the_scan_rejects_a_schema_that_imports_a_module_beside_it(
     tmp_path: Path,
 ) -> None:
-    """§39: the direction, in the three spellings that reach a sibling.
+    """Proved red: the direction, in the three spellings that reach a sibling.
 
     `utils` is the one the old rule named; `detectors` is the one it could not see, and is the whole
     reason this half was generalised.
@@ -167,7 +170,7 @@ def test_the_scan_rejects_a_schema_that_imports_a_module_beside_it(
 def test_the_scan_rejects_a_utils_holding_something_that_is_not_a_conversion(
     tmp_path: Path,
 ) -> None:
-    """§39: §6's condition, which no guard checked until T55."""
+    """Proved red for the condition no guard checked until T55."""
     package = _implementation(
         tmp_path,
         schema="class Detector:\n    pass\n",
@@ -178,7 +181,7 @@ def test_the_scan_rejects_a_utils_holding_something_that_is_not_a_conversion(
 
 
 def test_the_scan_rejects_a_package_with_no_schema(tmp_path: Path) -> None:
-    """§39: the half that is still about which files exist, and the only one left."""
+    """Proved red: the half that is still about which files exist, and the only one left."""
     package = _implementation(tmp_path)
     (package / SCHEMA).unlink()
 
@@ -188,8 +191,8 @@ def test_the_scan_rejects_a_package_with_no_schema(tmp_path: Path) -> None:
 def test_the_scan_permits_a_fourth_module(tmp_path: Path) -> None:
     """The rule this task deleted, kept as a green case so the deletion cannot be undone by accident.
 
-    A fourth file was a finding until T55 and is the shape T56 moves both packages to. If this ever
-    goes red again, §6's remedy has been made a build failure a second time.
+    A fourth file was a finding until T55 and is the shape both packages are in since T56. If this
+    ever goes red again, the convention's remedy has been made a build failure a second time.
     """
     package = _implementation(
         tmp_path, schema="class Detector:\n    pass\n", extra="detectors.py"
@@ -214,7 +217,7 @@ def test_the_scan_permits_a_utils_that_converts_the_shapes_beside_it(
 def test_an_annotated_exemption_covers_a_utils_that_has_outgrown_the_condition(
     tmp_path: Path,
 ) -> None:
-    """§40: the hatch both implementations stand on until T56 splits them.
+    """The hatch both implementations stand on until T56 splits them.
 
     One annotation for the module, because the finding is one finding -- which is the whole reason
     `unconverted` reports it that way.

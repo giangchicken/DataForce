@@ -1,7 +1,7 @@
 # Axis module shape — Implementation Spec
 
 **Status:** awaiting review · **Reads from:** [`../annotation-pipeline/spec.md`](../annotation-pipeline/spec.md),
-`AGENTS.md` §4–§6 and §15, §18, §19, §20, §38, §42 · **Style reference:** the internal
+AGENTS.md · **Style reference:** the internal
 `agent-evaluation` service, which `annotation-pipeline/spec.md` already names on its own line 3
 
 ---
@@ -34,7 +34,7 @@ other way: *"`utils.py` stays … Alternative: split each into `parts.py`, `embe
 axis — which the sentence above the exemption forbids."* This document reopens it because four of
 the facts that decision rested on are measurably not true, and one of them was never true.
 
-**1 · The exemption does not cover most of what the modules hold.** AGENTS.md §6 grants `utils.py`
+**1 · The exemption does not cover most of what the modules hold.** AGENTS.md grants `utils.py`
 "only for conversions over the shapes in the `schema.py` beside it". Counting top-level functions
 that name a shape defined in the `schema.py` beside them:
 
@@ -45,7 +45,7 @@ that name a shape defined in the `schema.py` beside them:
 
 The other 32 are a language vocabulary, two manifest readers, two JSON canonicalisers, turn
 rendering, answer arithmetic and annotation decoding. The exemption has not been stretched — it
-stopped covering these modules some time ago and nothing said so, because no guard reads §6's
+stopped covering these modules some time ago and nothing said so, because no guard reads the convention's
 condition and the guard that does read the package (I4) only counts files.
 
 **2 · A second consumer already arrived — three of them, and they are tests.** Decision 14's
@@ -56,8 +56,8 @@ condition and the guard that does read the package (I4) only counts files.
 - `tests/stages/test_tool_decision.py:32` imports `stated_calls` from `text2text.utils`
 - `tests/guards/test_one_canonical_form.py:35` imports `canonical_json` from `tool_decision.utils`
 
-Under §19 — *"no test imports a module's internals. If one must, that is a design finding, not a test
-problem"* — those three lines are the finding. Under §15 they are also the second consumer whose
+Under the rule that *"no test imports a module's internals. If one must, that is a design finding, not a test
+problem"* — those three lines are the finding. They are also the second consumer whose
 absence was the stated reason not to split.
 
 **3 · The style reference this repository names does the split, and accepts the consumer count.**
@@ -78,10 +78,10 @@ sentences has to give, and the measurement says which.
 **4 · The `utils.py` files cannot get a real name, because a guard forbids it.**
 `tests/guards/test_axis_module_shape.py` requires an axis package to hold exactly `__init__.py`,
 `schema.py` and `utils.py`, and carries a test named `test_the_scan_rejects_a_fourth_module`. So
-AGENTS.md §6's remedy — *"the moment it holds something else, §5 applies and it gets a real name"* —
+AGENTS.md's remedy — *"the moment it holds something else, it needs a real name"* —
 is a build failure. **A rule that forbids its own remedy converts every later addition into
-`utils.py`**, which is the outcome §6 exists to prevent. This is recorded in AGENTS.md's Conflicts
-section, resolved as: *a guard may fix a package's shape only where the conventions state that
+`utils.py`**, which is the outcome the convention exists to prevent. AGENTS.md records the
+resolution: *a guard may fix a package's shape only where the conventions state that
 shape, and should prefer to constrain the direction of an import over the number of files.*
 
 **5 · The spoken-PII vocabulary is a live duplicate, and it has already drifted.** `SpokenPiiForms`,
@@ -90,13 +90,13 @@ shape, and should prefer to constrain the direction of an import over the number
 byte-identical to the ones in `text2text/utils.py:146–185`. The behaviour is not: the library raises
 `ToolkitError`, this repository raises `ConfigError`. `text2text/utils.py:105` states the duplication
 outright — *"holds this exact shape and these exact names on a branch already"* — and that sentence
-has stood as a justification rather than as a finding, which is what AGENTS.md §42 now names.
+has stood as a justification rather than as a finding, which is what AGENTS.md now names.
 
 I6 cannot see it, and the merge did not change that. The guard reads owned names off the
 **installed** library; the pin resolves by tag, `v0.1.0` is at `2b603a6`, and the merge is two commits
 past it. Verified: `spoken_pii_forms` is a `def` in the branch's
 `string_utils.__all__`, so **the pin move alone turns I6 red on
-`text2text/utils.py:209`** — the guard does the enforcement the moment it can see. `SPOKEN_PII_FORMS`
+`spoken_pii_forms` in `text2text/detectors.py`** — the guard does the enforcement the moment it can see. `SPOKEN_PII_FORMS`
 and `SpokenPiiForms` are a constant and a class, which I6 does not scan, so those two come out by
 hand.
 
@@ -115,7 +115,7 @@ by signature rather than by duplication — `declaration(manifest, *path: str)` 
 caller and names no key, and every key constant stays in the axis that means it.
 
 **What is not wrong with these files.** 38% of `src/` is docstring (2647 of 6905 lines) and that is
-§22 working as intended. `tool_decision/utils.py` is 423 lines of code, not 916. The problem is the
+Documenting the interface where it lives, working as intended. `tool_decision/utils.py` is 423 lines of code, not 916. The problem is the
 number of unrelated jobs in one module, not its length, and this document does not delete one
 sentence of prose — every docstring moves with the code it documents.
 
@@ -153,7 +153,7 @@ defines" and the edge maps it to a 400. So `detectors.py` catches `ToolkitError`
 *Alternative:* let `ToolkitError` escape. *Why not:* it makes the engine raise a second exception type,
 falsifies `errors.py`'s docstring — *"the only exception the engine raises"* — and hands the edge
 something its 400 mapping does not cover. *Consequence:* `written_down` — the generic table reader —
-loses one of its two callers and, under §4, stops being a function: it is inlined into `phone_plan`.
+loses one of its two callers and, stops being a function: it is inlined into `phone_plan`.
 *Noticed while writing this:* § *Error Behavior* has no row for an undeclared `language:` at all,
 which is why T54 adds one rather than editing one.
 
@@ -161,21 +161,21 @@ which is why T54 adds one rather than editing one.
 New form: **an axis implementation has a `schema.py` that imports no sibling; and a `utils.py` beside
 it, if one exists, holds only conversions over those shapes.** The first half is what I4 checks today,
 generalised from "imports no `utils`" to "imports no sibling" — a `schema.py` that imported
-`detectors.py` would be the same defect under a new filename. The second half is AGENTS.md §6's
+`detectors.py` would be the same defect under a new filename. The second half is AGENTS.md's
 condition, made mechanical for the first time: every top-level function in a module named `utils.py`
 must reference a name defined in the `schema.py` beside it.
-*Alternative:* a threshold — *most* functions must. *Why not:* a tuned literal in a guard is §35's
-finding and there is no measurement behind any particular number. §6 says "and nothing else", so the
+*Alternative:* a threshold — *most* functions must. *Why not:* a tuned literal in a guard is the
+finding and there is no measurement behind any particular number. The convention says "and nothing else", so the
 rule is *every*, and a helper that touches no shape belongs with the thing it helps.
-*Alternative:* forbid `utils.py` outright. *Why not:* §6 grants it on purpose, and a new axis whose
+*Alternative:* forbid `utils.py` outright. *Why not:* the convention grants it on purpose, and a new axis whose
 conversions really are all over its own shapes should be allowed to have one. After T56 neither
 package has a `utils.py`, so the second half binds only the next axis someone writes — which is
 exactly when it is worth having.
 
 **D5 · A module is named for what it produces, and the façade re-exports one name from each.**
-This is §5 applied to filenames, and it is the style reference's shape. `modality.py` and `profile.py`
+This is the naming rule applied to filenames, and it is the style reference's shape. `modality.py` and `profile.py`
 name the object that answers the protocol; `turns.py`, `detectors.py`, `answers.py`, `annotations.py`
-and `records.py` each name a result. **No guard enforces this**, for the reason §5 gives about itself:
+and `records.py` each name a result. **No guard enforces this**, for the reason the naming rule gives about itself:
 telling `answers.py` from `helpers.py` is a judgement, not a pattern. It is caught in review or it is
 not caught.
 
@@ -187,7 +187,7 @@ the manifest rather than from a literal: `config/profiles/` when `manifest.modal
 `config/modalities/` when it is not — which is what that field already means.
 *Alternative:* leave both copies and add a guard holding them equal, the way I24 holds the three
 `json.dumps`. *Why not:* I24 exists because the canonical form is genuinely constrained from three
-directions; a config reader is constrained from none, and a guard pairing two copies is §18's
+directions; a config reader is constrained from none, and a guard pairing two copies is a
 pass-through with a test attached.
 *The check that keeps the vocabulary out:* `declarations.py` contains no string literal that is a
 manifest key. Its four functions take `*path: str`.
@@ -204,7 +204,7 @@ values chosen to tell the options apart — collapses to running one.
 **D8 · What this does not do.**
 No behaviour changes. No pattern, threshold, protocol member, record key, endpoint or config key
 moves. Every docstring travels with the code it describes, so the prose that explains a decision stays
-at the line where the next reader hits it (§8). The proof is I23: an axis implementation's public
+at the line where the next reader hits it. The proof is I23: an axis implementation's public
 surface is exactly its protocol's members, and it is asserted before and after.
 
 ---
@@ -221,7 +221,7 @@ guard compares them word for word. These rows are what § *Package layout* gains
     text2text/
       __init__.py           façade · the text2text modality; the object a composition root registers, and the encoder it is built with.
       schema.py             DEFINITION · the text2text shapes: what a detector is, and what its display config holds.
-      turns.py              LOGIC · one source item's turns as ordered parts, and one turn's calls as one canonical string.
+      turns.py              LOGIC · one turn as one part: what it said, what it called, and the string that holds both.
       detectors.py          LOGIC · the six shapes layer one scans for, filled with the words a declared language dictates.
       modality.py           LOGIC · Text2Text — the object that answers the Modality protocol.
 
@@ -231,7 +231,7 @@ guard compares them word for word. These rows are what § *Package layout* gains
       schema.py             DEFINITION · the tool_decision shapes: a call, an answer, and what constrains one.
       answers.py            LOGIC · the answer space, and the three operations over an answer: distance, permitted, consensus.
       annotations.py        LOGIC · what one annotation said, decoded from the controls the capture half emitted.
-      records.py            LOGIC · one source item as one record, and the label carried on it.
+      records.py            LOGIC · the answer a record carries: the one that ships, the one its turns restate, the redacted one.
       profile.py            LOGIC · ToolDecision — the object that answers the Profile protocol.
 ```
 
@@ -242,17 +242,26 @@ guard compares them word for word. These rows are what § *Package layout* gains
 |---|---|
 | `SpokenPiiForms`, `SPOKEN_PII_FORMS`, `spoken_pii_forms`, `written_down` | deleted — `agent_toolkit.string_utils` (T54) |
 | `PhonePlan`, `PHONE_PLANS`, `phone_plan`, `spaced`, `a_detector`, `personal_data_detectors`, `EMAIL`, `IDENTIFIER_DIGITS` | `text2text/detectors.py` |
-| `spoken_text`, `stated_calls`, `call_arguments`, `a_turn`, `text_parts` | `text2text/turns.py` |
-| `Encoder`, `Text2Text`, `embedding_model`, `DISPLAY_TAGS`, `CONVERSATION`, `TURN_SEPARATOR` and the manifest key constants | `text2text/modality.py` |
+| `spoken_text`, `stated_calls`, `call_arguments`, `a_turn` | `text2text/turns.py` |
+| `Encoder`, `Text2Text`, `embedding_model`, `text_parts`, `DISPLAY_TAGS`, `CONVERSATION`, `TURN_SEPARATOR` and the manifest key constants | `text2text/modality.py` |
 | `calls_in`, `entries_in`, `catalog_of`, `one_call_schema`, `answer_schema`, `answer_is_permitted`, `argument_agreement`, `answer_distance`, `agreed_arguments`, `vote_consensus` | `tool_decision/answers.py` |
 | `control_values`, `typed_arguments`, `corrected_answer`, `one_written_line` | `tool_decision/annotations.py` |
 | `final_label`, `restated_answer`, `redacted_arguments`, `redact_label` | `tool_decision/records.py` |
 | `ToolDecision`, `CAPTURE_TAGS`, `VERDICTS`, `SCENARIO_LENGTH` and the manifest key constants | `tool_decision/profile.py` |
-| `declaration`, `declared_name`, `declared_text`, `declared_count`, `declared_roles` | `dataforce/declarations.py` — one copy, `declared_text` folded into `declared_name` |
+| `declaration`, `declared_name`, `declared_text`, `declared_count`, `declared_roles` | `dataforce/declarations.py` — one copy, `declared_text` folded into `declared_name`, plus `declaring_file` |
 | `canonical_json` ×2 | `dataforce/record.py` — one copy, and `record_id_for` calls it (D7) |
 | `one_role` | `tool_decision/profile.py` — its one caller is `ToolDecision.__init__` (`utils.py:680`), and the role it names is the profile's vocabulary, not a reader |
 
-**Each new module answers §18's deletion test in one sentence:**
+**Three rows were corrected while this was being built (T56).** `turns.py` describes one turn and
+not one item, because `content_parts` — the member that turns an item's turns into parts — stays on
+the object in `modality.py`; `text_parts` went with it for the same reason, since refusing a media
+part is the modality's rule about its own input and both of its callers are there, and the deletion
+test below never named it. `records.py` describes the label a record carries and not the building of
+one, because `build_record` is a member too. And `declarations.py` has a fifth function,
+`declaring_file`: naming the file a message points at has four callers inside that module, which is
+what the file rule asks a function for.
+
+**Each new module answers the deletion test in one sentence:**
 
 - `turns.py` — delete it and every caller has to know that a turn's `content` may be a string, a null
   or a content-block array, and that a call's `arguments` may be a JSON string or an object.
@@ -271,9 +280,9 @@ guard compares them word for word. These rows are what § *Package layout* gains
 
 **I4 is rewritten.** Its row in § *Invariants* becomes:
 
-> | I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves. AST scan over both axis packages: `schema.py` must exist and import nothing from its own package — generalised from "imports no `utils`", because a `schema.py` importing `detectors.py` is the same defect under a new name. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md §6 grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. The file-set half is gone — it required exactly three files and so made §6's own remedy, *give it a real name*, a build failure |
+> | I4 | An axis implementation's `schema.py` imports no sibling, and a `utils.py` beside it holds only conversions over those shapes | two halves. AST scan over both axis packages: `schema.py` must exist and import nothing from its own package — generalised from "imports no `utils`", because a `schema.py` importing `detectors.py` is the same defect under a new name. Then, for any module named `utils.py`, every top-level function must reference a name `schema.py` defines: AGENTS.md grants that filename "only for conversions over the shapes in the `schema.py` beside it", and this is that condition, checked. The file-set half is gone — it required exactly three files and so made the convention's own remedy, *give it a real name*, a build failure |
 
-§39 applies: the new guard is proved red against a synthetic `schema.py` that imports a sibling, and
+The red-first rule applies: the new guard is proved red against a synthetic `schema.py` that imports a sibling, and
 against a synthetic `utils.py` holding a function that touches no shape, **before** the packages are
 split. The existing `test_the_scan_rejects_a_fourth_module` is deleted with the rule it proves.
 
@@ -303,7 +312,7 @@ five kinds.
 These land **with the code, in the same commit**, because three guards parse that file and compare it
 to the tree: I19 (§ *Package layout*), I6 (§ *Context*'s ownership sentence) and I21/I20 (unaffected
 here). Editing it before the code turns the build red; editing it after leaves the build green while
-the document is wrong, which is what §41 exists to prevent.
+the document is wrong, which is what the doc-and-code comparison exists to prevent.
 
 | § | line | change | task |
 |---|---|---|---|
@@ -316,7 +325,7 @@ the document is wrong, which is what §41 exists to prevent.
 | *Invariants* | 1837 | I4's row → the row in § *Invariants* above | T55 |
 | *Invariants* | 1856 | I24's row loses "and as `canonical_json` in each axis", if D7 is taken | T56 |
 | *Invariants* | after 1857 | I25 is added | T56 |
-| *Decisions* | 1588–1597 | **Decision 14 is not deleted.** Per AGENTS.md §8, a decision reversed is recorded where the next reader hits it: the entry keeps its argument and gains what changed — the four measurements in § *Context* above, and the fact that its "one consumer each" reason was already false when it was written | T56 |
+| *Decisions* | 1588–1597 | **Decision 14 is not deleted.** Per AGENTS.md, a decision reversed is recorded where the next reader hits it: the entry keeps its argument and gains what changed — the four measurements in § *Context* above, and the fact that its "one consumer each" reason was already false when it was written | T56 |
 | *Error Behavior* | after 1867 | **a row is added, not edited** — the table has no row for an unknown `language:` today, which is its own small gap. Behaviour is unchanged: a `ConfigError` naming the languages written down. The new row says the library raises and this repository translates (D3) | T54 |
 
 `plan.md` gains T54, T55 and T56 below, and its header paragraph gains them in the Phase 7 sentence.
@@ -337,18 +346,18 @@ Nothing parses `plan.md`, so those edits can land first.
 **Approach.** In `agent-toolkit`: merge `spoken-forms` to `main` and cut a tag. Here: move the pin in
 `pyproject.toml`, `uv lock`, delete the three names and `written_down` (D3), import
 `spoken_pii_forms`, and translate `ToolkitError` to `ConfigError` at the one call site.
-`tests/stages/test_text2text.py:35` imports two of the deleted names and imports them from the
-library instead — the tests that assert *the two tables have the same keys* stay here, because
+`tests/stages/test_text2text.py` imports two of the deleted names off `text2text/detectors.py`
+and imports them from the library instead — the tests that assert *the two tables have the same keys* stay here, because
 `PHONE_PLANS` stays here.
 
 **Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS" src/` returns nothing. An undeclared language
 still raises `ConfigError` with the same message. Every pattern is byte-identical: assert the six
 compiled patterns before and after, which is what proves D2 was honoured.
 
-**Source.** AGENTS.md §42, §24; I6; § *Context* item 5.
+**Source.** AGENTS.md; I6; § *Context* item 5.
 
 **Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
-red on `text2text/utils.py:209`. A green run at that point means the tag does not contain the commit.
+red on `spoken_pii_forms` in `text2text/detectors.py`. A green run at that point means the tag does not contain the commit.
 
 ---
 
@@ -361,18 +370,18 @@ reviewable apart: after it, nothing has moved and the build is green.
 
 **Approach.** Rewrite `tests/guards/test_axis_module_shape.py` to D4's two halves. Delete
 `test_the_scan_rejects_a_fourth_module` — it proves a rule that no longer exists — and add the two
-§39 proofs D4 names. `docs/annotation-pipeline/spec.md` § *Invariants* row I4 and § *Package layout*
+The red-first proofs D4 names. `docs/annotation-pipeline/spec.md` § *Invariants* row I4 and § *Package layout*
 lines 757–761 change in the same commit.
 
 **Acceptance criteria.** The new guard is red against both synthetic violations and green over the
 tree as it stands today, with both packages still holding exactly three files. The second half is
 therefore exercised against the two real `utils.py` **before** they move — and it will be red, since
 2 of 16 and 5 of 23 functions touch a shape. **So this task lands the rule with both modules carrying
-one annotated §40 exemption each, naming T56 as the fix and dated.** An exemption that is a scheduled
+one annotated exemption each, naming T56 as the fix and dated.** An exemption that is a scheduled
 deletion is what the hatch is for; `test_exemptions.py`'s ceiling of 5 has room for two.
 
-**Source.** AGENTS.md §6, §38, §39, §40, and the Conflicts entry `§6`'s escape hatch vs a guard that
-closes it.
+**Source.** AGENTS.md: a guard may fix a package's shape only where the conventions
+state that shape.
 
 **Verify.** `make check`, and `test_exemptions.py` shows four standing exemptions rather than two.
 
@@ -386,8 +395,8 @@ closes it.
 
 **Approach.** Pure moves, in this order so each step is green: `declarations.py` first with both axes
 importing it (D6); then `canonical_json` into `record.py` (D7); then `text2text/` into three modules;
-then `tool_decision/` into four. Every docstring travels with its code. The two §40 exemptions from
-T55 are deleted by this task, which is what §40 means by *shrinking*.
+then `tool_decision/` into four. Every docstring travels with its code. The two exemptions from
+T55 are deleted by this task, which is what *shrinking* means.
 
 **Acceptance criteria.** I23 passes unchanged — the public surface of both façades is the same set of
 names before and after. `tests/stages/test_text2text.py` and `test_tool_decision.py` import from the
@@ -395,10 +404,10 @@ module that owns each name rather than from `utils`, and `test_one_canonical_for
 `canonical_json` from `record.py`. No test's assertions change: if one has to, the move was not a
 move and the task is wrong.
 
-**Source.** AGENTS.md §5, §6, §15, §18, §19, §20; I19, I23.
+**Source.** AGENTS.md; I19, I23.
 
 **Verify.** `make check`. Then the byte check: run the smoke corpus before and after and compare
-`records.jsonl` and `metrics.json` byte for byte. §7 asks what proved that behaviour did not change,
+`records.jsonl` and `metrics.json` byte for byte. The verify rule asks what proved that behaviour did not change,
 and for a task that is entirely moves, an identical artifact is the only answer that means anything.
 
 ---
@@ -419,7 +428,7 @@ guard plus a move of 1478 lines. The exemptions are the cheaper cost, and they a
 `modality.py` or `profile.py` that assembles the axis. § *Context* item 3 is the argument that this is
 the house shape and not a defect, and it is a measurement of the style reference rather than a
 principle. If the reviewer reads those numbers and still wants one module, the fix is to say so here
-and keep `utils.py` — but then §6's exemption sentence should be rewritten to describe what these
+and keep `utils.py` — but then the exemption sentence should be rewritten to describe what these
 files actually hold, because today it describes something else and 32 of 39 functions are outside it.
 
 ---

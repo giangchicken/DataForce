@@ -11,7 +11,7 @@ to get right is the *document* -- the turns it keeps, in order, joined one way -
 reveals its input is what makes that assertable. The determinism test runs it in two processes under two hash seeds, which is
 where a set iteration or an unsorted `json.dumps` would show up.
 
-Every fixture is invented (AGENTS.md §9), in `objective.md` §2's shape. The Vietnamese is the
+Every fixture is invented, in `objective.md` §2's shape. The Vietnamese is the
 corpus's language and the spoken-digit fixtures are the ones an off-the-shelf scrubber misses.
 """
 
@@ -32,7 +32,7 @@ from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
-from dataforce.modalities.text2text.utils import (
+from dataforce.modalities.text2text.detectors import (
     PHONE_PLANS,
     SPOKEN_PII_FORMS,
     phone_plan,
@@ -452,7 +452,7 @@ def test_the_model_name_is_read_off_the_manifest() -> None:
 
 
 def test_the_shipped_manifest_names_a_language_that_is_written_down() -> None:
-    """§41: the fixture defaults to `vi` and the committed file declares one, and a name with no
+    """The fixture defaults to `vi` and the committed file declares one, and a name with no
     entry in the table is a `ConfigError` on the first real run and on no test."""
     shipped = read_yaml(MANIFEST)
 

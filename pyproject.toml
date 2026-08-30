@@ -26,7 +26,7 @@ dependencies = [
     # call -- and a hand-written twin of a schema we materialise ourselves is the pair
     # of definitions I6 exists to prevent. It arrives transitively through
     # `agent-toolkit[llm]` anyway; declared here because `src/` imports it, under one
-    # annotated I6 exemption in `profiles/tool_decision/utils.py`.
+    # annotated I6 exemption in `profiles/tool_decision/answers.py`.
     "jsonschema>=4.26",
     # The question store's engine (Decision 6: `publish` writes to a database we own).
     # Pinned inside 2.0 because the models are written in its declarative style and 2.1

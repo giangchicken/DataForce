@@ -33,9 +33,9 @@ two may not import each other. If they applied the replacements in different ord
 disagree: with ``{"480215": "<A_1>", "0215": "<B_1>"}`` a longest-first pass writes ``<A_1>`` and a
 shortest-first pass writes ``48<B_1>``, which manufactures exactly the ``label_assistant_mismatch``
 Requirement 17 exists to prevent. So *how* a value becomes its placeholder is one function here,
-called by both ends, rather than an algorithm spelled twice and agreed by luck (§23, §26).
+called by both ends, rather than an algorithm spelled twice and agreed by luck.
 
-**A key's model is named for what the key holds, never for the stage that writes it.** ``§5``: a
+**A key's model is named for what the key holds, never for the stage that writes it.** A
 name shared with a stage makes every sentence about the code ambiguous, and ``LabelCheck`` is
 already the profile's word for one of the five checks (Requirement 47). So what
 ``data_quality.label_check`` holds is a ``LabelVerdict``, and the two never collide in one import.
@@ -126,7 +126,7 @@ class Part(RecordModel):
 
         A media part with no `sha256` contributes nothing to `record_id` but its type and role,
         which every other such part also contributes -- two different recordings would share an
-        id. Requiring the field is cheaper than detecting the collision downstream (§32).
+        id. Requiring the field is cheaper than detecting the collision downstream.
         """
         needed = ("text",) if self.type == "text" else ("uri", "sha256")
         carried = tuple(
@@ -142,6 +142,27 @@ class Part(RecordModel):
         return self
 
 
+def canonical_json(value: Any) -> str:
+    """One JSON value as the one string that means it: keys sorted, no incidental whitespace.
+
+    There were three of these -- inline below, and one per axis, each carrying a docstring that
+    explained the duplication was deliberate. It was: § *The two axes* says the two axes share
+    `name`, `version` and `Part` and nothing else, so a fourth shared thing needed an argument, and
+    a serialisation both axes happen to agree on is not one. What settles it is that a `record_id`
+    **is** the hash of the string this returns, so the form is not a preference -- it is part of
+    what a record is, which is what this module holds. Both axes already import this module, so
+    nothing new is reached to get here.
+
+    Two values are compared through this rather than with `==` wherever either may be an object or
+    an array: two mappings differing only in key order are one value, and `answer_distance` and
+    `agreed_arguments` both need that to be true.
+
+    I24 holds the form. Flipping `ensure_ascii` re-keys every Vietnamese record there is and I9
+    cannot see it, because I9 re-derives both sides of its comparison through this same call.
+    """
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def record_id_for(content: Sequence[Part]) -> str:
     """The 16 lowercase hex a record with this content is joined on (Requirement 6).
 
@@ -149,14 +170,14 @@ def record_id_for(content: Sequence[Part]) -> str:
     whitespace -- and not about the text: two turns differing by one space are two records, and
     grouping the near-duplicates is `duplicate_check`'s job rather than this function's. Order
     within a record is content (Requirement 7); position in the source file is not, so a shuffled
-    re-ingest produces the same set of ids (I9). The three options below are written twice more, as
-    `canonical_json` in each axis, and I24 holds the copies to one form -- flipping `ensure_ascii`
-    in any one of them re-keys every Vietnamese record there is, and I9 would not notice.
+    re-ingest produces the same set of ids (I9). It serialises through `canonical_json` above, which
+    is the whole of what that function is for: an id is the hash of that string, so the two cannot
+    be allowed to drift, and until T56 they were two copies plus this one.
 
     Two records whose content is identical therefore share an id, which is the design's own
     consequence: `duplicate_check` reports such a pair rather than the id pretending they differ.
     """
-    canonical = json.dumps(
+    canonical = canonical_json(
         [
             {"type": part.type, "role": part.role, "text": part.text}
             if part.type == "text"
@@ -164,10 +185,7 @@ def record_id_for(content: Sequence[Part]) -> str:
             # `uri` -- moving a file does not change an id; changing its content does.
             else {"type": part.type, "role": part.role, "sha256": part.sha256}
             for part in content
-        ],
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+        ]
     )
     return compute_hash(canonical)[:16]
 
