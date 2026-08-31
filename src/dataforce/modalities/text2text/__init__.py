@@ -6,10 +6,11 @@ shapes in `schema.py` are deliberately not re-exported -- a stage reads a `Detec
 because `pipeline/` may not import this package at all (I2), and re-exporting them would only make
 that import look permitted.
 
-The modules beside `schema.py` are named for what they produce -- `turns.py`, `detectors.py`,
-`modality.py` -- and none of them is a name anything above this line needs.
+The modules beside `schema.py` are named for what they produce -- `pii_detector.py`,
+`text_embeddor.py`, `modality.py` -- and none of them is a name anything above this line needs.
 """
 
-from dataforce.modalities.text2text.modality import Encoder, Text2Text, embedding_model
+from dataforce.modalities.text2text.modality import Text2Text
+from dataforce.modalities.text2text.text_embeddor import Encoder, embedding_model
 
 __all__ = ["Encoder", "Text2Text", "embedding_model"]

@@ -16,15 +16,15 @@ under redaction and take every join in the corpus with it. It is computed once, 
 ``record_id_for``, which lives here because what an id is made of is part of what a record is
 (Requirements 6-8).
 
-**``SPOKEN_AND_STATED`` is the fourth name both axes borrow, and it is here for ``Part``'s reason.**
-A turn can both speak and act -- ``"Mình tra cứu ngay nhé."`` plus a ``tool_calls`` entry -- and a
-part carries one string, so a modality writing that turn down has to join the two and a profile
-comparing the calls against the label has to find them again. § *The two axes* says the contracts
-share ``name``, ``version`` and ``Part`` *and nothing else*; that sentence was already false, because
-the separator was a convention spelled in one axis and assumed in the other, which is the worst
-version of a shared fact. It is the same kind of fact as ``Part``: how a piece of record content is
-written down. So it lives here, where both can reach it, and one test crosses the seam so neither
-end can move alone.
+**``SPOKEN_AND_STATED`` was here and is now the profile's**, which is what T54 corrected. A turn can
+both speak and act -- ``"Mình tra cứu ngay nhé."`` plus a ``tool_calls`` entry -- and a part carries
+one string, so the two have to be joined and found again. That looked like ``Part``'s own case: a
+fact about how a piece of record content is written down, borrowed by both axes. It is not. Only
+*one module* of the concept has calls to write, so the separator was a convention spelled in a module
+both axes import for the benefit of one of them -- and § *The two axes* is explicit that a concept may
+not hold a convention only one of its modules speaks. It is ``tool_decision/records.py``'s constant
+now, written and read by the profile that declares what a call is, with the crossing test unchanged
+so neither end can move alone.
 
 **``redacted_text`` is here for the same reason as the separator, and it is the sharper case.**
 Requirement 17 says ``pii_check`` rewrites ``content`` **and** the label together, under the same
@@ -77,12 +77,6 @@ PartType = Literal["text", "audio", "image", "video"]
 # Nothing the pipeline produces spells one: a jury answers the materialised schema and an
 # annotator answers a form, and both of those are objects.
 StoredAnswer = tuple[dict[str, Any] | str, ...]
-
-
-# What separates what a turn said from the calls it made, inside one part's text. Borrowed by both
-# axes: `text2text` joins on it, `tool_decision` reads the calls back off it. A turn that only
-# speaks or only calls carries no separator at all.
-SPOKEN_AND_STATED = "\n"
 
 
 class Part(RecordModel):

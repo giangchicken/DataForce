@@ -10,7 +10,7 @@ resolution-markers = [
 [[package]]
 name = "agent-toolkit"
 version = "0.1.0"
-source = { git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.1.0#2b603a6ebb98ba28815ce78a5d0c22f85b05083d" }
+source = { git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.2.0#d0abc5d80a091eb3ac75da00809b855c8c2d3d34" }
 dependencies = [
     { name = "json-repair" },
     { name = "pyyaml" },
@@ -319,7 +319,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-toolkit", extras = ["llm"], git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.1.0" },
+    { name = "agent-toolkit", extras = ["llm"], git = "https://github.com/giangchicken/agent-toolkit.git?rev=v0.2.0" },
     { name = "alembic", specifier = ">=1.19.1" },
     { name = "jsonschema", specifier = ">=4.26" },
     { name = "label-studio-sdk", marker = "extra == 'label-studio'", specifier = ">=2.1.1" },

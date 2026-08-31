@@ -1,4 +1,4 @@
-"""DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
+"""DEFINITION · the Modality protocol; Detector and ContentDisplay, opaque.
 
 Six members, closed. The two named types are aliases here and concrete pydantic models in an
 implementation's ``schema.py`` (Requirement 47). This module imports no implementation of its own
@@ -23,7 +23,7 @@ from dataforce.record import Part, Record
 # import I16 forbids, and describing it here would make the protocol a description of its single
 # implementation.
 type Detector = Any
-type DisplayConfig = Any
+type ContentDisplay = Any
 
 
 class Modality(Protocol):
@@ -43,9 +43,10 @@ class Modality(Protocol):
         ...
 
     def personal_data_detectors(self) -> list[Detector]:
-        """The high-recall pattern layer, in this modality's terms."""
+        """The high-recall first layer: one scan per class of personal data."""
         ...
 
-    def display_config(self, record: Record) -> DisplayConfig:
-        """The *display* half of the annotation config. Never the capture half."""
+    def content_display(self, record: Record) -> ContentDisplay:
+        """How this record's content is shown to a person: the fragment that renders it,
+        and the task data that fragment reads. Never the capture half."""
         ...

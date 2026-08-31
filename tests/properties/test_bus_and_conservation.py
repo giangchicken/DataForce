@@ -163,7 +163,7 @@ def a_corpus(engine: Engine) -> tuple[Record, ...]:
         ),
         an_item(
             id="s4",
-            messages=[{"role": "user", "content": f"Mã của mình là {TYPED}."}],
+            messages=[{"role": "user", "content": f"Mã xác nhận của mình là {TYPED}."}],
             meta={"label": [SENT]},
         ),
         an_item(id="s5", messages="không phải một danh sách"),

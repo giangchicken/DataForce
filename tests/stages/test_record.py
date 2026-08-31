@@ -219,12 +219,12 @@ def test_a_record_survives_the_trip_through_json() -> None:
                 part=0,
                 start=16,
                 end=26,
-                **{"class": "CUSTOMER_ID"},
+                **{"class": "OTP"},
                 verified=True,
-                placeholder="<CUSTOMER_ID_1>",
+                placeholder="<OTP_1>",
             ),
         ),
-        classes=("CUSTOMER_ID",),
+        classes=("OTP",),
         unverified=0,
     )
     record = a_record(a_text_part(TURNS[0]))
@@ -236,7 +236,7 @@ def test_a_record_survives_the_trip_through_json() -> None:
 
     written = scanned.model_dump()
 
-    assert written["data_quality"]["pii_check"]["spans"][0]["class"] == "CUSTOMER_ID"
+    assert written["data_quality"]["pii_check"]["spans"][0]["class"] == "OTP"
     assert Record.model_validate_json(scanned.model_dump_json()) == scanned
 
 

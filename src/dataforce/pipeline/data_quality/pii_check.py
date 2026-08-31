@@ -4,11 +4,11 @@ The only stage that changes what a record already carries, and Requirement 5 nam
 exception: it writes its own key, rewrites ``content`` and the ``label`` **together**, and bumps
 ``content_version``. Redacting one of that pair and not the other is worse than redacting neither --
 it manufactures a ``label_assistant_mismatch`` downstream and makes ``export`` emit a training
-example whose input reads ``<CUSTOMER_ID_1>`` and whose target reads the original value, which
+example whose input reads ``<OTP_1>`` and whose target reads the original value, which
 teaches a model to produce an identifier absent from its input. That is a data-poisoning defect
 wearing a privacy defect's clothes (Requirement 17).
 
-**Layer one is the modality's patterns; layer two is the edge's model.** The detectors come from
+**Layer one is the modality's four scans; layer two is the edge's model.** The detectors come from
 ``personal_data_detectors()`` and are read structurally -- ``pipeline/`` may not import an axis
 implementation (I2), which is why every field of a detector is named for what a reader does with it.
 The model pass is a port on the ``Engine``, because a model call opens a socket and no engine module
@@ -16,14 +16,16 @@ may (I1, ``ports.py``). **No verifier is not confirmation by default:** every hi
 the record says so, and the content is not rewritten -- an absent second layer must not silently turn
 into *everything layer one guessed was right*.
 
-**The tone-stripped scan is normalised per word so an offset survives it.** Requirement 18 runs the
-patterns over the raw text *and* over a tone-stripped normalisation, and Requirement 19 records each
-span against the content it was found in -- but ``normalize_text`` collapses whitespace and strips the
-ends, so an offset into its output is not an offset into ``content`` and the matched string may not
-even occur in the raw text, which would make it unreplaceable. ``tone_stripped_view`` is the
-resolution: word by word, and only where the stripped word is the same length. The cost is written
-down in § *PII, in two layers* -- a word whose NFKC form changes length is left alone rather than
-shifting every offset after it.
+**A scan returns values, a span needs offsets, so this stage locates every value it is handed.** The
+library's scans are ``(text, language) -> list[str]`` and Requirement 19 records each span against
+the content it was found in, so what arrives is *what* was found and never *where*. ``spans_of`` is
+the resolution: each reported value is searched for across any run of whitespace, and the matched
+slice of the **raw** text is the hit. That is what makes a name reported with single spaces a hit
+where the transcript wrapped it over a line, keeps every offset a true offset into ``content``, and
+keeps the replaced value the one that is actually in the text -- the property that makes a hit
+replaceable at all. It also retires a whole mechanism: the patterns behind the scans carry the toned
+and the tone-stripped spelling together, so there is no second pass over a normalisation and no
+offset to keep through one.
 
 **Only a confirmed hit is replaced.** Layer two exists to set precision, so the digit run that turns
 out to be a price stays in the text and the span says why (§ *Testing Strategy* item 6). That is what
@@ -39,10 +41,8 @@ an engine and never another stage's side output (I13).
 """
 
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Any, NamedTuple
-
-from agent_toolkit.string_utils import normalize_text
 
 from dataforce.engine import Engine, ServiceResult
 from dataforce.errors import ConfigError
@@ -63,8 +63,9 @@ REDACT = ("enable_redact",)
 STAGE = "pii_check"
 PLACEHOLDERS = "placeholders"
 
-# One whitespace-separated word, which is the unit the tone-stripped view is built in.
-WORD = re.compile(r"\S+")
+# What a run of whitespace in a reported value is allowed to match in the raw text, which is what
+# finds a name the transcript wrapped over a line.
+ANY_WHITESPACE = r"\s+"
 
 
 class Hit(NamedTuple):
@@ -73,38 +74,47 @@ class Hit(NamedTuple):
     part: int  # index into `content` of the part it was found in
     start: int  # character offset in that part's text, inclusive
     end: int  # character offset of its end, exclusive
-    value: str  # the text itself, which is what gets replaced wherever it appears
+    value: str  # the slice of raw text, which is what gets replaced wherever it appears
     guessed: (
-        str  # the class of the first detector that matched it, in the modality's order
+        str  # the class of the first detector that reported it, in the modality's order
     )
 
 
-def tone_stripped_view(text: str) -> str:
-    """The same text with its tone marks gone and every character still at its own index.
+def spans_of(value: str, text: str) -> Iterator[tuple[int, int]]:
+    """Every place one reported value occurs in the text, across any run of whitespace.
 
-    `normalize_text` is the library's (I6) and it collapses whitespace, so it is applied to one word
-    at a time and only where the result is the same length -- which for Vietnamese it is, since
-    stripping the marks off a precomposed character leaves one character. A word whose NFKC form is a
-    different length is left as it was: it is the rarer case by far, and shifting every offset after
-    it would cost every span in the part.
+    A scan reports the value it matched and no offsets, so this is what turns one into a span. The
+    words are matched in order with `\\s+` between them rather than the value being searched for
+    verbatim: a scan normalises the run of whitespace inside `Nguyễn Văn Dũng` to single spaces, and
+    a transcript that wrapped that name over a line would then hold no occurrence of it at all --
+    the value would be unfindable, and an unfindable value is an unreplaceable one.
+
+    **Every occurrence, not the first.** Requirement 17 mints one placeholder per value and replaces
+    it everywhere, so a value said twice in one part is two spans and the record says so; reporting
+    one would leave the second span out of the evidence for a rewrite that touches both.
+
+    A value that is empty or all whitespace yields nothing rather than matching everywhere, which is
+    the one shape `re.escape` on a split would turn into a pattern that matches the empty string.
     """
-    view = list(text)
-    for word in WORD.finditer(text):
-        stripped = normalize_text(word[0], remove_tone_marks=True)
-        if len(stripped) == len(word[0]):
-            view[word.start() : word.end()] = stripped
-    return "".join(view)
+    words = value.split()
+    if not words:
+        return
+    pattern = ANY_WHITESPACE.join(re.escape(word) for word in words)
+    for match in re.finditer(pattern, text):
+        yield match.start(), match.end()
 
 
 def outermost(found: Sequence[Hit]) -> tuple[Hit, ...]:
     """The hits that are not inside another hit, each keeping the first class that claimed it.
 
-    Layer one's patterns overlap on purpose -- a phone number matches the phone pattern and the
-    digit-run pattern, and a digit run inside an email address matches both of those -- so the same
-    text arrives two or three times. Keeping all of them would mint a placeholder for a value that is
-    already gone by the time its turn comes, and list a class the record does not really carry. The
-    sort puts a containing hit before anything inside it and a lower detector index before a higher
-    one, so *first in the modality's declared order* is the class that wins.
+    Layer one's four scans overlap on purpose -- a cue word in front of a long digit run puts it in
+    reach of both `OTP` and `PHONE`, and a digit run inside an email address is in reach of a third
+    -- so the same text arrives two or three times. Keeping all of them would mint a placeholder for
+    a value that is already gone by the time its turn comes, and list a class the record does not
+    really carry. The sort puts a containing hit before anything inside it and a lower detector index
+    before a higher one, so *first in the modality's declared order* is the class that wins -- and
+    layer two may still return a different one, because it is the layer that can read the sentence
+    around it.
     """
     kept: list[Hit] = []
     for hit in sorted(found, key=lambda hit: (hit.part, hit.start, -hit.end)):
@@ -120,28 +130,23 @@ def outermost(found: Sequence[Hit]) -> tuple[Hit, ...]:
 
 
 def hits_in_part(index: int, text: str, detectors: Sequence[Any]) -> tuple[Hit, ...]:
-    """Everything layer one flags in one part, both spellings of every pattern (Requirement 18).
+    """Everything layer one flags in one part: one hit per value per span (Requirement 18).
 
     `detectors` is a `Sequence[Any]` because a `Detector` is `modalities/base.py`'s opaque type and
-    the concrete model is the modality's `schema.py`, which this module may not import (I2). The
-    three fields read here are the three that shape's docstring says a reader reads.
+    the concrete model is the modality's `schema.py`, which this module may not import (I2). The two
+    fields read here are the two that shape's docstring says a reader reads.
+
+    One pass over the raw text and no second one: each scan's own patterns carry the toned and the
+    tone-stripped spelling together, so `khong chin` and `không chín` are both found by the scan
+    rather than by normalising the text underneath it. A reported value no span can be found for is
+    not a hit, which is unreachable while every scan returns what it matched.
     """
-    stripped = tone_stripped_view(text)
     return outermost(
         [
-            Hit(
-                index,
-                match.start(),
-                match.end(),
-                text[match.start() : match.end()],
-                detector.personal_data_class,
-            )
+            Hit(index, start, end, text[start:end], detector.personal_data_class)
             for detector in detectors
-            for scanned, pattern in (
-                (text, detector.pattern),
-                (stripped, detector.tone_stripped_pattern),
-            )
-            for match in re.finditer(pattern, scanned)
+            for value in detector.scan(text)
+            for start, end in spans_of(value, text)
         ]
     )
 
@@ -177,7 +182,7 @@ def confirmed_in_window(
 
 
 def placeholders_for(classes: Mapping[str, str]) -> dict[str, str]:
-    """One typed placeholder per value: `<CUSTOMER_ID_1>`, numbered per class within the record.
+    """One typed placeholder per value: `<OTP_1>`, numbered per class within the record.
 
     Scoped per record (Requirement 17) and numbered in the order the scan first met each value, so
     two runs over one record mint the same names. A value used twice keeps one placeholder, which is
@@ -272,7 +277,7 @@ def scanned(
 def pii_check(engine: Engine, records: Iterable[Record]) -> ServiceResult:
     """Every record scanned, and one map of everything that was replaced, for the edge.
 
-    The map is keyed by `record_id` because a placeholder is scoped per record: `<CUSTOMER_ID_1>` in
+    The map is keyed by `record_id` because a placeholder is scoped per record: `<OTP_1>` in
     one record and in the next are two different people, and a map that flattened them would be
     unusable for the one thing it exists for.
     """

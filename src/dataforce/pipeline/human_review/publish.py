@@ -6,7 +6,7 @@ questions out (Decision 6), so the pipeline stays runnable and testable with no 
 composes is a *labelling config* in Label Studio's dialect, which is a different thing from talking
 to one: the tool on the other end is real and its input is not ours to choose (Requirement 52).
 
-**The config is two halves and this module writes neither** (Requirement 31). ``display_config``
+**The config is two halves and this module writes neither** (Requirement 31). ``content_display``
 gives the fragment that renders the content and the task data that feeds it; ``answer_config`` gives
 the fragment that captures an answer and the names it offers. What is here is the `<View>` they go
 inside and the two ids that join a task back to a record -- and that is the whole of the assembly,
@@ -81,7 +81,7 @@ def rows_for(engine: Engine, record: Record) -> tuple[QuestionToStore, ...]:
     The pair and the run come off the record's own `provenance`, already stamped `name@version`.
     A store outlives a run, so a row that did not carry them could not be read back safely.
     """
-    display = engine.modality.display_config(record)
+    display = engine.modality.content_display(record)
     capture = engine.profile.answer_config(record)
     config = annotation_config(display.tags, capture.tags)
     digest = compute_hash(config)

@@ -1,9 +1,19 @@
 """LOGIC · the answer a record carries: the one that ships, the one its turns restate, the redacted one.
 
-Three conversions over a record's label, and not one of them is a member of anything. ``final_label``
+Conversions over a record's label, and not one of them is a member of anything. ``final_label``
 was a public method on ``ToolDecision`` for one commit, used no ``self``, and appeared in neither
 § *Profile*'s members nor the plan; I23 is the guard that says so now, and this is where such a
 conversion belongs.
+
+**Both ends of *the one its turns restate* are here, and that is what T54 moved.** A turn that both
+speaks and acts is written down as both, and the separator between the two used to be a constant in
+``record.py`` that ``text2text`` joined on and this module split on -- a convention only one module
+of the concept speaks, held by a module both axes import. § *The two axes* is explicit that a concept
+may not hold one: what a call *is* is this profile's, so the profile that writes the calls onto a part
+is the one that reads them back off it, and the separator is its own. ``ToolDecision`` overrides the
+``_turn_part`` seam ``Text2Text`` leaves for it, and one test in
+``tests/stages/test_tool_decision.py`` builds a turn through the modality and reads the calls back
+here, so neither end can move alone.
 
 **Redacting the label and redacting the content are one decision applied twice** (Requirement 17),
 which is why ``redacted_text`` is ``record.py``'s and not this module's. The stage owns the content
@@ -16,17 +26,74 @@ The short of it is that a name is the catalog's and not the customer's.
 """
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from dataforce.profiles.tool_decision.answers import NAME
 from dataforce.record import (
-    SPOKEN_AND_STATED,
     FinalLabel,
+    Part,
     Record,
     StoredAnswer,
+    canonical_json,
     redacted_text,
 )
+
+# The turn keys that carry what a turn *did*, which is this profile's vocabulary and not the
+# concept's: `text2text` reads a role and a content, and this reads the calls beside them.
+TOOL_CALLS = "tool_calls"
+FUNCTION = "function"
+ARGUMENTS = "arguments"
+
+# What separates what a turn said from the calls it made, inside one part's text. This profile's
+# own constant: it is written here by `part_with_calls` and read back here by `restated_answer`, and
+# a turn that only speaks or only calls carries no separator at all.
+SPOKEN_AND_STATED = "\n"
+
+
+def call_arguments(stated: Any) -> Any:
+    """One call's arguments as the object they mean, whichever of the two forms they arrived in."""
+    if not isinstance(stated, str):
+        return stated
+    try:
+        return json.loads(stated)
+    except json.JSONDecodeError:
+        return stated
+
+
+def stated_calls(calls: Sequence[Mapping[str, Any]]) -> str:
+    """The calls a turn made, canonically, so Requirement 15's three spellings are one string.
+
+    A call whose shape the declared input does not match is written down as it arrived rather than
+    refused: a malformed turn is evidence for `label_check` to find, and a run always completes
+    (Requirement 43).
+    """
+    return canonical_json(
+        [
+            {NAME: named.get(NAME, ""), ARGUMENTS: call_arguments(named.get(ARGUMENTS))}
+            for call in calls
+            for named in [call.get(FUNCTION) or {}]
+        ]
+    )
+
+
+def part_with_calls(part: Part, turn: Mapping[str, Any]) -> Part:
+    """That part, with what the turn called joined onto what it said.
+
+    **A tool-call turn is content rather than an answer.** `messages` holds the conversation and
+    *nothing in it is an answer* (Requirement 13); an assistant turn that already called a tool is
+    context like any other. Requirement 15 asks that one call spelled three ways -- arguments as a
+    JSON string, the same string reordered and re-spaced, and the object form -- be one part and one
+    `record_id`, so the rendering is canonical JSON over the parsed arguments.
+
+    A turn that made no call is returned untouched, which is what keeps a spoken-only part free of a
+    separator and `record_id` identical to what the concept alone would have produced.
+    """
+    calls = turn.get(TOOL_CALLS)
+    if not calls:
+        return part
+    written = [piece for piece in (part.text, stated_calls(calls)) if piece]
+    return part.model_copy(update={"text": SPOKEN_AND_STATED.join(written)})
 
 
 def final_label(record: Record) -> StoredAnswer:
@@ -68,7 +135,7 @@ def redact_label(label: StoredAnswer, replacements: Mapping[str, str]) -> Stored
     Requirement 17, and the half of it that is this profile's: the stage owns the content and knows
     nothing about what an answer is, so the shape of the label is read here. Redacting one and not
     the other is worse than redacting neither -- it manufactures a `label_assistant_mismatch` on the
-    next run, and `export` emits a training example whose input reads `<CUSTOMER_ID_1>` and whose
+    next run, and `export` emits a training example whose input reads `<OTP_1>` and whose
     target reads the original, teaching a model to produce an identifier absent from its input.
 
     **The tool's name is never rewritten and everything else is.** A name is the catalog's, not the
@@ -98,14 +165,14 @@ def restated_answer(record: Record, role: str) -> StoredAnswer | None:
     answers that turn and nothing restates it, which is the declared shape's ordinary case. Prose is
     not a restatement either.
 
-    **The calls are the segment after the last `record.SPOKEN_AND_STATED`**, because a turn that both
+    **The calls are the segment after the last `SPOKEN_AND_STATED`**, because a turn that both
     speaks and acts is written down as both and this check went silent on exactly those turns until a
     review found it -- a `data_quality` check reading 0 on the common shape is worse than no check,
     since Requirement 22 compares its count against `params.invalid_counts` and a zero reads as
-    health. The separator is the record's constant rather than a copy of the modality's, and a
-    crossing test builds the turn through `text2text` and reads it here, so neither end can move
-    alone. Splitting on it costs nothing where there is no separator: `rsplit` returns the whole
-    text, which is what a calls-only turn carries.
+    health. The separator is this profile's own, written by `part_with_calls` above, and a crossing
+    test builds the turn through `text2text` and reads the calls back off the part here, so neither
+    end can move alone. Splitting on it costs nothing where there is no separator: `rsplit` returns
+    the whole text, which is what a calls-only turn carries.
     """
     if not record.content or record.content[-1].role != role:
         return None

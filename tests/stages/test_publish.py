@@ -193,7 +193,7 @@ def test_the_composed_config_carries_each_half_and_neither_half_carries_the_othe
     """Requirement 31, on the composition and on the pieces."""
     engine = an_engine_publishing()
     record = asked(engine, a_record())[0]
-    display = engine.modality.display_config(record)
+    display = engine.modality.content_display(record)
     capture = engine.profile.answer_config(record)
 
     composed = annotation_config(display.tags, capture.tags)
@@ -208,7 +208,7 @@ def test_the_two_halves_own_disjoint_payload_keys() -> None:
     engine = an_engine_publishing()
     record = asked(engine, a_record())[0]
 
-    display = engine.modality.display_config(record)
+    display = engine.modality.content_display(record)
     capture = engine.profile.answer_config(record)
 
     assert not display.data.keys() & capture.data.keys()

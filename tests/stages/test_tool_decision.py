@@ -29,11 +29,10 @@ from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Text2Text
-from dataforce.modalities.text2text.turns import stated_calls
 from dataforce.profiles import Profile
 from dataforce.profiles.tool_decision import ToolDecision
+from dataforce.profiles.tool_decision.records import SPOKEN_AND_STATED, stated_calls
 from dataforce.record import (
-    SPOKEN_AND_STATED,
     Branch,
     FinalLabel,
     HumanReview,
@@ -164,22 +163,22 @@ def parts(turns: Sequence[tuple[str, str]] = TURNS) -> tuple[Part, ...]:
 def a_text2text() -> Text2Text:
     """The concept this profile is one module inside, on its own.
 
-    Still built separately here, and the separation is the point of the fixture: `a_profile()` is
-    also a `Text2Text` now, and a test that read a turn back through the same object would prove
-    the two ends agree only because they are one object. The seam below is real when it is crossed
-    between two of them.
+    Built separately here so one test can assert what the concept does *not* do: since T54 a bare
+    `Text2Text` writes a turn's `role` and `content` and nothing else, because `tool_calls` is one
+    module's vocabulary and a concept may not hold a convention only one of its modules speaks.
     """
     return Text2Text(a_modality_manifest(), no_vector)
 
 
 def a_turn_that_calls(name: str, arguments: Any, said: str | None = None) -> Part:
-    """One target turn, rendered by the modality that will actually render it.
+    """One target turn, rendered by the object a run actually resolves to.
 
-    Crossing the seam is the point. `text2text` writes a turn's calls into a part's text and
-    `restated_answer` reads them back out, and until a review found it the two agreed only by a
-    convention spelled in one axis and assumed in the other. Building this fixture here rather than
-    hand-writing `json.dumps` is what makes a change at either end fail this file. The *arguments*
-    are a JSON string on purpose: that is the form a source item carries them in.
+    Crossing the seam is the point. `ToolDecision` overrides the `_turn_part` seam to write a turn's
+    calls into a part's text and `restated_answer` reads them back out, and until a review found it
+    the two agreed only by a convention spelled in one axis and assumed in the other. Building this
+    fixture through the profile rather than hand-writing `json.dumps` is what makes a change at
+    either end fail this file. The *arguments* are a JSON string on purpose: that is the form a
+    source item carries them in.
     """
     turn: dict[str, Any] = {
         "role": "assistant",
@@ -189,7 +188,7 @@ def a_turn_that_calls(name: str, arguments: Any, said: str | None = None) -> Par
     }
     if said is not None:
         turn["content"] = said
-    return a_text2text().content_parts({"messages": [turn]})[0]
+    return a_profile().content_parts({"messages": [turn]})[0]
 
 
 def a_record(
@@ -525,11 +524,41 @@ def test_a_label_naming_one_tool_twice_fires() -> None:
     assert "label_names_one_tool_twice" in checks_that_fire(twice)
 
 
-def test_the_separator_between_what_a_turn_said_and_called_is_the_records() -> None:
-    """The fourth name both axes borrow, asserted once so neither copy can drift.
+def test_the_concept_alone_writes_no_calls() -> None:
+    """What T54 moved, asserted from the side that no longer does it.
+
+    `tool_calls` is what *this* task answers with, so a bare `Text2Text` reads a role and a
+    `content` and stops -- and `summarize` beside this profile gets a turn with no vocabulary of
+    ours written onto it. A regression here would put the separator back in a module both axes
+    import for the benefit of one of them.
+    """
+    said = "Mình tra cứu ngay nhé."
+    turn = {
+        "role": "assistant",
+        "content": said,
+        "tool_calls": [
+            {
+                "function": {
+                    "name": "LookupBalance",
+                    "arguments": '{"ma_khach": "480215"}',
+                }
+            }
+        ],
+    }
+
+    part = a_text2text().content_parts({"messages": [turn]})[0]
+
+    assert part.text == said
+    assert SPOKEN_AND_STATED not in (part.text or "")
+
+
+def test_the_separator_between_what_a_turn_said_and_called_is_the_profiles() -> None:
+    """The profile's own constant, asserted once so neither end of it can drift.
 
     This is the assumption that made `label_assistant_mismatch` silent on every turn that both
-    speaks and acts: the modality joined the two halves and the profile parsed the whole string.
+    speaks and acts: one axis joined the two halves and the other parsed the whole string. Both ends
+    are this profile's now -- `_turn_part` writes, `restated_answer` reads -- which is what § *The
+    two axes* asks for, and this test is what keeps them one convention rather than two.
     """
     part = a_turn_that_calls(
         "LookupBalance", {"ma_khach": "480215"}, said="Mình tra cứu ngay nhé."
@@ -682,12 +711,12 @@ def test_an_item_with_no_id_traces_back_through_its_offset() -> None:
 
 def test_a_value_in_an_argument_is_replaced_under_its_placeholder() -> None:
     """Requirement 17: the stage rewrites the content and this rewrites the label, one map."""
-    redacted = a_profile().redact_label((SENT,), {"480215": "<CUSTOMER_ID_1>"})
+    redacted = a_profile().redact_label((SENT,), {"480215": "<OTP_1>"})
 
     assert redacted == (
         {
             "name": "SendStatement",
-            "arguments": {"ma_khach": "<CUSTOMER_ID_1>", "ky": "thang_nay"},
+            "arguments": {"ma_khach": "<OTP_1>", "ky": "thang_nay"},
         },
     )
 
@@ -703,10 +732,10 @@ def test_a_value_nested_inside_an_argument_is_reached() -> None:
     """An argument may itself be an object or an array, which is why the walk recurses."""
     nested = ({"name": "OpenTicket", "arguments": {"khach": {"ma": ["480215"]}}},)
 
-    redacted = a_profile().redact_label(nested, {"480215": "<CUSTOMER_ID_1>"})
+    redacted = a_profile().redact_label(nested, {"480215": "<OTP_1>"})
 
     assert redacted == (
-        {"name": "OpenTicket", "arguments": {"khach": {"ma": ["<CUSTOMER_ID_1>"]}}},
+        {"name": "OpenTicket", "arguments": {"khach": {"ma": ["<OTP_1>"]}}},
     )
 
 
@@ -720,14 +749,14 @@ def test_a_bare_name_answer_comes_back_as_it_went_in() -> None:
 def test_one_value_inside_another_is_replaced_longest_first() -> None:
     """The order both ends share, through `record.redacted_text`.
 
-    Shortest-first would write `48<PHONE_1>` here and the stage would write `<CUSTOMER_ID_1>` in the
+    Shortest-first would write `48<PHONE_1>` here and the stage would write `<OTP_1>` in the
     content, which is the mismatch Requirement 17 exists to prevent -- manufactured by the fix.
     """
-    both = {"480215": "<CUSTOMER_ID_1>", "0215": "<PHONE_1>"}
+    both = {"480215": "<OTP_1>", "0215": "<PHONE_1>"}
 
     redacted = a_profile().redact_label((SENT,), both)
 
-    assert redacted[0]["arguments"]["ma_khach"] == "<CUSTOMER_ID_1>"  # type: ignore[call-overload,index]
+    assert redacted[0]["arguments"]["ma_khach"] == "<OTP_1>"  # type: ignore[call-overload,index]
 
 
 def test_a_label_with_nothing_to_replace_is_unchanged() -> None:
@@ -1074,7 +1103,7 @@ def test_a_role_declared_as_a_list_reads_as_its_first_entry() -> None:
 
 
 def test_it_answers_every_member_of_both_protocols_and_nothing_else() -> None:
-    """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
+    """The runtime half of what `profile.py`'s `TYPE_CHECKING` block proves statically.
 
     An equality, not a containment: both sets are *closed*, and the containment version of this
     test is what let `final_label` ship as an undeclared extra. I23 checks the same closure off the
@@ -1103,3 +1132,97 @@ def test_it_answers_every_member_of_both_protocols_and_nothing_else() -> None:
     assert {
         name for name in dir(a_profile()) if not name.startswith("_")
     } == profile | concept
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"ma_khach": "480215", "ky": "thang_nay"}',
+        '{ "ky" : "thang_nay" ,\n  "ma_khach" : "480215" }',
+        {"ma_khach": "480215", "ky": "thang_nay"},
+    ],
+    ids=["json-string", "reordered-and-spaced", "object"],
+)
+def test_one_call_spelled_three_ways_is_one_part_and_one_id(arguments: Any) -> None:
+    """Requirement 15, asserted against the first spelling rather than against itself.
+
+    Moved here by T54 with the code it covers: rendering a call is what a call *is*, so it is this
+    profile's and not the concept's. What it proves is unchanged -- one call, three spellings, one
+    part and one `record_id`.
+    """
+    spelled = {
+        "messages": [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"function": {"name": "SendStatement", "arguments": arguments}}
+                ],
+            }
+        ]
+    }
+    canonical = {
+        "messages": [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "SendStatement",
+                            "arguments": '{"ma_khach": "480215", "ky": "thang_nay"}',
+                        }
+                    }
+                ],
+            }
+        ]
+    }
+    modality = a_profile()
+
+    written = modality.content_parts(spelled)
+    expected = modality.content_parts(canonical)
+
+    assert len(written) == 1
+    assert written == expected
+    assert record_id_for(written) == record_id_for(expected)
+
+
+def test_a_turn_that_both_speaks_and_calls_carries_both() -> None:
+    """Dropping either would lose content `record_id` has to cover.
+
+    The join is `_turn_part`'s, on this profile's own separator: `Text2Text` writes what was said and
+    `ToolDecision` writes what was called onto the part it gets back.
+    """
+    both = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": "Mình tra cứu ngay nhé.",
+                "tool_calls": [
+                    {"function": {"name": "LookupBalance", "arguments": "{}"}}
+                ],
+            }
+        ]
+    }
+
+    text = a_profile().content_parts(both)[0].text or ""
+
+    assert text.startswith("Mình tra cứu ngay nhé.\n")
+    assert '"LookupBalance"' in text
+
+
+def test_a_malformed_arguments_string_is_written_down_rather_than_refused() -> None:
+    """Requirement 43: a run always completes, and a malformed turn is evidence, not a stop.
+
+    Moved here by T54: what a malformed *call* is written down as is this profile's decision.
+    """
+    broken = {
+        "messages": [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {"function": {"name": "OpenTicket", "arguments": "{not json"}}
+                ],
+            }
+        ]
+    }
+
+    assert "{not json" in (a_profile().content_parts(broken)[0].text or "")

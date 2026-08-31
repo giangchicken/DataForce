@@ -16,7 +16,6 @@ corpus's language and the spoken-digit fixtures are the ones an off-the-shelf sc
 """
 
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -26,19 +25,12 @@ from typing import Any
 
 import pytest
 from agent_toolkit.file_utils import read_yaml
-from agent_toolkit.string_utils import normalize_text
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
-from dataforce.modalities.text2text.detectors import (
-    PHONE_PLANS,
-    SPOKEN_PII_FORMS,
-    phone_plan,
-    spaced,
-    spoken_pii_forms,
-)
+from dataforce.modalities.text2text.pii_detector import SCANS, languages_written_down
 from dataforce.record import (
     AgreementScores,
     AiReview,
@@ -153,86 +145,22 @@ def test_text_arrives_byte_identical() -> None:
     assert a_modality().content_parts(spaced)[0].text == "Mã  của\tmình là 480 215."
 
 
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        '{"ma_khach": "480215", "ky": "thang_nay"}',
-        '{ "ky" : "thang_nay" ,\n  "ma_khach" : "480215" }',
-        {"ma_khach": "480215", "ky": "thang_nay"},
-    ],
-    ids=["json-string", "reordered-and-spaced", "object"],
-)
-def test_one_call_spelled_three_ways_is_one_part_and_one_id(arguments: Any) -> None:
-    """Requirement 15, asserted against the first spelling rather than against itself."""
-    spelled = {
-        "messages": [
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {"function": {"name": "SendStatement", "arguments": arguments}}
-                ],
-            }
-        ]
-    }
-    canonical = {
-        "messages": [
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "SendStatement",
-                            "arguments": '{"ma_khach": "480215", "ky": "thang_nay"}',
-                        }
-                    }
-                ],
-            }
-        ]
-    }
-    modality = a_modality()
+def test_a_turn_that_calls_a_tool_keeps_only_what_it_said() -> None:
+    """What T54 moved out of this axis, asserted from the side that stopped doing it.
 
-    written = modality.content_parts(spelled)
-    expected = modality.content_parts(canonical)
+    `tool_calls` is what one module in this family answers with, so the concept reads a role and a
+    `content` and stops -- and `summarize` beside `tool_decision` gets a turn with no vocabulary of
+    another task written onto it. Where the calls go and how they are rendered is
+    `tests/stages/test_tool_decision.py`'s, which is where those assertions moved.
+    """
+    spoke_and_called = ITEM["messages"][4]
+    assert "tool_calls" in spoke_and_called, "the fixture is the shape being ignored"
 
-    assert len(written) == 1
-    assert written == expected
-    assert record_id_for(written) == record_id_for(expected)
+    part = a_modality().content_parts(ITEM)[4]
 
-
-def test_a_turn_that_both_speaks_and_calls_carries_both() -> None:
-    """Dropping either would lose content `record_id` has to cover."""
-    both = {
-        "messages": [
-            {
-                "role": "assistant",
-                "content": "Mình tra cứu ngay nhé.",
-                "tool_calls": [
-                    {"function": {"name": "LookupBalance", "arguments": "{}"}}
-                ],
-            }
-        ]
-    }
-
-    text = a_modality().content_parts(both)[0].text or ""
-
-    assert text.startswith("Mình tra cứu ngay nhé.\n")
-    assert '"LookupBalance"' in text
-
-
-def test_a_malformed_arguments_string_is_written_down_rather_than_refused() -> None:
-    """Requirement 43: a run always completes, and a malformed turn is evidence, not a stop."""
-    broken = {
-        "messages": [
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {"function": {"name": "OpenTicket", "arguments": "{not json"}}
-                ],
-            }
-        ]
-    }
-
-    assert "{not json" in (a_modality().content_parts(broken)[0].text or "")
+    assert part.role == "assistant"
+    assert part.text == ""
+    assert "LookupBalance" not in (part.text or "")
 
 
 @pytest.mark.parametrize(
@@ -453,135 +381,150 @@ def test_the_model_name_is_read_off_the_manifest() -> None:
 
 def test_the_shipped_manifest_names_a_language_that_is_written_down() -> None:
     """The fixture defaults to `vi` and the committed file declares one, and a name with no
-    entry in the table is a `ConfigError` on the first real run and on no test."""
+    entry in the library's tables is a `ConfigError` on the first real run and on no test."""
     shipped = read_yaml(MANIFEST)
 
-    assert shipped["language"] in SPOKEN_PII_FORMS
+    assert shipped["language"] in languages_written_down()
     assert shipped["language"] == "vi"
 
 
-def test_a_second_language_gets_the_same_shapes_and_its_own_words() -> None:
+def test_a_second_language_gets_the_same_scans_and_its_own_words() -> None:
     """The defect the parameter exists for: an English corpus registering this modality used to
     get `không|một|mốt|...` and nothing usable, because a modality that provides a task family's
-    framework was also deciding the family's language."""
-    spoken = {
-        detector.name: detector.pattern
+    framework was also deciding the family's language. The words are the library's now, so what
+    this asserts is that a declared language reaches them."""
+    found = {
+        detector.personal_data_class: detector.scan(
+            "my name is Dung, verification code one two three four five six"
+        )
         for detector in a_modality(language="en").personal_data_detectors()
     }
 
-    assert re.search(spoken["customer_id_spoken"], "four eight zero two one five")
-    assert re.search(spoken["email_spoken"], "an at vi du dot vn")
-    assert "không" not in spoken["customer_id_spoken"]
-    assert spoken["customer_id_digits"] == r"\d(?:[\s.-]?\d){5,}", "shapes do not move"
+    assert found["NAME"] == ["Dung"]
+    assert found["OTP"] == ["one two three four five six"]
+    assert (
+        a_modality(language="vi").personal_data_detectors()[3].scan("my name is Dung")
+        == []
+    ), "the Vietnamese table has no `my name is`"
 
 
 def test_a_language_nobody_wrote_down_is_refused() -> None:
     """Falling back to any particular language scans a Spanish corpus with Vietnamese digit words,
     finds nothing, and looks exactly like a clean corpus -- the one failure this layer cannot
-    notice on its own."""
-    with pytest.raises(ConfigError, match="es"):
+    notice on its own. The message names the languages there are, because that is the fix."""
+    with pytest.raises(ConfigError, match="'es'") as refused:
         a_modality(language="es")
+
+    assert "en, vi" in str(refused.value)
 
     with pytest.raises(ConfigError, match="language"):
         a_modality(language=None)
 
 
-def test_a_declared_phrase_matches_however_its_words_are_spaced() -> None:
-    """`a còng` is two words, so the pattern joins them on whitespace rather than on one space."""
-    assert spaced("a còng") == r"a\s+còng"
-    assert re.search(spaced("a còng"), "an  a\ncòng vidu")
+def test_the_languages_offered_are_the_ones_every_table_behind_a_scan_has() -> None:
+    """The intersection, not any one table: a language written into `OTP_CUES` and not into
+    `SPOKEN_DIGITS` raises a `KeyError` from inside the library on the first record, which is a
+    stack trace where a `ConfigError` belongs. Derived off the library rather than listed here,
+    so a language it adds is offered without an edit to this repository."""
+    offered = languages_written_down()
+
+    assert offered == {"en", "vi"}
+    for found in SCANS:
+        for table in found.tables:
+            assert offered <= set(table)
 
 
-def test_the_two_tables_are_keyed_by_the_same_languages() -> None:
-    """Two tables under one name is how a language arrives in one and not the other, and the
-    second lookup is the one that raises after the first has already succeeded."""
-    assert set(SPOKEN_PII_FORMS) == set(PHONE_PLANS)
+def test_there_are_four_classes_and_each_carries_a_scan_that_runs() -> None:
+    """One detector per class of personal data, and a class an identifier alone cannot reach.
 
-
-def test_the_two_phone_lengths_disagree_by_one_and_the_type_says_so() -> None:
-    """Naming a literal must not move a boundary: the written shape matched ten or eleven digits
-    and the spoken shape nine or ten words before either was named, and both still do. Nine
-    dictated digits is not a valid Vietnamese number, which is why this is the inherited bug and
-    not a language fact -- and why `PhonePlan` did not go into `agent-toolkit` with the words."""
-    plan = phone_plan("vi")
-
-    assert plan.written_digits != plan.spoken_words
-    assert plan.written_digits == (10, 11)
-    assert plan.spoken_words == (9, 10)
-
-
-def test_a_language_missing_a_phone_plan_is_refused_by_name() -> None:
-    """The two lookups say which table failed, because the fix is a different row each time."""
-    with pytest.raises(ConfigError, match="a phone plan"):
-        phone_plan("es")
-
-    with pytest.raises(ConfigError, match="spoken PII forms"):
-        spoken_pii_forms("es")
-
-
-def test_every_detector_carries_two_patterns_that_compile() -> None:
-    """A pattern that does not compile is a detector that finds nothing and says nothing."""
+    `CUSTOMER_ID` was a fifth, matching any run of six or more digits: a bare `480215` is an order
+    number as often as a customer code, so it flagged every invoice in the corpus and layer two paid
+    for each one. What is left is the same shape behind a cue word, which is `OTP`.
+    """
     detectors = a_modality().personal_data_detectors()
+    classes = [detector.personal_data_class for detector in detectors]
 
-    assert len(detectors) == 6
+    assert classes == ["PHONE", "EMAIL", "OTP", "NAME"]
+    assert len(set(classes)) == len(classes)
     for detector in detectors:
-        assert re.compile(detector.pattern)
-        assert re.compile(detector.tone_stripped_pattern)
         assert detector.personal_data_class.isupper()
-
-
-def test_the_detector_names_are_distinct() -> None:
-    """A name is what a noisy detector is turned down by, so two of them cannot share one."""
-    named = [detector.name for detector in a_modality().personal_data_detectors()]
-
-    assert len(set(named)) == len(named)
+        assert detector.scan("nothing personal here") == []
 
 
 @pytest.mark.parametrize(
-    ("hit", "expected"),
+    ("hit", "expected", "found"),
     [
-        ("Mã của mình là 480215.", "CUSTOMER_ID"),
-        ("Số của mình là 0900123456.", "PHONE"),
-        ("Mã của mình là bốn tám không hai một năm.", "CUSTOMER_ID"),
-        ("Số là không chín không một hai ba bốn năm sáu bảy.", "PHONE"),
-        ("Email của mình là an.nguyen@vidu.vn nhé.", "EMAIL"),
-        ("Email là an chấm nguyen a còng vi du chấm vn.", "EMAIL"),
+        ("Số của mình là 0900123456.", "PHONE", "0900123456"),
+        (
+            "Số là không chín không một hai ba bốn năm sáu bảy.",
+            "PHONE",
+            "không chín không một hai ba bốn năm sáu bảy",
+        ),
+        ("Email của mình là an.nguyen@vidu.vn nhé.", "EMAIL", "an.nguyen@vidu.vn"),
+        ("Mã xác nhận là 480215.", "OTP", "480215"),
+        (
+            "Mã xác nhận là bốn tám không hai một năm.",
+            "OTP",
+            "bốn tám không hai một năm",
+        ),
+        ("Chào anh Nguyễn Văn Dũng nhé.", "NAME", "Nguyễn Văn Dũng"),
     ],
     ids=[
-        "written-id",
         "written-phone",
-        "spoken-id",
         "spoken-phone",
         "email",
-        "spoken-email",
+        "written-otp",
+        "spoken-otp",
+        "name-behind-its-title",
     ],
 )
-def test_layer_one_finds_the_spoken_pii_forms_a_scrubber_misses(
-    hit: str, expected: str
+def test_layer_one_finds_the_spoken_forms_a_scrubber_misses(
+    hit: str, expected: str, found: str
 ) -> None:
-    """Requirement 18, over the two texts every pattern is run against."""
-    stripped = normalize_text(hit, remove_tone_marks=True)
-    found = {
-        detector.personal_data_class
+    """Requirement 18: one scan per class, each finding the written form and the dictated one."""
+    scanned = {
+        detector.personal_data_class: detector.scan(hit)
         for detector in a_modality().personal_data_detectors()
-        if re.search(detector.pattern, hit)
-        or re.search(detector.tone_stripped_pattern, stripped)
     }
 
-    assert expected in found
+    assert found in scanned[expected]
 
 
-def test_a_pattern_written_with_tone_marks_finds_the_stripped_text_too() -> None:
-    """The half of Requirement 18 that fails silently: correct Vietnamese against `khong chin`."""
-    typed = "Ma cua minh la bon tam khong hai mot nam."
-    spoken = next(
-        detector
+def test_one_pass_over_the_raw_text_finds_both_spellings() -> None:
+    """The half of Requirement 18 that used to fail silently, and the mechanism T54 retired.
+
+    A pattern written in correct Vietnamese cannot match `khong chin`, so this stage ran every
+    pattern twice -- once over the raw text and once over a tone-stripped view built word by word to
+    keep the offsets true. The library's patterns carry both spellings, so one pass finds both and
+    there is no normalisation for an offset to survive.
+    """
+    detectors = {
+        detector.personal_data_class: detector.scan
         for detector in a_modality().personal_data_detectors()
-        if detector.name == "customer_id_spoken"
-    )
+    }
 
-    assert not re.search(spoken.pattern, typed)
-    assert re.search(spoken.tone_stripped_pattern, typed)
+    assert detectors["OTP"]("Ma xac nhan la bon tam khong hai mot nam.") == [
+        "bon tam khong hai mot nam"
+    ]
+    assert detectors["OTP"]("Mã xác nhận là bốn tám không hai một năm.") == [
+        "bốn tám không hai một năm"
+    ]
+
+
+def test_a_bare_identifier_is_not_a_class_layer_one_has() -> None:
+    """The stated cost, asserted so a reader finds it here rather than in a corpus.
+
+    `480215` with no cue word in front of it is an order number as often as a customer code, and a
+    scan claiming it flags every invoice. Adding a fifth class is a rule added in `agent-toolkit`,
+    reviewable in a diff there -- which is why this is a test about reach and not a TODO.
+    """
+    bare = "Đơn của mình là 480215."
+    scanned = {
+        detector.personal_data_class: detector.scan(bare)
+        for detector in a_modality().personal_data_detectors()
+    }
+
+    assert scanned == {"PHONE": [], "EMAIL": [], "OTP": [], "NAME": []}
 
 
 def test_the_display_half_is_community_tags_over_the_conversation() -> None:
@@ -589,7 +532,7 @@ def test_the_display_half_is_community_tags_over_the_conversation() -> None:
     modality = a_modality()
     record = a_record(modality.content_parts(ITEM))
 
-    shown = modality.display_config(record)
+    shown = modality.content_display(record)
 
     assert "<Chat" not in shown.tags
     assert '<Paragraphs name="conversation"' in shown.tags
@@ -626,7 +569,7 @@ def test_no_model_output_reaches_the_display_half() -> None:
     )
 
     shown = json.dumps(
-        modality.display_config(reviewed).model_dump(), ensure_ascii=False
+        modality.content_display(reviewed).model_dump(), ensure_ascii=False
     )
 
     for leaked in ("jury", "cohesion", "triage", "disagreed", "audit", "0.9"):
@@ -634,7 +577,7 @@ def test_no_model_output_reaches_the_display_half() -> None:
 
 
 def test_it_answers_every_member_its_protocol_declares() -> None:
-    """The runtime half of what `utils.py`'s `TYPE_CHECKING` block proves statically.
+    """The runtime half of what `modality.py`'s `TYPE_CHECKING` block proves statically.
 
     A `Protocol` is not runtime-checkable and `mypy --strict` reads `src/` alone, so this is what
     catches a renamed member from the test side -- and it reads as the list of what a modality is.
@@ -653,7 +596,7 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
 
     assert declared == {
         "content_parts",
-        "display_config",
+        "content_display",
         "embedding",
         "modality_name",
         "modality_version",

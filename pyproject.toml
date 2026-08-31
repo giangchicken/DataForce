@@ -9,8 +9,8 @@ dependencies = [
     # Pinned to a git tag because the library is on no registry. `uv.lock` records
     # the commit the tag resolves to, so a moved tag shows up as a lockfile diff
     # rather than as a release built from a tree nobody chose -- which matters,
-    # because this tag has already been moved once.
-    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.1.0",
+    # because `v0.1.0` was moved once, so a tag name here is not a tree.
+    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.2.0",
     # The embeddings call `duplicate_check` groups through. `agent-toolkit` owns the
     # LLM client but exposes nothing embedding-shaped -- `complete`, `complete_structured`,
     # `complete_with_reasoning`, `count_tokens` and the resolvers, and no `embed` -- so

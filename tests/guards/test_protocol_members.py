@@ -156,7 +156,7 @@ def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
             "    def content_parts(self): ...\n"
             "    def embedding(self): ...\n"
             "    def personal_data_detectors(self): ...\n"
-            "    def display_config(self): ...\n"
+            "    def content_display(self): ...\n"
             "    def transcribe(self): ...\n",
             "a member the document gained and the class did not",
         ),

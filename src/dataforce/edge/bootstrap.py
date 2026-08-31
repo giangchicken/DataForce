@@ -25,7 +25,7 @@ still needs one entry per module.
 **The pair is still checked against the manifests and not against the hierarchy.**
 ``paired_modality`` compares the two declarations, which is what a request body full of them has to
 pass; the hierarchy says the same thing one level up and is proved where it costs nothing --
-``mypy --strict`` on the ``TYPE_CHECKING`` block in ``profiles/tool_decision/utils.py``, and a test
+``mypy --strict`` on the ``TYPE_CHECKING`` block in ``profiles/tool_decision/profile.py``, and a test
 over the two maps below. A runtime ``issubclass`` here would be a third statement of one fact,
 checked at the one moment both other statements have already been read.
 

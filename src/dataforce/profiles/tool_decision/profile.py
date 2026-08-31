@@ -62,6 +62,7 @@ from dataforce.profiles.tool_decision.answers import (
 )
 from dataforce.profiles.tool_decision.records import (
     final_label,
+    part_with_calls,
     redact_label,
     restated_answer,
 )
@@ -206,6 +207,21 @@ class ToolDecision(Text2Text):
         self._label_at = declared_name(manifest, LABEL, AT)
         self._target_role = one_role(manifest, TARGET)
         self._question = question_template.strip()
+
+    def _turn_part(self, turn: Mapping[str, Any]) -> Part:
+        """The concept's turn, with what this task's turns also *do* written onto it.
+
+        The one seam `Text2Text` leaves for a module in its family (Decision 24). The concept reads a
+        role and a `content`; `tool_calls` is what *this* task answers with, so the profile that
+        declares what a call is is the profile that writes one onto a part and reads it back off --
+        and the separator between the two is `records.py`'s constant rather than a convention held in
+        a module both axes import. § *The two axes* is the argument: a concept may not hold a
+        convention only one of its modules speaks.
+
+        Private for I23's reason: an implementation's public surface is exactly its protocol's
+        members, and a seam a subclass overrides is not one of them.
+        """
+        return part_with_calls(super()._turn_part(turn), turn)
 
     def answer_schema(self, record: Record) -> dict[str, Any]:
         """This record's permitted answers: `oneOf` per offered tool. Never persisted."""
@@ -426,7 +442,7 @@ if TYPE_CHECKING:
     ) -> "Profile":
         """`mypy --strict` checks this return, so a member that stops matching fails the build.
 
-        The same check `text2text/utils.py` carries, and for the same reason: mypy reads `src/`
+        The same check `text2text/modality.py` carries, and for the same reason: mypy reads `src/`
         alone, and `edge/bootstrap.py` types the pair only as far as the protocols do.
         """
         return ToolDecision(modality, manifest, encode, question)

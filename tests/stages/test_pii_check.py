@@ -10,10 +10,13 @@ slices, what it does with a subset that came back, and what it does when nothing
 answers from a fixed list makes all three assertable; the live model is `edge/bootstrap.py`'s and the
 Smoke rung's.
 
-**The hardest case is the mixed spelling**, `bon tám khong hai mot nam`: the raw text does not match a
-pattern written in correct Vietnamese and the tone-stripped pattern does not match the raw text
-either, so only the per-word view finds it — and the span it produces has to point into the raw text,
-because a hit nobody can locate is a hit nobody can redact.
+**The hardest case used to be the mixed spelling**, `bon tám khong hai mot nam`, and since T54 it is
+not one: the library's own patterns list the toned and the tone-stripped word side by side, so one
+pass over the raw text finds all four spellings and the tone-stripped view this stage used to build
+word by word is gone. What is left for the stage is the other half of the same problem — a scan
+reports a *value* and a span needs offsets, so every reported value is located in the raw text across
+any run of whitespace. That is what redacts a name the transcript wrapped over a line, and a hit
+nobody can locate is a hit nobody can redact.
 """
 
 from collections.abc import Callable, Mapping
@@ -25,14 +28,16 @@ import pytest
 from dataforce.engine import Engine
 from dataforce.errors import ConfigError
 from dataforce.pipeline.data_quality.label_check import label_check
-from dataforce.pipeline.data_quality.pii_check import pii_check, tone_stripped_view
+from dataforce.pipeline.data_quality.pii_check import pii_check, spans_of
 from dataforce.record import Part, Record
 
 from .test_label_check import written_paths
 from .test_load_data import an_engine
 from .test_tool_decision import SENT, a_record, a_turn_that_calls
 
-# One customer id, written the four ways a call-centre transcript writes it.
+# One one-time code, written the four ways a call-centre transcript writes it. A code and not a bare
+# customer id since T54: an identifier with no cue word in front of it is not a class layer one has,
+# which is § *PII, in two layers*' stated cost and `test_text2text.py` asserts directly.
 TYPED = "480215"
 SPOKEN = "bốn tám không hai một năm"
 SPOKEN_BARE = "bon tam khong hai mot nam"
@@ -143,9 +148,9 @@ def found_values(record: Record, scanned: Record) -> set[str]:
     [TYPED, SPOKEN, SPOKEN_BARE, SPOKEN_MIXED],
     ids=["typed", "spoken", "tone-free", "mixed"],
 )
-def test_a_customer_id_is_found_however_it_is_spelled(written: str) -> None:
-    """Requirement 18: the pattern is written once in correct Vietnamese and matches all four."""
-    said = a_turn(f"Mã của mình là {written}.")
+def test_a_code_is_found_however_it_is_spelled(written: str) -> None:
+    """Requirement 18, and in one pass: the library's pattern lists both spellings of every word."""
+    said = a_turn(f"Mã xác nhận của mình là {written}.")
 
     scanned, _ = checked(said)
 
@@ -154,7 +159,7 @@ def test_a_customer_id_is_found_however_it_is_spelled(written: str) -> None:
 
 def test_a_span_points_into_the_text_it_was_found_in() -> None:
     """The offsets are `content`'s, not a normalisation's, which is what makes a hit replaceable."""
-    said = a_turn(f"Mã của mình là {SPOKEN_MIXED} nhé.")
+    said = a_turn(f"Mã xác nhận của mình là {SPOKEN_MIXED} nhé.")
 
     scanned, _ = checked(said)
 
@@ -163,14 +168,89 @@ def test_a_span_points_into_the_text_it_was_found_in() -> None:
     assert scan_of(scanned).content_version_scanned == 1
 
 
-def test_the_tone_stripped_view_keeps_every_character_at_its_own_index() -> None:
-    """The rule the view exists for: same length, so an offset in it is an offset in the text."""
-    said = "Mã của mình là bốn tám không hai một năm."
+def test_a_reported_value_is_located_across_any_run_of_whitespace() -> None:
+    """What replaced the tone-stripped view: a scan reports a value, and this finds where it is.
 
-    view = tone_stripped_view(said)
+    A scan normalises the whitespace inside a name it reports, so the value it hands back may not
+    occur verbatim in the text it came out of. Matching its words in order with `\\s+` between them
+    is what keeps the span a true offset into `content` -- and the matched slice, not the reported
+    value, is what gets replaced.
+    """
+    wrapped = "Chào anh Nguyễn\nVăn Dũng nhé."
 
-    assert len(view) == len(said)
-    assert view == "Ma cua minh la bon tam khong hai mot nam."
+    assert list(spans_of("Nguyễn Văn Dũng", wrapped)) == [(9, 24)]
+    assert wrapped[9:24] == "Nguyễn\nVăn Dũng"
+
+
+def test_every_occurrence_of_a_value_is_a_span() -> None:
+    """Requirement 17 replaces a value everywhere, so the evidence has to name every place."""
+    twice = f"Mã xác nhận {TYPED}. Vâng, {TYPED} nhé?"
+
+    assert len(list(spans_of(TYPED, twice))) == 2
+
+
+def test_a_value_reported_twice_is_not_two_spans_per_occurrence() -> None:
+    """The cross-product `spans_of` introduces, and what `outermost` is doing about it.
+
+    A scan reports what it matched, so a number said twice comes back twice -- and this stage then
+    locates *every* occurrence of *each* reported value, which is four hits over two real spans.
+    Keeping all four would put a record's phone number in the evidence twice and number the
+    placeholders off it, so the containment pass collapses the identical ones. This is the case that
+    says the pass is load-bearing rather than a leftover from the overlapping-patterns design.
+    """
+    number = "0900123456"
+    said = a_turn(f"Số của mình là {number}, gọi lại {number} nhé.")
+
+    scanned, _ = checked(said)
+
+    spans = scan_of(scanned).spans
+    assert [(span.start, span.end) for span in spans] == [(15, 25), (35, 45)]
+    assert {span.placeholder for span in spans} == {"<PHONE_1>"}
+
+
+def test_a_value_that_is_all_whitespace_matches_nothing() -> None:
+    """The one shape a split-and-escape would turn into a pattern that matches the empty string."""
+    assert list(spans_of("   ", "Mã xác nhận 480215.")) == []
+    assert list(spans_of("", "Mã xác nhận 480215.")) == []
+
+
+def test_a_name_behind_its_title_is_found_and_redacted() -> None:
+    """§ *Testing Strategy* item 6: the one name rule that needs no list of names.
+
+    A title or an introduction, then the capitalised words after it -- so `anh Nguyễn Văn Dũng` is a
+    hit and a name nobody announced is not. That second half is the class's stated reach and not a
+    gap this repository closes: a rule's reach is `agent-toolkit`'s, in a diff there.
+    """
+    said = a_turn("Chào anh Nguyễn Văn Dũng nhé.")
+
+    scanned, written = checked(said)
+
+    assert scan_of(scanned).classes == ("NAME",)
+    assert "Nguyễn Văn Dũng" not in (scanned.content[0].text or "")
+    assert "<NAME_1>" in (scanned.content[0].text or "")
+
+
+def test_a_name_the_transcript_wrapped_over_a_line_is_still_redacted() -> None:
+    """§ *Testing Strategy* item 6, and the reason `spans_of` matches across whitespace.
+
+    The scan reports `Nguyễn Văn Dũng` with single spaces because that is how it normalises what it
+    matched; the text holds a newline in the middle of it. Searching for the reported value verbatim
+    would find nothing, mint a placeholder for a value no span points at, and leave the name in the
+    corpus -- so what is replaced is the *matched slice of the raw text*, which is the property that
+    makes a hit replaceable at all.
+    """
+    wrapped = a_turn("Chào anh Nguyễn\nVăn Dũng nhé.")
+
+    scanned, written = checked(wrapped)
+
+    span = scan_of(scanned).spans[0]
+    assert (wrapped.text or "")[span.start : span.end] == "Nguyễn\nVăn Dũng"
+    assert scanned.content[0].text == "Chào anh <NAME_1> nhé."
+    assert written == {
+        "pii_check": {
+            "placeholders": {scanned.record_id: {"<NAME_1>": "Nguyễn\nVăn Dũng"}}
+        }
+    }
 
 
 def test_a_spoken_email_is_found_through_a_cong_and_cham() -> None:
@@ -185,35 +265,69 @@ def test_a_spoken_email_is_found_through_a_cong_and_cham() -> None:
 def test_one_value_used_twice_keeps_one_placeholder() -> None:
     """Requirement 17. Two spans, one placeholder, because the map is keyed by value."""
     scanned, _ = checked(
-        a_turn(f"Mã của mình là {TYPED}."), a_turn(f"Vâng, {TYPED} phải không ạ?")
+        a_turn(f"Mã xác nhận của mình là {TYPED}."),
+        a_turn(f"Vâng, mã xác nhận {TYPED} phải không ạ?"),
     )
 
     spans = scan_of(scanned).spans
     assert len(spans) == 2
-    assert {span.placeholder for span in spans} == {"<CUSTOMER_ID_1>"}
+    assert {span.placeholder for span in spans} == {"<OTP_1>"}
+
+
+def test_a_value_is_replaced_in_a_part_the_scan_flagged_nothing_in() -> None:
+    """One placeholder per value is true across parts, and the scan is per part.
+
+    Newly worth asserting since T54: the classes carry cue words now, so the second mention of a
+    code often is not flagged where it is repeated -- and Requirement 17 replaces a value
+    *everywhere* it appears, through one pass keyed by value. So the rewrite reaches a part with no
+    span in it, and the span list stays what Requirement 19 says it is: where a hit was found.
+    """
+    scanned, _ = checked(
+        a_turn(f"Mã xác nhận của mình là {TYPED}."),
+        a_turn(f"Vâng, {TYPED} phải không ạ?"),
+    )
+
+    assert [span.part for span in scan_of(scanned).spans] == [0]
+    assert TYPED not in (scanned.content[1].text or "")
+    assert "<OTP_1>" in (scanned.content[1].text or "")
 
 
 def test_a_hit_inside_a_longer_hit_is_not_a_second_hit() -> None:
-    """A digit run inside an email address: layer one's patterns overlap on purpose."""
-    scanned, _ = checked(a_turn("Gửi vào mail 4802156@vidu.com giúp mình."))
+    """Layer one's four scans overlap on purpose, and the outer hit is the one that survives.
 
-    assert scan_of(scanned).classes == ("EMAIL",)
+    A cue word in front of a ten-digit run puts it in reach of both classes: `PHONE` reports all ten
+    and `OTP` reports the first eight of them. Keeping both would mint a placeholder for a value that
+    is already gone by the time its turn comes, so the containing hit wins and layer two is what may
+    still call it something else.
+    """
+    scanned, _ = checked(a_turn("Mã xác nhận và số là 0900123456."))
+
+    assert scan_of(scanned).classes == ("PHONE",)
+    assert len(scan_of(scanned).spans) == 1
+    assert scan_of(scanned).spans[0].placeholder == "<PHONE_1>"
 
 
 # --- layer two: what sets the precision ---
 
 
-def test_a_digit_run_that_is_a_price_is_flagged_and_then_cleared() -> None:
-    """§ *Testing Strategy* item 6, exactly: layer one flags it, layer two clears it."""
-    price = "1250000"
-    engine = an_engine_that(clearing(price))
+def test_a_long_digit_run_that_is_an_order_reference_is_flagged_and_then_cleared() -> (
+    None
+):
+    """§ *Testing Strategy* item 6, exactly: layer one flags it, layer two clears it.
 
-    scanned, written = checked(a_turn(f"Tổng cộng {price} đồng nhé."), engine=engine)
+    An *order reference* and no longer a price, because the two moved apart when layer one became the
+    library's: a seven-digit price reaches no class now, and a ten-digit reference is exactly as long
+    as a mobile number. That is the noise layer one is allowed to make and layer two exists to price.
+    """
+    reference = "1250000789"
+    engine = an_engine_that(clearing(reference))
+
+    scanned, written = checked(a_turn(f"Đơn hàng {reference} nhé."), engine=engine)
 
     assert scan_of(scanned).unverified == 1
     assert not scan_of(scanned).spans[0].verified
     assert scan_of(scanned).decision == "withheld"
-    assert price in (scanned.content[0].text or "")
+    assert reference in (scanned.content[0].text or "")
     assert written == {}
 
 
@@ -227,21 +341,28 @@ def test_the_window_layer_two_reads_is_one_part_that_had_a_candidate() -> None:
     """
     engine = an_engine_that(confirming_everything())
 
-    checked(a_turn("Xin chào."), a_turn(f"Mã của mình là {TYPED}."), engine=engine)
+    checked(
+        a_turn("Xin chào."), a_turn(f"Mã xác nhận của mình là {TYPED}."), engine=engine
+    )
 
     verifier = engine.personal_data_verifier
     assert isinstance(verifier, ALayerTwo)
-    assert verifier.windows == [f"Mã của mình là {TYPED}."]
+    assert verifier.windows == [f"Mã xác nhận của mình là {TYPED}."]
 
 
 def test_layer_two_decides_which_class_a_hit_was() -> None:
-    """A ten-digit run is a phone number *and* a customer id until something reads the sentence."""
+    """A digit run behind a cue word is an `OTP` *and* a `PHONE` until something reads the sentence.
+
+    Decision 23: layer two returns each value under the class it confirms it as, which is a subset
+    of the values and never of the classes -- so the class on the span is the one the layer that can
+    read the sentence chose, not the first scan that reached it.
+    """
     number = "0900123456"
-    engine = an_engine_that(reclassifying(number, "CUSTOMER_ID"))
+    engine = an_engine_that(reclassifying(number, "OTP"))
 
     scanned, _ = checked(a_turn(f"Số của mình là {number}."), engine=engine)
 
-    assert scan_of(scanned).spans[0].placeholder == "<CUSTOMER_ID_1>"
+    assert scan_of(scanned).spans[0].placeholder == "<OTP_1>"
 
 
 @pytest.mark.parametrize(
@@ -255,7 +376,9 @@ def test_no_second_layer_is_no_confirmation_and_not_confirmation_by_default(
     engine: Engine,
 ) -> None:
     """Requirement 43: the call that failed is one missing answer, and the record says so."""
-    scanned, written = checked(a_turn(f"Mã của mình là {TYPED}."), engine=engine)
+    scanned, written = checked(
+        a_turn(f"Mã xác nhận của mình là {TYPED}."), engine=engine
+    )
 
     assert scan_of(scanned).unverified == 1
     assert scan_of(scanned).decision == "withheld"
@@ -272,17 +395,17 @@ def test_content_and_label_are_rewritten_together_under_one_placeholder() -> Non
         "SendStatement", {"ma_khach": TYPED, "ky": "thang_nay"}
     )
 
-    scanned, written = checked(a_turn(f"Mã của mình là {TYPED}."), restating)
+    scanned, written = checked(a_turn(f"Mã xác nhận của mình là {TYPED}."), restating)
 
     assert TYPED not in (scanned.content[0].text or "")
     assert scanned.label == (
         {
             "name": "SendStatement",
-            "arguments": {"ma_khach": "<CUSTOMER_ID_1>", "ky": "thang_nay"},
+            "arguments": {"ma_khach": "<OTP_1>", "ky": "thang_nay"},
         },
     )
     assert written == {
-        "pii_check": {"placeholders": {scanned.record_id: {"<CUSTOMER_ID_1>": TYPED}}}
+        "pii_check": {"placeholders": {scanned.record_id: {"<OTP_1>": TYPED}}}
     }
 
 
@@ -298,7 +421,9 @@ def test_the_restated_answer_still_matches_the_label_after_redaction() -> None:
         "SendStatement", {"ma_khach": TYPED, "ky": "thang_nay"}
     )
 
-    scanned, _ = checked(a_turn(f"Mã của mình là {TYPED}."), restating, engine=engine)
+    scanned, _ = checked(
+        a_turn(f"Mã xác nhận của mình là {TYPED}."), restating, engine=engine
+    )
     again = label_check(engine, [scanned]).records[0].data_quality.label_check
 
     assert again is not None
@@ -309,7 +434,9 @@ def test_redaction_off_reports_and_leaves_the_content_alone() -> None:
     """Requirement 21, and the default: the run completes and `export`'s precondition then fails."""
     engine = an_engine_that(confirming_everything(), redact=False)
 
-    scanned, written = checked(a_turn(f"Mã của mình là {TYPED}."), engine=engine)
+    scanned, written = checked(
+        a_turn(f"Mã xác nhận của mình là {TYPED}."), engine=engine
+    )
 
     assert scan_of(scanned).decision == "reported"
     assert scan_of(scanned).spans[0].verified
@@ -329,7 +456,7 @@ def test_a_record_with_nothing_to_redact_is_redacted() -> None:
 
 def test_content_version_is_bumped_only_where_the_text_changed() -> None:
     """The version says which text a span offset points into, so a bump with no rewrite is a lie."""
-    scanned, _ = checked(a_turn(f"Mã của mình là {TYPED}."))
+    scanned, _ = checked(a_turn(f"Mã xác nhận của mình là {TYPED}."))
 
     assert scanned.content_version == 2
     assert scan_of(scanned).content_version_scanned == 1
@@ -338,8 +465,8 @@ def test_content_version_is_bumped_only_where_the_text_changed() -> None:
 
 def test_two_runs_over_one_record_mint_the_same_placeholders() -> None:
     """Numbered per class in first-hit order, so a re-run is comparable to the run before it."""
-    once, _ = checked(a_turn(f"Mã {TYPED} và số 0900123456."))
-    twice, _ = checked(a_turn(f"Mã {TYPED} và số 0900123456."))
+    once, _ = checked(a_turn(f"Mã xác nhận {TYPED} và số 0900123456."))
+    twice, _ = checked(a_turn(f"Mã xác nhận {TYPED} và số 0900123456."))
 
     assert [span.placeholder for span in scan_of(once).spans] == [
         span.placeholder for span in scan_of(twice).spans
@@ -352,7 +479,7 @@ def test_two_runs_over_one_record_mint_the_same_placeholders() -> None:
 def test_a_record_that_is_only_reported_gains_exactly_one_key() -> None:
     """I8, in the case Requirement 5 has no exception for."""
     engine = an_engine_that(confirming_everything(), redact=False)
-    record = a_record(content=(a_turn(f"Mã của mình là {TYPED}."),))
+    record = a_record(content=(a_turn(f"Mã xác nhận của mình là {TYPED}."),))
     loaded = label_check(engine, [record]).records[0]
 
     scanned = pii_check(engine, [loaded]).records[0]
@@ -367,7 +494,7 @@ def test_a_redacted_record_touches_the_three_paths_requirement_5_names_and_no_ot
 ):
     """Its own key, `content`, the `label` and `content_version` -- and nothing else moves."""
     engine = an_engine_that(confirming_everything())
-    record = a_record(content=(a_turn(f"Mã của mình là {TYPED}."),))
+    record = a_record(content=(a_turn(f"Mã xác nhận của mình là {TYPED}."),))
     loaded = label_check(engine, [record]).records[0]
 
     scanned = pii_check(engine, [loaded]).records[0]
@@ -382,7 +509,7 @@ def test_a_redacted_record_touches_the_three_paths_requirement_5_names_and_no_ot
 
 def test_a_record_that_never_went_through_label_check_is_skipped_untouched() -> None:
     """Requirement 42's precondition: skipped, marked by the absence, never dropped."""
-    record = a_record(content=(a_turn(f"Mã của mình là {TYPED}."),))
+    record = a_record(content=(a_turn(f"Mã xác nhận của mình là {TYPED}."),))
 
     scanned = pii_check(an_engine_that(confirming_everything()), [record]).records
 
@@ -396,7 +523,9 @@ def test_a_quarantined_record_is_still_scanned() -> None:
     Personal data in a record that failed a label check is still personal data, and a corpus where
     the broken records are the unscrubbed ones is the worst possible arrangement.
     """
-    scanned, _ = checked(a_turn(f"Mã của mình là {TYPED}."), label=("KhongCoTool",))
+    scanned, _ = checked(
+        a_turn(f"Mã xác nhận của mình là {TYPED}."), label=("KhongCoTool",)
+    )
 
     assert scanned.data_quality.label_check is not None
     assert scanned.data_quality.label_check.quarantined
@@ -407,7 +536,7 @@ def test_every_record_comes_back() -> None:
     """I11, over a batch where one is skipped, one is redacted and one has nothing to find."""
     engine = an_engine_that(confirming_everything())
     records = [
-        a_record(content=(a_turn(f"Mã của mình là {TYPED}."),)),
+        a_record(content=(a_turn(f"Mã xác nhận của mình là {TYPED}."),)),
         a_record(content=(a_turn("Xin chào."),)),
     ]
     loaded = [*label_check(engine, records).records, records[0]]
@@ -430,5 +559,6 @@ def test_a_config_error_from_layer_two_stops_the_run() -> None:
     """
     with pytest.raises(ConfigError, match="endpoint"):
         checked(
-            a_turn(f"Mã của mình là {TYPED}."), engine=an_engine_that(misconfigured())
+            a_turn(f"Mã xác nhận của mình là {TYPED}."),
+            engine=an_engine_that(misconfigured()),
         )

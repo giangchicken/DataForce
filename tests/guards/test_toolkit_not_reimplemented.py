@@ -12,10 +12,12 @@ from defining one. A pairing over two hand-maintained copies of a fact proves th
 it cannot prove either is *true*. The third party -- the library a run actually imports -- is the
 only thing that can say, and it was the one party the rule never asked.
 
-*Installed* is the load-bearing word. The pin is `@v0.1.0` and the checkout beside this repository
+*Installed* is the load-bearing word. The pin is `@v0.2.0` and the checkout beside this repository
 is not: what `uv.lock` resolved is what `import agent_toolkit` gets, so that is what the rule is
 written against. A tag that moves under a name this package defines shows up here as a red guard
-rather than as a function that quietly stopped being ours.
+rather than as a function that quietly stopped being ours -- and T54 is the case: the four
+personal-data scans became owned names the day that pin moved, and the rule covered them without an
+edit here.
 
 **One level deep, and functions only.** `pkgutil.iter_modules` reaches the package's front doors --
 `string_utils`, `file_utils`, `json_utils`, `llm` -- and not `llm/executors.py`, whose `__all__` is
