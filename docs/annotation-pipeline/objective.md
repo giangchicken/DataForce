@@ -156,9 +156,9 @@ record[<phase>][<service>] = { … }
 
   "data_quality": {
     "data_quality_config":    { "use_exact_match": True, "use_similar_embedding": True, "embedding_config": {"embedding_model": "potion-multilingual-128M", "dim": 256}, "redacted_pii": True},
-    "pii_check": {"spans": [ { "part": 3, "start": 16, "end": 22, "class": "CUSTOMER_ID",
-                                  "verified": true, "placeholder": "<ID_1>" } ],
-                     "classes": ["CUSTOMER_ID"], "unverified": 0 },
+    "pii_check": {"spans": [ { "part": 3, "start": 16, "end": 22, "class": "OTP",
+                                  "verified": true, "placeholder": "<OTP_1>" } ],
+                     "classes": ["OTP"], "unverified": 0 },
     "duplicate_check":       {"duplicate_content_diff_label": ["record_id_1", "record_id_2"], "duplicate_content_same_label": ["record_id_3", "record_id_4"]}
   },
 

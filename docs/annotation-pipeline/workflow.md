@@ -72,7 +72,7 @@ from scratch — only `load_data` does that.
 bumps `content_version`. That is why its spans record which version they were found in: after the
 rewrite, the offsets no longer point where they did. Content and label move together because rewriting
 one of them alone manufactures a `label_assistant_mismatch` and makes `export` emit an example whose
-input reads `<CUSTOMER_ID_1>` and whose target reads the original (Requirement 17).
+input reads `<OTP_1>` and whose target reads the original (Requirement 17).
 
 ---
 

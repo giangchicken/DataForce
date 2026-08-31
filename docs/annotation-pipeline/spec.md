@@ -1845,7 +1845,7 @@ change, and `scanned` calls the port for every part instead of only for the part
 | label-studio-sdk | `>=2.1.1` | current release, PyPI; used only by the sync |
 | Label Studio (server) | 1.23.0 | the release the sync is written against, not a Python dependency. **Community edition** — Requirement 52 is what that costs. `deploy/` gets the compose file with T26, the first task that needs an instance |
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
-| agent-toolkit | `@v0.1.0` git tag | the tag moves rather than the pin, so `uv.lock` is the record of which build a run got. Layer one needs the build that holds the four personal-data scans; I6's document half fails while the pinned one does not |
+| agent-toolkit | `@v0.2.0` git tag | the pin resolves by tag and `uv.lock` records the commit, so `uv.lock` is the record of which build a run got. `v0.2.0` is the first tag holding the four personal-data scans and the five vocabulary tables behind them, which is what layer one is built from; `v0.1.0` was moved once, which is why a tag name here is not a tree |
 | openai | `>=3.2` | the embeddings call `duplicate_check` groups through; `agent-toolkit` exposes none, so this is the one direct use, under one I6 exemption |
 | ~~model2vec~~ | removed | the deployment serves `bge-m3` on an endpoint it already runs, so no run downloads a model — Requirement 23 |
 | ~~dvc / pandera / pandas~~ | removed | none of the three had a job in this design — see Decision 18 |

@@ -23,11 +23,11 @@ and 1095 tests, 522 of which are not guards — but **T34 is open and CI is red 
 it. **Phase 7 has started: T27, T53 and T52 have landed, and T28, T29 and T49 are behind them — and
 T34 is still the oldest thing on this list.**
 
-**Phase 3 is open with T54, T55 and T56**, a review round on the shape of the two axis packages. T55
+**Phase 3's review round is done: T54, T55 and T56 have all landed.** T55
 and T56 are specified in [`../axis-module-shape/spec.md`](../axis-module-shape/spec.md) rather than
 here, because they reverse Decision 14 and that needed a document with the measurements in it — the
 first tasks in this plan sourced from a second spec. T54 is sourced from `spec.md`: it is where the
-concept stops holding one module's vocabulary and layer one becomes the library's. § *Review round ·
+concept stopped holding one module's vocabulary and layer one became the library's. § *Review round ·
 the shape of the two axis packages* holds all three. AGENTS.md gained the unshipped-copy rule in the
 same round.
 
@@ -126,7 +126,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
-| T54 | Layer one is the library's four scans, and the concept keeps no module's vocabulary | 3 | T50 · **a tag in `agent-toolkit` containing `d0abc5d`** | L | |
+| T54 | Layer one is the library's four scans, and the concept keeps no module's vocabulary | 3 | T50 · a tag in `agent-toolkit` containing `d0abc5d` | L | ✓ `8f4e65e` |
 | T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ `2535a56` |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
@@ -1765,10 +1765,66 @@ this task is worth starting.
 **Out of scope.** A fifth class. Any change to what the four scans match — a rule's reach is the
 library's to change, in a diff there.
 
-**Blocked by.** A tag in `agent-toolkit` containing `d0abc5d`. The pin resolves by tag, `v0.1.0` is at
-`2b603a6` on the remote, and `uv.lock` records that commit — so `v0.1.0` today holds neither the scans
+**Blocked by.** A tag in `agent-toolkit` containing `d0abc5d`. The pin resolves by tag, `v0.1.0` was at
+`2b603a6` on the remote, and `uv.lock` recorded that commit — so `v0.1.0` held neither the scans
 nor the tables. One tag, in another repository, and not scheduled here. Read the lockfile rather than a
 local tag to check: `git fetch` will not correct a stale local tag on its own.
+
+**Landed** (`8f4e65e`). The block cleared as `v0.2.0` at `d0abc5d`, a new tag rather than a moved one, so
+`uv.lock` moved from `v0.1.0#2b603a6` to `v0.2.0#d0abc5d` and the diff says which build a run got.
+The pre-flight ran first and is what the task made a precondition: all four scans and all five
+vocabulary tables — `SPOKEN_DIGITS`, `SPOKEN_AT`, `SPOKEN_DOT`, `NAME_TITLES`, `OTP_CUES`, keyed `en`
+and `vi` — are in the installed `__all__`. `make check` is green over 63 modules and 1145 tests, 527
+of which are not guards.
+
+`text2text/` is `schema.py`, `pii_detector.py`, `text_embeddor.py` and `modality.py`. All six moves
+landed together rather than one commit each, because the guards make a partial landing red: I19
+compares the whole tree to § *Package layout* in both directions, and I21 and I23 compare a protocol
+member to the document and to the class — so `turns.py` gone, `pii_detector.py` present and
+`content_display` renamed are one atomic step or none.
+
+**Four things moved, and `spec.md` states each one.** The protocol member `display_config` is
+`content_display` and `DisplayConfig` is `ContentDisplay`. The class vocabulary is `PHONE`, `EMAIL`,
+`OTP`, `NAME` — `CUSTOMER_ID` is retired, and the test that says so asserts all four scans return
+nothing for a bare `480215`. A `Detector` is two fields now, a class name and the scan that finds it,
+with the declared language bound before the stage sees it. And `SPOKEN_AND_STATED` left `record.py`
+for `tool_decision/records.py`, which is where both ends of it now sit.
+
+**The three guards were already red before a line was written**, which is the doc-first order working:
+`f18bb77` rewrote the spec, and I19 (7 findings), I21 and the markup half of I19 failed against the
+tree. Nothing else in the suite was red, so the spec was the only thing ahead of the code.
+
+**`tone_stripped_view` is gone, and that is the mechanism this task retired rather than moved.** The
+stage ran every pattern twice — once over the raw text, once over a tone-stripped view rebuilt word
+by word so the offsets stayed true — because a pattern written in correct Vietnamese cannot match
+`khong chin`. The library's patterns list both spellings of every word, so one pass finds all four
+spellings of a dictated code including the mixed one, and there is no normalisation for an offset to
+survive. What replaced it is `spans_of`: a scan returns values and a span needs offsets, so each
+reported value is located across any run of whitespace and the matched slice of the raw text is the
+hit. That is what redacts `Nguyễn\nVăn Dũng` from a name reported with single spaces.
+
+**One behaviour became newly observable and got its own test.** The classes carry cue words now, so
+the second mention of a code often is not flagged where it repeats — while Requirement 17 still
+replaces a value everywhere. So the rewrite reaches a part with no span in it, and the span list stays
+what Requirement 19 says it is: where a hit was *found*. Two fixtures § *Testing Strategy* item 6 asks
+for and the suite did not have are in too: a name behind its title, and a name the transcript wrapped
+over a line.
+
+**Two fixtures had to change, and neither is a weakened assertion.** `Mã của mình là 480215` finds
+nothing now and gained the cue that makes it an `OTP`; the cleared long digit run is a ten-digit order
+reference rather than a seven-digit price, because a price no longer reaches a class at all. The
+property corpus needed the same cue, or its *some record is redacted* assertion was vacuous.
+
+**Out of scope, and held to.** No change to what the four scans match. The two things
+`PhonePlan` documented — the written/spoken off-by-one, and `IDENTIFIER_DIGITS` — left with the module
+rather than being carried: both are facts about a rule's reach, which is the library's to state, and
+what settles the first is a measurement of layer one's recall over a declared corpus. That is the
+pilot's.
+
+**Four stale `utils.py` references from T56 were corrected on the way past** — in `edge/bootstrap.py`,
+`tool_decision/profile.py` and two test docstrings, each naming the module that carries the
+`TYPE_CHECKING` protocol check. I19 compares first lines only, so a body line naming a deleted module
+is invisible to it.
 
 ---
 
