@@ -149,7 +149,9 @@ pattern.**
 **D3 · An unknown language stays a `ConfigError`.**
 The library raises `ToolkitError`; `errors.py` says `ConfigError` is "the one exception this codebase
 defines" and the edge maps it to a 400. So `detectors.py` catches `ToolkitError` from
-`spoken_pii_forms` and raises `ConfigError` with the message it raises today.
+`spoken_pii_forms` — and from `email_patterns_by_rules`, which raises through it — and raises
+`ConfigError` with the message it raises today. One `except`, because both calls are inside the same
+build and an unknown language fails them both.
 *Alternative:* let `ToolkitError` escape. *Why not:* it makes the engine raise a second exception type,
 falsifies `errors.py`'s docstring — *"the only exception the engine raises"* — and hands the edge
 something its 400 mapping does not cover. *Consequence:* `written_down` — the generic table reader —
@@ -338,7 +340,9 @@ Nothing parses `plan.md`, so those edits can land first.
 ### T54 · The words a language dictates come from the library
 
 **Goal.** `agent_toolkit.string_utils` is the only definition of `SpokenPiiForms`,
-`SPOKEN_PII_FORMS` and `spoken_pii_forms`.
+`SPOKEN_PII_FORMS` and `spoken_pii_forms`, and the only place an email address's shape is written
+down. `email_patterns_by_rules(language)` returns `(written, dictated)`; `by_rules` is in the name
+because a rule is not the only way to find an address and layer two is the other.
 
 **Context.** § *Context* item 5. The branch is written and tested and one commit ahead of
 `agent-toolkit`'s `main`; nothing in it has landed here because the pin is `@v0.1.0`.

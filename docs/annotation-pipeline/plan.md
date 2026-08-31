@@ -1717,7 +1717,7 @@ the spec's § *Context* first: it reverses Decision 14, and the four measurement
 ### T54 · The words a language dictates come from the library
 
 **Goal.** `agent_toolkit.string_utils` is the only definition of `SpokenPiiForms`, `SPOKEN_PII_FORMS`
-and `spoken_pii_forms`.
+and `spoken_pii_forms`, and the only place an email address's shape is written down.
 
 **Context.** T50 ends by scheduling this task: *"the day the pin moves past `61fdf65`,
 `spoken_pii_forms` appears in the installed library's `__all__`, I6 fails on the duplicate `def` here,
@@ -1734,10 +1734,22 @@ callers and stops being a function under the function rule — it is inlined int
 and stays wrong (spec D2): correcting the off-by-one shrinks what layer one redacts, and what settles
 it is the pilot's recall measurement.
 
-**Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS" src/` returns nothing. An undeclared language
-still raises `ConfigError` with the message it raises today. **The six compiled patterns are identical
-before and after** — that is what proves D2 was honoured, and it is the only assertion in this task
-that is about behaviour rather than about names.
+**The email half goes the same way, and it is written already.** `EMAIL` and the two `rf"…"`
+expressions that build `email_written` and `email_spoken` are replaced by
+`email_patterns_by_rules(language)`, which returns `(written, dictated)` and is in `agent-toolkit`'s
+`string_utils` beside the vocabulary it is built from. An address is a local part, an `@` and a dotted
+domain wherever one is written, so its shape is a fact about a format — unlike a numbering plan, which
+is a fact about a country, which is why `PHONE_PLANS` and `IDENTIFIER_DIGITS` stay here and this does
+not. `spaced` stays too: the digit and `zero` patterns still need it. The library function raises
+`ToolkitError` for an unknown language the way `spoken_pii_forms` does, so D3's translation covers
+both and stays one `except`.
+
+**Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS\|EMAIL = " src/` returns nothing. An undeclared
+language still raises `ConfigError` with the message it raises today. **The six compiled patterns are
+identical before and after** — that is what proves D2 was honoured, and it is the only assertion in
+this task that is about behaviour rather than about names. It now covers the two email patterns as
+well; the library was checked against this repository's current strings when it was written, and both
+languages match character for character.
 
 **Source.** `../axis-module-shape/spec.md` D1, D2, D3 and § *Context* item 5; AGENTS.md; I6;
 T50, which scheduled it.
@@ -1748,11 +1760,13 @@ and nothing else in this task is worth starting.
 
 **Out of scope.** Correcting `PHONE_PLANS`. Any change to a detector's reach.
 
-**Blocked by.** A tag in `agent-toolkit` containing `61fdf65`. The merge landed on `main` as
-`d0572c9` on 2026-08-30 and **that does not unblock this task**: the pin resolves by tag, `v0.1.0` is
-at `2b603a6` on the remote, and `uv.lock` records that commit. One tag, in another repository, and not
-scheduled here. Read the lockfile rather than a local tag to check — the checkout beside this
-repository has `v0.1.0` at `ec1f338` and `git fetch` will not correct it.
+**Blocked by.** A tag in `agent-toolkit` containing both `61fdf65` and the `email_patterns_by_rules`
+commit. The spoken-forms merge landed on `main` as `d0572c9` on 2026-08-30 and **that does not unblock
+this task**: the pin resolves by tag, `v0.1.0` is at `2b603a6` on the remote, and `uv.lock` records
+that commit. Re-fetching on 2026-08-31 moved the local tag from `ec1f338` to `2b603a6` and no further:
+`v0.1.0..main` is still exactly `61fdf65` and its merge. One tag, in another repository, and not
+scheduled here. Read the lockfile rather than a local tag to check — `git fetch` will not correct a
+stale local tag on its own, which is how `ec1f338` stood here for as long as it did.
 
 ---
 
