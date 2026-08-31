@@ -51,10 +51,12 @@ this project's `agent-toolkit` was extracted from settles four things this spec 
   related fields are grouped under `# --- Section ---` comments. This is Requirement 1 below.
 - A router handler is thin: call the service, map `ValueError` → `400` and anything else → `500`.
 
-**What `agent-toolkit` already owns** and must not be re-implemented: `compute_hash`, `normalize_text`
-(including `remove_tone_marks`, which the PII layer needs), `slot_filling`, `extract_json_from_text`,
-atomic `read_jsonlines` / `write_jsonlines` / `read_yaml`, and the whole LLM client — `complete`,
-`complete_structured`, `count_tokens`, retries, rate limiting. Those are the ones this pipeline
+**What `agent-toolkit` already owns** and must not be re-implemented: `compute_hash`,
+`normalize_text` (including `remove_tone_marks`), the four rule-based personal-data scans layer one
+is built from — `phone_number_detection_by_rules`, `email_detection_by_rules`,
+`otp_detection_by_rules`, `name_detection_by_rules` — and the vocabulary tables behind them,
+`slot_filling`, `extract_json_from_text`, atomic `read_jsonlines` / `write_jsonlines` / `read_yaml`,
+and the whole LLM client — `complete`, `complete_structured`, `count_tokens`, retries, rate limiting. Those are the ones this pipeline
 reaches for and not the whole surface: I6 reads the owned names off the installed library's
 `__all__`, so the rule covers every function `agent-toolkit` exports whether or not this sentence
 names one.
@@ -125,13 +127,14 @@ class Modality(Protocol):
         """A vector for near-duplicate grouping, from the model the manifest names."""
 
     def personal_data_detectors(self) -> list[Detector]:
-        """The high-recall pattern layer, in this modality's terms."""
+        """The high-recall first layer: one scan per class of personal data."""
 
-    def display_config(self, record: Record) -> DisplayConfig:
-        """The *display* half of the annotation config. Never the capture half."""
+    def content_display(self, record: Record) -> ContentDisplay:
+        """How this record's content is shown to a person: the fragment that renders it,
+        and the task data that fragment reads. Never the capture half."""
 ```
 
-Six members, closed. `Detector` and `DisplayConfig` are opaque here and concrete in
+Six members, closed. `Detector` and `ContentDisplay` are opaque here and concrete in
 `text2text/schema.py` (Requirement 47). `Part` is not the modality's to define — a part is a piece of
 record content, and `build_record` on the *other* axis takes a `Sequence[Part]` too, so it lives in
 `record.py` where both protocols can reach it.
@@ -154,7 +157,7 @@ class Profile(Protocol):
     def answer_config(self, record: Record) -> AnswerConfig:
         """The capture half: the fragment that collects an answer, and the task data it owns.
 
-        Takes the record for `display_config`'s reason -- half of what it returns is per record.
+        Takes the record for `content_display`'s reason -- half of what it returns is per record.
         The catalog an annotator chooses from is this record's, and a Label Studio project holds
         one config for every task in it, so the names travel as *data* and not as markup."""
 
@@ -208,14 +211,15 @@ there could be, and only the correction is the profile's own vocabulary — whic
 typed `Answer`. `ports.JurorAnswer` is the same shape of value on the other side of the engine.
 
 **`build_record` is the only place a source shape is *validated*, and not the only place one is
-read.** `content_parts` reads `messages`, and inside it `role`, `content`, `tool_calls` and a call's
-`function` and `arguments` — it has to, because turns are content and reading content is what a
-modality is for. What the profile owns is every other key *and the `shape:` declaration itself*: it is
-the only side that refuses an undeclared shape, and the modality assumes a chat item unconditionally.
-So the declared input spans both axes with one end unvalidated, and since neither axis may hold the
-other's vocabulary there is nowhere to move the check to. The member docstring said *the only place a
-source shape is read* until T14 and now says *validated*, which is the half that is true; this
-paragraph is the other half, where a reader following the member lands.
+read.** `content_parts` reads `messages`, and inside a turn `role` and `content` — it has to, because
+turns are content and reading content is what a modality is for. **The task's own vocabulary inside a
+turn is the profile's**: a turn may also carry `tool_calls`, and what a call is is the whole of what
+`tool_decision` declares, so that profile overrides the turn its concept writes and reads `tool_calls`
+and a call's `function` and `arguments` there. A concept holds no key only one of its modules can
+read. What the profile owns is every other key *and the `shape:` declaration itself*: it is the only
+side that refuses an undeclared shape, and the modality assumes a chat item unconditionally. So the
+declared input spans both axes with one end unvalidated, and since neither axis may hold the other's
+vocabulary there is nowhere to move the check to.
 
 **Provenance is a parameter and not a key on the item.** It was ``item["__provenance__"]`` for one
 phase -- ``load_data`` put the file's digest, the offset, the clock and the run there, and this member
@@ -277,23 +281,20 @@ panel agreed to call nothing* and *the panel produced nothing defensible* are tw
 value read two ways. A consensus answer validates against the record's `answer_schema`, asserted
 directly.
 
-The two contracts share four names and nothing else: `name`, `version`, `Part`, and
-`SPOKEN_AND_STATED` — the last two are the record's and are only borrowed by both. The separator is
-there for `Part`'s own reason: a turn can both speak and act, a part carries one string, so the
-modality that writes such a turn down and the profile that compares its calls against the label need
-one convention between them. It was a convention spelled in one axis and assumed in the other until a
-review found `label_assistant_mismatch` silent on every turn of that shape, which is the worst
-version of a shared fact — so it is named in `record.py` where both can reach it, and one test builds
-a turn through the modality and reads it through the profile so neither end can move alone. Neither
-axis may drift into the other's job.
+The two contracts share three names and nothing else: `name`, `version` and `Part` — the last is the
+record's and is only borrowed by both. **How a turn that both speaks and acts is written down is not
+one of them.** A part carries one string, so the calls a turn made are joined onto the text it spoke;
+the profile that declares what a call *is* is the one that writes them there and the one that reads
+them back, so the separator between the two is that profile's own constant, and one test writes a
+turn through it and reads the calls back off the part so neither end can move alone. A concept cannot
+hold a convention only one of its modules speaks. Neither axis may drift into the other's job.
 
-**That sentence is about the two *contracts*, and it was read as being about the two modules.** The
-implementations have always shared more than four names — `Manifest`, `ConfigError`, `Record`, and
-since Decision 24 the concept's own class, which `ToolDecision` subclasses. Reading *and nothing
-else* as a rule about imports is what bought two copies of the manifest reader and three of the
-canonical JSON form, each carrying a docstring that cited this line as its reason. T56 removed them.
-What a module both axes import may not do is carry one axis's vocabulary — which is a property of its
-signature, checked by I25, and not of how many axes reach it.
+**That sentence is about the two *contracts*, and not about the two modules.** The implementations
+share more than three names — `Manifest`, `ConfigError`, `Record`, and by Decision 24 the concept's
+own class, which `ToolDecision` subclasses. Reading *and nothing else* as a rule about imports buys a
+second copy of the manifest reader and a third of the canonical JSON form, each with a docstring
+citing this line as its reason. What a module both axes import may not do is carry one axis's
+vocabulary — which is a property of its signature, checked by I25, and not of how many axes reach it.
 
 ---
 
@@ -437,18 +438,20 @@ Each is a statement a test can be pointed at.
 ### data_quality
 
 17. `pii_check` replaces detected values with **stable typed placeholders** scoped per record
-    (`<CUSTOMER_ID_1>`), never deletes them, and a value used twice keeps one placeholder.
+    (`<OTP_1>`), never deletes them, and a value used twice keeps one placeholder.
     **Content and label are rewritten together.** A value found in `content` is replaced everywhere it
     also appears in `label`, through the profile's `redact_label(label, replacements)`, under the same
     placeholder. Redacting one and not the other is worse than redacting neither: it manufactures a
     `label_assistant_mismatch` failure downstream, and `export` emits a training example whose input
-    reads `<CUSTOMER_ID_1>` and whose target reads the original value — teaching a model to produce an
+    reads `<OTP_1>` and whose target reads the original value — teaching a model to produce an
     identifier that is absent from its input. That is a data-poisoning defect wearing a privacy
     defect's clothes, and it is why this is one requirement and not two.
-18. Detection runs two layers: patterns tuned for recall (and permitted to be noisy), then a model pass
-    over a bounded window that sets precision. Patterns run against the raw text **and** against a
-    tone-stripped normalisation, so `khong chin` is caught while patterns stay written in correct
-    Vietnamese.
+18. Detection runs two layers: `agent-toolkit`'s rule-based scans, one per class of personal data,
+    tuned for recall (and permitted to be noisy), then a model pass over a bounded window that sets
+    precision. Every scan finds the written form **and** the form a speaker dictates, and every
+    pattern behind one holds the toned and the tone-stripped spelling together, so `khong chin` and
+    `không chín` are one scan over the raw text and no second pass has to keep an offset through a
+    normalisation.
 19. Spans are recorded against the content they were found in — `content_version` *before* the rewrite —
     and each names `part`, `start`, `end`, `class`, `verified`, `placeholder`.
 20. The placeholder→original map is returned to the edge, written outside version control, and read by
@@ -543,7 +546,7 @@ Each is a statement a test can be pointed at.
 46. HTTP and an in-process caller reach the same function, and produce the same record.
 47. **A type named in an axis protocol is opaque at the base and concrete in the implementation.**
     `Answer`, `AnswerConfig` and `LabelCheck` are aliases in `profiles/base.py`; `Detector` and
-    `DisplayConfig` are aliases in `modalities/base.py`; the pydantic models that satisfy them live in
+    `ContentDisplay` are aliases in `modalities/base.py`; the pydantic models that satisfy them live in
     that axis implementation's `schema.py`. **`Answer` is the one whose satisfying model is a
     composite:** `tool_decision/schema.py` holds `Call`, and an answer is a set of them — what
     *crosses* the boundary is `record.StoredAnswer`, because a stage hands `record.label` straight to
@@ -675,14 +678,14 @@ src/dataforce/              the package; its docstring states the import directi
 
   modalities/               one directory per implementation, beside the protocol they answer
     __init__.py             façade · the modality axis: the protocol, and nothing that implements it.
-    base.py                 DEFINITION · the Modality protocol; Detector and DisplayConfig, opaque.
+    base.py                 DEFINITION · the Modality protocol; Detector and ContentDisplay, opaque.
 
     text2text/              the only modality built; *Out of Scope* says why there is no empty `speech2text/`
       __init__.py           façade · the text2text modality; the object a composition root registers, and the encoder it is built with.
-      schema.py             DEFINITION · the text2text shapes: what a detector is, and what its display config holds.
-      turns.py              LOGIC · one turn as one part: what it said, what it called, and the string that holds both.
-      detectors.py          LOGIC · the six shapes layer one scans for, filled with the words a declared language dictates.
-      modality.py           LOGIC · Text2Text — the object that answers the Modality protocol.
+      schema.py             DEFINITION · the text2text shapes: what a detector is, and what shows one record to a person.
+      pii_detector.py       LOGIC · layer one for the declared language: one library scan per class of personal data.
+      text_embeddor.py      LOGIC · the document one vector is taken over, and the name of the model that takes it.
+      modality.py           LOGIC · Text2Text — the object that answers the Modality protocol, and the turn it reads.
 
   profiles/                 the same shape as `modalities/`, and nothing shared between the two axes
     __init__.py             façade · the profile axis: the protocol, and nothing that implements it.
@@ -774,14 +777,14 @@ A shape is a shape and a conversion over it is logic — they change for differe
 dependency runs one way and never back. So `answer_schema` — a record turned into a JSON Schema — is
 logic, while the answer models it constrains are `schema.py`.
 
-**The file list is not fixed, and was until T55.** I4 required exactly three modules and failed on a
-fourth, which made AGENTS.md's own remedy — a `utils.py` that has outgrown its exemption gets a
-real name — a build failure; the convention is then a rule that forbids its own remedy, and every later addition
-lands in `utils.py`. `AGENTS.md` records it. `utils.py` is still the one module name it
+**The file list is not fixed.** I4 constrains the direction of an import and not the number of
+files: a guard that required exactly three modules would make AGENTS.md's own remedy — a `utils.py`
+that has outgrown its exemption gets a real name — a build failure, and a rule that forbids its own
+remedy sends every later addition into `utils.py`. `utils.py` is the one module name AGENTS.md
 exempts by name, under exactly one condition — conversions over the shapes in the `schema.py` beside
-it — and I4's second half is now that condition rather than a count of files. Neither package has
-one as of T56: `text2text/` is `turns.py`, `detectors.py` and `modality.py`, and `tool_decision/` is
-`answers.py`, `annotations.py`, `records.py` and `profile.py`.
+it — and I4's second half is that condition. Neither package has one: `text2text/` is
+`pii_detector.py`, `text_embeddor.py` and `modality.py`, and `tool_decision/` is `answers.py`,
+`annotations.py`, `records.py` and `profile.py`.
 
 **An axis façade re-exports its protocol and nothing else.** `dataforce/modalities/__init__.py` holds
 `Modality` and not `text2text`. Re-exporting the implementation would make `import dataforce.modalities`
@@ -819,7 +822,7 @@ prose, and nests `human_review` inside `ai_review`.
   "content": [                        // ordered parts; order is content, so it is covered by record_id
     { "type": "text",                 // both kinds are drawn; a text2text record holds only this one
       "role": "user",                 // who spoke; every turn is context and none of it is an answer
-      "text": "Mã của mình là <CUSTOMER_ID_1>." },
+      "text": "Mã xác nhận của mình là <OTP_1>." },
     { "type": "audio",                // what a media modality writes instead: the file, by reference
       "role": "user",
       "uri":    "data/raw/4471.wav",  // where it sits; never in record_id, so moving it changes nothing
@@ -829,7 +832,7 @@ prose, and nests `human_review` inside `ai_review`.
 
   // --- The answer, and everything else the source carried ---
   "label": [ { "name": "SendStatement",                        // the training target. Nothing else is.
-               "arguments": { "ma_khach": "<CUSTOMER_ID_1>",   // checked against the tool's JSON Schema
+               "arguments": { "ma_khach": "<OTP_1>",           // checked against the tool's JSON Schema
                               "ky": "thang_nay" } } ],
   "meta":  { "human_checked": true }, // the source's own keys, verbatim; read only where declared
 
@@ -841,13 +844,13 @@ prose, and nests `human_review` inside `ai_review`.
                          "quarantined": false },  // downstream services skip it; it is never removed
     "pii_check":       { "decision": "redacted",          // redacted | reported | withheld
                          "content_version_scanned": 1,    // which content the spans below index into
-                         "spans": [ { "part": 3,          // index into `content`
-                                      "start": 16,        // character offset, inclusive
-                                      "end": 22,          // character offset, exclusive
-                                      "class": "CUSTOMER_ID",       // the typed class, which picks the placeholder
+                         "spans": [ { "part": 0,          // index into `content`
+                                      "start": 24,        // character offset, inclusive
+                                      "end": 30,          // character offset, exclusive
+                                      "class": "OTP",               // the typed class, which picks the placeholder
                                       "verified": true,             // did layer two confirm layer one's hit
-                                      "placeholder": "<CUSTOMER_ID_1>" } ],
-                         "classes": ["CUSTOMER_ID"],      // distinct classes found, for the corpus-level report
+                                      "placeholder": "<OTP_1>" } ],
+                         "classes": ["OTP"],              // distinct classes found, for the corpus-level report
                          "unverified": 0 },               // hits layer two could not confirm; export's precondition reads this
     "duplicate_check": { "duplicate_content_same_label": [],  // same content, same label: safe to drop one
                          "duplicate_content_diff_label": [] } // same content, different label: one of them is wrong
@@ -968,64 +971,55 @@ pairwise cosine over one batch is quadratic and the block is what a real corpus 
 corpus where every record offers one catalog is one block and the quadratic comes back. The exit then
 is a signature to block on or an index — not a smaller batch, which would change the groups.
 
-**PII, in two layers.** Layer one is patterns over the raw text and over a tone-stripped
-normalisation, covering the spoken forms an off-the-shelf scrubber misses: digits as words, `@` and
-`.` said aloud. It is tuned for recall and is *allowed* to be noisy — a digit run is also a price, a
-date, an order reference.
+**PII, in two layers.** Layer one is `agent-toolkit`'s rule-based scans, one per class: a phone
+number, an email address, a one-time code, a personal name. Each finds the written form and the form
+a speaker dictates — digits as words, `@` and `.` said aloud — which is the half an off-the-shelf
+scrubber misses, and each pattern behind one carries the toned and the tone-stripped spelling
+together, so a single pass over the raw text catches `khong chin` and `không chín` both. It is tuned
+for recall and is *allowed* to be noisy: a long digit run is also a price, a date, an order reference.
+Layer two is a model pass over a bounded window that marks each hit verified or not. The
+placeholder→original map is returned to the edge and written to a path the edge chooses, which
+`.gitignore` covers.
 
-**The shapes are the modality's and the language is a parameter.** Six pattern shapes live in
-`text2text/detectors.py`, because a regular expression is tested and these are tested against the
-adversarial fixtures § *Testing Strategy* item 6 asks for. What fills them is a language: the
-manifest declares one word (`language: vi`) and `spoken_forms` is the table behind it, holding the
-words a language dictates digits with (`không`…`chín`, plus `mốt`, `tư`, `lăm`), the words for `@`
-and `.` (`a còng`, `chấm`), the trunk prefix and the two phone lengths. `vi` and `en` are written
-down; a name with no entry is a `ConfigError` rather than a fallback, because scanning a Spanish
-corpus with Vietnamese digit words finds nothing and finding nothing looks exactly like a clean
-corpus.
+**The classes are the modality's and the words are the library's.** `personal_data_detectors()`
+returns one detector per class — `PHONE`, `EMAIL`, `OTP`, `NAME` — each naming the class its hits are
+recorded under and carrying the scan that finds them. So the vocabulary a record's spans are written
+in belongs to this axis, and every word a language reads a digit, an `@` or a name aloud with belongs
+to the library, beside the `normalize_text` whose tone-stripping is the other half of the same
+concern: a modality provides a task family's *framework* and cannot also decide the family's
+language, and an English `text2text` corpus registering this one would otherwise get Vietnamese digit
+words and nothing usable. What the manifest declares is one word — `language: vi` — and it is one
+word rather than a block of vocabulary because the words for the digits do not vary between two
+Vietnamese corpora, so declaring them per corpus buys a reader, a validation and a fixture for a fact
+nobody should be able to get wrong. `vi` and `en` are written down; a language with no entry is a
+`ConfigError` when the detectors are built, not a fallback, because scanning a Spanish corpus with
+Vietnamese digit words finds nothing and finding nothing looks exactly like a clean corpus.
 
-Those words were literals in the module until § *The two axes*' definition was written properly — a
-modality that provides a task family's *framework* cannot also decide the family's language, and an
-English `text2text` corpus registering this one got Vietnamese digit words and nothing usable.
-**Declaring the vocabulary per corpus was the first fix and it was wrong:** the words for the digits
-do not vary between two Vietnamese corpora, so a manifest block bought sixty lines of reader,
-validation and fixture for a fact nobody should be able to get wrong.
+**A scan returns values, a span needs offsets, so the stage locates every value it is handed.**
+`pii_check` searches the part for each reported value across any run of whitespace and takes the
+matched slice of the raw text as the hit. That is what makes a name reported with single spaces a hit
+where the transcript wrapped it over a line, keeps the offsets Requirement 19 records true offsets
+into `content`, and keeps the replaced value the one that is actually in the text — the property that
+makes a hit replaceable at all. A reported value no span can be found for is not a hit, which is
+unreachable while every scan returns what it matched.
 
-**Two tables, because only one of them is about a language.** `SPOKEN_PII_FORMS` is the words, and it
-belongs in `agent-toolkit` — it has no connection to this pipeline, and it is written there on a
-branch already, in `string_utils.py` beside `normalize_text`, whose tone-stripping is the other half
-of the same scan. `PHONE_PLANS` is what a number opens with and how long it runs, which is a fact about
-a *country* and changes when a regulator says so; and one of its numbers is wrong — a written number
-is ten or eleven digits and a dictated one nine or ten words, where nine digits is not a valid
-Vietnamese number at all. Both patterns read `{8,9}` before either was named, so the discrepancy was
-invisible; it is preserved because a detector's reach decides what gets redacted and correcting it
-shrinks what layer one finds, and what settles it is a measurement of recall over a declared corpus.
-Shipping that to a library would have made this repository's off-by-one a fact about Vietnamese. The
-words leave when this repository's pin moves past the branch — I6 fails on the duplicate `def
-spoken_pii_forms` and the fix is one import and one deletion. Layer two is a
-model pass over a bounded window that marks each hit verified or not. The placeholder→original map is
-returned to the edge and written to a path the edge chooses, which `.gitignore` covers.
-
-**The tone-stripped half is normalised per word, because an offset has to survive it.**
-`normalize_text` collapses whitespace and strips the ends, so an offset into its output is not an
-offset into `content` — and Requirement 19 records every span against the content it was found in. So
-the scan builds a view of the part in which each whitespace-separated word is replaced by
-`normalize_text(word, remove_tone_marks=True)` **only where that leaves its length unchanged**, which
-for Vietnamese it does: stripping marks off a precomposed character leaves one character. Every hit
-therefore has true offsets and a value that exists in the raw text, which is what makes it
-replaceable at all. What is given up is a word whose NFKC form changes length — `ﬁ`, `①` — which is
-left as it is rather than shifting every offset after it.
+**Stated cost: an identifier with no cue word in front of it is not a class layer one has.** A bare
+`480215` is an order number as often as a customer code, and a scan claiming it flags every invoice in
+the corpus; `mã xác nhận 480215` is an `OTP` and is caught. What recall layer one has over
+identifiers is a measurement over a declared corpus, which is the pilot's, and a class to add is a
+rule added in `agent-toolkit` — reviewable in a diff there, and shared by every consumer of it.
 
 **Layer two is a port, and its window is one part.** `PersonalDataVerifier.confirmed_personal_data`
 takes the part's text and the values layer one flagged inside it, and returns the subset it confirms,
 each under the class it confirms it as — a subset and never a superset, which is Decision 23. So a
-ten-digit run that matched both the phone and the customer-id pattern is decided by the layer that can
-read the sentence around it. A value confirmed
+digit run a cue word put in front of and that is also long enough to be a number — flagged `OTP` and
+`PHONE` both — is decided by the layer that can read the sentence around it. A value confirmed
 in *any* part of a record is confirmed for that record: recall-first, and it is what keeps *one
 placeholder per value* (Requirement 17) true across parts. No verifier and a verifier that failed are
 the same answer for the same reason — the run completes and the record says `unverified`.
 
 **Only a confirmed hit is replaced, and the decision says what happened.** Layer two exists to set
-precision, so a hit it clears — the digit run that is a price — stays in the text; if everything layer
+precision, so a hit it clears — the long digit run that is an order reference — stays in the text; if everything layer
 one flagged were replaced anyway, layer two would buy a number and nothing else. That gives the
 `decision` field its three values: `reported` with `enable_redact: false`, whatever was found
 (Requirement 21); `redacted` where redaction is on and every hit was confirmed, *including* a record
@@ -1360,7 +1354,7 @@ detail a parser written from memory gets wrong. **Each half owns its own keys**,
 disjoint: `conversation` is the display half's, `tool_names` is the capture half's, and `question_id`
 and `question` are neither axis's — `publish` adds them, because neither axis knows a question.
 That is why `answer_config` takes a record: half of what it returns is per record, exactly as
-`display_config` is. `question_id` rides inside `data` because Label Studio
+`content_display` is. `question_id` rides inside `data` because Label Studio
 assigns its own task ids and we must map an annotation back to the question that produced it;
 `publication` records the pair, and `data.question_id` is what makes the mapping survive a project
 rebuild. Requirement 30 is asserted on this dict: no vote, no cohesion number, no bucket appears in it.
@@ -1374,7 +1368,7 @@ rebuild. Requirement 30 is asserted on this dict: no vote, no cohesion number, n
  {"from_name": "corrected_names", "to_name": "conversation", "type": "choices",
   "value": {"choices": ["SendStatement"]}},
  {"from_name": "corrected_arguments", "to_name": "conversation", "type": "textarea",
-  "value": {"text": ["{\"SendStatement\": {\"ma_khach\": \"<CUSTOMER_ID_1>\", \"ky\": \"thang_nay\"}}"]}}
+  "value": {"text": ["{\"SendStatement\": {\"ma_khach\": \"<OTP_1>\", \"ky\": \"thang_nay\"}}"]}}
 ]
 ```
 
@@ -1483,7 +1477,7 @@ than a base class. *Reversible:* costly — the name is stamped into every recor
 *Two justifications were struck in Phase 5 and the choice stands without them.* One was that
 `objective.md` §3 writes `branch.modality = "text2text"` on the record: that establishes the string
 and is silent on what its halves mean, which was the only thing in question. The other was that the
-display half of the annotation config depends on both halves — `display_config` returns the
+display half of the annotation config depends on both halves — `content_display` returns the
 conversation and nothing else, and what is being judged reaches an annotator through the profile's
 *capture* half (Requirement 31). It may become true when a family arrives whose output is not text;
 today it described an intention as a fact.
@@ -1811,24 +1805,25 @@ spoken forms genuinely cannot do. *Why this:* four costs, and none of them is th
 **It changes who the model runs on.** A part with no candidates is skipped today; a layer that can add
 has to read every part of every record, which is a different cost class over twenty thousand of them,
 and it puts Requirement 28's endpoint precondition on a call made per part rather than per hit.
-**An added value has no offset.** Requirement 19 records `part`, `start` and `end` against the
-pre-rewrite `content_version`; layer one's hits carry offsets because they matched, while a value a
-model hands back has to be found by searching for it — and where it is not literally in the raw text,
-because the model normalised or re-spaced it, it is unreplaceable. That is the failure
-`tone_stripped_view` exists to prevent, arriving through the other door. **A hallucinated hit is a
+**An added value may have no offset.** Requirement 19 records `part`, `start` and `end` against the
+pre-rewrite `content_version`, and both layers hand back a string that has to be located in the part.
+Layer one's is a slice of what its own scan matched, so the search always finds it; a value a model
+hands back may have been normalised or re-spaced on the way out, and then it is unlocatable and
+unreplaceable while the record claims it was redacted. **A hallucinated hit is a
 poisoned training example, silently.** Requirement 17 rewrites content and label together, so an
 invented value is replaced in both and `export` ships the result; layer one's noise is bounded by a
-declared pattern set someone reviewed in a diff, a model's is bounded by nothing, and the one artifact
+rule set someone reviewed in a diff, a model's is bounded by nothing, and the one artifact
 that would show it is the placeholder map — which I13 forbids any service to read. **And the redaction
 stops being reproducible**, which is the property Requirement 23 is about for the other stage in this
 phase — and holds less well since that embedder became a hosted one, which is a reason to spend the
 guarantee once rather than twice. `record_id` survives, being computed at load and a field rather than a validator
 over `content`, but two runs would export different text.
-*The gap is real, and it gets the other fix:* a form the patterns miss is a pattern to add.
-`personal_data_detectors()` is the modality's member and the place a form is named, so recall improves
-where it is reviewable in a diff, permanent for every later run, and deterministic when the run
-happens. Using a model *offline* to propose detectors is a different activity from a model adding hits
-per record, and nothing here forbids it. *Cost, stated plainly:* recall is capped by the pattern set, a
+*The gap is real, and it gets the other fix:* a form the scans miss is a rule to add, in
+`agent-toolkit` beside the four, and a class those rules do not cover is a detector
+`personal_data_detectors()` stops naming — so recall improves where it is reviewable in a diff,
+permanent for every later run, deterministic when the run happens, and shared by every consumer of the
+library. Using a model *offline* to propose rules is a different activity from a model adding hits
+per record, and nothing here forbids it. *Cost, stated plainly:* recall is capped by the rule set, a
 form nobody has written down is invisible however good the verifier is, and no number in the run says
 so — `unverified` counts the hits layer two could not confirm, never the hits layer one never made.
 *What revisits this:* a measured recall gap on a declared corpus, the way `max_calls` and
@@ -1850,7 +1845,7 @@ change, and `scanned` calls the port for every part instead of only for the part
 | label-studio-sdk | `>=2.1.1` | current release, PyPI; used only by the sync |
 | Label Studio (server) | 1.23.0 | the release the sync is written against, not a Python dependency. **Community edition** — Requirement 52 is what that costs. `deploy/` gets the compose file with T26, the first task that needs an instance |
 | pydantic | `>=2.13` | unchanged; `Field(description=…)` is Requirement 1's mechanism |
-| agent-toolkit | `@v0.1.0` git tag | unchanged; the tag has moved once, so `uv.lock` is the record |
+| agent-toolkit | `@v0.1.0` git tag | the tag moves rather than the pin, so `uv.lock` is the record of which build a run got. Layer one needs the build that holds the four personal-data scans; I6's document half fails while the pinned one does not |
 | openai | `>=3.2` | the embeddings call `duplicate_check` groups through; `agent-toolkit` exposes none, so this is the one direct use, under one I6 exemption |
 | ~~model2vec~~ | removed | the deployment serves `bge-m3` on an endpoint it already runs, so no run downloads a model — Requirement 23 |
 | ~~dvc / pandera / pandas~~ | removed | none of the three had a job in this design — see Decision 18 |
@@ -1900,6 +1895,7 @@ Each names the check that holds it, not a file that used to.
 |---|---|
 | Source digest ≠ `params.source.sha256` | `ConfigError` before a record is read — the one place a run refuses to start |
 | Undeclared label key | `ConfigError` naming the manifest, the key, and what *is* declared |
+| A `language:` no scan has a vocabulary for | `ConfigError` naming the languages there are, raised where the detectors are built and so before any record is read. Left to the scan it would arrive as a missing table on the first record, and a layer one that finds nothing looks exactly like a clean corpus |
 | An item whose `messages` is not a list, whose turn declares no `role`, or whose `meta` lacks the declared label key | `ConfigError` from `content_parts` or `build_record`, raised **while** records are being read — which Requirement 43 does not permit. Neither signature has a value channel for *this item is unreadable*, and `Record.label` is required so a missing label cannot default to *call nothing*. **`load_data` catches all three**, counts the item against its offset and returns them as side output for the quarantine tier, so a run still completes; both axis modules record the break and § *Per-service contracts* row 0 records what it costs. A fourth raise stood beside these until T14 and was deleted rather than caught — provenance is a parameter of `build_record` now, so an item without it cannot be constructed |
 | A turn's `content` is a content-block array, or any other non-string | read, never refused: a text block contributes its text and any other block its canonical JSON, so nothing leaves `record_id`. Requirement 13 declares the OpenAI chat-completion shape and this is that shape, so such an item is a declared item and becomes a record |
 | Unknown profile or modality | `ConfigError` listing the registered ones; an empty registry says "none" |
@@ -1974,9 +1970,10 @@ There is no test suite. It is written against this document, in this order, and 
 5. **Fixtures are invented, never extracted from real data**, in `objective.md` §2's
    shape. There is no corpus-wide test until a source is declared; when one is, it asserts the label-check
    counts against `params.invalid_counts` under `-m integration` and nowhere else.
-6. **PII gets adversarial fixtures**: spoken digits with and without tone marks, `a còng`, `chấm`, a value
-   used twice in one record (one placeholder), and a digit run that is a price rather than an identifier
-   — layer one flags it, layer two clears it.
+6. **PII gets adversarial fixtures**: spoken digits with and without tone marks, `a còng`, `chấm`, a
+   code behind its cue word, a name behind its title, a name the transcript wrapped over a line, a value
+   used twice in one record (one placeholder), and a long digit run that is an order reference rather
+   than a phone number — layer one flags it, layer two clears it.
 7. **The store**: SQLite in `tmp_path`, idempotency asserted by running the sync twice against a fake
    Label Studio client.
 8. **No network in `make check`.** Every jury test uses a stubbed panel; the live panel is the Smoke rung,

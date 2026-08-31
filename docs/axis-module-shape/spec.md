@@ -12,8 +12,8 @@ Both axis implementations put every conversion they own in one `utils.py`: 562 l
 `modalities/text2text/`, 916 in `profiles/tool_decision/`. This document specifies three changes,
 in order, each independently landable:
 
-1. **Move the `agent-toolkit` pin** past the branch that already holds this repository's Vietnamese
-   spoken-PII vocabulary, and delete the local copy.
+1. **Move the `agent-toolkit` pin** to a tag that holds the library's four personal-data scans, so
+   layer one can be a call into them instead of a second copy of them.
 2. **Rewrite invariant I4** so it constrains the direction of an import rather than the number of
    files in a package.
 3. **Split both `utils.py`** into modules named for what they produce, and give the manifest reader
@@ -84,21 +84,19 @@ is a build failure. **A rule that forbids its own remedy converts every later ad
 resolution: *a guard may fix a package's shape only where the conventions state that
 shape, and should prefer to constrain the direction of an import over the number of files.*
 
-**5 · The spoken-PII vocabulary is a live duplicate, and it has already drifted.** `SpokenPiiForms`,
-`SPOKEN_PII_FORMS` and `spoken_pii_forms` are in `agent-toolkit`'s `main`, merged as `d0572c9` on
-2026-08-30 (`61fdf65`, `src/agent_toolkit/string_utils.py:390–507`). The two `vi` and `en` tables are
-byte-identical to the ones in `text2text/utils.py:146–185`. The behaviour is not: the library raises
-`ToolkitError`, this repository raises `ConfigError`. `text2text/utils.py:105` states the duplication
-outright — *"holds this exact shape and these exact names on a branch already"* — and that sentence
-has stood as a justification rather than as a finding, which is what AGENTS.md now names.
+**5 · The whole of layer one is a duplicate of the library.** `agent-toolkit`'s `main` holds
+`phone_number_detection_by_rules`, `email_detection_by_rules`, `otp_detection_by_rules` and
+`name_detection_by_rules` (`d0abc5d`, `src/agent_toolkit/string_utils.py`), each
+`(text, language) -> list[str]`, together with the vocabulary tables behind them — so the six pattern
+shapes here, the words that fill them and the tone-stripped twin of each are all a second copy of
+something that ships. **T54 is where they go, and it is specified in
+[`../annotation-pipeline/spec.md`](../annotation-pipeline/spec.md)** — § *Modality*, § *PII, in two
+layers* and Requirement 18 — because a `Detector` becomes a class and a scan rather than a pattern,
+which is a change to that document's own contracts and not to this one's module shapes.
 
-I6 cannot see it, and the merge did not change that. The guard reads owned names off the
-**installed** library; the pin resolves by tag, `v0.1.0` is at `2b603a6`, and the merge is two commits
-past it. Verified: `spoken_pii_forms` is a `def` in the branch's
-`string_utils.__all__`, so **the pin move alone turns I6 red on
-`spoken_pii_forms` in `text2text/detectors.py`** — the guard does the enforcement the moment it can see. `SPOKEN_PII_FORMS`
-and `SpokenPiiForms` are a constant and a class, which I6 does not scan, so those two come out by
-hand.
+I6 cannot see the duplicate yet. The guard reads owned names off the **installed** library; the pin
+resolves by tag, `v0.1.0` is at `2b603a6`, and the four scans are past it. The pin move is what makes
+the rule effective, which is why T54's first step is to relock and read the installed `__all__`.
 
 **6 · The manifest reader is duplicated, and the reason given for duplicating it is not true.**
 `declaration`, `declared_name`/`declared_text` and `canonical_json` are copied between the two
@@ -146,16 +144,16 @@ what gets redacted, and correcting it shrinks what layer one finds. What settles
 of layer-one recall over a declared corpus, which is the pilot's. **This document changes no
 pattern.**
 
-**D3 · An unknown language stays a `ConfigError`.**
-The library raises `ToolkitError`; `errors.py` says `ConfigError` is "the one exception this codebase
-defines" and the edge maps it to a 400. So `detectors.py` catches `ToolkitError` from
-`spoken_pii_forms` — and from `email_patterns_by_rules`, which raises through it — and raises
-`ConfigError` with the message it raises today. One `except`, because both calls are inside the same
-build and an unknown language fails them both.
-*Alternative:* let `ToolkitError` escape. *Why not:* it makes the engine raise a second exception type,
-falsifies `errors.py`'s docstring — *"the only exception the engine raises"* — and hands the edge
-something its 400 mapping does not cover. *Consequence:* `written_down` — the generic table reader —
-loses one of its two callers and, stops being a function: it is inlined into `phone_plan`.
+**D3 · An unknown language stays a `ConfigError`, raised where the detectors are built.**
+A scan indexes its vocabulary table by language, so a language nobody wrote down reaches a caller as a
+`KeyError` on the first record scanned. `errors.py` says `ConfigError` is "the one exception this
+codebase defines" and the edge maps it to a 400, so `pii_detector.py` checks the declared language
+against the library's tables when it builds the detectors and raises `ConfigError` naming the
+languages there are — at composition, before any record is read, which is where Requirement 43 wants
+a bad declaration to fail.
+*Alternative:* let the `KeyError` escape. *Why not:* it makes the engine raise a second exception type,
+falsifies `errors.py`'s docstring — *"the only exception the engine raises"* — hands the edge
+something its 400 mapping does not cover, and does it per record instead of once.
 *Noticed while writing this:* § *Error Behavior* has no row for an undeclared `language:` at all,
 which is why T54 adds one rather than editing one.
 
@@ -237,15 +235,16 @@ guard compares them word for word. These rows are what § *Package layout* gains
       profile.py            LOGIC · ToolDecision — the object that answers the Profile protocol.
 ```
 
-**Where each existing name goes.** Nothing is deleted except the spoken-PII vocabulary (T54) and
-`written_down` (D3); nothing is renamed.
+**Where each existing name goes.** Nothing is deleted except what layer one duplicates of the
+library (T54); nothing is renamed.
 
 | from | to |
 |---|---|
-| `SpokenPiiForms`, `SPOKEN_PII_FORMS`, `spoken_pii_forms`, `written_down` | deleted — `agent_toolkit.string_utils` (T54) |
-| `PhonePlan`, `PHONE_PLANS`, `phone_plan`, `spaced`, `a_detector`, `personal_data_detectors`, `EMAIL`, `IDENTIFIER_DIGITS` | `text2text/detectors.py` |
-| `spoken_text`, `stated_calls`, `call_arguments`, `a_turn` | `text2text/turns.py` |
-| `Encoder`, `Text2Text`, `embedding_model`, `text_parts`, `DISPLAY_TAGS`, `CONVERSATION`, `TURN_SEPARATOR` and the manifest key constants | `text2text/modality.py` |
+| everything layer one is built from — the pattern shapes, the vocabulary and the tone-stripped twin | `agent_toolkit.string_utils`; what stays here is one detector per class (T54, `../annotation-pipeline/spec.md`) |
+| `spoken_text`, `a_turn` | `text2text/modality.py`, where the turn a profile in the family overrides is one method |
+| `stated_calls`, `call_arguments` | `tool_decision/records.py` — a call is that module's vocabulary (T54) |
+| `Encoder`, `embedding_model`, `TURN_SEPARATOR` and the embedding keys | `text2text/text_embeddor.py` (T54) |
+| `Text2Text`, `text_parts`, `DISPLAY_TAGS`, `CONVERSATION` and the item keys | `text2text/modality.py` |
 | `calls_in`, `entries_in`, `catalog_of`, `one_call_schema`, `answer_schema`, `answer_is_permitted`, `argument_agreement`, `answer_distance`, `agreed_arguments`, `vote_consensus` | `tool_decision/answers.py` |
 | `control_values`, `typed_arguments`, `corrected_answer`, `one_written_line` | `tool_decision/annotations.py` |
 | `final_label`, `restated_answer`, `redacted_arguments`, `redact_label` | `tool_decision/records.py` |
@@ -288,9 +287,10 @@ The red-first rule applies: the new guard is proved red against a synthetic `sch
 against a synthetic `utils.py` holding a function that touches no shape, **before** the packages are
 split. The existing `test_the_scan_rejects_a_fourth_module` is deleted with the rule it proves.
 
-**I6 is unchanged and newly effective.** Moving the pin adds `spoken_pii_forms` to the owned set, and
-`def spoken_pii_forms` in `text2text/utils.py` becomes a finding with no code change to the guard.
-This is the mechanism, not a side effect: T54's verification is that the guard goes red first.
+**I6 is unchanged and newly effective.** Moving the pin adds the four scans to the owned set, so the
+guard covers them with no code change of its own, and its document half — every backticked name in
+§ *Context*'s ownership sentence must be a name the installed library exports — is what keeps that
+sentence from naming a scan the pin cannot reach.
 
 **I19 covers the new modules for free** — every row above is a module docstring, compared word for
 word. **I23 is the proof the split changed nothing**: an axis implementation's public surface is
@@ -318,50 +318,31 @@ the document is wrong, which is what the doc-and-code comparison exists to preve
 
 | § | line | change | task |
 |---|---|---|---|
-| *Context* | 54–60 | the ownership sentence gains `spoken_pii_forms` — I6's `test_the_document_claims_nothing_the_library_does_not_own` asserts every backticked name there is one the installed library exports, so this row cannot land before the pin moves | T54 |
-| *Versions* | 1818 | `agent-toolkit` `@v0.1.0` → the tag cut from `spoken-forms`; the "why" column records that the tag has now moved twice and `uv.lock` is the record | T54 |
 | *Package layout* | 757–761 | *"Every implementation of either axis is `__init__.py`, `schema.py` and `utils.py`"* → the shape D4 states: a `schema.py` that imports no sibling, a façade that holds nothing of its own, and modules named for what they produce | T55 |
 | *Package layout* | 672–674, 681–683 | the tree gains the rows above and loses the two `utils.py` rows; `declarations.py` is added at top level beside `manifest.py` | T56 |
-| *The two axes* | 973–981 | the paragraph explaining that the words live on a branch is replaced by the sentence that they live in the library, and the `PHONE_PLANS` half is kept verbatim — D2 changes nothing about it | T54 |
 | *The two axes* | — | the *"share `name`, `version`, `Part` and one separator and nothing else"* sentence is corrected: it omits `Manifest`, `ConfigError`, `Record` and the base class Decision 24 introduced, and it is the stated reason for the duplication D6 removes | T56 |
 | *Invariants* | 1837 | I4's row → the row in § *Invariants* above | T55 |
 | *Invariants* | 1856 | I24's row loses "and as `canonical_json` in each axis", if D7 is taken | T56 |
 | *Invariants* | after 1857 | I25 is added | T56 |
 | *Decisions* | 1588–1597 | **Decision 14 is not deleted.** Per AGENTS.md, a decision reversed is recorded where the next reader hits it: the entry keeps its argument and gains what changed — the four measurements in § *Context* above, and the fact that its "one consumer each" reason was already false when it was written | T56 |
-| *Error Behavior* | after 1867 | **a row is added, not edited** — the table has no row for an unknown `language:` today, which is its own small gap. Behaviour is unchanged: a `ConfigError` naming the languages written down. The new row says the library raises and this repository translates (D3) | T54 |
 
-`plan.md` gains T54, T55 and T56 below, and its header paragraph gains them in the Phase 7 sentence.
-Nothing parses `plan.md`, so those edits can land first.
+**T54's edits to that file are stated in it**, not scheduled from here: § *Modality*, § *The two
+axes*, § *PII, in two layers*, Requirements 18 and 47, § *Package layout*, § *Testing Strategy* item
+6, and one new row in § *Error Behavior* for an undeclared `language:`. The `@v0.1.0` line in
+§ *Versions* moves with it, because the four scans are what the pin has to reach.
+
+`plan.md` carries T54, T55 and T56 as tasks. Nothing parses `plan.md`, so those edits can land first.
 
 ---
 
 ## Tasks
 
-### T54 · The words a language dictates come from the library
+### T54 · Layer one is the library's four scans
 
-**Goal.** `agent_toolkit.string_utils` is the only definition of `SpokenPiiForms`,
-`SPOKEN_PII_FORMS` and `spoken_pii_forms`, and the only place an email address's shape is written
-down. `email_patterns_by_rules(language)` returns `(written, dictated)`; `by_rules` is in the name
-because a rule is not the only way to find an address and layer two is the other.
-
-**Context.** § *Context* item 5. The branch is written and tested and one commit ahead of
-`agent-toolkit`'s `main`; nothing in it has landed here because the pin is `@v0.1.0`.
-
-**Approach.** In `agent-toolkit`: merge `spoken-forms` to `main` and cut a tag. Here: move the pin in
-`pyproject.toml`, `uv lock`, delete the three names and `written_down` (D3), import
-`spoken_pii_forms`, and translate `ToolkitError` to `ConfigError` at the one call site.
-`tests/stages/test_text2text.py` imports two of the deleted names off `text2text/detectors.py`
-and imports them from the library instead — the tests that assert *the two tables have the same keys* stay here, because
-`PHONE_PLANS` stays here.
-
-**Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS" src/` returns nothing. An undeclared language
-still raises `ConfigError` with the same message. Every pattern is byte-identical: assert the six
-compiled patterns before and after, which is what proves D2 was honoured.
-
-**Source.** AGENTS.md; I6; § *Context* item 5.
-
-**Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
-red on `spoken_pii_forms` in `text2text/detectors.py`. A green run at that point means the tag does not contain the commit.
+Specified in [`../annotation-pipeline/spec.md`](../annotation-pipeline/spec.md) and scheduled in
+`plan.md`. It is here only as § *Context* item 5, D2 and D3, which are the three things this
+document has to say about it: what the duplicate is, that no reach may move in a refactor, and that
+an unknown language stays a `ConfigError`.
 
 ---
 

@@ -23,12 +23,13 @@ and 1095 tests, 522 of which are not guards — but **T34 is open and CI is red 
 it. **Phase 7 has started: T27, T53 and T52 have landed, and T28, T29 and T49 are behind them — and
 T34 is still the oldest thing on this list.**
 
-**Phase 3 reopened on 2026-08-30 with T54, T55 and T56**, a review round on the shape of the two axis
-packages. It is specified in [`../axis-module-shape/spec.md`](../axis-module-shape/spec.md) rather
-than here, because it reverses Decision 14 and that needed a document with the measurements in it.
-These are the first tasks in this plan sourced from a second spec; § *Review round · the shape of the
-two axis packages* holds them, after T50, which scheduled T54 in its own last paragraph. AGENTS.md
-gained the unshipped-copy rule in the same round.
+**Phase 3 is open with T54, T55 and T56**, a review round on the shape of the two axis packages. T55
+and T56 are specified in [`../axis-module-shape/spec.md`](../axis-module-shape/spec.md) rather than
+here, because they reverse Decision 14 and that needed a document with the measurements in it — the
+first tasks in this plan sourced from a second spec. T54 is sourced from `spec.md`: it is where the
+concept stops holding one module's vocabulary and layer one becomes the library's. § *Review round ·
+the shape of the two axis packages* holds all three. AGENTS.md gained the unshipped-copy rule in the
+same round.
 
 **Scope.** Every stage of `load_data`, `data_quality`, `ai_review` and `human_review`, and both
 shells. The `release` phase — `split`, `export`, `datasheet` — is declared in the flow so
@@ -70,7 +71,7 @@ depart from it.
 | `Decision 12` | `spec.md` § *Decisions* — 23 of them |
 | `pii_check` | a stage: one row of `spec.md` § *The flow*. Stages are named, never numbered — Decision 19 |
 | `T16` | a task in this file. The number is its name, not its place in the order — inserting T32 renumbered nothing |
-| `D4` | a decision in a *second* spec, `docs/axis-module-shape/spec.md`, which T54–T56 serve. `Decision 12` without a document is always this file's source spec |
+| `D4` | a decision in a *second* spec, `docs/axis-module-shape/spec.md`, which T55 and T56 serve. `Decision 12` without a document is always this file's source spec |
 
 ---
 
@@ -125,7 +126,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T47 | The fourteen are closed from the implementation's side too | 3 | T12, T13 | S | ✓ |
 | T48 | Three sentences the code does not support | 3 | T12, T13 | S | ✓ |
 | T50 | What a modality is, and whose language layer one speaks | 3 | T12, T16 | S | ✓ |
-| T54 | The words a language dictates come from the library | 3 | T50 · **a tag in `agent-toolkit` containing `61fdf65`** | S | |
+| T54 | Layer one is the library's four scans, and the concept keeps no module's vocabulary | 3 | T50 · **a tag in `agent-toolkit` containing `d0abc5d`** | L | |
 | T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ `2535a56` |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
@@ -1710,63 +1711,64 @@ two packages T12 and T13 built — and they are carried here rather than in that
 is the standing task list and there is one of it.
 
 **They are a review round on a phase that is otherwise done**, the way T35–T43 were on Phases 1 and 2.
-No protocol member, record key, pattern, threshold, endpoint or config key moves in any of the three.
-T54 is the follow-up T50 scheduled in its own last paragraph. T55 unblocks T56 and lands alone. Read
-the spec's § *Context* first: it reverses Decision 14, and the four measurements are the reason.
+T55 and T56 move no protocol member, record key, pattern, threshold, endpoint or config key; T55
+unblocks T56 and lands alone. Read that spec's § *Context* first: it reverses Decision 14, and the four
+measurements are the reason. **T54 is not a rename and is sourced from `spec.md` alone** — a protocol
+member, a record constant, the class vocabulary a span is written in and the shape of a `Detector` all
+move in it, and `spec.md` states each one.
 
-### T54 · The words a language dictates come from the library
+### T54 · Layer one is the library's four scans, and the concept keeps no module's vocabulary
 
-**Goal.** `agent_toolkit.string_utils` is the only definition of `SpokenPiiForms`, `SPOKEN_PII_FORMS`
-and `spoken_pii_forms`, and the only place an email address's shape is written down.
+**Goal.** `text2text` is `schema.py`, `pii_detector.py`, `text_embeddor.py` and `modality.py`; layer one is
+`agent_toolkit.string_utils`' four scans over a declared language; no module of the concept carries one
+profile's vocabulary; and `Text2Text` is the base class a profile in the family subclasses.
 
-**Context.** T50 ends by scheduling this task: *"the day the pin moves past `61fdf65`,
-`spoken_pii_forms` appears in the installed library's `__all__`, I6 fails on the duplicate `def` here,
-and the fix is one import and one deletion."* That day has not come because the pin is `@v0.1.0` and
-the branch has not been tagged. Both `vi` and `en` tables are byte-identical across the two
-repositories today; the behaviour is not — the library raises `ToolkitError` and this repository
-raises `ConfigError`. AGENTS.md is the rule that now names the standing comment as a finding
-rather than as its own excuse.
+**Context.** The library owns the whole of layer one: `phone_number_detection_by_rules`,
+`email_detection_by_rules`, `otp_detection_by_rules` and `name_detection_by_rules`, each
+`(text, language) -> list[str]`, each finding the written and the dictated form, each pattern carrying
+the toned and the tone-stripped spelling. So a `Detector` is a class name and the scan that finds it,
+`pii_check` locates the values it is handed instead of running patterns itself, and the tone-stripped
+second pass has nothing left to do. The classes are `PHONE`, `EMAIL`, `OTP` and `NAME`: an identifier
+with no cue word in front of it is not one of them, which is the reach spec § *PII, in two layers*
+states and the pilot measures.
 
-**Approach.** In `agent-toolkit`: merge `spoken-forms` to `main`, cut a tag. Here: move the pin,
-`uv lock`, delete the three names and `written_down`, import `spoken_pii_forms`, and translate
-`ToolkitError` to `ConfigError` at the one call site (spec D3). `written_down` loses one of its two
-callers and stops being a function under the function rule — it is inlined into `phone_plan`. `PHONE_PLANS` stays,
-and stays wrong (spec D2): correcting the off-by-one shrinks what layer one redacts, and what settles
-it is the pilot's recall measurement.
+**Approach.** Six moves, one commit each if they grow.
 
-**The email half goes the same way, and it is written already.** `EMAIL` and the two `rf"…"`
-expressions that build `email_written` and `email_spoken` are replaced by
-`email_patterns_by_rules(language)`, which returns `(written, dictated)` and is in `agent-toolkit`'s
-`string_utils` beside the vocabulary it is built from. An address is a local part, an `@` and a dotted
-domain wherever one is written, so its shape is a fact about a format — unlike a numbering plan, which
-is a fact about a country, which is why `PHONE_PLANS` and `IDENTIFIER_DIGITS` stay here and this does
-not. `spaced` stays too: the digit and `zero` patterns still need it. The library function raises
-`ToolkitError` for an unknown language the way `spoken_pii_forms` does, so D3's translation covers
-both and stays one `except`.
+1. `pii_detector.py` — the four detectors for the declared language, and a `ConfigError` for a
+   language no table in the library has written down.
+2. `text_embeddor.py` — `Encoder`, `embedding_model(manifest)`, the excluded roles and the document a
+   vector is taken over.
+3. `modality.py` — `Text2Text`, the turn it reads (`role`, `content`, and a content-block array), and
+   `content_display`. `_turn_part` is the seam a profile in the family overrides, and it is private
+   because I23 holds an implementation's public surface to exactly the protocol's six members.
+4. `tool_decision` — the turn that also acts. The profile overrides `turn_part`, writes the calls onto
+   the part it gets back, and owns the separator it reads them off; `record.py` stops carrying it.
+5. `pii_check` — a hit per value per span, located across any run of whitespace; `tone_stripped_view`
+   and the second pattern pass go.
+6. `publish`, the protocol, the guards' expectations and the fixtures § *Testing Strategy* item 6
+   asks for.
 
-**Acceptance criteria.** `grep -rn "SPOKEN_PII_FORMS\|EMAIL = " src/` returns nothing. An undeclared
-language still raises `ConfigError` with the message it raises today. **The six compiled patterns are
-identical before and after** — that is what proves D2 was honoured, and it is the only assertion in
-this task that is about behaviour rather than about names. It now covers the two email patterns as
-well; the library was checked against this repository's current strings when it was written, and both
-languages match character for character.
+**Acceptance criteria.** `grep -rn "tool_calls\|SPOKEN_AND_STATED" src/dataforce/modalities/` returns
+nothing. `grep -rn "re.finditer\|re.compile" src/dataforce/modalities/text2text/pii_detector.py`
+returns nothing — the scans are the library's. An undeclared language raises `ConfigError` naming the
+languages there are. A record whose transcript wraps a name over a line has that name redacted, and
+the placeholder replaces the text that was there. `ToolDecision` still answers both protocols, checked
+by the two `TYPE_CHECKING` returns.
 
-**Source.** `../axis-module-shape/spec.md` D1, D2, D3 and § *Context* item 5; AGENTS.md; I6;
-T50, which scheduled it.
+**Source.** `spec.md` § *Modality*, § *The two axes*, § *PII, in two layers*, Requirements 18, 19, 31
+and 47, § *Package layout*, § *Testing Strategy* item 6.
 
-**Verify.** `make check`. **First**, before deleting anything: move the pin alone and confirm I6 goes
-red on `spoken_pii_forms` in `text2text/detectors.py`. A green run at that point means the tag does not contain `61fdf65`,
-and nothing else in this task is worth starting.
+**Verify.** `make check`. **First**, before writing anything: relock and confirm the four scans are in
+the installed `__all__`. A missing one means the tag does not contain the merge and nothing else in
+this task is worth starting.
 
-**Out of scope.** Correcting `PHONE_PLANS`. Any change to a detector's reach.
+**Out of scope.** A fifth class. Any change to what the four scans match — a rule's reach is the
+library's to change, in a diff there.
 
-**Blocked by.** A tag in `agent-toolkit` containing both `61fdf65` and the `email_patterns_by_rules`
-commit. The spoken-forms merge landed on `main` as `d0572c9` on 2026-08-30 and **that does not unblock
-this task**: the pin resolves by tag, `v0.1.0` is at `2b603a6` on the remote, and `uv.lock` records
-that commit. Re-fetching on 2026-08-31 moved the local tag from `ec1f338` to `2b603a6` and no further:
-`v0.1.0..main` is still exactly `61fdf65` and its merge. One tag, in another repository, and not
-scheduled here. Read the lockfile rather than a local tag to check — `git fetch` will not correct a
-stale local tag on its own, which is how `ec1f338` stood here for as long as it did.
+**Blocked by.** A tag in `agent-toolkit` containing `d0abc5d`. The pin resolves by tag, `v0.1.0` is at
+`2b603a6` on the remote, and `uv.lock` records that commit — so `v0.1.0` today holds neither the scans
+nor the tables. One tag, in another repository, and not scheduled here. Read the lockfile rather than a
+local tag to check: `git fetch` will not correct a stale local tag on its own.
 
 ---
 
