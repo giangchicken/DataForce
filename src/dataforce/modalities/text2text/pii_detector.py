@@ -25,15 +25,10 @@ in two layers* states and the pilot measures. Adding a fifth class is a rule add
 ``agent-toolkit``, reviewable in a diff there.
 """
 
-from collections.abc import Callable, Mapping
-from typing import NamedTuple
+from collections.abc import Callable
 
 from agent_toolkit.string_utils import (
-    NAME_TITLES,
-    OTP_CUES,
-    SPOKEN_AT,
     SPOKEN_DIGITS,
-    SPOKEN_DOT,
     email_detection_by_rules,
     name_detection_by_rules,
     otp_detection_by_rules,
@@ -48,47 +43,28 @@ from dataforce.modalities.text2text.schema import Detector
 # The one key this module reads: the whole of what a corpus declares about layer one.
 LANGUAGE = "language"
 
-# One library scan, as this modality reaches for it.
+# The library's scan signature, as this modality reaches for it.
 type Scan = Callable[[str, str], list[str]]
 
-
-class LibraryScan(NamedTuple):
-    """One class of personal data, the library scan that finds it, and the tables that scan reads."""
-
-    personal_data_class: (
-        str  # what a hit is recorded under, which picks the placeholder
-    )
-    scan: Scan  # the library's, `(text, language) -> list[str]`
-    tables: tuple[
-        Mapping[str, str], ...
-    ]  # every vocabulary table this scan looks a language up in
-
-
-# The tables are named per scan rather than counted because a language written into one and not
-# another is how the second lookup raises after the first has already succeeded -- so the language a
-# corpus may declare is the one every table behind all four scans has a row for.
-SCANS: tuple[LibraryScan, ...] = (
-    LibraryScan("PHONE", phone_number_detection_by_rules, (SPOKEN_DIGITS,)),
-    LibraryScan("EMAIL", email_detection_by_rules, (SPOKEN_AT, SPOKEN_DOT)),
-    LibraryScan("OTP", otp_detection_by_rules, (OTP_CUES, SPOKEN_DIGITS)),
-    LibraryScan("NAME", name_detection_by_rules, (NAME_TITLES,)),
+# Which class each scan's hits are recorded under. The pairing is written out because the class
+# vocabulary is this axis's and the function names are the library's -- deriving one from the other
+# would make `PHONE` a fact about how `agent-toolkit` spells a function.
+SCANS: tuple[tuple[str, Scan], ...] = (
+    ("PHONE", phone_number_detection_by_rules),
+    ("EMAIL", email_detection_by_rules),
+    ("OTP", otp_detection_by_rules),
+    ("NAME", name_detection_by_rules),
 )
 
-
-def languages_written_down() -> frozenset[str]:
-    """Every language all four scans can be built for, read off the library's own tables.
-
-    The intersection and not any one table: a scan whose cue words a language has and whose digit
-    words it does not raises a `KeyError` from inside the library on the first record, which is a
-    stack trace where a `ConfigError` naming the languages there are belongs. Derived rather than
-    listed, so a language the library adds is offered here without an edit.
-    """
-    return frozenset[str].intersection(
-        *(frozenset(table) for found in SCANS for table in found.tables)
-    )
+# The languages a corpus may declare, read off the library rather than listed, so one it adds is
+# offered here without an edit. `SPOKEN_DIGITS` stands for the five tables behind the four scans:
+# every dictated form needs it, and one test asserts the five agree on their keys -- which is where
+# that belongs, because a library shipping a language in one table and not another is a fact about
+# the library, caught at `make check` rather than carried as a lookup in every build.
+LANGUAGES = frozenset(SPOKEN_DIGITS)
 
 
-def a_detector(found: LibraryScan, language: str) -> Detector:
+def a_detector(personal_data_class: str, scan: Scan, language: str) -> Detector:
     """One class, and its scan with the declared language already bound.
 
     Bound here rather than passed through the stage, because `pii_check` is handed detectors and no
@@ -97,8 +73,8 @@ def a_detector(found: LibraryScan, language: str) -> Detector:
     what it means.
     """
     return Detector(
-        personal_data_class=found.personal_data_class,
-        scan=lambda text: found.scan(text, language),
+        personal_data_class=personal_data_class,
+        scan=lambda text: scan(text, language),
     )
 
 
@@ -115,10 +91,12 @@ def personal_data_detectors(manifest: Manifest) -> tuple[Detector, ...]:
     nothing is the one failure layer one cannot tell from a clean corpus.
     """
     language = declared_name(manifest, LANGUAGE)
-    written_down = languages_written_down()
-    if language not in written_down:
-        known = ", ".join(sorted(written_down))
+    if language not in LANGUAGES:
+        known = ", ".join(sorted(LANGUAGES))
         raise ConfigError(
             f"no personal-data scans for language {language!r}; written down: {known}"
         )
-    return tuple(a_detector(found, language) for found in SCANS)
+    return tuple(
+        a_detector(personal_data_class, scan, language)
+        for personal_data_class, scan in SCANS
+    )

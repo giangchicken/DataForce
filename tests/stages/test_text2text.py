@@ -25,12 +25,19 @@ from typing import Any
 
 import pytest
 from agent_toolkit.file_utils import read_yaml
+from agent_toolkit.string_utils import (
+    NAME_TITLES,
+    OTP_CUES,
+    SPOKEN_AT,
+    SPOKEN_DIGITS,
+    SPOKEN_DOT,
+)
 
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
-from dataforce.modalities.text2text.pii_detector import SCANS, languages_written_down
+from dataforce.modalities.text2text.pii_detector import LANGUAGES
 from dataforce.record import (
     AgreementScores,
     AiReview,
@@ -384,7 +391,7 @@ def test_the_shipped_manifest_names_a_language_that_is_written_down() -> None:
     entry in the library's tables is a `ConfigError` on the first real run and on no test."""
     shipped = read_yaml(MANIFEST)
 
-    assert shipped["language"] in languages_written_down()
+    assert shipped["language"] in LANGUAGES
     assert shipped["language"] == "vi"
 
 
@@ -421,17 +428,21 @@ def test_a_language_nobody_wrote_down_is_refused() -> None:
         a_modality(language=None)
 
 
-def test_the_languages_offered_are_the_ones_every_table_behind_a_scan_has() -> None:
-    """The intersection, not any one table: a language written into `OTP_CUES` and not into
-    `SPOKEN_DIGITS` raises a `KeyError` from inside the library on the first record, which is a
-    stack trace where a `ConfigError` belongs. Derived off the library rather than listed here,
-    so a language it adds is offered without an edit to this repository."""
-    offered = languages_written_down()
+def test_the_five_tables_behind_the_four_scans_agree_on_their_languages() -> None:
+    """The upstream assumption `LANGUAGES` rests on, pinned where it costs nothing to hold.
 
-    assert offered == {"en", "vi"}
-    for found in SCANS:
-        for table in found.tables:
-            assert offered <= set(table)
+    `personal_data_detectors` reads one table to say which languages there are. That is only true
+    while the five agree: a language written into `OTP_CUES` and not into `SPOKEN_DIGITS` would be
+    offered here and then raise a `KeyError` from inside the library on the first record, which is a
+    stack trace where a `ConfigError` belongs. Asserting it here rather than intersecting five tables
+    on every build is the trade -- the failure is a fact about the library, so it should break
+    `make check` on the next `uv sync`, not cost a lookup in production code.
+    """
+    tables = (SPOKEN_DIGITS, SPOKEN_AT, SPOKEN_DOT, OTP_CUES, NAME_TITLES)
+
+    assert LANGUAGES == {"en", "vi"}
+    for table in tables:
+        assert set(table) == LANGUAGES
 
 
 def test_there_are_four_classes_and_each_carries_a_scan_that_runs() -> None:
