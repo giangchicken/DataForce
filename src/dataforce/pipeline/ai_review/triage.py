@@ -1,9 +1,9 @@
 """STEP · triage · the two numbers become a bucket, a stratum and a review quota.
 
 The last stage of the phase and the only one in the pipeline that is re-run on purpose:
-``objective.md`` §8 calls bucket thresholds provisional until the pilot measures them and gives
-this stage **exactly one** re-tuning pass afterwards. That is what Decision 3 bought -- a boundary
-that moves re-runs this module and never the panel.
+``objective.md`` §8 calls bucket thresholds provisional until the pilot measures them and gives this
+stage **exactly one** re-tuning pass afterwards. That is what § *ai_review*'s three stages are for
+-- a boundary that moves re-runs this module and never the panel.
 
 **No number is written here** (Requirement 27). Both floors, every stratum and every quota are
 lines in ``params.yaml``, so moving a boundary is a committed, attributable edit whose digest the

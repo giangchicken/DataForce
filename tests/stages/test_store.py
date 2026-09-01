@@ -1,7 +1,7 @@
 """T23 · the question store: three tables, one adapter, and the two constraints the sync rests on.
 
-**Every test in this file runs twice** (Decision 7), over `conftest.py`'s `store_at` fixture: a
-SQLite file in `tmp_path`, which is what `make check` runs, and a real Postgres named by
+**Every test in this file runs twice** (§ *The question store*), over `conftest.py`'s `store_at`
+fixture: a SQLite file in `tmp_path`, which is what `make check` runs, and a real Postgres named by
 `DATAFORCE_TEST_DATABASE_URL`, which is marked `integration` and runs behind that gate. A store test
 that passes on SQLite and has never run on Postgres is not evidence — the two disagree about type
 affinity, about what a JSON column is, and about which constraint violation surfaces as what, and
@@ -286,7 +286,7 @@ def test_asking_about_no_questions_returns_nothing(store: SqlQuestionStore) -> N
     assert store.answers_to([]) == ()
 
 
-# --- the constraints the sync's idempotency rests on (Decision 7) ---
+# --- the constraints the sync's idempotency rests on (§ *The question store*) ---
 
 
 def test_one_annotation_cannot_be_pulled_into_two_rows(

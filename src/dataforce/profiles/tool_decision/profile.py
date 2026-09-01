@@ -211,8 +211,9 @@ class ToolDecision(Text2Text):
     def _turn_part(self, turn: Mapping[str, Any]) -> Part:
         """The concept's turn, with what this task's turns also *do* written onto it.
 
-        The one seam `Text2Text` leaves for a module in its family (Decision 24). The concept reads a
-        role and a `content`; `tool_calls` is what *this* task answers with, so the profile that
+        The one seam `Text2Text` leaves for a module in its family (§ *The two axes*). The concept
+        reads a role and a `content`; `tool_calls` is what *this* task answers with, so the profile
+        that
         declares what a call is is the profile that writes one onto a part and reads it back off --
         and the separator between the two is `records.py`'s constant rather than a convention held in
         a module both axes import. § *The two axes* is the argument: a concept may not hold a

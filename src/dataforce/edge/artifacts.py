@@ -136,7 +136,7 @@ def corpus_counts(engine: Engine, records: Sequence[Record]) -> dict[str, Any]:
     which is the same sentence as *how many that stage skipped*, read from the other end; and what
     each label check found beside what `params.invalid_counts` declared it found last time.
 
-    That last pair is Requirement 22 as Decision 10 left it -- a count that moved is a line in a
+    That last pair is the whole of what Requirement 22 asks for -- a count that moved is a line in a
     diff and stops nothing. Both sides are listed even where one is absent: a check that fired for
     the first time and a declared check that stopped firing are the two interesting cases, and
     either would be invisible if the fold only reported what it happened to see.

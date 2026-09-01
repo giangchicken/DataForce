@@ -12,8 +12,9 @@ nothing raises, and the record it hands back carries why -- ``failed_checks`` na
 **Nothing here compares a count to anything.** Requirement 22 reads as though this stage checks each
 check's count against ``params.invalid_counts``, and Requirement 44 settles what that means: a
 corpus-level number is a fold at the edge, for reading, and *a count that has moved is something a
-human sees in a diff, not a crash* (Decision 10). So the counting is ``edge/artifacts.py``'s and the
-comparison is a line in ``metrics.json``. A check reading 0 is what tells you when it stops reading 0.
+human sees in a diff, not a crash* (Requirement 22). So the counting is ``edge/artifacts.py``'s and
+the comparison is a line in ``metrics.json``. A check reading 0 is what tells you when it stops
+reading 0.
 """
 
 from collections.abc import Iterable

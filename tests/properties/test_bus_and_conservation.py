@@ -70,10 +70,10 @@ class AnAnsweringStore(AStore):
     """A store where a person answers the moment a question reaches it.
 
     The one fixture in this file that models something a fold cannot contain: `publish` and
-    `annotator_answers` are two stages *because a person answers in between* (Decision 22), so a
-    single fold over the phase would otherwise stop at a store nobody had visited. Answering on
-    write is the shortest honest stand-in, and it is what lets all five stages run over one corpus
-    against real upstream output rather than a fixture's idea of it.
+    `annotator_answers` are two stages *because a person answers in between*
+    (§ *Per-service contracts*), so a single fold over the phase would otherwise stop at a store
+    nobody had visited. Answering on write is the shortest honest stand-in, and it is what lets all
+    five stages run over one corpus against real upstream output rather than a fixture's idea of it.
     """
 
     def __init__(self) -> None:

@@ -19,7 +19,7 @@ every record, for ever, with ``make check`` green. ``Stage.phase``'s own comment
 
 **Order is position, and nothing else states it.** Neither side numbers a stage, so the comparison
 is list-against-list rather than key-against-key: a row moved up is a row that fails here
-(Decision 19).
+(§ *The flow*).
 
 Deriving a stage's module path was this test's business until the runner needed it. It now reads
 ``stage_module_name`` out of ``pipeline/runner.py``, which is what makes the two file assertions

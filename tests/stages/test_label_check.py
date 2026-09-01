@@ -5,11 +5,11 @@ The row is § *Per-service contracts*' second: reads `content`, `label` and `met
 there against the defects they find; what is asserted here is the stage's own three promises --
 one key, every record, and nothing stopped.
 
-**The last one is the point of the whole design.** Decision 10 deleted the gate engine, so a
-declared count that has moved is a line in a `metrics.json` diff and not a crash: a corpus where
-every record fails every check still comes out the other end carrying why. `written_paths` below is
-how "exactly one key" (I8) is asserted, and the two stage tests after this one and the property test
-in `tests/properties/` read it from here.
+**The last one is the point of the whole design.** No stage in the flow is a gate, so a
+declared count that has moved is a line in a `metrics.json` diff and not a crash (Requirement 22):
+a corpus where every record fails every check still comes out the other end carrying why.
+`written_paths` below is how "exactly one key" (I8) is asserted, and the two stage tests after this
+one and the property test in `tests/properties/` read it from here.
 """
 
 from collections.abc import Iterable, Mapping
@@ -80,7 +80,7 @@ def test_every_record_comes_back() -> None:
 
 
 def test_a_declared_count_that_has_moved_stops_nothing() -> None:
-    """Decision 10, stated as a test: this is the cost of having no gates, and it is deliberate.
+    """Requirement 22, stated as a test: this is the cost of having no gates, and it is deliberate.
 
     `params.invalid_counts.empty_catalog` says none, the record has one, and the run completes with
     the defect on the record. The comparison is `metrics.json`'s -- a number a human reads in a

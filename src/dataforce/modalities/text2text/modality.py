@@ -109,8 +109,8 @@ class Text2Text:
     """Conversational text: read verbatim, embedded, scanned for what a person must not see.
 
     **Not `@final`, and that is the whole of what T52 needed from this class.** A profile is one
-    module inside a concept and now says so by subclassing it (Decision 24), so `ToolDecision` is a
-    `Text2Text` and every later module in this family -- `summarize`, `classification` -- shares
+    module inside a concept and now says so by subclassing it (§ *The two axes*), so `ToolDecision`
+    is a `Text2Text` and every later module in this family -- `summarize`, `classification` -- shares
     these three members rather than redeclaring them. What a subclass may not do is answer for a
     profile member: the two protocols stay separate and the identity is prefixed on both, which is
     why `modality_name` is not `name`.

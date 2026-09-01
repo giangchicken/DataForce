@@ -6,7 +6,7 @@ whole record, it skips nothing, and the one thing that stops it is a source dige
 declared one.
 
 **Two things are proved here that no other module can prove.** That provenance is the edge's and
-travels with the record (Requirement 12, Decision 4) -- nothing in the engine has a clock, so a
+travels with the record (Requirement 12) -- nothing in the engine has a clock, so a
 record's `ingested_at` is only ever what a caller handed over, and that is what makes HTTP and an
 in-process call produce the same record (Requirement 46). And that an item which cannot be read is
 *counted*, which is the decision T44 deferred to this task: `build_record` and `content_parts` both
@@ -108,7 +108,7 @@ def test_the_record_is_joined_on_its_content_and_nothing_else() -> None:
 
 
 def test_provenance_carries_what_only_the_edge_could_know() -> None:
-    """Requirement 12 and Decision 4, field by field: the engine has no clock and no path."""
+    """Requirement 12, field by field: the engine has no clock and no path."""
     records, _ = loaded(an_item())
 
     assert records[0].provenance.source_file_sha256 == DIGEST

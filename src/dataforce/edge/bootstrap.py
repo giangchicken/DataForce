@@ -15,7 +15,7 @@ cannot accidentally reach a disk through this module.
 ``BUILT_PROFILES`` map a manifest's name to the class that answers to it, and the edge supplies the
 two things neither class can open for itself: an encoder for the concept, a template for the module.
 
-**One object fills both slots, because a profile is a subclass of its modality** (Decision 24).
+**One object fills both slots, because a profile is a subclass of its modality** (§ *The two axes*).
 ``ToolDecision`` *is* a ``Text2Text``, so a run resolves to one instance answering both protocols
 and the registry registers it twice -- under its modality name in one namespace and its profile name
 in the other. Two slots and one object: the namespaces stay separate because a name is only unique
@@ -59,9 +59,10 @@ beside ``complete``.
 
 **What is not solved here: a second run re-pays the corpus.** ``lru_cache`` used to hold a loaded
 model, and the hosted analogue is a cache per document, without which running ``duplicate_check``
-twice embeds every record twice. That is Decision 3's argument for the panel arriving a second time,
-and T49 is where a cache and its key get designed; sizing one for twenty thousand documents is not a
-line to add in passing: recorded where the next reader hits it.
+twice embeds every record twice. § *ai_review* makes the same argument about the panel: work that
+costs money is not re-paid because something downstream moved. T49 is where a cache and its key get
+designed; sizing one for twenty thousand documents is not a line to add in passing, so it is
+recorded where the next reader hits it.
 
 **Requirement 28 is not checked here yet.** The cross-border precondition is about a panel, and a
 panel has no adapter until T49 -- there is no endpoint declared anywhere for this to read. T49's own
@@ -110,7 +111,7 @@ MODEL = "model"
 class ProfileInConcept(Modality, Profile, Protocol):
     """One object answering both axes: a module, and the concept it is one module inside.
 
-    The type-system half of Decision 24. `Engine` keeps two slots and `Registry` keeps two
+    The type-system half of § *The two axes*. `Engine` keeps two slots and `Registry` keeps two
     namespaces, but since T52 one instance fills both -- so the composition root needs a name for
     *a thing that is both*, and Python has no intersection type to write it with inline.
 

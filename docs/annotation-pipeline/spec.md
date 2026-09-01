@@ -421,9 +421,9 @@ Each is a statement a test can be pointed at.
    keys no code recognises — what looks like noise now is what a later question turns out to need.
 10. No record stores an answer space. `Record` has no such field, and constructing one with it raises.
 11. Every key a service writes is written by exactly one service. The per-phase `<phase>_config` key is
-    the single exception and is written by the **edge**, never by a service (Requirement 11).
+    the single exception and is written by the **edge**, never by a service.
 12. A record carries `provenance` written by `load_data`: source digest, offset, ingest time, both axis
-    versions, and the run id (Requirement 12).
+    versions, and the run id.
 
 ### load_data
 
@@ -467,7 +467,7 @@ Each is a statement a test can be pointed at.
     downstream personal-data scan then fails, so nothing ships. Turning it on is an edit to
     `params.yaml`, which makes the decision attributable.
 22. `label_check` runs the five declared checks, and each check's count is compared against
-    `params.invalid_counts[<check>]`; a count that moves fails the run. Those numbers are populated by
+    `params.invalid_counts[<check>]`. Those numbers are populated by
     the first run over a declared source, and the comparison is a line in `metrics.json` — a number a
     human reads in a diff, not a stop.
 23. `duplicate_check` reports two groups per record: `duplicate_content_same_label` and

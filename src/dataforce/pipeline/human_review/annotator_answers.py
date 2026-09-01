@@ -1,9 +1,9 @@
 """STEP · annotator_answers · responses read back out of the store onto the record.
 
 The other half of the exchange ``publish`` opened, and a separate stage because **a person answers
-in between** (Decision 22). They cannot run in one call -- ``POST /human-review`` stops after
-``publish`` for exactly this reason -- they re-run for different reasons, and they read different
-things: ``publish`` reads the questions and the two config halves, this reads the store.
+in between** (§ *Per-service contracts*). They cannot run in one call -- ``POST /human-review``
+stops after ``publish`` for exactly this reason -- they re-run for different reasons, and they read
+different things: ``publish`` reads the questions and the two config halves, this reads the store.
 
 **It names no verdict and no control.** What a `result` list means is the capture half's, and the
 inverse of that half is one profile member (Requirement 49); this stage asks it what the annotation

@@ -1,9 +1,10 @@
 """STEP · publish · questions written to the question store, ready for the annotation tool.
 
 **No Label Studio anywhere.** ``publish`` writes to a database we own and a separate sync moves the
-questions out (Decision 6), so the pipeline stays runnable and testable with no instance and
-``annotator_answers`` reads one shape whatever the annotation tool turns out to be. Not one word of
-that tool's dialect is written here either: the payload this stage composes is keys and values, and
+questions out (§ *The question store*), so the pipeline stays runnable and testable with no
+instance and ``annotator_answers`` reads one shape whatever the annotation tool turns out to be.
+Not one word of that tool's dialect is written here either: the payload this stage composes is keys
+and values, and
 every tag that reads them is ``edge/label_studio.py``'s.
 
 **This module writes no annotation-tool markup at all** (Requirement 31). What it assembles is the

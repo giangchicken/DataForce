@@ -1,13 +1,14 @@
 """STEP · cohesion · how much the jury agrees with itself, and with the existing label.
 
 Arithmetic over what ``jury`` wrote, and no model call at all. That is the whole reason it is not
-folded into the stage above it (Decision 3): a panel that has answered is never asked again, and
+folded into the stage above it (§ *ai_review*): a panel that has answered is never asked again, and
 these two numbers can be recomputed for nothing every time the question they feed changes.
 
-**Both numbers are δ, because every number the pipeline produces is** (Decision 15). Agreement is
-``1 - answer_distance``, so a jury that called the right tool with one argument wrong scores above
-one that called the wrong tool -- which a verdict count would not, and ``label_is_right`` is a
-verdict count. The jurors' own opinion of the label is on the record and is not what this measures.
+**Both numbers are δ, because every number the pipeline produces is**
+(§ *The answer, and the three operations over it*). Agreement is ``1 - answer_distance``, so a jury
+that called the right tool with one argument wrong scores above one that called the wrong tool --
+which a verdict count would not, and ``label_is_right`` is a verdict count. The jurors' own opinion
+of the label is on the record and is not what this measures.
 
 **Only a usable vote is measured.** An invalid vote is an answer outside this record's answer
 space, and a distance to a point outside the space is not evidence about the panel; it is evidence

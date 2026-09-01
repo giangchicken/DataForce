@@ -6,8 +6,8 @@ own axis (I16).
 
 **``modality`` was the sixteenth and is gone, because the containment is a base class now.** It
 declared *which concept this profile composes with* as a string off the profile's own manifest, and
-an implementation subclassing its concept (Decision 24) inherits ``modality_name`` from it instead
--- one attribute, one writer, and one that cannot disagree with the object that actually read
+an implementation subclassing its concept (§ *The two axes*) inherits ``modality_name`` from it
+instead -- one attribute, one writer, and one that cannot disagree with the object that actually read
 the content. The manifest key it came from stays: ``modality:`` is what tells the composition root
 which manifest to open, and ``edge/bootstrap.py`` still reads it there.
 

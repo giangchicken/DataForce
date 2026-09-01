@@ -353,8 +353,9 @@ def test_the_window_layer_two_reads_is_one_part_that_had_a_candidate() -> None:
 def test_layer_two_decides_which_class_a_hit_was() -> None:
     """A digit run behind a cue word is an `OTP` *and* a `PHONE` until something reads the sentence.
 
-    Decision 23: layer two returns each value under the class it confirms it as, which is a subset
-    of the values and never of the classes -- so the class on the span is the one the layer that can
+    § *PII, in two layers*: layer two returns each value under the class it confirms it as, which is
+    a subset of the values and never of the classes -- so the class on the span is the one the layer
+    that can
     read the sentence chose, not the first scan that reached it.
     """
     number = "0900123456"

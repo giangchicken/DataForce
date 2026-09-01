@@ -128,7 +128,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ `2535a56` · `text2text/` half superseded by T54 |
 | T57 | The modality stops emitting markup | 3 | T26, T54 | M | ✓ |
-| T58 | The code cites a section, not a decision number | 3 | | S | |
+| T58 | The code cites a section, not a decision number | 3 | | S | ✓ |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
 | T6 | The guards | 1 | T5, T7 | L | ✓ `c72e5a6` |
@@ -2049,6 +2049,24 @@ argument"*). Each states what changed; write what holds.
 No assertion changes.
 
 **Source.** `spec.md`, all sections named above.
+
+**Landed.** Fifty citations across 33 modules and tests, all of them comment, docstring or message
+text; no assertion and no expression changed. The four sentences were rewritten rather than
+substituted, and a fifth turned up next to them: `edge/artifacts.py:139` read *"Requirement 22 as
+Decision 10 left it"*, which substitution would have turned into a requirement citing itself.
+
+**Two citations point at a message rather than at a comment, and that is on purpose.** The
+`ConfigError` `store_engine` raises and two `Field(description=…)` strings carried a decision number
+into text a person reads at runtime or in `/docs`. A section name is what they say now, for the
+reason the task exists — a number is read in two places and a name is not.
+
+**Three defects in `spec.md` itself, left by the same deletion and fixed here.** Requirements 11 and
+12 each ended by citing themselves, which is what the merge produced where a decision restated a
+requirement. Requirement 22 was worse: it said *"a count that moves fails the run"* and then, two
+sentences later, *"a number a human reads in a diff, not a stop"* — the gate deletion reversed the
+first half and the merge kept both. Six of these fifty citations now point at Requirement 22 for
+exactly the second reading, so the contradiction had to go: the clause the gates took with them is
+deleted.
 
 ## Phase 4 · One record makes the round trip
 

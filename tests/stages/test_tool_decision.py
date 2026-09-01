@@ -1023,8 +1023,8 @@ def test_both_identities_come_from_their_own_manifests() -> None:
 
 
 def test_a_profile_is_an_instance_of_the_concept_it_is_one_module_inside() -> None:
-    """Decision 24, at runtime. The containment used to be a string in a manifest and nothing a
-    reader of the classes could see; it is the type now, which is what T52 exists for."""
+    """§ *The two axes* at runtime: a profile is one module inside a concept, and the containment is
+    the type rather than something only a manifest says. T52 is the task that made it so."""
     assert isinstance(a_profile(), Text2Text)
 
 

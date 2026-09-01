@@ -9,7 +9,7 @@ what to do with an item that cannot be read at all.
 signature ``(engine, records) -> ServiceResult``; a source item is not a record and there is no
 record to hand this one, so the rule is broken here and ``flow.FROM_SOURCE`` is where
 ``run_phase`` reads that. The three keyword arguments are the things only the edge can know: the
-digest of the file the items came out of, the clock, and the run they belong to (Decision 4 --
+digest of the file the items came out of, the clock, and the run they belong to (Requirement 12 --
 *``run_id`` is generated at the edge, because the engine has no clock*). Handing them in rather than
 taking them is what makes ``POST /load-data`` and an in-process caller produce the same record
 (Requirement 46, I15).

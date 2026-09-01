@@ -1,8 +1,9 @@
 """TOOL · the Label Studio adapter: the config it composes, questions out, annotations back, idempotent in both directions.
 
-Decision 6's other half. ``publish`` writes to a database we own and never talks to an annotation
-tool; this moves rows between that database and one, and **running it is optional** -- every other
-endpoint works with no instance anywhere, which is what makes the pipeline testable without one.
+The other half of § *The question store*. ``publish`` writes to a database we own and never talks to
+an annotation tool; this moves rows between that database and one, and **running it is optional** --
+every other endpoint works with no instance anywhere, which is what makes the pipeline testable
+without one.
 
 **This module is where the tool's config grammar is written, and it is written nowhere else**
 (Requirement 31). A modality reads content; how a conversation is *shown* is this tool's dialect, so

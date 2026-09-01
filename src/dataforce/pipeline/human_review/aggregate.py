@@ -1,7 +1,8 @@
 """STEP · aggregate · overlap becomes one verdict with a confidence and an agreement statistic.
 
 Arithmetic over what ``annotator_answers`` wrote, and it asks nobody anything -- the same reason
-``cohesion`` is not folded into ``jury``: people are expensive and re-reading what they said is free.
+``cohesion`` is not folded into ``jury``: people are expensive and re-reading what they said is
+free.
 
 **Three numbers, and they answer three different questions.** ``overlap`` is how many people saw
 this record. ``confidence`` is how much *they* agreed about it, which is a fact about one record.
@@ -28,7 +29,7 @@ the chance of agreeing about two different questions. What the corrections feed 
 their verdicts first and by ``answer_distance`` between their corrections second, so two people who
 both said the label is wrong and named the same tool with one argument different are nearly agreed
 rather than simply disagreed -- which string equality cannot express and is the whole reason δ is
-soft (Decision 15).
+soft (§ *The answer, and the three operations over it*).
 
 **Absent evidence reads as absent agreement.** One response has no pair to measure and gets a
 confidence of ``0.0`` rather than ``1.0``, for ``cohesion``'s reason: a single annotator scored as
@@ -111,8 +112,9 @@ def response_distance(
     *correct* is no closer to *unsure* than to *incorrect*. Same verdict, and what remains is what
     they proposed instead, which is δ's own question.
 
-    **No verdict value is named here** (Decision 22). A response that carries no correction carries
-    the empty answer, and `δ(∅, ∅) = 0`, so two people who agreed the label is right compare equal
+    **No verdict value is named here** (§ *Per-service contracts*). A response that carries no
+    correction carries the empty answer, and `δ(∅, ∅) = 0`, so two people who agreed the label is
+    right compare equal
     without this module knowing which value means that.
     """
     if a.verdict != b.verdict:

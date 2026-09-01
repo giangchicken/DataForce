@@ -13,8 +13,8 @@ The invariant's own row carries the same clause, because a sentence no run can s
 can check.
 
 **The fold is for reading and stops nothing** (Requirement 44). `label_check`'s counts are compared
-against `params.invalid_counts` here, which is where Decision 10 put that comparison when it deleted
-the gates: a declared count that moved is a line in a diff, not a crash.
+against `params.invalid_counts` here, which is where Requirement 22 puts that comparison: a
+declared count that moved is a line in a diff, not a crash.
 
 **A run id says when it started and what it was configured with.** Deterministic in its second half,
 so two runs that read the same files are visibly the same configuration, and a clock in front of it
@@ -187,7 +187,7 @@ def test_the_fold_names_no_stage_that_has_no_module(tmp_path: Path) -> None:
 
 
 def test_a_declared_count_that_moved_is_a_line_in_the_fold(tmp_path: Path) -> None:
-    """Requirement 22 as Decision 10 left it: found beside declared, and nothing stops."""
+    """Requirement 22 to the letter: found beside declared, and nothing stops."""
     counts = corpus_counts(
         an_engine(tmp_path, DECLARING_COUNTS),
         (checked("label_not_in_catalog"), checked("label_not_in_catalog")),

@@ -1,7 +1,7 @@
 """STEP · jury · N independent models answer the record's own task.
 
 The one stage in this phase that costs money, which is the whole of why the phase is three stages
-(Decision 3): a bucket boundary that moves re-runs ``triage`` alone, and a panel that has answered
+(§ *ai_review*): a bucket boundary that moves re-runs ``triage`` alone, and a panel that has answered
 once is never asked again for it.
 
 **The panel is a port and the judgment is not.** A model call opens a socket and no engine module

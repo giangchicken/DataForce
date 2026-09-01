@@ -17,7 +17,8 @@ in the layer furthest from the capture half that defines it, and with no record 
 corrected value against. The envelope is a different fact and stays decomposed: ``was_skipped`` and
 ``lead_time_seconds`` are the pilot's instruments and answer nothing (recorded in ``spec.md``).
 
-**Two dialects, one schema, and the differences are carried rather than argued away** (Decision 7).
+**Two dialects, one schema, and the differences are carried rather than argued away**
+(§ *The question store*).
 ``JSON`` is a real type in Postgres and a text affinity in SQLite; a timezone-aware ``DateTime`` is
 stored as one in Postgres and as a naive string in SQLite; and the unique constraints this schema
 leans on for the sync's idempotency are precisely where the two disagree about which violation

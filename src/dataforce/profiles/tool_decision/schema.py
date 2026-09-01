@@ -100,7 +100,7 @@ class AnswerConfig(BaseModel):
         ...,
         description=(
             "The permitted answers to a question. The record does not name them "
-            "(Decision 22); this is where they are declared."
+            "(§ *Per-service contracts*); this is where they are declared."
         ),
     )
     tags: str = Field(
@@ -123,7 +123,7 @@ class AnswerConfig(BaseModel):
         description=(
             "Which of `verdicts` says the label as it stands is right. `curate` reads "
             "it rather than naming a value, so a fourth verdict stays one directory's "
-            "edit (Decision 22); every other verdict leaves the label to a correction."
+            "edit (§ *Per-service contracts*); every other verdict leaves the label to a correction."
         ),
     )
 

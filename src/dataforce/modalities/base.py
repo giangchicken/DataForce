@@ -11,7 +11,7 @@ composes the fragment from ``record.content`` and asks this protocol for nothing
 modality be added without a page layout in it.
 
 **The identity is prefixed, and that is what lets one object be both axes.** A profile is a module
-inside a concept and says so by subclassing it (Decision 24), so one instance answers this
+inside a concept and says so by subclassing it (§ *The two axes*), so one instance answers this
 protocol and ``Profile`` at once -- and a bare ``name`` on both would be one attribute where a record
 needs two. ``modality_name`` and ``profile_name`` cannot collapse, which is what keeps
 ``Branch(modality=…, profile=…)`` able to say which concept read a record and which module answered

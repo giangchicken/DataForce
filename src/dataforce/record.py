@@ -212,7 +212,7 @@ class Branch(RecordModel):
 
 
 class Provenance(RecordModel):
-    """What made this record, travelling with it (Requirement 12, Decision 4)."""
+    """What made this record, travelling with it (Requirement 12)."""
 
     source_file_sha256: str = Field(
         ...,
@@ -346,7 +346,7 @@ class DataQuality(RecordModel):
         default_factory=dict,
         description=(
             "The resolved config and its digest. Written by the edge, read by the "
-            "services (Decision 5)."
+            "services (Requirement 11)."
         ),
     )
     label_check: LabelVerdict | None = Field(
@@ -512,7 +512,7 @@ class AnnotatorResponse(RecordModel):
         ...,
         description=(
             "One of that question's `enum` values. The record does not name them: "
-            "the permitted answers are the profile's capture half (Decision 22)."
+            "the permitted answers are the profile's capture half (§ *Per-service contracts*)."
         ),
     )
     corrected_value: StoredAnswer | None = Field(

@@ -8,7 +8,7 @@ alone (I3).
 a number is the same fact written a second time and the second copy is the one that goes wrong. It is also a *shared* index: inserting a stage renumbers every stage after it -- here, in
 each ``STEP ·`` docstring, and through half the spec -- for a change that is one row. Scope is
 named rather than cut at a number: ``DECLARED_ONLY`` holds the phases that are in the flow and
-have no module (Decision 19).
+have no module (§ *The flow*).
 """
 
 from typing import NamedTuple

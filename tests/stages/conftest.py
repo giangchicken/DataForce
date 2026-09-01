@@ -4,9 +4,10 @@ Here rather than in `test_store.py` because `test_publish.py` runs the stage aga
 adapter too — the second one, since one adapter is a hypothetical seam. A fixture shared by
 importing it is a name pytest then sees twice; a `conftest.py` is the mechanism that exists for this.
 
-`store_at` is what makes Decision 7's *run the tests twice* real: every test that takes it runs once
-on a SQLite file in `tmp_path` and once, under `-m integration`, on the Postgres named by
-`DATAFORCE_TEST_DATABASE_URL`. With none attached the second is skipped rather than passed, because
+`store_at` is what makes § *The question store*'s *run the tests twice* real: every test that takes
+it runs once on a SQLite file in `tmp_path` and once, under `-m integration`, on the Postgres named
+by `DATAFORCE_TEST_DATABASE_URL`. With none attached the second is skipped rather than passed,
+because
 *not run* and *passed* are different claims.
 """
 

@@ -2,14 +2,15 @@
 
 The port is ``dataforce/ports.py``. This is an adapter of it, and calling it a port is the path by
 which someone adds a method *here* and the engine then has to import ``edge/store/`` to name a type
--- the inversion Decision 12 moved ``ports.py`` inward to prevent (T37).
+-- the inversion § *Engine and edge* forbids by putting the abstraction in the layer that
+consumes it, which is why ``ports.py`` sits inside the engine (T37).
 
 **One adapter, two DSNs, and one line that knows which.** There is no ``PostgresQuestionStore``
-beside a SQLite one, because SQLite and Postgres are one adapter addressed two ways (Decision 7).
-The single fork is ``insert_of``: ``ON CONFLICT DO NOTHING`` has two spellings and no neutral one,
-and what was written in its place was a check that races. No ``RETURNING`` and no server-side
-default, so everything else the two disagree about is behaviour this module leans on -- which is why
-the tests run twice rather than why the code forks.
+beside a SQLite one, because SQLite and Postgres are one adapter addressed two ways
+(§ *The question store*). The single fork is ``insert_of``: ``ON CONFLICT DO NOTHING`` has two
+spellings and no neutral one, and what was written in its place was a check that races. No
+``RETURNING`` and no server-side default, so everything else the two disagree about is behaviour
+this module leans on -- which is why the tests run twice rather than why the code forks.
 
 **Writing a question the store already holds is a no-op, not an error**. The id is a pure
 function of the question, so a second publish of an unchanged corpus is the same rows and re-running
@@ -94,8 +95,8 @@ def insert_of(dialect: str, rows: Sequence[Mapping[str, Any]]) -> Insert:
     """An insert of those rows that leaves a `question_id` the store holds exactly as it is.
 
     The one dialect-specific line in the adapter. `store_engine` admits exactly two backends
-    (Decision 7), so the fallthrough is SQLite by construction rather than by default -- and a
-    third would have been refused when the pool was built.
+    (§ *The question store*), so the fallthrough is SQLite by construction rather than by default
+    -- and a third would have been refused when the pool was built.
     """
     if dialect == POSTGRES:
         return (

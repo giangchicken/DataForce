@@ -6,9 +6,9 @@ is a fact about two stages, and a fixture that hand-wrote a `PanelVerdict` would
 about `valid` by luck.
 
 **The test that keeps δ soft is `test_a_near_miss_scores_above_a_wrong_tool`.** Every number this
-pipeline produces is written on δ (Decision 15), so a cohesion figure that ranked *right tool, one
-argument wrong* level with *wrong tool* would put both in one triage bucket and no threshold change
-would separate them again.
+pipeline produces is written on δ (§ *The answer, and the three operations over it*), so a cohesion
+figure that ranked *right tool, one argument wrong* level with *wrong tool* would put both in one
+triage bucket and no threshold change would separate them again.
 
 Every fixture is invented.
 """
@@ -107,8 +107,9 @@ def test_the_label_number_is_over_the_votes_and_the_label_they_were_cast_on() ->
 
 
 def test_a_near_miss_scores_above_a_wrong_tool() -> None:
-    """Decision 15: δ is soft, so *right tool, one argument wrong* is not *wrong tool*. A verdict
-    count would rank them identically and put both in one bucket."""
+    """§ *The answer, and the three operations over it*: δ is soft, so *right tool, one argument
+    wrong* is not *wrong tool*. A verdict count would rank them identically and put both in one
+    bucket."""
     near = measured((SENT_NEARLY,)).label_agreement
     wrong = measured((LOOKED_UP,)).label_agreement
 

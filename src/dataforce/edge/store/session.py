@@ -2,9 +2,9 @@
 
 The DSN is read here and nowhere else, from ``DATAFORCE_DATABASE_URL`` (Twelve-Factor III): a
 backing service is a resource a deployment attaches, so the store's address is the environment's and
-never a literal in a module. The default is a SQLite file in the working directory, which is
-Decision 7's whole point -- ``make check`` needs no database server -- and it is a default and not a
-substitute: the same tests run against Postgres under ``-m integration``, because SQLite and
+never a literal in a module. The default is a SQLite file in the working directory, which is § *The
+question store*'s whole point -- ``make check`` needs no database server -- and it is a default and
+not a substitute: the same tests run against Postgres under ``-m integration``, because SQLite and
 Postgres disagree about exactly the constraints this schema leans on.
 
 **One session per unit of work, not one per process.** ``sessions_to`` hands back a factory and the
@@ -36,13 +36,14 @@ DEFAULT_URL = "sqlite+pysqlite:///dataforce.sqlite3"
 
 # The dialect that needs asking. SQLite has enforced foreign keys since 3.6.19 and ships with them
 # *off* for backwards compatibility, so a schema whose integrity Postgres enforces is decoration in
-# the default backend -- the classic parity violation, and Decision 7's named risk, arriving in
-# the one place a substitute is allowed to differ silently.
+# the default backend -- the classic parity violation, and § *The question store*'s named risk,
+# arriving in the one place a substitute is allowed to differ silently.
 SQLITE = "sqlite"
 
-# The other one, and the two together are what this store is written for (Decision 7). A list rather
-# than an assumption because `repository.py` forks on the dialect to spell its `ON CONFLICT`: a third
-# backend would reach that fork with nothing to do there. Read from the DSN when the pool is built,
+# The other one, and the two together are what this store is written for (§ *The question store*).
+# A list rather than an assumption because `repository.py` forks on the dialect to spell its
+# `ON CONFLICT`: a third backend would reach that fork with nothing to do there. Read from the DSN
+# when the pool is built,
 # which is before any record, and by parsing rather than by connecting -- naming a database
 # nobody installed a driver for should say so, not fail importing the driver.
 POSTGRES = "postgresql"
@@ -77,7 +78,7 @@ def store_engine(url: str | None = None) -> StoreEngine:
     if backend not in SUPPORTED:
         raise ConfigError(
             f"{DATABASE_URL} names a {backend} database and this store is written for "
-            f"{' and '.join(SUPPORTED)} (Decision 7); the schema leans on constraints "
+            f"{' and '.join(SUPPORTED)} (§ *The question store*); the schema leans on constraints "
             "the two of them have been tested against and a third has not"
         )
     engine = create_engine(dsn)

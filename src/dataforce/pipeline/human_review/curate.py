@@ -1,11 +1,13 @@
 """STEP · curate · the verdict becomes the record's final label, or an adjudication.
 
-The last stage of the phase, and the only one that touches what ships. Everything before it measures;
-this one decides, and what it decides is one of three things: the label the record arrived with was
-right, the people who looked at it agreed on a different one, or nobody can say (Requirement 35).
+The last stage of the phase, and the only one that touches what ships. Everything before it
+measures; this one decides, and what it decides is one of three things: the label the record arrived
+with was right, the people who looked at it agreed on a different one, or nobody can say
+(Requirement 35).
 
-**It names no verdict value** (Decision 22). Which verdict says *the label as it stands is right* is
-the capture half's to declare and ``answer_config().endorsing_verdict`` is where it does, so adding a
+**It names no verdict value** (§ *Per-service contracts*). Which verdict says *the label as it
+stands is right* is the capture half's to declare and ``answer_config().endorsing_verdict`` is where
+it does, so adding a
 fourth verdict stays one directory's edit. What this module does name is the three **statuses**,
 because those are the record's own vocabulary -- ``FinalLabel.status`` is a ``Literal`` of exactly
 them, and `tool_decision`'s ``final_label`` already reads one.
