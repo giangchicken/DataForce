@@ -1,264 +1,58 @@
-# Conventions
+# Coding guidelines
 
-Rules for anyone — person or agent — writing code here. General enough to copy into another
-repo.
+**Enforcement (Cách ép):** `[lint]` a check that fails the build (một phép kiểm tra làm hỏng bản build) · `[review]` caught by a human reading the diff (bắt được khi có người đọc diff) · `[none]` judgement only, no check exists (chỉ bằng phán đoán, không có phép kiểm tra nào)
 
-## Think before you code
+## Definitions (Định nghĩa)
 
-- Say your assumptions out loud.
-- If the request reads two ways, say both and pick one. Never pick silently.
-- If something is unclear, name the confusing part and ask.
-- If a simpler way exists, say so before writing the complicated one.
-- A reason I can check beats agreement.
+- A **module** is anything with an interface and an implementation — a function, a class, a package, a service — whose job is to hide one decision. Something that hides nothing is a namespace, not a module. (Module là bất cứ thứ gì có interface và phần hiện thực — một hàm, một class, một package, một service — mà nhiệm vụ của nó là giấu đi một quyết định. Thứ gì không giấu gì cả thì là namespace, không phải module.)
+- An **interface** is everything a caller must know to use it correctly: the signature, the invariants, the ordering, the error modes, the required configuration, the speed. Not just the types. (Interface là mọi thứ caller phải biết để dùng cho đúng: chữ ký hàm, các bất biến, thứ tự gọi, các dạng lỗi, cấu hình bắt buộc, tốc độ. Không chỉ là kiểu dữ liệu.)
+- **Coupling** is what two parts share and how tightly that binds them — the kind and the degree of the dependency between them. (Coupling là chuyện hai phần chia sẻ cái gì và bị buộc chặt tới đâu — bản chất và mức độ của sự phụ thuộc giữa chúng.)
+- **Connascence** is one thing forcing another to change with it. It is measured on three axes: strength, how hard the joint change is to get right; locality, how far apart the two ends sit; degree, how many places are involved. (Connascence là chuyện thứ này buộc thứ kia phải thay đổi theo. Nó được đo trên ba chiều: strength — thay đổi cùng nhau cho đúng khó tới đâu; locality — hai đầu nằm xa nhau tới đâu; degree — có bao nhiêu chỗ dính vào.)
 
-## Write the least code that solves it
+## Writing code (Viết code)
 
-- Nothing built for a future that has not arrived.
-- No features beyond what was asked.
-- No abstraction for a single use.
-- No settings nobody asked for.
-- No error handling for a state no caller can reach.
-- If you wrote two hundred lines and fifty would do, write the fifty.
+- `[review]` Build only what was asked for, and only for the case that exists today. This governs behaviour and features. (Chỉ xây cái được yêu cầu, và chỉ cho trường hợp đang có hôm nay. Luật này áp cho hành vi và tính năng.)
+- `[review]` Boundaries are the exception, and they are decided ahead of the need: hiding a decision is not a feature built early. An implementation aimed slightly wider than today's single call site usually ends up with a simpler, deeper interface than one specialised to it. (Ranh giới là ngoại lệ, và phải quyết trước khi cần: giấu một quyết định không phải là làm sớm một tính năng. Phần hiện thực nhắm hơi rộng hơn một chỗ gọi của hôm nay thường cho ra interface đơn giản hơn và sâu hơn so với bản làm riêng cho đúng chỗ đó.)
+- `[review]` Write the smallest version by interface, not the shortest by line count. Cutting a function in half to make each half shorter adds an interface, and if the halves stay entangled the reader now has to hold both. (Viết bản nhỏ nhất về interface, không phải ngắn nhất về số dòng. Chẻ một hàm làm đôi cho mỗi nửa ngắn đi là thêm một interface, và nếu hai nửa vẫn dính nhau thì người đọc giờ phải giữ cả hai trong đầu.)
+- `[review]` Optimise for clarity first, then for a bottleneck you can name. A bottleneck you cannot name is a guess. (Tối ưu cho sự rõ ràng trước, rồi mới cho một nút thắt bạn gọi được tên. Một nút thắt không gọi được tên chỉ là phỏng đoán.)
+- `[review]` Add something that has to run — a queue, a cache, a scheduled job — only to fix a problem you can name. Everything that runs is something to keep alive. (Chỉ thêm thứ phải chạy — một queue, một cache, một job hẹn giờ — khi có một vấn đề bạn gọi được tên. Thứ gì phải chạy là thứ phải nuôi.)
+- `[review]` Make a function when two or more places call it and change together, or when a decision needs its own test. Otherwise a named variable is enough to put the rule on screen. (Tạo hàm khi có từ hai chỗ trở lên gọi nó và cùng thay đổi, hoặc khi một quyết định cần test riêng. Ngoài ra một biến có tên là đủ để đưa luật hiện lên màn hình.)
+- `[review]` Inline a one-line function with a single caller whose name adds nothing. Three kinds look inlinable but are not: a method implementing an interface, a callback named in configuration or metrics, a decorated function. Removing those still runs while something is lost silently. (Viết thẳng vào chỗ dùng một hàm một dòng, một chỗ gọi, mà cái tên không thêm được gì. Có ba loại trông như inline được nhưng không phải: method hiện thực một interface, callback có tên trong cấu hình hay metrics, và hàm mang decorator. Xoá chúng thì vẫn chạy trong khi có thứ mất đi trong im lặng.)
+- `[review]` Keep the decision and the side effect in different functions. One function that validates, writes, calls out and notifies has four reasons to change. (Để quyết định và tác dụng phụ ở hai hàm khác nhau. Một hàm vừa kiểm tra, vừa ghi, vừa gọi ra ngoài, vừa thông báo thì có bốn lý do để thay đổi.)
+- `[lint]` Write structured events to standard output, and never manage log files. Logging is a side effect, so the domain returns what happened and the edge writes it down. (Ghi các sự kiện có cấu trúc ra standard output, và đừng bao giờ tự quản lý file log. Ghi log là một tác dụng phụ, nên miền nghiệp vụ trả về chuyện gì đã xảy ra còn phần rìa ghi nó xuống.)
+- `[review]` Name what is there, not how it got there: what a function returns, what a variable holds, what a file contains. Test a name by reading only the line that uses it and saying what it is. (Đặt tên theo cái đang có ở đó, không theo cách nó tới: hàm trả về gì, biến giữ gì, file chứa gì. Kiểm tra một cái tên bằng cách chỉ đọc dòng dùng nó rồi nói xem nó là gì.)
+- `[lint]` Never name a thing after its container or its position — user_map, order_list, main — or reuse a word that already names a step, a command or a table. (Đừng bao giờ đặt tên theo vật chứa hay theo vị trí — user_map, order_list, main — cũng đừng dùng lại một từ đã gọi tên một bước, một câu lệnh hay một bảng.)
+- `[lint]` Replace a hard-coded value with a named constant, positional arguments with keyword arguments, an implied ordering with an explicit one. Each swap turns a rule someone has to remember into one the code states. (Thay giá trị viết cứng bằng hằng số có tên, tham số theo vị trí bằng tham số có từ khoá, thứ tự ngầm định bằng thứ tự tường minh. Mỗi lần đổi là biến một luật người ta phải nhớ thành một luật code tự nói ra.)
+- `[review]` Comment the abstraction, not the implementation: state the invariants, the units, the ordering and the error modes next to the signature, because none of them are in it. Code does not document itself — if a caller has to read the body to learn the rule, the comment is missing, not redundant. (Comment cho abstraction, không cho phần hiện thực: ghi các bất biến, đơn vị đo, thứ tự gọi và các dạng lỗi ngay cạnh chữ ký hàm, vì không cái nào nằm trong chữ ký cả. Code không tự nói hết được — nếu caller phải đọc thân hàm mới biết luật thì comment đang thiếu chứ không phải thừa.)
 
-## Change only what was asked
+## Codebase layout (Bố cục codebase)
 
-- Touch what the request needs and nothing else.
-- Do not tidy nearby code, comments or formatting.
-- Do not refactor working code.
-- Match the style already there, even where you would write it differently.
-- Delete what your own change left unused.
-- Leave dead code that was already there. Mention it instead.
+- `[review]` Group by domain first, technical kind second: things that change together live together. Adding a field to an order should open one folder, not four. (Nhóm theo miền nghiệp vụ trước, theo loại kỹ thuật sau: những thứ thay đổi cùng nhau thì ở cùng nhau. Thêm một trường vào đơn hàng thì chỉ nên phải mở một thư mục, không phải bốn.)
+- `[review]` The farther apart two elements sit, the weaker the form of connascence between them has to be. If you cannot weaken it, move them closer together — that is why the shape and the logic of one domain share a folder. (Hai phần tử càng xa nhau thì dạng connascence giữa chúng càng phải yếu. Nếu không hạ được độ mạnh thì kéo chúng lại gần nhau — đó là lý do shape và logic của cùng một miền nằm chung một thư mục.)
+- `[review]` Make the top of the source tree name the domain, not the framework. (Làm sao để thư mục gốc gọi tên miền nghiệp vụ, không phải tên framework.)
+- `[lint]` Start every module docstring with one of five tags: shape holds nouns and constants; logic holds the decisions over them; facade only re-exports; adapter translates between an outside format and the domain; wiring is the composition root, where the concrete parts get connected. Two answers means the file holds two jobs. Write facade without the cedilla — the tag is read by a machine. (Bắt đầu mọi docstring của module bằng một trong năm tag: shape chứa danh từ và hằng số; logic chứa các quyết định trên chúng; facade chỉ export lại; adapter dịch giữa một định dạng bên ngoài và miền nghiệp vụ; wiring là composition root, chỗ nối dây các thành phần cụ thể. Hai câu trả lời nghĩa là file đang giữ hai việc. Viết facade không dấu — tag này để máy đọc.)
+- `[lint]` Name a module for what it holds or the job it does, never helpers, utilities, managers or entities. Those name a bucket, not a job. (Đặt tên module theo thứ nó chứa hoặc nhiệm vụ nó làm, đừng bao giờ là helpers, utilities, managers hay entities. Đó là tên của cái thùng, không phải tên của một nhiệm vụ.)
+- `[review]` Give each module one decision to hide, and pick the one most likely to change: the file format, the storage engine, the retry policy. (Cho mỗi module một quyết định để giấu, và chọn quyết định dễ thay đổi nhất: định dạng file, engine lưu trữ, chính sách retry.)
+- `[review]` Keep the file format and the call order inside the module. A caller that has to know them is already leaked, with or without an import. (Giữ định dạng file và thứ tự gọi ở bên trong module. Caller mà phải biết chúng thì đã rò rỉ rồi, có import hay không cũng vậy.)
+- `[review]` Put a lot behind a small interface, and delete a module that nothing gets harder without. (Đặt thật nhiều thứ sau một interface nhỏ, và xoá một module mà thiếu nó chẳng có gì khó hơn.)
+- `[lint]` Translate schema, wire and framework types at the outermost layer, in an adapter, so the domain never learns the transport. (Dịch các kiểu từ schema, từ định dạng truyền và từ framework ngay ở tầng ngoài cùng, trong một adapter, để miền nghiệp vụ không bao giờ biết tới tầng truyền tải.)
+- `[review]` Do not begin the decomposition from the flow of processing. A step can be a unit of composition — one thing done well, clipped onto the next — but it must not be the unit that hides a decision: a decision usually spans several steps, so splitting by step lands every change in three files. Give the decision its own module and let the steps call it. (Đừng bắt đầu phân rã từ luồng xử lý. Một bước có thể là đơn vị ghép nối — làm một việc cho tốt, ghép được vào bước sau — nhưng không được là đơn vị giấu quyết định: một quyết định thường trải qua nhiều bước, nên chia theo bước sẽ khiến mỗi thay đổi rơi vào ba file. Hãy cho quyết định đó module riêng và để các bước gọi nó.)
+- `[review]` Do not split before a second consumer needs half of it, and do not call the split finished while the two halves still depend on each other. (Đừng tách trước khi có người dùng thứ hai cần một nửa của nó, và đừng coi lần tách là xong chừng nào hai nửa vẫn còn phụ thuộc lẫn nhau.)
+- `[lint]` Declare the import direction once and enforce it with a check that fails the build, not with discipline. (Khai báo chiều import một lần và ép nó bằng một phép kiểm tra làm hỏng bản build, không phải bằng tính kỷ luật.)
+- `[review]` Start with one codebase and real module boundaries inside it. Split out a service only when scaling, ownership or reliability genuinely differ — scale itself is bought with indexes, queues and caches. (Bắt đầu bằng một codebase với ranh giới module thật bên trong. Chỉ tách service khi nhu cầu mở rộng, quyền sở hữu hay độ tin cậy thật sự khác nhau — còn khả năng chịu tải thì mua bằng index, hàng đợi và cache.)
+- `[none]` Expect a boundary to follow ownership: one that no single team owns will not hold. Draw the modules and divide the teams together rather than fighting the pull. (Ranh giới sẽ đi theo quyền sở hữu: ranh giới không thuộc về một đội nào thì sẽ không đứng được. Vạch module và chia đội cùng lúc, đừng chống lại lực kéo đó.)
+- `[none]` Redraw the boundaries when a typical change keeps touching more files. (Vạch lại ranh giới khi một thay đổi thông thường ngày càng phải động vào nhiều file hơn.)
 
-## When something deserves to be a function
+## Sources (Nguồn)
 
-- Make one when two or more places call it.
-- Make one when it holds a decision a reader needs to see named: a check, a branch, a raise,
-  a rule.
-- One expression with one caller is not a function. Inline it. A name that only forwards an
-  argument costs a file to open and gives back nothing.
-- These earn a name even with a single caller:
-  - a method that implements an interface, because deleting it deletes the polymorphism
-  - a callback whose name shows up in output, configuration or metrics
-  - a cached function, where the decorator is the point
-  - a function that returns a function
-  - anything longer than one expression: a loop, a try/except, a generator, an early return
-  - anything a test calls directly
-- Splitting a long function into named steps is often right. Each step must be nameable as a
-  result, not as "part two of the thing above".
-
-## How to name things
-
-- A name says what comes back, not what was done to get it.
-- A name is long enough to be clear read alone at the call site.
-- A bare verb names no object. Parse what, into what? Name the result.
-- A relation suffix hides the object. The noun in front is then free to be wrong without
-  looking wrong.
-- A one-word shortening of a concept is too short to mean anything.
-- A word already used for a step, a stage, a command or a table makes every sentence about
-  the code ambiguous.
-- Read the call site with nothing else on screen. If you cannot say what comes back, the name
-  is too short.
-- A leading underscore is not an excuse. You still have to read it.
-
-## How to organise files
-
-- One module, one job. The first word of the module docstring says which kind of job:
-  - a definition: one noun and its shape, its types and its constants
-  - logic: the conversions and computations over that noun
-  - a step: serves exactly one step of the flow, and nothing else
-  - a tool: not in the flow at all
-  - a façade: re-exports, and holds nothing of its own
-- A shape is a shape; turning one thing into another is logic. They change for different
-  reasons, so they are different files.
-- Group what changes together. A reader follows one input to one output, and a file per
-  concern charges ten jumps for one step.
-- Do not split a module until a second consumer needs half of it. A module with one caller is
-  that caller's code.
-- Do not make a consumer depend on what it does not use. Twenty things in one module puts
-  every consumer in the blast radius of every edit.
-- Name a module for its noun or its job, never for how useful it is. There is no such thing as
-  a helpers module.
-- A module named for utilities holds conversions over the shapes beside it and nothing else.
-  The moment it holds something else, it needs a real name.
-- Read the import with nothing else on screen and say what comes back.
-- Declare the import direction once and never reverse it. Enforce it with a test, not with
-  discipline.
-
-## Verify, then report
-
-- Decide what success is, as something you can run, before you start.
-- Write the failing test, then make it pass.
-- "Add validation" is not a goal. "Invalid input raises, proved by a test" is.
-- Add or change a test whenever behaviour changes. It must prove the new behaviour, not merely
-  run the new code.
-- Run the focused check, then the project's full check. Fix what they catch without growing
-  the job.
-- If behaviour must not change, say what proved it.
-- Report what you ran and what it said.
-- If you skipped something, say so. Never call unrun code working.
-
-## When a rule is wrong
-
-- Rules lose to reasons.
-- If a rule makes the code worse here, break it.
-- Write the break where the next reader will hit it.
-- Two rules disagreeing in one place is a fact about the design. Write it down rather than
-  settling it silently.
-
-## Working agreement
-
-- One task at a time. Finish it, verify it, commit it, then tell me to push. I push.
-- Commit messages say why, not what the diff already shows: the option not taken, the cost
-  paid, the rule bent.
-- Never commit anything internal or personally identifying. This repo is public.
-- No absolute paths, no credentials, no hostnames.
-- Test fixtures are invented, never taken from real data.
-- Never write a live key or token into a file. Environment variables only.
-
----
-
-# Design principles
-
-## Words we agree on
-
-- A module is anything with an interface and an implementation: a function, a class, a
-  package, a service.
-- An interface is everything a caller must know to use it correctly: the signature, the
-  invariants, the ordering, the error modes, the required configuration, the speed. Not just
-  the types.
-- Depth is how much a module does, divided by how much you must learn to call it.
-- A seam is a place where behaviour can change without editing in that place.
-- An adapter is a concrete thing plugged into a seam. A fake and a production client are both
-  adapters.
-- Two things are connascent when changing one forces you to change the other.
-- Use these words, or define the one you want. A word nobody uses the same way is worse than
-  no word.
-
-## Where the lines go
-
-- Do not split along the flow of processing. One decision usually spans several steps, so
-  splitting by step makes every change land in three files.
-- Split by the decisions most likely to change. Give each one a module whose job is to hide
-  it: the encoding format, the storage engine, the wire protocol, the retry policy.
-- A module that hides nothing is a namespace, not a module.
-- An interface shows as little of the inside as possible.
-- Leakage needs no shared import. Knowing the file format, or knowing that one call must come
-  before another, leaks through an implicit interface.
-- Group by domain first, technical kind second. A package holding every controller in the
-  system has nothing in common but its shape.
-- Someone new should be able to read the top of the source tree and name the domain, not the
-  framework.
-- Split when a second consumer needs half of it, not before. A split made for a caller that
-  never arrives costs the extra jump forever and returns nothing.
-
-## Interfaces and depth
-
-- Prefer deep modules: a lot behind a small interface.
-- Weigh what a caller must learn against what they get. An interface nearly as complicated as
-  its implementation is shallow.
-- Depth is about the interface, not the implementation. A deep module may be built inside from
-  small swappable parts; they just do not reach the caller.
-- Before adding a module, imagine it gone. If nothing gets harder, it was a pass-through. If
-  every caller has to do the work itself, it earns its place.
-- The interface is the test surface. A test that must reach past it to set something up or see
-  a result is telling you the shape is wrong.
-- Give each caller a narrow interface. Every member a caller does not call is still a reason
-  it can be forced to change.
-- Design it twice. Two or three genuinely different shapes before you choose; variations do
-  not count.
-- Document the interface where the interface lives. Invariants, units, ordering and error
-  modes are part of it, because none of them are in the signature.
-- A precondition that lives only in a design document is an undocumented interface.
-- Comments restating what the code plainly does are still noise.
-
-## Coupling
-
-- Coupling is not on or off. It has three axes: how hard the dependency is to change, how far
-  apart the two ends sit, and how many things are affected.
-- Prefer the weaker form. A magic literal becomes a named constant. Positional arguments
-  become keyword arguments. An implied ordering becomes an explicit one.
-- Any dependency on an unwritten shared assumption is a finding: a magic number, an argument
-  order, an execution order.
-- The further apart, the weaker the coupling must be. Strong coupling inside one small module
-  is fine, across a package boundary is a problem, across a network boundary is a defect.
-- If you cannot weaken it, move the two ends together.
-- Maximise coupling inside a boundary; minimise it across.
-- One key, one writer. For any derived or shared state, exactly one module writes it.
-
-## Dependency direction
-
-- Dependencies point toward the domain. Business logic depends on nothing framework-shaped.
-- Frameworks, databases and transports sit at the edges and point inward.
-- An abstraction belongs to the layer that uses it, not the one that implements it. If the
-  domain takes something as a parameter, that thing is defined in the domain, even when only
-  an adapter can build one.
-- Ports live inside, implementations outside. Defining a port beside its database
-  implementation is the usual way a clean layer diagram turns out to be false.
-- One composition root. Exactly one place builds concrete dependencies and wires them
-  together, and nothing else reaches for a connection, a client, a clock or a file path.
-- One adapter is a guess; two make the seam real. Do not cut a seam until something actually
-  varies across it.
-- A port with no adapters should be deleted. The interface type is already seam enough for a
-  future implementer.
-- Name adapter packages for the kind of input and output, not for one transport. Otherwise
-  every entry point imports the package named for the web layer, and the diagram stops meaning
-  anything.
-
-## Errors, state, configuration
-
-- Make errors impossible where you can. The cheapest error is the one the design cannot
-  express.
-- Prefer a signature that cannot say the bad thing, a default that makes the empty case
-  ordinary, an operation safe to repeat.
-- This is not licence to skip a check you actually need.
-- A bad item is data; a bad configuration is an exception.
-- One bad record should not stop a batch of twenty thousand.
-- A missing credential should stop the process before the first record is read.
-- Processes keep no state. Anything that must survive a request lives in a backing service,
-  never in process memory or on local disk.
-- Configuration lives in the environment, not in code.
-- Tuned numbers are configuration too. A literal in the logic means changing behaviour takes a
-  code change, and the change is invisible in a configuration diff.
-- Keep development and production alike. A lightweight local stand-in for a backing service is
-  fine; assuming it behaves identically is not.
-- Logs are an event stream. Write structured events to standard output, and never manage log
-  files or rotation.
-- Logging is input and output, so it happens at the edge: the domain returns what happened,
-  the edge writes it.
-- Code you cannot watch while it runs is code you cannot trust.
-
-## Enforcement
-
-- Every rule a machine can check should be checked by one: import rules, layering, cycle
-  detection, naming, public interface snapshots.
-- Without that, rules rot quietly. The diagram keeps saying the controller never touches the
-  repository long after it did.
-- A rule that fails the build is enforced. A rule that fails the review is a suggestion.
-- Write the guard before the code it constrains, and prove it goes red first. A guard written
-  afterwards is how a codebase picks up the thing it forbids.
-- On an existing codebase, freeze the current violations so the rule blocks new ones without
-  demanding a big cleanup.
-- A guard may fix the shape of a package only where the conventions state that shape. Prefer
-  constraining the direction of an import over the number of files.
-- A rule that forbids its own remedy is worse than no rule.
-- Allow tracked exemptions. A rule with no escape hatch gets bypassed entirely: the import
-  moves to a helper, or someone deletes the check.
-- An exemption names a reason and an owner. The list should be short, dated, and shrinking.
-- Where a document states a fact the code also states, a test compares the two. Documentation
-  nothing checks becomes fiction, and unlike code, nobody gets a compile error about it.
-- A guard that reads the installed version of a library cannot see a copy that has not
-  shipped. Two copies in one module drift in a review; two copies in two repositories drift in
-  silence, and nobody runs the tests for the second one.
-- Step modules are allowed, but a decision that spans several steps gets its own module and
-  the steps call it. If a change keeps landing in three steps at once, a module is missing.
-
-## Sources
-
+- Conway, *How Do Committees Invent?*, 1968
+- Constantine and Yourdon, *Structured Design*, 1979
 - Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*, 1972
 - Page-Jones, *Comparing Techniques by Means of Encapsulation and Connascence*, 1992
 - Feathers, *Working Effectively with Legacy Code*, 2004
 - Martin, *Screaming Architecture*, 2011, and *Clean Architecture*
 - Cockburn, *Ports & Adapters*; Palermo, *Onion Architecture*
+- Sandin, *Four Strategies for Organizing Code*, 2016
 - Ousterhout, *A Philosophy of Software Design*, 2018
 - Wiggins and others, *The Twelve-Factor App*
 - North, *CUPID — for joyful coding*, 2022

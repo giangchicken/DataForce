@@ -28,7 +28,7 @@ that already exists (I23).
 
 ## Context
 
-`annotation-pipeline/spec.md` Decision 14 already settled this question once, and settled it the
+`annotation-pipeline/spec.md` the `utils.py` exemption already settled this question once, and settled it the
 other way: *"`utils.py` stays … Alternative: split each into `parts.py`, `embedding.py`,
 `detectors.py`. Why not: three modules with one consumer each — the `__init__.py` that assembles the
 axis — which the sentence above the exemption forbids."* This document reopens it because four of
@@ -48,7 +48,7 @@ rendering, answer arithmetic and annotation decoding. The exemption has not been
 stopped covering these modules some time ago and nothing said so, because no guard reads the convention's
 condition and the guard that does read the package (I4) only counts files.
 
-**2 · A second consumer already arrived — three of them, and they are tests.** Decision 14's
+**2 · A second consumer already arrived — three of them, and they are tests.** the `utils.py` exemption's
 "one consumer each" is the reason it gives, and it is false today:
 
 - `tests/stages/test_text2text.py:35` imports `PHONE_PLANS`, `SPOKEN_PII_FORMS`, `phone_plan`,
@@ -62,7 +62,7 @@ absence was the stated reason not to split.
 
 **3 · The style reference this repository names does the split, and accepts the consumer count.**
 `annotation-pipeline/spec.md` line 3 names `agent-evaluation` as the style reference. Its feature
-folders are named modules, and its modules have exactly the consumer count Decision 14 rejected —
+folders are named modules, and its modules have exactly the consumer count the `utils.py` exemption rejected —
 counted as import statements across its `src/`:
 
 | feature folder | modules | importers each |
@@ -72,7 +72,7 @@ counted as import statements across its `src/`:
 | `agents/testcase_generator/flowtest_generator/` | `agent.py` (470L), `generator.py` (177L), `graph.py` (163L), `submit_graph_tool.py` (128L), `schemas.py` (81L) | **2**, 3, 7, **2**, 33 |
 
 Three of those modules have two importers — the façade and one sibling. That is the shape Decision
-14 calls forbidden, in the codebase Decision 14's own document calls the reference. One of the two
+14 calls forbidden, in the codebase the `utils.py` exemption's own document calls the reference. One of the two
 sentences has to give, and the measurement says which.
 
 **4 · The `utils.py` files cannot get a real name, because a guard forbids it.**
@@ -104,7 +104,7 @@ the rule effective, which is why T54's first step is to relock and read the inst
 in both docstrings and in § *The two axes*, is that the axes share *"`name`, `version`, `Part` and one
 separator and nothing else"*, so a shared reader would be a fourth shared thing. They share more than
 that already: `Manifest` (a whole type, whose own docstring at `manifest.py:5` argues **against**
-splitting it), `ConfigError`, `Record`, `SPOKEN_AND_STATED` — and since Decision 24, `ToolDecision`
+splitting it), `ConfigError`, `Record`, `SPOKEN_AND_STATED` — and since § *The two axes*, `ToolDecision`
 **subclasses `Text2Text`**. The two copies of `declaration` differ in one string: `config/modalities/`
 versus `config/profiles/`.
 
@@ -174,8 +174,8 @@ exactly when it is worth having.
 
 **D5 · A module is named for what it produces, and the façade re-exports one name from each.**
 This is the naming rule applied to filenames, and it is the style reference's shape. `modality.py` and `profile.py`
-name the object that answers the protocol; `turns.py`, `detectors.py`, `answers.py`, `annotations.py`
-and `records.py` each name a result. **No guard enforces this**, for the reason the naming rule gives about itself:
+name the object that answers the protocol; `pii_detector.py`, `text_embeddor.py`, `answers.py`,
+`annotations.py` and `records.py` each name a result. **No guard enforces this**, for the reason the naming rule gives about itself:
 telling `answers.py` from `helpers.py` is a judgement, not a pattern. It is caught in review or it is
 not caught.
 
@@ -211,69 +211,27 @@ surface is exactly its protocol's members, and it is asserted before and after.
 
 ## The target layout
 
-Rows are written the way I19 requires — the text **is** the module's own docstring first line, and the
-guard compares them word for word. These rows are what § *Package layout* gains.
+**The layout is `../annotation-pipeline/spec.md` § *Package layout*, and it is not restated here.**
+Those rows are the ones I19 compares against the modules' own docstrings, so a copy in this document
+would be a second statement of the tree with nothing checking it — which is how the copy comes to
+describe a package that no longer exists. This document argued for the split; the tree it produced
+lives where the guard can read it.
 
-```
-  declarations.py           LOGIC · the manifest declarations an axis reads, checked where they are read.
+Two things this round changed that the tree alone does not show: `text_parts` stays on the object in
+`modality.py`, because refusing a media part is the modality's rule about its own input and both
+callers are there; and `declarations.py` gained `declaring_file`, because naming the file a message
+points at has four callers inside that module.
 
-  modalities/
-    text2text/
-      __init__.py           façade · the text2text modality; the object a composition root registers, and the encoder it is built with.
-      schema.py             DEFINITION · the text2text shapes: what a detector is, and what its display config holds.
-      turns.py              LOGIC · one turn as one part: what it said, what it called, and the string that holds both.
-      detectors.py          LOGIC · the six shapes layer one scans for, filled with the words a declared language dictates.
-      modality.py           LOGIC · Text2Text — the object that answers the Modality protocol.
+**Each module answers the deletion test in one sentence:**
 
-  profiles/
-    tool_decision/
-      __init__.py           façade · the tool_decision profile; the object a composition root registers.
-      schema.py             DEFINITION · the tool_decision shapes: a call, an answer, and what constrains one.
-      answers.py            LOGIC · the answer space, and the three operations over an answer: distance, permitted, consensus.
-      annotations.py        LOGIC · what one annotation said, decoded from the controls the capture half emitted.
-      records.py            LOGIC · the answer a record carries: the one that ships, the one its turns restate, the redacted one.
-      profile.py            LOGIC · ToolDecision — the object that answers the Profile protocol.
-```
-
-**Where each existing name goes.** Nothing is deleted except what layer one duplicates of the
-library (T54); nothing is renamed.
-
-| from | to |
-|---|---|
-| everything layer one is built from — the pattern shapes, the vocabulary and the tone-stripped twin | `agent_toolkit.string_utils`; what stays here is one detector per class (T54, `../annotation-pipeline/spec.md`) |
-| `spoken_text`, `a_turn` | `text2text/modality.py`, where the turn a profile in the family overrides is one method |
-| `stated_calls`, `call_arguments` | `tool_decision/records.py` — a call is that module's vocabulary (T54) |
-| `Encoder`, `embedding_model`, `TURN_SEPARATOR` and the embedding keys | `text2text/text_embeddor.py` (T54) |
-| `Text2Text`, `text_parts`, `DISPLAY_TAGS`, `CONVERSATION` and the item keys | `text2text/modality.py` |
-| `calls_in`, `entries_in`, `catalog_of`, `one_call_schema`, `answer_schema`, `answer_is_permitted`, `argument_agreement`, `answer_distance`, `agreed_arguments`, `vote_consensus` | `tool_decision/answers.py` |
-| `control_values`, `typed_arguments`, `corrected_answer`, `one_written_line` | `tool_decision/annotations.py` |
-| `final_label`, `restated_answer`, `redacted_arguments`, `redact_label` | `tool_decision/records.py` |
-| `ToolDecision`, `CAPTURE_TAGS`, `VERDICTS`, `SCENARIO_LENGTH` and the manifest key constants | `tool_decision/profile.py` |
-| `declaration`, `declared_name`, `declared_text`, `declared_count`, `declared_roles` | `dataforce/declarations.py` — one copy, `declared_text` folded into `declared_name`, plus `declaring_file` |
-| `canonical_json` ×2 | `dataforce/record.py` — one copy, and `record_id_for` calls it (D7) |
-| `one_role` | `tool_decision/profile.py` — its one caller is `ToolDecision.__init__` (`utils.py:680`), and the role it names is the profile's vocabulary, not a reader |
-
-**Three rows were corrected while this was being built (T56).** `turns.py` describes one turn and
-not one item, because `content_parts` — the member that turns an item's turns into parts — stays on
-the object in `modality.py`; `text_parts` went with it for the same reason, since refusing a media
-part is the modality's rule about its own input and both of its callers are there, and the deletion
-test below never named it. `records.py` describes the label a record carries and not the building of
-one, because `build_record` is a member too. And `declarations.py` has a fifth function,
-`declaring_file`: naming the file a message points at has four callers inside that module, which is
-what the file rule asks a function for.
-
-**Each new module answers the deletion test in one sentence:**
-
-- `turns.py` — delete it and every caller has to know that a turn's `content` may be a string, a null
-  or a content-block array, and that a call's `arguments` may be a JSON string or an object.
-- `detectors.py` — delete it and layer one's six shapes are written at whatever site scans.
+- `pii_detector.py` — delete it and layer one's classes are named at whatever site scans.
+- `text_embeddor.py` — delete it and every caller has to know which roles a vector excludes.
 - `modality.py` / `profile.py` — delete it and there is no object to register.
 - `answers.py` — delete it and δ, the answer space and consensus are re-derived per caller; four
   stages depend on δ alone.
-- `annotations.py` — delete it and the annotation tool's `result` shape is read in more than one place,
-  which Requirement 49 forbids by name.
-- `records.py` — delete it and the only place a source shape is validated stops being one place.
-- `declarations.py` — delete it and the reader is copied per axis, which is where this started.
+- `annotations.py` — delete it and an annotation tool's shape is read in two places.
+- `records.py` — delete it and the label a record carries is rebuilt at each reader.
+- `declarations.py` — delete it and each axis re-reads its manifest keys its own way.
 
 ---
 
@@ -320,11 +278,11 @@ the document is wrong, which is what the doc-and-code comparison exists to preve
 |---|---|---|---|
 | *Package layout* | 757–761 | *"Every implementation of either axis is `__init__.py`, `schema.py` and `utils.py`"* → the shape D4 states: a `schema.py` that imports no sibling, a façade that holds nothing of its own, and modules named for what they produce | T55 |
 | *Package layout* | 672–674, 681–683 | the tree gains the rows above and loses the two `utils.py` rows; `declarations.py` is added at top level beside `manifest.py` | T56 |
-| *The two axes* | — | the *"share `name`, `version`, `Part` and one separator and nothing else"* sentence is corrected: it omits `Manifest`, `ConfigError`, `Record` and the base class Decision 24 introduced, and it is the stated reason for the duplication D6 removes | T56 |
+| *The two axes* | — | the *"share `name`, `version`, `Part` and one separator and nothing else"* sentence is corrected: it omits `Manifest`, `ConfigError`, `Record` and the base class § *The two axes* introduced, and it is the stated reason for the duplication D6 removes | T56 |
 | *Invariants* | 1837 | I4's row → the row in § *Invariants* above | T55 |
 | *Invariants* | 1856 | I24's row loses "and as `canonical_json` in each axis", if D7 is taken | T56 |
 | *Invariants* | after 1857 | I25 is added | T56 |
-| *Decisions* | 1588–1597 | **Decision 14 is not deleted.** Per AGENTS.md, a decision reversed is recorded where the next reader hits it: the entry keeps its argument and gains what changed — the four measurements in § *Context* above, and the fact that its "one consumer each" reason was already false when it was written | T56 |
+| *Decisions* | 1588–1597 | **the `utils.py` exemption is not deleted.** Per AGENTS.md, a decision reversed is recorded where the next reader hits it: the entry keeps its argument and gains what changed — the four measurements in § *Context* above, and the fact that its "one consumer each" reason was already false when it was written | T56 |
 
 **T54's edits to that file are stated in it**, not scheduled from here: § *Modality*, § *The two
 axes*, § *PII, in two layers*, Requirements 18 and 47, § *Package layout*, § *Testing Strategy* item
@@ -376,7 +334,7 @@ state that shape.
 
 **Goal.** The layout above, and no `utils.py` in either package.
 
-**Context.** § *Context* items 1, 2, 3 and 6. Decision 14 is reversed, in writing, in its own entry.
+**Context.** § *Context* items 1, 2, 3 and 6. the `utils.py` exemption is reversed, in writing, in its own entry.
 
 **Approach.** Pure moves, in this order so each step is green: `declarations.py` first with both axes
 importing it (D6); then `canonical_json` into `record.py` (D7); then `text2text/` into three modules;
@@ -409,7 +367,7 @@ chose, and it reaches this repository as a `uv.lock` diff under an unchanged ver
 deletes. The alternative — land T55 and T56 as one commit — makes the reviewable unit a rewrite of a
 guard plus a move of 1478 lines. The exemptions are the cheaper cost, and they are dated.
 
-**Decision 14 was right about one thing.** Each new module has one runtime consumer: the
+**the `utils.py` exemption was right about one thing.** Each new module has one runtime consumer: the
 `modality.py` or `profile.py` that assembles the axis. § *Context* item 3 is the argument that this is
 the house shape and not a defect, and it is a measurement of the style reference rather than a
 principle. If the reviewer reads those numbers and still wants one module, the fix is to say so here
