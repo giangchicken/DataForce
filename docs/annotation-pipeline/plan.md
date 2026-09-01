@@ -127,7 +127,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T54 | Layer one is the library's four scans, and the concept keeps no module's vocabulary | 3 | T50 · a tag in `agent-toolkit` containing `d0abc5d` | L | ✓ `8f4e65e` |
 | T55 | I4 stops counting files | 3 | T12, T13 | S | ✓ `c4798fd` |
 | T56 | Both axes get modules named for what they produce | 3 | T55 | L | ✓ `2535a56` · `text2text/` half superseded by T54 |
-| T57 | The modality stops emitting markup | 3 | T26, T54 | M | |
+| T57 | The modality stops emitting markup | 3 | T26, T54 | M | ✓ |
 | T58 | The code cites a section, not a decision number | 3 | | S | |
 | T5 | The package skeleton and the import direction | 1 | | M | ✓ `64edb99` |
 | T7 | The flow-table drift test | 1 | T3, T5 | S | ✓ `b1c49b6` |
@@ -1973,6 +1973,43 @@ either has to be edited, the markup moved and something else moved with it, and 
 
 **Source.** `spec.md` § *Modality*, § *The annotation config, and what comes back*, Requirements 31,
 47 and 52, § *Package layout*.
+
+**Landed.** All five moves, and the six assertions watched red first. `Modality` is five members;
+`edge/label_studio.py` holds `DISPLAY_TAGS`, `display_payload` and `annotation_config`, and the
+composed config is byte-identical — `annotation_config(capture_tags)` returns exactly what
+`annotation_config(display.tags, capture.tags)` returned, which is what the two moved tests assert.
+`make check` is green over 1146 tests.
+
+**Move 5 was bigger than one call, and the two things it uncovered were settled rather than worked
+around.** `publish` did not only *call* `content_display`; it composed the `<View>` those halves went
+inside and hashed the result into `config_digest`. Both are the tool's grammar, so both had to leave
+a stage — and once they had, `publish` could not compose a config at all: Requirement 36 forbids an
+engine module importing `edge/`, which is where the fragment now is.
+
+- **`config_digest` is deleted, not weakened.** The alternatives were a digest over the capture
+  fragment alone — which stops answering the question the column exists for, since a change to the
+  display fragment would no longer move it — or one over the payload, which is a different fact and
+  would differ per question rather than per record. What is left is a column nothing reads and
+  nothing can honestly fill, so it goes: `QuestionToStore`, `Question`, the adapter's row and the
+  first revision all lose it. The revision was edited in place rather than followed by a
+  drop-column: it is the only one, and the table has never existed outside a test database.
+  Recording which config a person answered under belongs to the module that pushes the config, and
+  that module is the sync.
+- **The payload loses `conversation`, and the pushed task does too until the sync route lands.**
+  § *The annotation config* says that key is the adapter's; `publish` cannot reach the adapter, and
+  the sync has no record to build the array from — § *The question store* keeps records out of it.
+  So `display_payload` exists, is tested, and has no production caller yet — it returns the key
+  *and* the array rather than the bare array, so the join T28 writes cannot file one under the
+  wrong name, and the key is spelled once beside the tag that reads it. **This is the one thing this
+  task leaves not working:** a task created today would carry the question and the catalog and
+  render no transcript. T28 wires the route and is where the join belongs.
+
+`test_publish.py` lost the two config tests and the disjointness test to `test_sync.py`, which is
+where the grammar is; the one that read `config_digest` to prove *one config per project* is now
+asserted on the config itself. `test_text2text.py`'s Requirement 30 test on the display half is
+**not** moved as it stood: the member took a `Record` and could reach `ai_review`, and
+`display_payload` takes `Sequence[Part]` and cannot, so the fact is in the signature — what
+replaced it is one test in `test_sync.py` over a record that has been through all of `ai_review`.
 
 ### T58 · The code cites a section, not a decision number
 

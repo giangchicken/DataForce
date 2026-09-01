@@ -1,8 +1,8 @@
 """LOGIC · Text2Text — the object that answers the Modality protocol, and the turn it reads.
 
 **The implementation is here and not in ``__init__.py``**, which is a ``façade ·`` that holds nothing
-of its own (Requirement 2). All four of a modality's operations are conversions -- an item into
-parts, parts into a vector, a record into a display fragment -- so the object lives beside the
+of its own (Requirement 2). All three of a modality's operations are conversions -- an item into
+parts, parts into a vector, a part's text into the hits in it -- so the object lives beside the
 conversions it is assembled from: layer one's four scans are picked in ``pii_detector.py``, the
 document a vector is taken over is built in ``text_embeddor.py``, and what the manifest declares is
 read through ``dataforce/declarations.py``.
@@ -15,7 +15,7 @@ both axes; what a turn *did* is what one module in this family answers with, and
 says a concept may not hold a convention only one of its modules speaks. So ``_turn_part`` is the
 seam: this class writes down what was said, ``ToolDecision`` overrides it to write what was done onto
 the part it gets back, and both the key it reads that from and the separator are that profile's own.
-It is private because I23 holds an implementation's public surface to exactly the protocol's six
+It is private because I23 holds an implementation's public surface to exactly the protocol's five
 members, and a seam for a subclass is not a member.
 
 The key names are deliberately not spelled here, and that is the rule rather than fastidiousness: a
@@ -43,13 +43,13 @@ from typing import TYPE_CHECKING, Any
 from dataforce.errors import ConfigError
 from dataforce.manifest import Manifest
 from dataforce.modalities.text2text.pii_detector import personal_data_detectors
-from dataforce.modalities.text2text.schema import ContentDisplay, Detector
+from dataforce.modalities.text2text.schema import Detector
 from dataforce.modalities.text2text.text_embeddor import (
     Encoder,
     embedded_document,
     roles_not_embedded,
 )
-from dataforce.record import Part, Record, canonical_json
+from dataforce.record import Part, canonical_json
 
 if TYPE_CHECKING:
     from dataforce.modalities import Modality
@@ -59,18 +59,6 @@ MESSAGES = "messages"
 ROLE = "role"
 CONTENT = "content"
 TEXT = "text"
-
-# The key `<Paragraphs>` reads its turns from, and the one key this half of the config owns.
-CONVERSATION = "conversation"
-
-# Requirement 52: `<Chat>` renders this exactly the way this modality wants and is Enterprise-only,
-# so the community path is `<Paragraphs layout="dialogue">`. `$question` is the profile's string and
-# `$conversation` is this half's data -- the tag that shows one is still the display half's.
-DISPLAY_TAGS = (
-    '<Paragraphs name="conversation" value="$conversation"\n'
-    '            layout="dialogue" nameKey="role" textKey="content"/>\n'
-    '<Header value="$question"/>'
-)
 
 
 def spoken_text(content: Any) -> str:
@@ -118,18 +106,18 @@ def text_parts(parts: Sequence[Part]) -> tuple[Part, ...]:
 
 
 class Text2Text:
-    """Conversational text: read verbatim, embedded, shown to a person as dialogue.
+    """Conversational text: read verbatim, embedded, scanned for what a person must not see.
 
     **Not `@final`, and that is the whole of what T52 needed from this class.** A profile is one
     module inside a concept and now says so by subclassing it (Decision 24), so `ToolDecision` is a
     `Text2Text` and every later module in this family -- `summarize`, `classification` -- shares
-    these four members rather than redeclaring them. What a subclass may not do is answer for a
+    these three members rather than redeclaring them. What a subclass may not do is answer for a
     profile member: the two protocols stay separate and the identity is prefixed on both, which is
     why `modality_name` is not `name`.
 
     **What a subclass may override is one seam, and it is a turn.** `_turn_part` is where a module in
     this family writes its own vocabulary onto a part -- what a turn *did*, for `tool_decision` --
-    and it is the only thing here a profile is expected to extend. The four members are the
+    and it is the only thing here a profile is expected to extend. The three members are the
     framework, and a framework a subclass has to reimplement is not one.
 
     **Built with what only the edge can produce.** Identity and both embedding choices come from
@@ -208,23 +196,6 @@ class Text2Text:
     def personal_data_detectors(self) -> list[Detector]:
         """The high-recall first layer: one scan per class of personal data."""
         return list(self._detectors)
-
-    def content_display(self, record: Record) -> ContentDisplay:
-        """How this record's content is shown to a person. Never the capture half.
-
-        The turns go into task *data* rather than into markup, so nothing is escaped: `<Paragraphs>`
-        reads a JSON array, and a transcript containing a tag stays that text instead of becoming
-        structure in the annotator's page.
-        """
-        return ContentDisplay(
-            tags=DISPLAY_TAGS,
-            data={
-                CONVERSATION: [
-                    {ROLE: part.role, CONTENT: part.text or ""}
-                    for part in text_parts(record.content)
-                ]
-            },
-        )
 
 
 if TYPE_CHECKING:

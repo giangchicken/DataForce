@@ -84,7 +84,6 @@ def rows_for(
             "modality": question.modality,
             "profile": question.profile,
             "payload": dict(question.payload),
-            "config_digest": question.config_digest,
             "created_at": published_at,
         }
         for question in questions

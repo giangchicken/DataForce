@@ -110,10 +110,6 @@ class Question(Base):
         JSON,
         comment="The task payload as the annotation tool takes it: `data` and nothing else.",
     )
-    config_digest: Mapped[str] = mapped_column(
-        String(ID_LENGTH),
-        comment="Of the annotation config this payload was composed against, as published.",
-    )
     created_at: Mapped[datetime] = mapped_column(
         UtcDateTime,
         comment="When the store first held it. A re-publish does not move it.",

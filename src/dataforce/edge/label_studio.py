@@ -1,12 +1,20 @@
-"""TOOL · the Label Studio sync: questions out, annotations back, idempotent in both directions.
+"""TOOL · the Label Studio adapter: the config it composes, questions out, annotations back, idempotent in both directions.
 
 Decision 6's other half. ``publish`` writes to a database we own and never talks to an annotation
 tool; this moves rows between that database and one, and **running it is optional** -- every other
 endpoint works with no instance anywhere, which is what makes the pipeline testable without one.
 
-**Nothing here touches a record.** The sync reads and writes the store's own three tables and the
+**This module is where the tool's config grammar is written, and it is written nowhere else**
+(Requirement 31). A modality reads content; how a conversation is *shown* is this tool's dialect, so
+the display fragment and the ``conversation`` array it reads are composed here out of a record's own
+parts -- a ``Part`` already carries ``role`` and ``text``, so no axis is asked for either. The
+profile's capture half is enclosed verbatim and this module emits none of it: what an annotator may
+answer is the profile's to say, and § *The two axes* keeps that fragment the only one an axis owns.
+
+**Nothing the sync does touches a record.** It reads and writes the store's own three tables and the
 bus never enters it, so a failed sync cannot leave a record saying something that did not happen.
-That is most of why the two directions are safe to retry.
+That is most of why the two directions are safe to retry. The composition above it takes parts and
+returns strings; it reaches no database and is not part of either direction.
 
 **Idempotency is two unique constraints, not two flags.** A question already pushed has a
 ``publication`` row for ``(question_id, external_system)`` and is not offered again; an annotation
@@ -43,8 +51,29 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from dataforce.errors import ConfigError
+from dataforce.record import Part
 
 from .store.models import AnnotatorAnswer, Publication, Question
+
+# The task-payload keys the display fragment reads, spelled the way the tag below spells them:
+# `<Paragraphs>` is pointed at `$conversation` and reads each object's `role` and `content`.
+CONVERSATION = "conversation"
+ROLE = "role"
+CONTENT = "content"
+
+# The part a conversation is shown from. A media part has nothing `<Paragraphs>` can render, and the
+# tag that would render one is the change a media modality makes here.
+TEXT = "text"
+
+# Requirement 52: `<Chat>` renders a conversation exactly the way a chat corpus wants and is
+# Enterprise and Starter Cloud only, so the community path is `<Paragraphs layout="dialogue">`.
+# `$question` is the profile's string and `$conversation` is this module's data -- the tag that
+# shows one is still this module's.
+DISPLAY_TAGS = (
+    '<Paragraphs name="conversation" value="$conversation"\n'
+    '            layout="dialogue" nameKey="role" textKey="content"/>\n'
+    '<Header value="$question"/>'
+)
 
 # Which annotation tool a `publication` row belongs to. One value today, and a column rather than an
 # assumption: the row's uniqueness is per system, so a second tool is a row and not a migration.
@@ -64,6 +93,44 @@ PROJECT_ID = "DATAFORCE_LABEL_STUDIO_PROJECT"
 ANSWER_PREFIX = "a_"
 ANSWER_LENGTH = 16
 ID_SEPARATOR = "|"
+
+
+# --- the config this tool takes, composed from the record's parts and the profile's fragment ---
+
+
+def display_payload(parts: Sequence[Part]) -> dict[str, Any]:
+    """The task-payload keys the display fragment reads: the conversation, one object per text part.
+
+    A dict rather than the bare array, so the key and the tag that reads it are spelled in one place
+    and a caller cannot file the array under the wrong name. It is the display half's share of one
+    task's `data` and holds no other half's keys (Requirement 31).
+
+    The turns go into task *data* rather than into markup, so nothing is escaped: the tag reads a
+    JSON array, and a transcript containing a tag stays that text instead of becoming structure in
+    the annotator's page.
+
+    A part with no text contributes an empty string rather than a null, because the tag renders a
+    string; a media part contributes nothing at all, because there is no tag here that shows one.
+    """
+    return {
+        CONVERSATION: [
+            {ROLE: part.role, CONTENT: part.text or ""}
+            for part in parts
+            if part.type == TEXT
+        ]
+    }
+
+
+def annotation_config(capture_tags: str) -> str:
+    """The labelling config an annotator's page is built from: this tool's display fragment, and
+    the profile's capture half enclosed unchanged, inside one `<View>`.
+
+    Display first, because that is reading order on the page: the conversation, the question, then
+    the controls that answer it. Assembled by concatenation and not by parsing -- this module has no
+    opinion about the fragment it encloses, and an XML tree here would be a second place that could
+    hold one.
+    """
+    return f"<View>\n{DISPLAY_TAGS}\n{capture_tags}\n</View>"
 
 
 @dataclass(frozen=True)

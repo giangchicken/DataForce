@@ -1,7 +1,7 @@
 """I21 · each axis protocol has the members its section of the document writes down.
 
 `Modality` and `Profile` are written three times: as a `Protocol` block in `spec.md`, as a count in
-words in that section *and* in the module's own docstring -- "Six members, closed" -- and as the
+words in that section *and* in the module's own docstring -- "Five members, closed" -- and as the
 class itself. Three statements, and until this guard nothing compared any two of them.
 
 **The names are compared, not only the count.** A renamed member keeps the count and breaks every
@@ -106,7 +106,7 @@ def test_the_protocol_has_the_members_the_document_writes(
 def test_the_count_in_the_document_is_the_number_of_members(
     axis: str, heading: str, protocol: type
 ) -> None:
-    """ "Six members, closed" is a fact about the code, so it is compared to the code."""
+    """ "Five members, closed" is a fact about the code, so it is compared to the code."""
     assert stated_count(section(heading)) == len(protocol.__protocol_attrs__)
 
 
@@ -129,14 +129,14 @@ def test_the_sentence_defining_the_protocol_is_the_same_on_both_sides(
     A protocol's docstring says what the axis *is*, and it is written twice -- in the document's
     block and on the class. Nothing compared them until a reader asked why `Modality` promises an
     output half that no member delivers, which is a question about this sentence and not about the
-    six names above it.
+    five names above it.
     """
     assert drawn_sentence(heading) == plain(protocol.__doc__ or "")
 
 
 def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
     """Guards the parse: an empty set on both sides would make the comparison vacuous."""
-    assert len(drawn_members("### Modality")) == 6
+    assert len(drawn_members("### Modality")) == 5
     assert "content_parts" in drawn_members("### Modality")
     assert "annotation_response" in drawn_members("### Profile")
     assert drawn_sentence("### Modality").startswith("One input")
@@ -156,7 +156,6 @@ def test_the_parser_found_a_protocol_and_not_an_empty_class() -> None:
             "    def content_parts(self): ...\n"
             "    def embedding(self): ...\n"
             "    def personal_data_detectors(self): ...\n"
-            "    def content_display(self): ...\n"
             "    def transcribe(self): ...\n",
             "a member the document gained and the class did not",
         ),
@@ -178,5 +177,5 @@ def test_the_scan_rejects_a_protocol_that_drifted(drawn: str, reason: str) -> No
 
 
 def test_the_scan_rejects_a_count_that_no_longer_matches() -> None:
-    """Proved red for the word: "Five members, closed" over six members."""
-    assert stated_count("Five members, closed.") != len(Modality.__protocol_attrs__)
+    """Proved red for the word: "Six members, closed" over five members."""
+    assert stated_count("Six members, closed.") != len(Modality.__protocol_attrs__)

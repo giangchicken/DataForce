@@ -137,7 +137,7 @@ class JuryPanel(Protocol):
 
 @dataclass(frozen=True)
 class QuestionToStore:
-    """One question as the store takes it: the join keys, the task payload, and what composed it.
+    """One question as the store takes it: the join keys and the task payload.
 
     Flat rather than the record's `Question` plus a payload, because the store's own row is flat and
     an adapter that had to reshape one would be a second place the row's shape is written down. The
@@ -153,7 +153,6 @@ class QuestionToStore:
     payload: Mapping[
         str, Any
     ]  # the task payload: `data` and nothing else (Requirement 30)
-    config_digest: str  # of the annotation config the payload was composed against
 
 
 @dataclass(frozen=True)

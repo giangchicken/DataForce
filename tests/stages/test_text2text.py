@@ -39,14 +39,10 @@ from dataforce.modalities import Modality
 from dataforce.modalities.text2text import Encoder, Text2Text, embedding_model
 from dataforce.modalities.text2text.pii_detector import LANGUAGES
 from dataforce.record import (
-    AgreementScores,
-    AiReview,
     Branch,
-    PanelVerdict,
     Part,
     Provenance,
     Record,
-    ReviewSelection,
     record_id_for,
 )
 
@@ -538,55 +534,6 @@ def test_a_bare_identifier_is_not_a_class_layer_one_has() -> None:
     assert scanned == {"PHONE": [], "EMAIL": [], "OTP": [], "NAME": []}
 
 
-def test_the_display_half_is_community_tags_over_the_conversation() -> None:
-    """Requirement 52 and Requirement 31: `<Paragraphs>`, and only this half's own data."""
-    modality = a_modality()
-    record = a_record(modality.content_parts(ITEM))
-
-    shown = modality.content_display(record)
-
-    assert "<Chat" not in shown.tags
-    assert '<Paragraphs name="conversation"' in shown.tags
-    assert set(shown.data) == {"conversation"}
-    assert shown.data["conversation"][1] == {
-        "role": "user",
-        "content": "Cho mình xem số dư tài khoản.",
-    }
-
-
-def test_no_model_output_reaches_the_display_half() -> None:
-    """Requirement 30, asserted on a record that already carries all three `ai_review` keys."""
-    modality = a_modality()
-    reviewed = a_record(
-        modality.content_parts(ITEM),
-        ai_review=AiReview(
-            jury=PanelVerdict(
-                panel_version=1,
-                prompt_version="jury.v1",
-                invalid_votes=0,
-                plurality=({"name": "LookupBalance", "arguments": {}},),
-                final_prediction=({"name": "LookupBalance", "arguments": {}},),
-            ),
-            cohesion=AgreementScores(
-                self_agreement=0.9, label_agreement=0.1, method="answer_distance"
-            ),
-            triage=ReviewSelection(
-                bucket="disagreed",
-                stratum="audit",
-                selected_for_review=True,
-                reason="label_agreement below the boundary",
-            ),
-        ),
-    )
-
-    shown = json.dumps(
-        modality.content_display(reviewed).model_dump(), ensure_ascii=False
-    )
-
-    for leaked in ("jury", "cohesion", "triage", "disagreed", "audit", "0.9"):
-        assert leaked not in shown
-
-
 def test_it_answers_every_member_its_protocol_declares() -> None:
     """The runtime half of what `modality.py`'s `TYPE_CHECKING` block proves statically.
 
@@ -607,7 +554,6 @@ def test_it_answers_every_member_its_protocol_declares() -> None:
 
     assert declared == {
         "content_parts",
-        "content_display",
         "embedding",
         "modality_name",
         "modality_version",

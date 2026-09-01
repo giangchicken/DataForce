@@ -98,7 +98,6 @@ def test_a_question_written_is_a_question_the_store_holds(
     assert [row.question_id for row in held] == ["q_0000000000000001"]
     assert held[0].record_id == "3f9a1c0b7e4d2856"
     assert held[0].payload == a_question().payload
-    assert held[0].config_digest == "a1b2c3d4"
 
 
 def test_writing_one_question_twice_is_one_row(
@@ -117,9 +116,9 @@ def test_a_second_write_does_not_rewrite_what_was_published(
     """Insert-if-absent, not upsert: the row records the question a person may have answered."""
     store.stored_questions([a_question()])
 
-    store.stored_questions([a_question(config_digest="deadbeef")])
+    store.stored_questions([a_question(payload={"question": "Câu khác."})])
 
-    assert rows_of(sessions, Question)[0].config_digest == "a1b2c3d4"
+    assert rows_of(sessions, Question)[0].payload == a_question().payload
 
 
 @pytest.mark.parametrize("dialect", ["sqlite", "postgresql"])

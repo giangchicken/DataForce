@@ -65,12 +65,6 @@ def upgrade() -> None:
             comment="The task payload as the annotation tool takes it: `data` and nothing else.",
         ),
         sa.Column(
-            "config_digest",
-            sa.String(length=64),
-            nullable=False,
-            comment="Of the annotation config this payload was composed against, as published.",
-        ),
-        sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,

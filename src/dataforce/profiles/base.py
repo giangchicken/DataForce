@@ -75,8 +75,8 @@ class Profile(Protocol):
     def answer_config(self, record: Record) -> AnswerConfig:
         """The capture half: the fragment that collects an answer, and the task data it owns.
 
-        Takes the record for `content_display`'s reason -- half of what it returns is per record.
-        The catalog an annotator chooses from is this record's, and a Label Studio project holds
+        Takes the record because half of what it returns is per record: the catalog an annotator
+        chooses from is this record's, and a Label Studio project holds
         one config for every task in it, so the names travel as *data* and not as markup."""
         ...
 

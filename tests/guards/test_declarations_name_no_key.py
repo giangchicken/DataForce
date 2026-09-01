@@ -15,7 +15,7 @@ one of them, the seam is back and this goes red.
 **The vocabulary is derived, not listed.** It is every string either axis assigns to a module-level
 constant, read off the tree the same way I6 reads the installed library: a hand-kept list here would
 be a second statement of what the axes' keys are, and the two would drift in the direction that makes
-this rule vacuous. It is generous on purpose -- `TURN_SEPARATOR`'s `"\\n\\n"` and `DISPLAY_TAGS`'
+this rule vacuous. It is generous on purpose -- `TURN_SEPARATOR`'s `"\\n\\n"` and `CAPTURE_TAGS`'
 markup are in it too. Everything an axis names as a constant is that axis's vocabulary, and none of
 it belongs in a reader both of them import.
 

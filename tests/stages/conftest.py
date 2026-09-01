@@ -67,7 +67,6 @@ def a_question(
             "modality": "text2text@1",
             "profile": "tool_decision@1",
             "payload": {"question_id": question_id, "question": "Tool nào cần gọi?"},
-            "config_digest": "a1b2c3d4",
             **written,
         }
     )

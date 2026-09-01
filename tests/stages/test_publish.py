@@ -1,4 +1,4 @@
-"""T24 · publish: the two config halves composed, and the questions handed across the port.
+"""T24 · publish: the question payload composed, and the questions handed across the port.
 
 The records reach this stage through the real `label_check`, `jury`, `cohesion`, `triage` and
 `question_generate`, because what gets published is what got asked and a hand-written `Question`
@@ -23,12 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from dataforce.edge.store.repository import SqlQuestionStore
 from dataforce.engine import Engine
 from dataforce.errors import ConfigError
-from dataforce.pipeline.human_review.publish import (
-    QUESTION,
-    QUESTION_ID,
-    annotation_config,
-    publish,
-)
+from dataforce.pipeline.human_review.publish import QUESTION, QUESTION_ID, publish
 from dataforce.ports import QuestionToStore, StoredAnnotation, StoreReceipt
 from dataforce.record import PublishedQuestions, Record
 
@@ -170,54 +165,10 @@ def test_a_row_carries_the_pair_and_the_run_off_the_record() -> None:
     assert row.record_id == written.record_id
 
 
-def test_every_record_is_published_under_one_config() -> None:
-    """A Label Studio project holds one config for every task in it, which is why the catalog is data."""
-    engine = an_engine_publishing()
-
-    published(engine, a_record(), a_record(label=(LOOKED_UP,)))
-
-    assert len({row.config_digest for row in store_of(engine).held.values()}) == 1
-
-
-# --- the config, composed from two halves this module does not write ---
-
-
-def test_the_config_is_both_halves_inside_one_view() -> None:
-    """Display first, because that is reading order: the content, the question, then the controls."""
-    assert annotation_config("<A/>", "<B/>") == "<View>\n<A/>\n<B/>\n</View>"
-
-
-def test_the_composed_config_carries_each_half_and_neither_half_carries_the_other() -> (
-    None
-):
-    """Requirement 31, on the composition and on the pieces."""
-    engine = an_engine_publishing()
-    record = asked(engine, a_record())[0]
-    display = engine.modality.content_display(record)
-    capture = engine.profile.answer_config(record)
-
-    composed = annotation_config(display.tags, capture.tags)
-
-    assert "<Paragraphs" in composed and '<Choices name="verdict"' in composed
-    assert "<Choices" not in display.tags
-    assert "<Paragraphs" not in capture.tags
-
-
-def test_the_two_halves_own_disjoint_payload_keys() -> None:
-    """A key emitted by both would silently drop one; Requirement 31 is why nothing guards it."""
-    engine = an_engine_publishing()
-    record = asked(engine, a_record())[0]
-
-    display = engine.modality.content_display(record)
-    capture = engine.profile.answer_config(record)
-
-    assert not display.data.keys() & capture.data.keys()
-
-
 # --- the payload ---
 
 
-def test_the_payload_carries_both_halves_data_and_the_questions_two_keys() -> None:
+def test_the_payload_carries_the_capture_half_and_the_questions_two_keys() -> None:
     """`question_id` rides inside `data`, because Label Studio assigns its own task ids."""
     engine = an_engine_publishing()
 
@@ -227,14 +178,25 @@ def test_the_payload_carries_both_halves_data_and_the_questions_two_keys() -> No
     payload = store_of(engine).held[question.question_id].payload
     assert payload[QUESTION_ID] == question.question_id
     assert payload[QUESTION] == question.content
-    assert [turn["role"] for turn in payload["conversation"]] == [
-        part.role for part in written.content
-    ]
     assert payload["tool_names"] == [
         {"value": "LookupBalance"},
         {"value": "SendStatement"},
         {"value": "OpenTicket"},
     ]
+
+
+def test_the_payload_carries_no_key_the_display_fragment_owns() -> None:
+    """Requirement 31: the fragment that renders the content, and the key it reads, are the adapter's.
+
+    Asserted by name because `conversation` is the key that moved: a payload carrying it again
+    would mean this stage had gone back to composing half of a page it cannot see.
+    """
+    engine = an_engine_publishing()
+
+    written = published(engine, a_record())[0]
+
+    payload = store_of(engine).held[questions_of(written)[0].question_id].payload
+    assert "conversation" not in payload
 
 
 def test_no_model_output_reaches_the_payload() -> None:

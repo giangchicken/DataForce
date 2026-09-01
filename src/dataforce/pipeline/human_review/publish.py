@@ -2,18 +2,19 @@
 
 **No Label Studio anywhere.** ``publish`` writes to a database we own and a separate sync moves the
 questions out (Decision 6), so the pipeline stays runnable and testable with no instance and
-``annotator_answers`` reads one shape whatever the annotation tool turns out to be. What this stage
-composes is a *labelling config* in Label Studio's dialect, which is a different thing from talking
-to one: the tool on the other end is real and its input is not ours to choose (Requirement 52).
+``annotator_answers`` reads one shape whatever the annotation tool turns out to be. Not one word of
+that tool's dialect is written here either: the payload this stage composes is keys and values, and
+every tag that reads them is ``edge/label_studio.py``'s.
 
-**The config is two halves and this module writes neither** (Requirement 31). ``content_display``
-gives the fragment that renders the content and the task data that feeds it; ``answer_config`` gives
-the fragment that captures an answer and the names it offers. What is here is the `<View>` they go
-inside and the two ids that join a task back to a record -- and that is the whole of the assembly,
-because a stage that knew what either half *contained* would be a second place to change when a
-modality or a profile changed.
+**This module writes no annotation-tool markup at all** (Requirement 31). What it assembles is the
+question *payload* -- the ``data`` dict a task carries -- out of the profile's capture half and the
+two ids that join a task back to a record. The config an annotator's page is built from is the tool's
+own grammar and is composed in ``edge/label_studio.py``, along with the fragment that renders the
+content and the array it reads: a stage that knew what a fragment contained would be a second place
+to change when the tool changed, and a stage that composed one could not be run without the tool
+being the one on the other end.
 
-**The payload carries no model output** (Requirement 30, I12). It is built from the two halves and
+**The payload carries no model output** (Requirement 30, I12). It is built from the capture half and
 the question, and nothing in this module can reach `ai_review` -- the record's votes, its two
 agreement figures and its bucket have no path into a `data` dict assembled out of three values none
 of which is read from that key.
@@ -30,8 +31,6 @@ transaction, mint an id over nothing and stamp a clock nobody reads, so the stag
 """
 
 from collections.abc import Iterable, Sequence
-
-from agent_toolkit.string_utils import compute_hash
 
 from dataforce.engine import Engine, ServiceResult
 from dataforce.errors import ConfigError
@@ -59,32 +58,16 @@ def questions_to_publish(record: Record) -> Sequence[Question]:
     return record.human_review.question_generate or ()
 
 
-def annotation_config(display_tags: str, capture_tags: str) -> str:
-    """The labelling config an annotator's page is built from: both halves, inside one `<View>`.
-
-    Display first, because that is reading order on the page: the conversation, the question, then
-    the controls that answer it. Assembled by concatenation and not by parsing -- this module has no
-    opinion about either fragment, and an XML tree here would be a second place that could hold one.
-    """
-    return f"<View>\n{display_tags}\n{capture_tags}\n</View>"
-
-
 def rows_for(engine: Engine, record: Record) -> tuple[QuestionToStore, ...]:
-    """One record's questions in the shape the store takes, each with the config it was composed
-    against.
+    """One record's questions in the shape the store takes.
 
-    The two halves are read once per record rather than once per question: the config is a fact
-    about the record's content and catalog, and every question about one record is asked on one
-    page. `config_digest` is over the composed config and not over either half, because what a
-    person was shown is the composition -- a change to either fragment changes what they saw.
+    The capture half is read once per record rather than once per question: what it offers is a fact
+    about the record's catalog, and every question about one record is asked on one page.
 
     The pair and the run come off the record's own `provenance`, already stamped `name@version`.
     A store outlives a run, so a row that did not carry them could not be read back safely.
     """
-    display = engine.modality.content_display(record)
     capture = engine.profile.answer_config(record)
-    config = annotation_config(display.tags, capture.tags)
-    digest = compute_hash(config)
     return tuple(
         QuestionToStore(
             question_id=question.question_id,
@@ -92,18 +75,15 @@ def rows_for(engine: Engine, record: Record) -> tuple[QuestionToStore, ...]:
             run_id=record.provenance.run_id,
             modality=record.provenance.modality,
             profile=record.provenance.profile,
-            # The `data` dict the config's `$names` read: both halves' keys and the question's
-            # two. The halves own disjoint keys by Requirement 31 and a collision would silently
-            # drop one, which is why `test_publish.py` asserts the disjointness rather than a
-            # branch here guarding it -- a key emitted by both is a fault in an axis, and one a
-            # test can state and a branch cannot fix.
+            # The `data` dict the config's `$names` read, as far as this side owns them: the
+            # capture half's keys and the question's two. The display fragment's own key is the
+            # adapter's and joins them where the task is created, because that is where the tag
+            # that reads it is written (Requirement 31).
             payload={
                 QUESTION_ID: question.question_id,
                 QUESTION: question.content,
-                **display.data,
                 **capture.data,
             },
-            config_digest=digest,
         )
         for question in questions_to_publish(record)
     )

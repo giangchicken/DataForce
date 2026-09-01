@@ -1119,6 +1119,9 @@ def test_it_answers_every_member_of_both_protocols_and_nothing_else() -> None:
     to add it without; fifteen since T19, which brought `jury`; sixteen while `modality` named the
     pair as a string, and fifteen again since T52 took that string off the protocol because the base
     class now says the same thing and cannot disagree with it.
+
+    Five concept members: six until T57 took `content_display` off, because how a conversation is
+    shown is an annotation tool's grammar and a modality reads content.
     """
     profile = {name for name in dir(Profile) if not name.startswith("_")} | set(
         Profile.__annotations__
@@ -1127,7 +1130,7 @@ def test_it_answers_every_member_of_both_protocols_and_nothing_else() -> None:
         Modality.__annotations__
     )
 
-    assert (len(profile), len(concept)) == (15, 6)
+    assert (len(profile), len(concept)) == (15, 5)
     assert not profile & concept, "a member of one axis may not answer for the other"
     assert {
         name for name in dir(a_profile()) if not name.startswith("_")

@@ -1,9 +1,13 @@
-"""T26 · the Label Studio sync: questions out, annotations back, and neither twice.
+"""T26 · the Label Studio adapter: the config it composes, questions out, annotations back, and neither twice.
 
 Not a stage. It is the one thing in this repository that talks to an annotation tool, and it is
 tested here because what it moves is the store's rows and `tests/stages` is where the store's tests
 already run — on SQLite in `make check` and on a real Postgres under `-m integration`, through
 `conftest.py`'s `sessions`.
+
+**The config tests need no database and no tool.** They are here rather than in a module of their own
+because the grammar and the sync are one module: this is the seam Requirement 31 draws, and a reader
+asking where the `<Paragraphs>` tag went should find the answer beside the thing that pushes it.
 
 **The tool is a double, and the constraints are real.** What a fake client cannot prove is
 idempotency, because idempotency here is two unique constraints in a database rather than a check in
@@ -17,6 +21,7 @@ task nobody recorded, so the row is the record that it exists.
 Every fixture is invented.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -28,11 +33,15 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from dataforce.edge.label_studio import (
     BASE_URL,
+    CONVERSATION,
+    DISPLAY_TAGS,
     EXTERNAL_SYSTEM,
     PUSHED,
     ReturnedAnnotation,
+    annotation_config,
     answer_id_for,
     declared_at,
+    display_payload,
     label_studio_tool,
     synced_with_label_studio,
 )
@@ -41,10 +50,10 @@ from dataforce.edge.store.repository import SqlQuestionStore
 from dataforce.errors import ConfigError
 from dataforce.pipeline.human_review.annotator_answers import annotator_answers
 from dataforce.pipeline.human_review.publish import publish
-from dataforce.record import Record
+from dataforce.record import Part, Record
 
 from .test_question_generate import an_engine_asking, another_record, asked
-from .test_tool_decision import SENT, a_record, an_annotation
+from .test_tool_decision import LOOKED_UP, SENT, a_record, an_annotation
 
 PROJECT = "7"
 ANSWERED_AT = datetime(2026, 8, 25, 16, 0, tzinfo=UTC)
@@ -139,7 +148,7 @@ def test_the_task_carries_the_payload_publish_composed(
     project_id, payload = tool.posted[0]
     assert project_id == PROJECT
     assert payload["question_id"].startswith("q_")
-    assert "conversation" in payload and "tool_names" in payload
+    assert "tool_names" in payload
 
 
 def test_syncing_twice_pushes_nothing_the_second_time(
@@ -317,3 +326,101 @@ def test_the_sdk_client_builds_against_a_declared_instance() -> None:
         )
 
     assert label_studio_tool() is not None
+
+
+# --- the config this module composes ---
+
+
+def test_the_config_is_the_display_fragment_and_the_capture_half_inside_one_view() -> (
+    None
+):
+    """Display first, because that is reading order: the content, the question, then the controls."""
+    assert annotation_config("<B/>") == f"<View>\n{DISPLAY_TAGS}\n<B/>\n</View>"
+
+
+def test_the_composed_config_carries_both_and_the_capture_half_carries_no_display_tag() -> (
+    None
+):
+    """Requirement 31, on the composition and on the one fragment an axis still owns."""
+    engine = an_engine_asking()
+    record = asked(engine, a_record())[0]
+    capture = engine.profile.answer_config(record)
+
+    composed = annotation_config(capture.tags)
+
+    assert "<Paragraphs" in composed and '<Choices name="verdict"' in composed
+    assert "<Paragraphs" not in capture.tags
+    assert "<Header" not in capture.tags
+
+
+def test_every_record_is_shown_under_one_config() -> None:
+    """A Label Studio project holds one config for every task in it, which is why the catalog is data."""
+    engine = an_engine_asking()
+    one, two = asked(engine, a_record(), another_record())
+
+    assert annotation_config(
+        engine.profile.answer_config(one).tags
+    ) == annotation_config(engine.profile.answer_config(two).tags)
+
+
+def test_the_conversation_is_data_and_the_two_halves_own_disjoint_keys() -> None:
+    """The turns go into task data, so a transcript containing a tag stays text.
+
+    Disjointness is asserted rather than guarded: a key emitted by both sides would silently drop
+    one, and that is a fault in a module rather than something a branch here could fix.
+    """
+    engine = an_engine_asking()
+    record = asked(engine, a_record())[0]
+
+    shown = display_payload(record.content)
+
+    assert set(shown) == {CONVERSATION}
+    assert [turn["role"] for turn in shown[CONVERSATION]] == [
+        part.role for part in record.content
+    ]
+    assert not shown.keys() & engine.profile.answer_config(record).data.keys()
+
+
+def test_a_part_that_is_not_text_is_not_shown() -> None:
+    """`<Paragraphs>` renders a string; the tag that shows a media part is not written here yet."""
+    heard = Part(type="audio", role="user", uri="s3://a-call.wav", sha256="0" * 64)
+    said = Part(type="text", role="assistant", text="Vâng ạ.")
+
+    assert display_payload((heard, said)) == {
+        CONVERSATION: [{"role": "assistant", "content": "Vâng ạ."}]
+    }
+
+
+def test_no_model_output_reaches_what_a_person_is_shown() -> None:
+    """I12, on the fragment and the data this module composes.
+
+    The record here has been through the whole of `ai_review`, so a plurality, two agreement figures
+    and a bucket are all sitting on it. None of them can reach a conversation built from
+    `record.content` and a config built from one constant and the capture half -- which is what
+    taking parts rather than a record buys, and it is why the member this replaced needed a test
+    with a hand-built `AiReview` in it and this one does not.
+
+    The one exception a reader will look for: `question_id` and `question` are `publish`'s keys and
+    are asserted there, not here.
+    """
+    engine = an_engine_asking()
+    record = asked(engine, a_record(label=(LOOKED_UP,)))[0]
+    said = record.ai_review
+
+    assert said.jury is not None and said.cohesion is not None
+    assert said.triage is not None
+    printed = json.dumps(
+        {
+            **display_payload(record.content),
+            "config": annotation_config(engine.profile.answer_config(record).tags),
+        },
+        ensure_ascii=False,
+    )
+    for model_output in (
+        said.triage.bucket,
+        said.triage.stratum,
+        said.jury.llm_votes[0].model_name,
+        said.cohesion.method,
+        str(said.cohesion.self_agreement),
+    ):
+        assert model_output not in printed
