@@ -1,375 +1,137 @@
-"""TOOL · the Label Studio adapter: the config it composes, questions out, annotations back, idempotent in both directions.
+"""ADAPTER · tasks out, annotations back, idempotent in both directions.
 
-The other half of § *The question store*. ``publish`` writes to a database we own and never talks to
-an annotation tool; this moves rows between that database and one, and **running it is optional** --
-every other endpoint works with no instance anywhere, which is what makes the pipeline testable
-without one.
-
-**This module is where the tool's config grammar is written, and it is written nowhere else**
-(Requirement 31). A modality reads content; how a conversation is *shown* is this tool's dialect, so
-the display fragment and the ``conversation`` array it reads are composed here out of a record's own
-parts -- a ``Part`` already carries ``role`` and ``text``, so no axis is asked for either. The
-profile's capture half is enclosed verbatim and this module emits none of it: what an annotator may
-answer is the profile's to say, and § *The two axes* keeps that fragment the only one an axis owns.
-
-**Nothing the sync does touches a record.** It reads and writes the store's own three tables and the
-bus never enters it, so a failed sync cannot leave a record saying something that did not happen.
-That is most of why the two directions are safe to retry. The composition above it takes parts and
-returns strings; it reaches no database and is not part of either direction.
-
-**Idempotency is two unique constraints, not two flags.** A question already pushed has a
-``publication`` row for ``(question_id, external_system)`` and is not offered again; an annotation
-already pulled has its ``external_annotation_id`` and is not written again. Both are enforced by the
-database rather than by a check this module makes, because a check races with a second sync and a
-constraint does not.
-
-**A ``publication`` row is committed as soon as its task exists, one at a time.** Batching the
-writes into one transaction would be faster and wrong: a failure at question five rolls back rows
-one to four, whose tasks are already sitting in Label Studio, and the next sync creates them a
-second time -- which no constraint can catch, because the thing that would have caught it is the row
-that was rolled back. The row *is* the record that the task exists.
-
-**The SDK is imported inside the builder, not at the top of this module.** ``label-studio-sdk`` is
-an optional extra and ``edge/main.py`` imports this module to hang a route on it, so a top-level
-import would make an install without the extra fail at startup rather than at the one endpoint that
-needs it. Anything that cannot reach the tool is a ``ConfigError``: a missing extra, a missing URL
-and an unreachable host are all *a human must change something*.
-
-**``AnnotationTool`` is declared here and not in ``ports.py``**, because the engine never calls it.
-A port is what the engine demands of the edge; this is the edge talking to the outside, so its
-abstraction belongs to the module that consumes it and that module is this one. It has two
-adapters -- the SDK client and the double the tests run -- which is what makes it a seam.
+Label Studio is the store. It already holds tasks and annotations, so nothing here keeps a second
+copy — idempotence comes from asking the project what it has rather than from a table of our own.
 """
 
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
-from agent_toolkit.string_utils import compute_hash
-from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from pydantic import BaseModel, Field
 
-from dataforce.errors import ConfigError
-from dataforce.record import Part
-
-from .store.models import AnnotatorAnswer, Publication, Question
-
-# The task-payload keys the display fragment reads, spelled the way the tag below spells them:
-# `<Paragraphs>` is pointed at `$conversation` and reads each object's `role` and `content`.
-CONVERSATION = "conversation"
-ROLE = "role"
-CONTENT = "content"
-
-# The part a conversation is shown from. A media part has nothing `<Paragraphs>` can render, and the
-# tag that would render one is the change a media modality makes here.
-TEXT = "text"
-
-# Requirement 52: `<Chat>` renders a conversation exactly the way a chat corpus wants and is
-# Enterprise and Starter Cloud only, so the community path is `<Paragraphs layout="dialogue">`.
-# `$question` is the profile's string and `$conversation` is this module's data -- the tag that
-# shows one is still this module's.
-DISPLAY_TAGS = (
-    '<Paragraphs name="conversation" value="$conversation"\n'
-    '            layout="dialogue" nameKey="role" textKey="content"/>\n'
-    '<Header value="$question"/>'
+from dataforce.modalities.text2text.human_review.schema import (
+    Annotation,
+    ReturnedAnnotation,
 )
 
-# Which annotation tool a `publication` row belongs to. One value today, and a column rather than an
-# assumption: the row's uniqueness is per system, so a second tool is a row and not a migration.
-EXTERNAL_SYSTEM = "label_studio"
-
-# What a pushed task's row says happened. One word, in the sync's own vocabulary.
-PUSHED = "pushed"
-
-# Where a deployment says which instance, and which project inside it. Read here and nowhere
-# else; a key is never written to a file.
-BASE_URL = "DATAFORCE_LABEL_STUDIO_URL"
-API_KEY = "DATAFORCE_LABEL_STUDIO_API_KEY"
-PROJECT_ID = "DATAFORCE_LABEL_STUDIO_PROJECT"
-
-# How an `answer_id` is minted from the annotation it came out of: deterministic, so a re-pull that
-# somehow got past the unique constraint would collide on the primary key too.
-ANSWER_PREFIX = "a_"
-ANSWER_LENGTH = 16
-ID_SEPARATOR = "|"
+# The one payload key a task is found by again. A task carrying it is a task we posted.
+SAMPLE_ID = "sample_id"
 
 
-# --- the config this tool takes, composed from the record's parts and the profile's fragment ---
+class SyncCounts(BaseModel):
+    """What one push came to."""
+
+    posted: int = Field(..., description="Tasks the project did not already hold.")
+    already_held: int = Field(..., description="Tasks it did, so nothing was posted.")
+    task_ids: dict[str, str] = Field(
+        default_factory=dict, description="The tool's task id, by `sample_id`."
+    )
 
 
-def display_payload(parts: Sequence[Part]) -> dict[str, Any]:
-    """The task-payload keys the display fragment reads: the conversation, one object per text part.
+def client() -> Any:
+    """The Label Studio client this deployment declared.
 
-    A dict rather than the bare array, so the key and the tag that reads it are spelled in one place
-    and a caller cannot file the array under the wrong name. It is the display half's share of one
-    task's `data` and holds no other half's keys (Requirement 31).
-
-    The turns go into task *data* rather than into markup, so nothing is escaped: the tag reads a
-    JSON array, and a transcript containing a tag stays that text instead of becoming structure in
-    the annotator's page.
-
-    A part with no text contributes an empty string rather than a null, because the tag renders a
-    string; a media part contributes nothing at all, because there is no tag here that shows one.
-    """
-    return {
-        CONVERSATION: [
-            {ROLE: part.role, CONTENT: part.text or ""}
-            for part in parts
-            if part.type == TEXT
-        ]
-    }
-
-
-def annotation_config(capture_tags: str) -> str:
-    """The labelling config an annotator's page is built from: this tool's display fragment, and
-    the profile's capture half enclosed unchanged, inside one `<View>`.
-
-    Display first, because that is reading order on the page: the conversation, the question, then
-    the controls that answer it. Assembled by concatenation and not by parsing -- this module has no
-    opinion about the fragment it encloses, and an XML tree here would be a second place that could
-    hold one.
-    """
-    return f"<View>\n{DISPLAY_TAGS}\n{capture_tags}\n</View>"
-
-
-@dataclass(frozen=True)
-class ReturnedAnnotation:
-    """One annotation as the tool returned it: the control values, and the envelope around them.
-
-    The same split `StoredAnnotation` makes and for the same reason -- `result` is the capture
-    half's and only the profile reads its shape (Requirement 49), while `was_cancelled` and
-    `lead_time` are the tool's own metadata and mean the same thing whatever the profile is.
-    """
-
-    annotation_id: str  # the tool's id for it; what makes pulling twice a no-op
-    task_id: str  # which task it answers, joined back through `publication`
-    annotator_id: str  # who answered, in the tool's own vocabulary
-    result: tuple[Mapping[str, Any], ...]  # the control values, verbatim
-    was_cancelled: bool  # the annotator saw it and declined; stored as `was_skipped`
-    lead_time_seconds: float | None  # how long they took, where the tool reported it
-    submitted_at: datetime  # when they submitted it, by the tool's clock
-
-
-@dataclass(frozen=True)
-class SyncCounts:
-    """What one sync did, in both directions. The route's response is built from it (T28)."""
-
-    pushed: int  # questions that became tasks on this run
-    already_pushed: int  # questions a previous run had already pushed
-    pulled: int  # annotations written to the store on this run
-    already_pulled: int  # annotations a previous run had already written
-
-
-class AnnotationTool(Protocol):
-    """What the sync needs of an annotation tool, and nothing else it happens to offer."""
-
-    def posted_task(self, project_id: str, payload: Mapping[str, Any]) -> str:
-        """One task created from that payload, and the id the tool gave it."""
-        ...
-
-    def annotations_on(self, task_id: str) -> Sequence[ReturnedAnnotation]:
-        """Every annotation that task has, including the cancelled ones."""
-        ...
-
-
-class LabelStudioTool:
-    """The `AnnotationTool` over `label-studio-sdk`, and the only place that library is used.
-
-    Thin on purpose: the shape it converts to is `ReturnedAnnotation`, so the sync below reads one
-    vocabulary and a change to the SDK's is an edit here. It is also what makes a test double
-    possible without pretending to be a third-party client.
-    """
-
-    def __init__(self, client: Any) -> None:
-        """Built with a client rather than a URL: `label_studio_tool` is the one that reads those."""
-        self._client = client
-
-    def posted_task(self, project_id: str, payload: Mapping[str, Any]) -> str:
-        """One task in that project, carrying the payload `publish` composed."""
-        created = self._client.tasks.create(project=int(project_id), data=dict(payload))
-        return str(created.id)
-
-    def annotations_on(self, task_id: str) -> Sequence[ReturnedAnnotation]:
-        """Every annotation on that task, per task rather than per project.
-
-        One call per published question, which is the cost of not depending on how a project-wide
-        listing paginates or which fields it inlines. **A sync is over the whole store and not over
-        one run** -- it takes no run id, and a person answers days after their task was made, so a
-        run-scoped pull would never reach last week's annotations. The count therefore grows with
-        the corpus and a task answered months ago is polled again; narrowing it is a decision about
-        when a task is done being polled, and T31 is where that has to be settled.
-        """
-        return tuple(
-            ReturnedAnnotation(
-                annotation_id=str(annotation.id),
-                task_id=task_id,
-                annotator_id=str(annotation.completed_by),
-                result=tuple(annotation.result or ()),
-                was_cancelled=bool(annotation.was_cancelled),
-                lead_time_seconds=annotation.lead_time,
-                submitted_at=annotation.created_at or datetime.now(UTC),
-            )
-            for annotation in self._client.annotations.list(int(task_id))
-        )
-
-
-def declared_at(variable: str) -> str:
-    """One value the environment must carry, or a `ConfigError` naming the variable."""
-    value = os.environ.get(variable)
-    if not value:
-        raise ConfigError(
-            f"{variable} names no Label Studio; the sync is the one endpoint that needs "
-            "an instance, and every other one runs without it"
-        )
-    return value
-
-
-def label_studio_tool() -> LabelStudioTool:
-    """A client onto the instance this deployment attached, built from the environment.
-
-    The import is here rather than at the top of the module: `label-studio-sdk` is the
-    `[label-studio]` extra, and an install without it should fail at this call and not at startup.
+    The import is here rather than at the top: `label-studio-sdk` is an extra, and importing it at
+    module load would make an install without it fail at startup rather than at this one route.
     """
     try:
         from label_studio_sdk.client import LabelStudio
-    except (
-        ImportError
-    ) as missing:  # pragma: no cover - exercised by installing without the extra
-        raise ConfigError(
-            "the sync needs the `label-studio` extra: `uv sync --extra label-studio`"
+    except ImportError as missing:
+        raise RuntimeError(
+            "label-studio-sdk is not installed; it is the extra this route needs"
         ) from missing
-    # The SDK ships no type information for its constructor, and this is the one line that
-    # touches it -- everything below reads `ReturnedAnnotation`, which is ours.
-    client = LabelStudio(  # type: ignore[no-untyped-call]
-        base_url=declared_at(BASE_URL), api_key=declared_at(API_KEY)
-    )
-    return LabelStudioTool(client)
-
-
-def answer_id_for(annotation_id: str) -> str:
-    """The store's own id for an annotation that came from outside it."""
-    joined = ID_SEPARATOR.join((EXTERNAL_SYSTEM, annotation_id))
-    return ANSWER_PREFIX + compute_hash(joined)[:ANSWER_LENGTH]
-
-
-def unpushed_questions(session: Session) -> Sequence[tuple[str, dict[str, Any]]]:
-    """Every question with no `publication` row for this system, with the payload to push.
-
-    A left join and not a Python filter: the set of already-published questions is the store's to
-    know, and reading every question into memory to subtract them is the same query written twice.
-    """
-    pushed = select(Publication.question_id).where(
-        Publication.external_system == EXTERNAL_SYSTEM
-    )
-    rows = session.execute(
-        select(Question.question_id, Question.payload).where(
-            Question.question_id.not_in(pushed)
+    url = os.environ.get("LABEL_STUDIO_URL", "")
+    key = os.environ.get("LABEL_STUDIO_API_KEY", "")
+    if not url or not key:
+        raise RuntimeError(
+            "LABEL_STUDIO_URL and LABEL_STUDIO_API_KEY name the instance and the key; "
+            "neither is defaulted, because a default would post transcripts somewhere nobody chose"
         )
-    )
-    return [(question_id, payload) for question_id, payload in rows]
+    return LabelStudio(base_url=url, api_key=key)  # type: ignore[no-untyped-call]
 
 
-def pushed_task_ids(session: Session) -> Sequence[tuple[str, str]]:
-    """Every question this system holds a task for, as `(question_id, external_task_id)`."""
-    rows = session.execute(
-        select(Publication.question_id, Publication.external_task_id).where(
-            Publication.external_system == EXTERNAL_SYSTEM,
-            Publication.external_task_id.is_not(None),
+def held_by(tool: Any, project_id: str) -> dict[str, str]:
+    """The task id the project already holds, by `sample_id`. What makes a re-push a no-op."""
+    held: dict[str, str] = {}
+    for task in tool.tasks.list(project=int(project_id)):
+        data = getattr(task, "data", None) or {}
+        sample_id = data.get(SAMPLE_ID)
+        if sample_id:
+            held[str(sample_id)] = str(task.id)
+    return held
+
+
+def published(project_id: str, samples: Sequence[Mapping[str, Any]]) -> SyncCounts:
+    """Post every sample the project does not already hold, and report both counts."""
+    tool = client()
+    held = held_by(tool, project_id)
+    posted = 0
+    for sample in samples:
+        sample_id = str(sample[SAMPLE_ID])
+        if sample_id in held:
+            continue
+        created = tool.tasks.create(project=int(project_id), data=dict(sample))
+        held[sample_id] = str(created.id)
+        posted += 1
+    return SyncCounts(posted=posted, already_held=len(samples) - posted, task_ids=held)
+
+
+def returned(tool: Any, task_id: str) -> list[ReturnedAnnotation]:
+    """Every annotation the tool holds on one task, as this package's own small value."""
+    return [
+        ReturnedAnnotation(
+            annotation_id=str(one.id),
+            task_id=str(task_id),
+            annotator_id=str(getattr(one, "completed_by", "") or ""),
+            result=tuple(getattr(one, "result", ()) or ()),
+            was_skipped=bool(getattr(one, "was_cancelled", False)),
+            submitted_at=str(getattr(one, "updated_at", "") or ""),
         )
-    )
-    return [(question_id, str(task_id)) for question_id, task_id in rows]
+        for one in tool.annotations.list(int(task_id))
+    ]
 
 
-def pulled_annotation_ids(session: Session) -> set[str]:
-    """Every annotation the store has already written, by the id the tool gave it."""
-    return set(
-        session.scalars(
-            select(AnnotatorAnswer.external_annotation_id).where(
-                AnnotatorAnswer.external_annotation_id.is_not(None)
-            )
-        )
-    )
+def submitted(stamp: str) -> datetime:
+    """The tool's clock, or now where it reported none. No part of this service holds one."""
+    try:
+        return datetime.fromisoformat(stamp)
+    except ValueError:
+        return datetime.now(UTC)
 
 
-def questions_pushed(
-    sessions: sessionmaker[Session], tool: AnnotationTool, project_id: str
-) -> tuple[int, int]:
-    """Every unpushed question as a task: how many were pushed, and how many already had been.
+def as_annotation(returned_one: ReturnedAnnotation) -> Annotation | None:
+    """One returned annotation as a verdict, a correction and a note.
 
-    Each row is committed the moment its task exists, one at a time. Both counts come out of one
-    read block, because the second is the first subtracted from what the store holds and a second
-    query for it could be answered after the push had already changed the answer.
+    **The only place the annotation tool's control shape is read.** A skipped annotation is not a
+    verdict and comes back as None: the person saw it and declined, which is a different fact from
+    an answer.
     """
-    with sessions() as reading:
-        waiting = unpushed_questions(reading)
-        held = len(list(reading.scalars(select(Question.question_id))))
-    for question_id, payload in waiting:
-        task_id = tool.posted_task(project_id, payload)
-        with sessions.begin() as writing:
-            writing.add(
-                Publication(
-                    question_id=question_id,
-                    external_system=EXTERNAL_SYSTEM,
-                    external_project_id=project_id,
-                    external_task_id=task_id,
-                    status=PUSHED,
-                    pushed_at=datetime.now(UTC),
-                )
-            )
-    return len(waiting), held - len(waiting)
-
-
-def answers_pulled(
-    sessions: sessionmaker[Session], tool: AnnotationTool
-) -> tuple[int, int]:
-    """Every annotation on every pushed task, written once: how many were new, how many were not.
-
-    A cancelled annotation is pulled like any other and stored as `was_skipped` (Requirement 50):
-    a person declining a question is evidence about that question, and dropping it here would lose
-    the rate the pilot reads.
-    """
-    with sessions() as reading:
-        tasks = pushed_task_ids(reading)
-        already = pulled_annotation_ids(reading)
-    written, seen_before = 0, 0
-    for question_id, task_id in tasks:
-        for annotation in tool.annotations_on(task_id):
-            if annotation.annotation_id in already:
-                seen_before += 1
-                continue
-            with sessions.begin() as writing:
-                writing.add(
-                    AnnotatorAnswer(
-                        answer_id=answer_id_for(annotation.annotation_id),
-                        question_id=question_id,
-                        annotator_id=annotation.annotator_id,
-                        result=list(annotation.result),
-                        was_skipped=annotation.was_cancelled,
-                        lead_time_seconds=annotation.lead_time_seconds,
-                        submitted_at=annotation.submitted_at,
-                        external_annotation_id=annotation.annotation_id,
-                    )
-                )
-            already.add(annotation.annotation_id)
-            written += 1
-    return written, seen_before
-
-
-def synced_with_label_studio(
-    sessions: sessionmaker[Session], tool: AnnotationTool, project_id: str
-) -> SyncCounts:
-    """Questions out and annotations back, and what each direction did.
-
-    Push before pull, because a task created on this run can already have been answered by the time
-    the pull reaches it -- the other order would leave that answer for the next sync for no reason.
-    """
-    pushed, already_pushed = questions_pushed(sessions, tool, project_id)
-    pulled, already_pulled = answers_pulled(sessions, tool)
-    return SyncCounts(
-        pushed=pushed,
-        already_pushed=already_pushed,
-        pulled=pulled,
-        already_pulled=already_pulled,
+    if returned_one.was_skipped:
+        return None
+    values: dict[str, Any] = {}
+    for control in returned_one.result:
+        name = str(control.get("from_name", ""))
+        value = control.get("value", {})
+        if isinstance(value, Mapping):
+            picked = value.get("choices") or value.get("text")
+            values[name] = picked[0] if isinstance(picked, list) and picked else picked
+    correction = values.get("corrected_label")
+    return Annotation(
+        annotator_id=returned_one.annotator_id,
+        verdict=values.get("verdict"),
+        corrected_label=tuple(correction) if isinstance(correction, list) else None,
+        note=values.get("note"),
+        submitted_at=submitted(returned_one.submitted_at),
     )
+
+
+def annotations_for(project_id: str) -> dict[str, list[Annotation]]:
+    """Every annotation the project holds, by `sample_id`."""
+    tool = client()
+    answers: dict[str, list[Annotation]] = {}
+    for sample_id, task_id in held_by(tool, project_id).items():
+        read = [as_annotation(one) for one in returned(tool, task_id)]
+        answers[sample_id] = [one for one in read if one is not None]
+    return answers

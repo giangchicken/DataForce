@@ -18,6 +18,44 @@ source:
 # change to this file, which makes the decision attributable.
 enable_redact: false
 
+# The models this run pays, and the one precondition on paying them. Not thresholds --
+# what a run declares about the endpoints it calls -- and here rather than in a fifth
+# file because this file's digest is already in the run manifest, which is what makes a
+# panel change or a prompt change attributable (Requirement 45). Where each name is
+# *served* is `config/model/<model>.json`, which a deployment attaches and no manifest
+# records: that file holds the key.
+models:
+  # Requirement 28. Which of the names below are served outside the jurisdiction this
+  # corpus may leave, and what recorded the review that permits sending it there.
+  # Nothing can read a jurisdiction off a base_url, so both halves are declared: a name
+  # in `offshore` with `cross_border_review` empty is a ConfigError before the first
+  # record. This spec requires the review to be *recorded*; it does not perform it.
+  offshore: []
+  cross_border_review: ""
+
+  # The panel `jury` asks. Empty until the pilot sizes one -- which models and how many
+  # is Phase 8's question, not a default worth guessing -- and an empty panel is an
+  # engine with no `jury_panel`, which is `jury`'s own ConfigError rather than a run
+  # that quietly asks nobody. `version` reaches every record, because a change to the
+  # composition invalidates every comparison drawn across it.
+  panel:
+    version: 1
+    prompt: profiles/tool_decision/jury_vote.v1
+    jurors: []
+    # Where votes already paid for are kept, so a second run over unchanged records
+    # costs a directory read. Keyed on what determines a vote -- the filled slots, the
+    # record's own answer space, the panel version and the prompt version -- so a
+    # redaction, a panel change or a prompt change all miss and a re-tuned triage
+    # boundary does not. Empty means ask every time.
+    cache: data/cache
+
+  # Layer two: the model pass that sets the precision of layer one's candidates
+  # (Requirement 18). Empty is a run with layer one alone, which every record says for
+  # itself as `verified: false` and counts in `unverified`.
+  verifier:
+    model: ""
+    prompt: modalities/text2text/personal_data.v1
+
 # Expected count per label check, declared so a source change is a decision rather
 # than a surprise. The five names are the profile's `label_checks()`, and they are
 # listed with no values because the counts are a property of a corpus, not of the
@@ -32,7 +70,7 @@ invalid_counts:
 
 thresholds:
   # Empty and reads as empty: `jury` holds no threshold. A panel floor and an invalid-vote
-  # rate were sketched here before Decision 10 deleted the gates, and a number nothing reads
+  # rate were sketched here before the gates were deleted, and a number nothing reads
   # is a number that goes stale unnoticed -- `invalid_votes` and the vote count are on every
   # record, and comparing them to anything is a line in metrics.json (Requirement 44). Kept as
   # a declared key so the question is visible rather than forgotten.

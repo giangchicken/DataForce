@@ -1,19 +1,15 @@
 name: ci
 
-on: [push, pull_request]
+# Two jobs, because the two suites need different things. `make check` needs the tree and
+# nothing else, so it is the gate every commit passes. `make integration` needs a database
+# and an annotation tool, which a public runner has only where a deployment attached them.
 
-env:
-  # The library's consumer contract calls count_tokens, which cannot answer
-  # without tiktoken's cl100k_base vocabulary. Cached so the integration job does
-  # not depend on that download staying available.
-  TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.tiktoken-cache
-  # The text modality's embedder is 512 MiB of static weights. Cached for the same
-  # reason: an integration job that re-downloads it every run is an integration job
-  # that fails when Hugging Face is slow.
-  HF_HOME: ${{ github.workspace }}/.hf-cache
+on: [push, pull_request]
 
 jobs:
   check:
+    # The commit gate: ruff, `mypy --strict`, pytest without `-m integration`. It makes no
+    # network call and reads no credential, which is what lets it be the signal everyone reads.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,22 +18,23 @@ jobs:
           python-version: "3.12"
       - run: uv sync
       - run: make check
-      - run: uv run dvc repro
 
-      - uses: actions/cache@v4
+  integration:
+    # The slow half: the store against a real Postgres, the sync against a real Label Studio.
+    # The addresses are the environment's, the way `store/session.py` and `label_studio.py`
+    # read them, and the step is skipped where none is declared -- *not run* and *passed* are
+    # different claims, and a job that runs a suite which skips itself makes them one.
+    runs-on: ubuntu-latest
+    env:
+      DATAFORCE_TEST_DATABASE_URL: ${{ secrets.DATAFORCE_TEST_DATABASE_URL }}
+      DATAFORCE_LABEL_STUDIO_URL: ${{ secrets.DATAFORCE_LABEL_STUDIO_URL }}
+      DATAFORCE_LABEL_STUDIO_API_KEY: ${{ secrets.DATAFORCE_LABEL_STUDIO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          path: ${{ env.TIKTOKEN_CACHE_DIR }}
-          key: tiktoken-cl100k-base
-      - name: populate the tiktoken cache
-        run: uv run python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
-
-      - uses: actions/cache@v4
-        with:
-          path: ${{ env.HF_HOME }}
-          key: potion-multilingual-128M
-      - name: populate the embedder cache
-        run: |
-          uv run python -c "from dataforce.modalities.text import EMBEDDING_MODEL, _model; \
-            print(EMBEDDING_MODEL, _model().dim)"
-      - name: the pinned library, and its own consumer contract
+          python-version: "3.12"
+      - run: uv sync
+      - name: the store and the sync, against the services a deployment attached
+        if: env.DATAFORCE_TEST_DATABASE_URL != '' || env.DATAFORCE_LABEL_STUDIO_URL != ''
         run: make integration

@@ -2,7 +2,7 @@
 #
 # Running it is optional. `POST /human-review/publish/sync` is the only route that talks
 # to this; every other endpoint, and the whole of `make check`, runs with nothing here
-# (Decision 6). The version is pinned because the sync is written against a release and
+# (§ *The question store*). The version is pinned because the sync is written against a release and
 # not against "latest" -- spec.md section *Versions* names the same one.
 #
 # No credentials in this file (AGENTS.md section 9). The variables below come from the

@@ -6,18 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 dependencies = [
-    # Pinned to a git tag because the library is on no registry. `uv.lock` records
-    # the commit the tag resolves to, so a moved tag shows up as a lockfile diff
-    # rather than as a release built from a tree nobody chose -- which matters,
-    # because `v0.1.0` was moved once, so a tag name here is not a tree.
-    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@v0.2.0",
-    # The embeddings call `duplicate_check` groups through. `agent-toolkit` owns the
-    # LLM client but exposes nothing embedding-shaped -- `complete`, `complete_structured`,
-    # `complete_with_reasoning`, `count_tokens` and the resolvers, and no `embed` -- so
-    # there is no front door to go through and the edge posts to the deployment's own
-    # endpoint. It arrives transitively through `agent-toolkit[llm]` anyway; declared here
-    # because `src/` imports it, under one annotated I6 exemption in `edge/bootstrap.py`
-    # that the library task deletes when an `embed` lands beside `complete`.
+    # A branch, not a tag: the library is on no registry and `embed` has not shipped
+    # under one yet. `uv.lock` records the commit either way, so a run is still built
+    # from one tree. Back to a tag at release.
+    "agent-toolkit[llm] @ git+https://github.com/giangchicken/agent-toolkit.git@dev",
+    # Not imported by `src/` any more -- `agent_toolkit.embed` owns the socket. Declared
+    # for the floor: the library asks for `>=2.0` and is written against the 3.x line,
+    # so without this uv may resolve a major it is not tested on.
     "openai>=3.2",
     "pydantic>=2.13",
     # Requirement 49: a corrected value an annotator typed by hand either validates
@@ -28,16 +23,23 @@ dependencies = [
     # `agent-toolkit[llm]` anyway; declared here because `src/` imports it, under one
     # annotated I6 exemption in `profiles/tool_decision/answers.py`.
     "jsonschema>=4.26",
-    # The question store's engine (Decision 6: `publish` writes to a database we own).
+    # The question store's engine (§ *The question store*: `publish` writes to a
+    # database we own).
     # Pinned inside 2.0 because the models are written in its declarative style and 2.1
     # is where that changes; SQLite and Postgres are one adapter with two DSNs, not two
-    # adapters, which is the whole of why one dependency covers both (Decision 7).
+    # adapters, which is the whole of why one dependency covers both.
     "sqlalchemy>=2.0.52,<2.1",
     # Migrations. A store whose schema is applied by `create_all` has no way to change
     # one, and the pilot changes one: `alembic upgrade head` against an empty database
     # is what T23 asserts, so the first schema is a migration rather than a side effect
     # of importing the models.
     "alembic>=1.19.1",
+    # The HTTP shell. One of the two ways every service is driven (Requirement 46), and
+    # the style reference's `create_app()` factory is written against its `APIRouter`.
+    "fastapi>=0.141.1",
+    # What serves that app. Named as a dependency rather than left to a deployment
+    # because `edge/main.py` is only half a shell without something to run it.
+    "uvicorn>=0.52.4",
 ]
 
 [project.scripts]
@@ -45,7 +47,8 @@ dataforce = "dataforce.edge.cli:main"
 
 [project.optional-dependencies]
 # Only the sync imports this, and only inside the function that builds a client -- so the
-# pipeline installs and `make check` runs with no annotation tool anywhere (Decision 6).
+# pipeline installs and `make check` runs with no annotation tool anywhere
+# (§ *The question store*).
 # An install without the extra fails at `POST /human-review/publish/sync` and nowhere else.
 label-studio = [
     "label-studio-sdk>=2.1.1",
@@ -65,7 +68,21 @@ packages = ["src/dataforce"]
 [dependency-groups]
 dev = [
     "mypy>=1.14",
+    # What `fastapi.testclient` is built on. A test dependency and not a runtime one:
+    # nothing in `src/` imports it, and I15 is the only thing that drives the app.
+    "httpx>=0.28",
+    # Here as well as in the `[label-studio]` extra, and the two are different jobs.
+    # The extra is what a *deployment* opts into to run the sync. This is what
+    # `mypy --strict` needs to see: `edge/label_studio.py` has one line that touches
+    # the SDK's constructor, and with the library absent that line is an
+    # `import-not-found` and its annotation an unused ignore -- so `make check` would
+    # pass or fail depending on which install ran it, which is the one thing the
+    # commit gate may not do.
+    "label-studio-sdk>=2.1.1",
     "pytest>=8.0.0",
+    # Every stage is a coroutine since the pipeline went async, so a test that runs one
+    # needs a loop. `auto` rather than a decorator per test: there is no sync stage left.
+    "pytest-asyncio>=0.24.0",
     "ruff>=0.13.1",
 ]
 
@@ -98,6 +115,7 @@ warn_unreachable = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 markers = [
     "integration: needs the network or a service; excluded from `make check`",
 ]

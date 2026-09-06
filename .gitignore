@@ -11,6 +11,10 @@ data/processed/
 data/release/
 data/quarantine/
 data/run.json
+# Votes already paid for, keyed by everything that determines one (`edge/panel.py`). Not an
+# artifact tier: it is the one thing under `data/` that is not what a run wrote but what a run
+# may re-use, and a committed one would be a panel's answers about a corpus nobody has here.
+data/cache/
 *.jsonl
 !tests/fixtures/**/*.jsonl
 
@@ -22,7 +26,8 @@ data/run.json
 # endpoint a deployment must attach and nothing says so is the same fault one directory up.
 config/model/*.json
 
-# The default question store, for a developer who attached no database (Decision 7). It holds
+# The default question store, for a developer who attached no database (§ *The question
+# store*). It holds
 # questions about real records, which makes a committed one a corpus in the repository. A
 # deployment names its own through `DATAFORCE_DATABASE_URL` and never lands here.
 dataforce.sqlite3

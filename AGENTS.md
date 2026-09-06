@@ -1,59 +1,136 @@
-# Coding guidelines
+# Design rules
 
-**Enforcement (Cách ép):** `[lint]` a check that fails the build (một phép kiểm tra làm hỏng bản build) · `[review]` caught by a human reading the diff (bắt được khi có người đọc diff) · `[none]` judgement only, no check exists (chỉ bằng phán đoán, không có phép kiểm tra nào)
+**How to read this.** Top down: one root sentence, three causes, then the rules hanging under each cause. Every rule has a fixed ID (`H-1`, `C-3`…) for citing in review. The rule text is verbatim from the source document; the framing around it names the principle each rule comes from.
 
-## Definitions (Định nghĩa)
+**Enforcement:** `[lint]` a check that fails the build · `[review]` caught by a human reading the diff · `[none]` judgement only, no check exists.
 
-- A **module** is anything with an interface and an implementation — a function, a class, a package, a service — whose job is to hide one decision. Something that hides nothing is a namespace, not a module. (Module là bất cứ thứ gì có interface và phần hiện thực — một hàm, một class, một package, một service — mà nhiệm vụ của nó là giấu đi một quyết định. Thứ gì không giấu gì cả thì là namespace, không phải module.)
-- An **interface** is everything a caller must know to use it correctly: the signature, the invariants, the ordering, the error modes, the required configuration, the speed. Not just the types. (Interface là mọi thứ caller phải biết để dùng cho đúng: chữ ký hàm, các bất biến, thứ tự gọi, các dạng lỗi, cấu hình bắt buộc, tốc độ. Không chỉ là kiểu dữ liệu.)
-- **Coupling** is what two parts share and how tightly that binds them — the kind and the degree of the dependency between them. (Coupling là chuyện hai phần chia sẻ cái gì và bị buộc chặt tới đâu — bản chất và mức độ của sự phụ thuộc giữa chúng.)
-- **Connascence** is one thing forcing another to change with it. It is measured on three axes: strength, how hard the joint change is to get right; locality, how far apart the two ends sit; degree, how many places are involved. (Connascence là chuyện thứ này buộc thứ kia phải thay đổi theo. Nó được đo trên ba chiều: strength — thay đổi cùng nhau cho đúng khó tới đâu; locality — hai đầu nằm xa nhau tới đâu; degree — có bao nhiêu chỗ dính vào.)
+Worked examples and the folded commentary live in `nguyen-tac.vi.md`, same IDs.
 
-## Writing code (Viết code)
+---
 
-- `[review]` Build only what was asked for, and only for the case that exists today. This governs behaviour and features. (Chỉ xây cái được yêu cầu, và chỉ cho trường hợp đang có hôm nay. Luật này áp cho hành vi và tính năng.)
-- `[review]` Boundaries are the exception, and they are decided ahead of the need: hiding a decision is not a feature built early. An implementation aimed slightly wider than today's single call site usually ends up with a simpler, deeper interface than one specialised to it. (Ranh giới là ngoại lệ, và phải quyết trước khi cần: giấu một quyết định không phải là làm sớm một tính năng. Phần hiện thực nhắm hơi rộng hơn một chỗ gọi của hôm nay thường cho ra interface đơn giản hơn và sâu hơn so với bản làm riêng cho đúng chỗ đó.)
-- `[review]` Write the smallest version by interface, not the shortest by line count. Cutting a function in half to make each half shorter adds an interface, and if the halves stay entangled the reader now has to hold both. (Viết bản nhỏ nhất về interface, không phải ngắn nhất về số dòng. Chẻ một hàm làm đôi cho mỗi nửa ngắn đi là thêm một interface, và nếu hai nửa vẫn dính nhau thì người đọc giờ phải giữ cả hai trong đầu.)
-- `[review]` Optimise for clarity first, then for a bottleneck you can name. A bottleneck you cannot name is a guess. (Tối ưu cho sự rõ ràng trước, rồi mới cho một nút thắt bạn gọi được tên. Một nút thắt không gọi được tên chỉ là phỏng đoán.)
-- `[review]` Add something that has to run — a queue, a cache, a scheduled job — only to fix a problem you can name. Everything that runs is something to keep alive. (Chỉ thêm thứ phải chạy — một queue, một cache, một job hẹn giờ — khi có một vấn đề bạn gọi được tên. Thứ gì phải chạy là thứ phải nuôi.)
-- `[review]` Make a function when two or more places call it and change together, or when a decision needs its own test. Otherwise a named variable is enough to put the rule on screen. (Tạo hàm khi có từ hai chỗ trở lên gọi nó và cùng thay đổi, hoặc khi một quyết định cần test riêng. Ngoài ra một biến có tên là đủ để đưa luật hiện lên màn hình.)
-- `[review]` Inline a one-line function with a single caller whose name adds nothing. Three kinds look inlinable but are not: a method implementing an interface, a callback named in configuration or metrics, a decorated function. Removing those still runs while something is lost silently. (Viết thẳng vào chỗ dùng một hàm một dòng, một chỗ gọi, mà cái tên không thêm được gì. Có ba loại trông như inline được nhưng không phải: method hiện thực một interface, callback có tên trong cấu hình hay metrics, và hàm mang decorator. Xoá chúng thì vẫn chạy trong khi có thứ mất đi trong im lặng.)
-- `[review]` Keep the decision and the side effect in different functions. One function that validates, writes, calls out and notifies has four reasons to change. (Để quyết định và tác dụng phụ ở hai hàm khác nhau. Một hàm vừa kiểm tra, vừa ghi, vừa gọi ra ngoài, vừa thông báo thì có bốn lý do để thay đổi.)
-- `[lint]` Write structured events to standard output, and never manage log files. Logging is a side effect, so the domain returns what happened and the edge writes it down. (Ghi các sự kiện có cấu trúc ra standard output, và đừng bao giờ tự quản lý file log. Ghi log là một tác dụng phụ, nên miền nghiệp vụ trả về chuyện gì đã xảy ra còn phần rìa ghi nó xuống.)
-- `[review]` Name what is there, not how it got there: what a function returns, what a variable holds, what a file contains. Test a name by reading only the line that uses it and saying what it is. (Đặt tên theo cái đang có ở đó, không theo cách nó tới: hàm trả về gì, biến giữ gì, file chứa gì. Kiểm tra một cái tên bằng cách chỉ đọc dòng dùng nó rồi nói xem nó là gì.)
-- `[lint]` Never name a thing after its container or its position — user_map, order_list, main — or reuse a word that already names a step, a command or a table. (Đừng bao giờ đặt tên theo vật chứa hay theo vị trí — user_map, order_list, main — cũng đừng dùng lại một từ đã gọi tên một bước, một câu lệnh hay một bảng.)
-- `[lint]` Replace a hard-coded value with a named constant, positional arguments with keyword arguments, an implied ordering with an explicit one. Each swap turns a rule someone has to remember into one the code states. (Thay giá trị viết cứng bằng hằng số có tên, tham số theo vị trí bằng tham số có từ khoá, thứ tự ngầm định bằng thứ tự tường minh. Mỗi lần đổi là biến một luật người ta phải nhớ thành một luật code tự nói ra.)
-- `[review]` Comment the abstraction, not the implementation: state the invariants, the units, the ordering and the error modes next to the signature, because none of them are in it. Code does not document itself — if a caller has to read the body to learn the rule, the comment is missing, not redundant. (Comment cho abstraction, không cho phần hiện thực: ghi các bất biến, đơn vị đo, thứ tự gọi và các dạng lỗi ngay cạnh chữ ký hàm, vì không cái nào nằm trong chữ ký cả. Code không tự nói hết được — nếu caller phải đọc thân hàm mới biết luật thì comment đang thiếu chứ không phải thừa.)
+## Root
 
-## Codebase layout (Bố cục codebase)
+> **The price of software is not the first write. It is the Nth change.**
 
-- `[review]` Group by domain first, technical kind second: things that change together live together. Adding a field to an order should open one folder, not four. (Nhóm theo miền nghiệp vụ trước, theo loại kỹ thuật sau: những thứ thay đổi cùng nhau thì ở cùng nhau. Thêm một trường vào đơn hàng thì chỉ nên phải mở một thư mục, không phải bốn.)
-- `[review]` The farther apart two elements sit, the weaker the form of connascence between them has to be. If you cannot weaken it, move them closer together — that is why the shape and the logic of one domain share a folder. (Hai phần tử càng xa nhau thì dạng connascence giữa chúng càng phải yếu. Nếu không hạ được độ mạnh thì kéo chúng lại gần nhau — đó là lý do shape và logic của cùng một miền nằm chung một thư mục.)
-- `[review]` Make the top of the source tree name the domain, not the framework. (Làm sao để thư mục gốc gọi tên miền nghiệp vụ, không phải tên framework.)
-- `[lint]` Start every module docstring with one of five tags: shape holds nouns and constants; logic holds the decisions over them; facade only re-exports; adapter translates between an outside format and the domain; wiring is the composition root, where the concrete parts get connected. Two answers means the file holds two jobs. Write facade without the cedilla — the tag is read by a machine. (Bắt đầu mọi docstring của module bằng một trong năm tag: shape chứa danh từ và hằng số; logic chứa các quyết định trên chúng; facade chỉ export lại; adapter dịch giữa một định dạng bên ngoài và miền nghiệp vụ; wiring là composition root, chỗ nối dây các thành phần cụ thể. Hai câu trả lời nghĩa là file đang giữ hai việc. Viết facade không dấu — tag này để máy đọc.)
-- `[lint]` Name a module for what it holds or the job it does, never helpers, utilities, managers or entities. Those name a bucket, not a job. (Đặt tên module theo thứ nó chứa hoặc nhiệm vụ nó làm, đừng bao giờ là helpers, utilities, managers hay entities. Đó là tên của cái thùng, không phải tên của một nhiệm vụ.)
-- `[review]` Give each module one decision to hide, and pick the one most likely to change: the file format, the storage engine, the retry policy. (Cho mỗi module một quyết định để giấu, và chọn quyết định dễ thay đổi nhất: định dạng file, engine lưu trữ, chính sách retry.)
-- `[review]` Keep the file format and the call order inside the module. A caller that has to know them is already leaked, with or without an import. (Giữ định dạng file và thứ tự gọi ở bên trong module. Caller mà phải biết chúng thì đã rò rỉ rồi, có import hay không cũng vậy.)
-- `[review]` Put a lot behind a small interface, and delete a module that nothing gets harder without. (Đặt thật nhiều thứ sau một interface nhỏ, và xoá một module mà thiếu nó chẳng có gì khó hơn.)
-- `[lint]` Translate schema, wire and framework types at the outermost layer, in an adapter, so the domain never learns the transport. (Dịch các kiểu từ schema, từ định dạng truyền và từ framework ngay ở tầng ngoài cùng, trong một adapter, để miền nghiệp vụ không bao giờ biết tới tầng truyền tải.)
-- `[review]` Do not begin the decomposition from the flow of processing. A step can be a unit of composition — one thing done well, clipped onto the next — but it must not be the unit that hides a decision: a decision usually spans several steps, so splitting by step lands every change in three files. Give the decision its own module and let the steps call it. (Đừng bắt đầu phân rã từ luồng xử lý. Một bước có thể là đơn vị ghép nối — làm một việc cho tốt, ghép được vào bước sau — nhưng không được là đơn vị giấu quyết định: một quyết định thường trải qua nhiều bước, nên chia theo bước sẽ khiến mỗi thay đổi rơi vào ba file. Hãy cho quyết định đó module riêng và để các bước gọi nó.)
-- `[review]` Do not split before a second consumer needs half of it, and do not call the split finished while the two halves still depend on each other. (Đừng tách trước khi có người dùng thứ hai cần một nửa của nó, và đừng coi lần tách là xong chừng nào hai nửa vẫn còn phụ thuộc lẫn nhau.)
-- `[lint]` Declare the import direction once and enforce it with a check that fails the build, not with discipline. (Khai báo chiều import một lần và ép nó bằng một phép kiểm tra làm hỏng bản build, không phải bằng tính kỷ luật.)
-- `[review]` Start with one codebase and real module boundaries inside it. Split out a service only when scaling, ownership or reliability genuinely differ — scale itself is bought with indexes, queues and caches. (Bắt đầu bằng một codebase với ranh giới module thật bên trong. Chỉ tách service khi nhu cầu mở rộng, quyền sở hữu hay độ tin cậy thật sự khác nhau — còn khả năng chịu tải thì mua bằng index, hàng đợi và cache.)
-- `[none]` Expect a boundary to follow ownership: one that no single team owns will not hold. Draw the modules and divide the teams together rather than fighting the pull. (Ranh giới sẽ đi theo quyền sở hữu: ranh giới không thuộc về một đội nào thì sẽ không đứng được. Vạch module và chia đội cùng lúc, đừng chống lại lực kéo đó.)
-- `[none]` Redraw the boundaries when a typical change keeps touching more files. (Vạch lại ranh giới khi một thay đổi thông thường ngày càng phải động vào nhiều file hơn.)
+Every rule here exists to make one ordinary change cheaper. None of them is about taste.
 
-## Sources (Nguồn)
+A change gets expensive for exactly three reasons — dependencies, obscurity and carrying cost — and the three branches below are those reasons. A fourth, numbered zero, adds no design rule; it keeps the other three from rotting.
 
-- Conway, *How Do Committees Invent?*, 1968
-- Constantine and Yourdon, *Structured Design*, 1979
-- Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*, 1972
-- Page-Jones, *Comparing Techniques by Means of Encapsulation and Connascence*, 1992
+---
+
+## Vocabulary
+
+Read this first. These four words carry the rest of the document.
+
+- **Module** — anything with an interface and an implementation — a function, a class, a package, a service — that hides a decision behind that interface. The more it hides behind the smaller interface, the deeper it is. A shallow module — wide interface, little hidden — is a bad sign in logic and in adapter, where there was a decision to hide; in shape, facade and wiring it is the normal state, because there is no decision there to hide.
+- **Interface** — everything a caller must know to use it correctly: the signature, the invariants, the ordering, the error modes, the required configuration, the speed. Not just the types. The longer that list runs, the wider the surface a caller is stuck to, even when the signature never moves.
+- **Coupling** — what two parts share and how tightly that binds them — the kind and the degree of the dependency between them.
+- **Connascence** — one thing forcing another to change with it. It is measured on three axes: strength, how hard the joint change is to get right; locality, how far apart the two ends sit; degree, how many places are involved. This is the part you actually pay for; coupling is the wider word around it.
+
+---
+
+# 1. Dependencies
+
+> A change is expensive when fixing one place forces you to fix another. Two ways out: **hide** what can be hidden, and **weaken** the ties that cannot.
+
+## 1A — Hide the decision
+
+> **Principle.** Each module exists to hide one decision from the rest of the system. The decision inside may change as often as it likes, as long as the interface does not.
+>
+> *Parnas, 1972.* He argues that starting a decomposition from the flowchart is almost always the wrong move; begin instead from a list of the design decisions that are hard, or that you expect to change, and build each module around hiding one of them. Those decisions outlive any single moment of execution, which is why modules end up not lining up with processing steps at all. This whole branch is that paper.
+
+- **H-1** `[review]` Give each module one decision to hide, and pick the one most likely to change: the file format, the storage engine, the retry policy.
+- **H-2** `[review]` Put a lot behind a small interface.
+- **H-3** `[review]` Keep the file format and the call order inside the module. A caller that has to know them is already leaked, with or without an import.
+- **H-4** `[review]` Write the smallest version by interface, not the shortest by line count. Cutting a function in half to make each half shorter adds an interface, and if the halves stay entangled the reader now has to hold both. An implementation aimed slightly wider than today's single call site usually ends up with a simpler, deeper interface than one specialised to it.
+- **H-5** `[lint]` Translate schema, wire and framework types at the outermost layer, in an adapter, so the domain never learns the transport.
+- **H-6** `[lint]` Write structured events to standard output, and never manage log files. Logging is a side effect, so the domain returns what happened and the edge writes it down.
+- **H-7** `[review]` Do not begin the decomposition from the flow of processing. A step can be a unit of composition — one thing done well, clipped onto the next — but it must not be the unit that hides a decision: a decision usually spans several steps, so splitting by step lands every change in three files. Give the decision its own module and let the steps call it.
+- **H-8** `[lint]` Start every module docstring with one of five tags: shape holds nouns and constants; logic holds the decisions over them; facade only re-exports; adapter translates between an outside format and the domain; wiring is the composition root, where the concrete parts get connected. Two answers means the file holds two jobs. Write facade without the cedilla — the tag is read by a machine.
+
+| tag | holds | imported by | may import |
+|---|---|---|---|
+| `shape` | nouns and constants | everything | nothing |
+| `logic` | the decisions over them | adapter, wiring | shape |
+| `adapter` | outside ↔ domain translation | wiring | shape, logic |
+| `facade` | re-exports only | outside the package | inside the package |
+| `wiring` | the composition root | entry point | everything |
+
+The fourth column is the declaration `E-1` enforces. The tag set and the import direction are one thing, not two.
+
+- **H-9** `[review]` Start with one codebase and real module boundaries inside it. Split out a service only when scaling, ownership or reliability genuinely differ — scale itself is bought with indexes, queues and caches. A split does not reduce connascence: both sides still change together, at the same strength and degree. It changes the kind of coupling — an in-process call becomes a network call — and it makes locality worse. If the joint change does not get weaker, you have traded a function call for a network call and bought nothing.
+
+## 1B — Manage the connascence
+
+> **Principle.** Some ties cannot be hidden — two places genuinely have to change together. For those, do two things: pull them **closer**, and trade the strong tie for a **weaker** one.
+>
+> *Page-Jones, 1992.* You rarely delete connascence. You move it along three axes — strength, locality, degree — and every rule below is one of those moves.
+
+- **C-1** `[review]` The farther apart two elements sit, the weaker the form of connascence between them has to be. If you cannot weaken it, move them closer together — that is why the shape and the logic of one domain share a folder.
+- **C-2** `[review]` Group by domain first, technical kind second: things that change together live together. Adding a field to an order should open one folder, not four.
+- **C-3** `[lint]` Replace a hard-coded value with a named constant, positional arguments with keyword arguments, an implied ordering with an explicit one. Exempt the values that carry no rule: 0, 1, -1, the empty string, and the status codes the protocol already names. Each swap turns a rule someone has to remember into one the code states, and trades a stronger form of connascence for a weaker one.
+- **C-4** `[review]` Make a function when two or more places call it and change together, or when a decision needs its own test. Otherwise a named variable is enough to put the rule on screen.
+- **C-5** `[review]` Inline a one-line function with a single caller whose name adds nothing. Three kinds look inlinable but are not: a method implementing an interface, a callback named in configuration or metrics, a decorated function. Removing those still runs while something is lost silently.
+- **C-6** `[review]` Keep the decision and the side effect in different functions. One function that validates, writes, calls out and notifies has four reasons to change.
+- **C-7** `[review]` Do not split before a second consumer needs half of it, and do not call the split finished while the two halves still depend on each other.
+
+---
+
+# 2. Obscurity
+
+> **Principle.** A change is expensive when you cannot tell **where** to make it, or cannot tell afterwards whether you understood it correctly. This is the cheapest branch to get right and the one most often skipped.
+>
+> Naming and comments are not decoration here. They are the only part of the interface that carries intent, and intent is exactly what the compiler throws away.
+
+- **R-1** `[review]` Name what is there, not how it got there: what a function returns, what a variable holds, what a file contains. Test a name by reading only the line that uses it and saying what it is.
+- **R-2** `[lint]` Never name a thing after its container or its position — user_map, order_list — or reuse a word that already names a step, a command or a table. `main` is the exception the language already owns: fine as an entry point, never as the name of a domain module.
+- **R-3** `[lint]` Name a module for what it holds or the job it does, never helpers, utilities, managers or entities. Those name a bucket, not a job.
+- **R-4** `[review]` Make the top of the source tree name the domain, not the framework.
+- **R-5** `[review]` Comment the abstraction, not the implementation: state the invariants, the units, the ordering and the error modes next to the signature, because none of them are in it. Code does not document itself — if a caller has to read the body to learn the rule, the comment is missing, not redundant.
+- **R-6** `[review]` Name a function with a noun phrase of at least two words — never a bare noun, which reads as the variable holding the result rather than the call producing it, and never a leading underscore or an `of`/`for` suffix.
+
+---
+
+# 3. Carrying cost
+
+> **Principle.** A change is expensive when you have to drag along what you did not need. Every line is debt; every process is a mouth to feed.
+>
+> This branch is the counterweight to 1A. Hiding a decision is free to keep; a queue is not.
+
+- **T-1** `[review]` Build only what was asked for, and only for the case that exists today. This governs behaviour and features.
+- **T-2** `[review]` Boundaries are the exception, and they are decided ahead of the need: hiding a decision is not a feature built early. Decide the boundary early and cut the file late — knowing where the seam runs does not oblige you to split it today.
+- **T-3** `[review]` Add something that has to run — a queue, a cache, a scheduled job — only to fix a problem you can name. Everything that runs is something to keep alive.
+- **T-4** `[review]` Optimise for clarity first, then for a bottleneck you can name. A bottleneck you cannot name is a guess.
+- **T-5** `[review]` Delete a module that nothing gets harder without.
+
+---
+
+# 0. Enforcement
+
+> **Principle.** A rule with no check is a rule already broken — you just have not found out yet. This branch adds no design rule; it keeps the three above from rotting.
+>
+> *Ford, Parsons and Kua.* Their observation is that the IDE actively encourages the imports that break module discipline, that a written coding standard on its own does not hold, and that the only thing that does hold is a check running in the pipeline.
+
+- **E-1** `[lint]` Declare the import direction once and enforce it with a check that fails the build, not with discipline.
+- **E-2** `[none]` Expect a boundary to follow ownership: one that no single team owns will not hold. Draw the modules and divide the teams together rather than fighting the pull.
+- **E-3** `[none]` Redraw the boundaries when a typical change keeps touching more files.
+
+Known gap in `E-1`: two modules sharing one database table are coupled through the schema, and schema coupling never shows up in the import graph. No rule here covers it yet.
+
+---
+
+## Sources
+
+- Conway, *How Do Committees Invent?*, 1968 — `E-2`
+- Parnas, *On the Criteria To Be Used in Decomposing Systems into Modules*, 1972 — all of 1A
+- Constantine and Yourdon, *Structured Design*, 1979 — coupling, cohesion
+- Page-Jones, *Comparing Techniques by Means of Encapsulation and Connascence*, 1992 — all of 1B
 - Feathers, *Working Effectively with Legacy Code*, 2004
-- Martin, *Screaming Architecture*, 2011, and *Clean Architecture*
-- Cockburn, *Ports & Adapters*; Palermo, *Onion Architecture*
-- Sandin, *Four Strategies for Organizing Code*, 2016
-- Ousterhout, *A Philosophy of Software Design*, 2018
-- Wiggins and others, *The Twelve-Factor App*
-- North, *CUPID — for joyful coding*, 2022
-- Ford, Parsons and Kua, *Building Evolutionary Architectures*
+- Martin, *Screaming Architecture*, 2011, and *Clean Architecture* — `R-4`
+- Cockburn, *Ports & Adapters*; Palermo, *Onion Architecture* — `H-5`
+- Sandin, *Four Strategies for Organizing Code*, 2016 — `C-2`
+- Ousterhout, *A Philosophy of Software Design*, 2018 — the root, `H-2`, `H-4`, `R-5`
+- Wiggins and others, *The Twelve-Factor App* — `H-6`
+- North, *CUPID — for joyful coding*, 2022 — `H-7`, `R-4`
+- Ford, Parsons and Kua, *Building Evolutionary Architectures* — branch 0
+- Fowler, *MonolithFirst* — `H-9`

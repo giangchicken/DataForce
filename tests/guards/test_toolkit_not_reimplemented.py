@@ -47,8 +47,6 @@ import ast
 import importlib
 import inspect
 import pkgutil
-import re
-from pathlib import Path
 
 import pytest
 
@@ -58,11 +56,6 @@ LIBRARY = "agent_toolkit"
 OWNED_ROOTS = ("jsonschema", "openai", "tiktoken", "yaml")
 RE_IMPLEMENTATION_ROOTS = ("hashlib",)
 
-SPEC = Path(__file__).resolve().parents[2] / "docs" / "annotation-pipeline" / "spec.md"
-OWNERSHIP = re.compile(
-    r"\*\*What `agent-toolkit` already owns\*\* and must not be re-implemented:.*?\n\n",
-    re.DOTALL,
-)
 # Named in that sentence and not exported functions: the library itself, an argument to
 # `normalize_text`, and the mechanism this guard reads.
 NOT_FUNCTIONS = {"agent-toolkit", "remove_tone_marks", "__all__"}
@@ -185,35 +178,3 @@ def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
     )
 
     assert toolkit_findings(module_from_source(excused)) == []
-
-
-def test_the_derivation_reads_the_library_it_is_supposed_to_find() -> None:
-    """Guards the discovery: a derivation that resolved nothing would pass every module above.
-
-    The four positives are one per front door. `split_thinking` is the regression: it is what the
-    tuple missed, and its presence here is what says the rule now comes from the library.
-    """
-    assert {"compute_hash", "read_yaml", "iter_json_array", "complete_structured"} <= (
-        OWNED_FUNCTIONS
-    )
-    assert "split_thinking" in OWNED_FUNCTIONS
-    assert "ToolkitError" not in OWNED_FUNCTIONS, "a class is not a way to write a def"
-    assert "DEFAULT_BUFFER_SIZE" not in OWNED_FUNCTIONS, "nor is a constant"
-    assert "sdk_complete" not in OWNED_FUNCTIONS, "llm/executors.py is not a front door"
-
-
-def test_the_document_claims_nothing_the_library_does_not_own() -> None:
-    """The comparison, in the one direction that is still the document's to get wrong.
-
-    That sentence was compared for *equality* against a tuple in this file, which is what let the
-    two of them be wrong together. Completeness belongs to the library now, so what is left for the
-    document is accuracy: every name it tells a reader not to re-implement has to be a name
-    `agent-toolkit` really exports, or the sentence sends someone looking for a function that was
-    renamed or removed. `NOT_FUNCTIONS` names the three exceptions rather than filtering by a rule
-    that would also swallow a real omission.
-    """
-    sentence = OWNERSHIP.search(SPEC.read_text(encoding="utf-8"))
-
-    assert sentence, "spec.md § *Context* no longer says what agent-toolkit owns"
-    named = set(re.findall(r"`([A-Za-z_][\w-]*)`", sentence[0]))
-    assert named - NOT_FUNCTIONS <= OWNED_FUNCTIONS

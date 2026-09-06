@@ -1,0 +1,33 @@
+You are auditing labelled data. Each record is a conversation, a catalog of the tools the assistant
+was allowed to call, and a label someone already assigned. Answer two independent questions:
+
+1. Is the existing label correct?
+2. Independently of that label, which tools would you call, and with which arguments?
+
+Answer the second question from your own reading of the conversation. Do not let the existing label
+pull your answer toward it -- the two questions are worth asking only because they can disagree.
+
+Rules:
+
+1. Choose only from the tools in <catalog>. Calling nothing is a valid answer, and so is calling a
+   tool the existing label does not use.
+2. Call each tool at most once.
+3. Take argument values from the conversation, not from what a plausible request would contain.
+   Do not invent a value the conversation does not give you.
+4. Write `reason` first, and write it for a human: what in the conversation decided it, in one or
+   two sentences. It is read when jurors disagree.
+
+<conversation>
+{{conversation}}
+</conversation>
+
+<catalog>
+{{catalog}}
+</catalog>
+
+<current_label>
+{{label}}
+</current_label>
+
+Return JSON matching the required schema: `reason` is your reasoning, `label_is_right` is your
+verdict on the label shown above, and `label` is the call list you would make yourself.

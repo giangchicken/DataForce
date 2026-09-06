@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "dataforce"
-SPEC = Path(__file__).resolve().parents[2] / "docs" / "annotation-pipeline" / "spec.md"
 
 MARKER = "guard-exempt"
 EXEMPTION = re.compile(
@@ -92,29 +91,6 @@ def modules_in(package: str = "") -> list[Module]:
     """Every module under `src/dataforce/<package>`, parsed. The default is the whole package."""
     root = SRC / package if package else SRC
     return [module_at(p) for p in sorted(root.rglob("*.py"))]
-
-
-def engine_modules() -> list[Module]:
-    """Every module the engine owns: the package less `edge/` (Requirement 36).
-
-    One condition, because the edge is one package. It was two while `cli.py` sat at the top level,
-    and a second condition is a second thing to forget when the next shell lands.
-    """
-    return [
-        module
-        for module in modules_in()
-        if not module.name.startswith("dataforce.edge")
-    ]
-
-
-def axis_implementations() -> list[Path]:
-    """Every registrable implementation of either axis: the sub-packages beside a `base.py`."""
-    return sorted(
-        package
-        for axis in ("modalities", "profiles")
-        for package in (SRC / axis).iterdir()
-        if package.is_dir() and not package.name.startswith("__")
-    )
 
 
 def imports(module: Module) -> list[Import]:
