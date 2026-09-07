@@ -14,8 +14,7 @@
 #   DATAFORCE_LABEL_STUDIO_PROJECT   the project id the questions go into
 #
 # The project itself is created by a person, because a project's settings *are* the rung:
-# `maximum_annotations` is 1 for Smoke and 2 for Pilot, and `aggregate`'s overlap floor in
-# params.yaml must be moved with it in the same commit.
+# `maximum_annotations` is 1 for Smoke and 2 for Pilot.
 
 services:
   label-studio:
