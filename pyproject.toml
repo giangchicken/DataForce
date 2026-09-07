@@ -63,6 +63,8 @@ build-backend = "hatchling.build"
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
+# Every file under the directory ships, not only the `.py` ones, which is how
+# `py.typed` and `edge/static/index.html` reach an install without being named here.
 packages = ["src/dataforce"]
 
 [dependency-groups]
@@ -112,6 +114,22 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 warn_unreachable = true
+# PEP 561: without the marker `dataforce` is an untyped install to its own type
+# checker, so every intra-package import resolves to `Any` and a finding inside one
+# is invisible. `mypy_path` plus explicit bases is the other half: the editable
+# install puts `src/` on the path, so without them one file is reachable under two
+# module names and mypy refuses.
+mypy_path = "src"
+explicit_package_bases = true
+
+# `agent_toolkit` ships no marker either, but it is annotated -- `complete`,
+# `resolve_config` and the rule scans all carry full signatures -- so following the
+# import reads them. `ignore_missing_imports` would make the library's whole surface
+# `Any` instead, which is how a signature changing under a pinned branch becomes
+# invisible here.
+[[tool.mypy.overrides]]
+module = "agent_toolkit.*"
+follow_untyped_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
