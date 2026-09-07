@@ -1,4 +1,4 @@
-"""LOGIC · N independent LLMs answer the sample's own task.
+"""logic · N independent LLMs answer the sample's own task.
 
 Independence is the whole point: the signal this service is built on is *models disagreeing*, so
 nothing here shows one juror another's answer, and a juror that failed is absent rather than

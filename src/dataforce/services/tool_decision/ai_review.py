@@ -1,4 +1,4 @@
-"""LOGIC · the full logic behind the ai-review endpoint: both reviewers over one sample.
+"""logic · the full logic behind the ai-review endpoint: both reviewers over one sample.
 
 Each function takes the config for the model it asks and builds its own reviewer. The panel and the
 finetuned reviewer are asked separately and neither is folded into the other -- one carries reasons

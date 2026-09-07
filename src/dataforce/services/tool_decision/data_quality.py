@@ -1,4 +1,4 @@
-"""LOGIC · the full logic behind each data-quality endpoint.
+"""logic · the full logic behind each data-quality endpoint.
 
 `personal_data_scan` takes the config for the model layer two asks and builds its own checker.
 `duplicate_report` and `abnormal_report` take a sample and nothing else: neither declares a shape

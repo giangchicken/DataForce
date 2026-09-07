@@ -1,4 +1,4 @@
-"""DEFINITION · what the two reviewers return, and the two sockets they answer through.
+"""shape · what the two reviewers return, and the two sockets they answer through.
 
 `LLMReviewerAnswer` and `SFTReviewerAnswer` are what a model said before anything decides whether
 it is usable; `LLMReviewerVote` and `SFTReviewerVerdict` are what this package concluded about that.

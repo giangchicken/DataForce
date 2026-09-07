@@ -1,4 +1,4 @@
-"""LOGIC · which tool the two reviewers say this sample should call.
+"""logic · which tool the two reviewers say this sample should call.
 
 The prompt is built here, not in the modality: `tool_prediction.txt` asks for a tool call, and what
 a juror is asked is the task's question. Each juror is handed the catalog, the conversation and

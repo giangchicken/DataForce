@@ -1,4 +1,4 @@
-"""LOGIC · the base every common check shares, held open until the two shapes are decided.
+"""logic · the base every common check shares, held open until the two shapes are decided.
 
 `Check` and `CheckVerdict` are gone from `schema.py` and nothing has replaced them, so neither what
 a common check is handed nor what it reports has a shape yet. The class holds the place and says

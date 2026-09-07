@@ -1,4 +1,4 @@
-"""LOGIC · what the human left, and the record that gets stored.
+"""logic · what the human left, and the record that gets stored.
 
 The record keeps what arrived and adds what the review made of it. `messages`, `tools` and `label`
 are the sample as it was posted; `new_messages`, `new_tools` and `new_label` are the versions that

@@ -1,4 +1,4 @@
-"""DEFINITION · what the three checks return, and what each one's provider is handed.
+"""shape · what the three checks return, and what each one's provider is handed.
 
 No module here opens a socket. The socket is the abstract method on each check's class, and
 `profile/<task>/data_quality.py` is where it gets a body.

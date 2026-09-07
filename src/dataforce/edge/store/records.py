@@ -1,4 +1,4 @@
-"""ADAPTER · one row per record, and the two calls that read and write it.
+"""adapter · one row per record, and the two calls that read and write it.
 
 One table, keyed by the record's own id, holding the row as JSON and the time it landed. A record
 posted twice is one record reviewed twice, so a second post replaces the row through

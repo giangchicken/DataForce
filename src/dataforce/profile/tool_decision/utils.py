@@ -1,4 +1,4 @@
-"""LOGIC · every tool a conversation was offered, written out as the text a reviewer reads.
+"""logic · every tool a conversation was offered, written out as the text a reviewer reads.
 
     [tool_name]
     <description, verbatim>

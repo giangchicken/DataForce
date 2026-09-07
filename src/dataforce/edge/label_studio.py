@@ -1,4 +1,4 @@
-"""ADAPTER · tasks out, annotations back, idempotent in both directions.
+"""adapter · tasks out, annotations back, idempotent in both directions.
 
 Label Studio is the store. It already holds tasks and annotations, so nothing here keeps a second
 copy — idempotence comes from asking the project what it has rather than from a table of our own.

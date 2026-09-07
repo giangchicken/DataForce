@@ -1,4 +1,4 @@
-"""LOGIC · the finetuned reviewer's own answer, and its verdict on the label.
+"""logic · the finetuned reviewer's own answer, and its verdict on the label.
 
 A second opinion and not a second juror. It carries a confidence and no reason, the panel carries
 reasons and no confidence, and folding them into one vote would weigh one model's training set

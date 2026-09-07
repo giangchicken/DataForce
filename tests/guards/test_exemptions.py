@@ -13,6 +13,7 @@ that half, where the rule being excused is.
 from .tree import exemptions, malformed_exemptions, module_from_source, modules_in
 
 WELL_FORMED = "import os  # guard-exempt: I1 · the reason · the owner · 2026-08-23"
+BY_RULE = "import os  # guard-exempt: H-8 · the reason · the owner · 2026-09-07"
 CEILING = 5
 
 
@@ -34,6 +35,12 @@ def test_a_well_formed_exemption_is_read_as_one() -> None:
     assert malformed_exemptions([module_from_source(WELL_FORMED)]) == []
 
 
+def test_an_exemption_may_name_a_rule_of_agents_md_rather_than_an_invariant() -> None:
+    """`test_import_direction.py` enforces `H-8`, so `H-8` is what a line there has to name."""
+    assert exemptions([module_from_source(BY_RULE)]) != []
+    assert malformed_exemptions([module_from_source(BY_RULE)]) == []
+
+
 def test_an_exemption_missing_a_field_is_caught_rather_than_ignored() -> None:
     """The failure mode that matters: a half-written annotation that silently excuses nothing --
     or, worse, is read as excusing everything."""
@@ -43,6 +50,7 @@ def test_an_exemption_missing_a_field_is_caught_rather_than_ignored() -> None:
         "import os  # guard-exempt: I1 · the reason · the owner",
         "import os  # guard-exempt: the reason · the owner · 2026-08-23",
         "import os  # guard-exempt: I1 · the reason · the owner · someday",
+        "import os  # guard-exempt: h-8 · the reason · the owner · 2026-09-07",
     ):
         module = module_from_source(missing)
 

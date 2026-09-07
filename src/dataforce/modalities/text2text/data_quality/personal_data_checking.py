@@ -1,4 +1,4 @@
-"""LOGIC · one personal-data scan, declared here and answered by the task.
+"""logic · one personal-data scan, declared here and answered by the task.
 
 `scan` is the socket. Layer one's rule scans, layer two's model pass, the placeholders and the
 offsets are one answer and not four, because what a sample is scanned *as* differs by task: a

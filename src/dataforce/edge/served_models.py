@@ -1,4 +1,4 @@
-"""ADAPTER · which models this deployment serves, and the resolver that reads them.
+"""adapter · which models this deployment serves, and the resolver that reads them.
 
 A model is served when `config/model/<model name>.json` exists. That directory is the deployment's
 -- written after cloning, kept out of the repository by `.gitignore` -- so the list of names is

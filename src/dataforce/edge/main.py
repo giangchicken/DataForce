@@ -1,4 +1,4 @@
-"""WIRING · create_app(): the config resolver, one router, and the app's own route."""
+"""wiring · create_app(): the config resolver, one router, and the app's own route."""
 
 import logging
 

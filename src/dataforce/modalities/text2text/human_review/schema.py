@@ -1,4 +1,4 @@
-"""DEFINITION · what one person's answer says, in this package's words and the tool's."""
+"""shape · what one person's answer says, in this package's words and the tool's."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

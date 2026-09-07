@@ -1,4 +1,4 @@
-"""LOGIC · the data-quality checks over a tool-calling sample.
+"""logic · the data-quality checks over a tool-calling sample.
 
 Personal data is the one with a body to write. What this task scans is the conversation *and* the
 catalog of tools it was offered: an argument value in a tool call is where a phone number actually

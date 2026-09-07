@@ -1,4 +1,4 @@
-"""ADAPTER · one APIRouter for tool_decision: a request body in, one part's answer out.
+"""adapter · one APIRouter for tool_decision: a request body in, one part's answer out.
 
 A handler is thin. It reads the body, calls one function in `services/tool_decision/`, and maps the
 error; it names no stage sequence, and no response carries a part the handler does not own. The

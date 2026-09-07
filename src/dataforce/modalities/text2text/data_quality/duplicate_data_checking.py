@@ -1,4 +1,4 @@
-"""LOGIC · exact and near-duplicate groups, split by label agreement.
+"""logic · exact and near-duplicate groups, split by label agreement.
 
 Two samples saying the same thing are two answers to one question, and which is right matters
 differently depending on whether they agree: same content and same label is a sample to drop one
