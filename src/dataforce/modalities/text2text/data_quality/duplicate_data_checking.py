@@ -11,9 +11,9 @@ compared — the exit is an index, not a smaller batch.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
-from .schema import Answer, DuplicateGroups, EmbedderModelConfig
+from .schema import DuplicateGroups, EmbedderModelConfig
 
 
 class DuplicateDataChecking(ABC):

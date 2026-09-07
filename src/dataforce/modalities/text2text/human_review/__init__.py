@@ -1,12 +1,5 @@
-"""facade · the label that ships."""
+"""facade · what one person's answer says."""
 
-from .decision_logic import DecisionLogic, MajorityDecision
-from .schema import Annotation, Evidence, LabelDecision
+from .schema import Annotation, ReturnedAnnotation
 
-__all__ = [
-    "Annotation",
-    "DecisionLogic",
-    "Evidence",
-    "LabelDecision",
-    "MajorityDecision",
-]
+__all__ = ["Annotation", "ReturnedAnnotation"]

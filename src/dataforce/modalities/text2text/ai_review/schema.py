@@ -15,14 +15,12 @@ class Frozen(BaseModel):
 
 
 class LLMReviewerVote(Frozen):
-
     model_name: str = Field(..., description="Which juror produced this vote.")
     reason: str = Field(..., description="Why, for the human who reads a disagreement.")
     label: str = Field(..., description="Its own answer.")
 
 
 class LLMReviewerVerdict(Frozen):
-    
     votes: tuple[LLMReviewerVote, ...] = Field(
         default=(), description="One entry per juror that answered."
     )
@@ -40,7 +38,6 @@ class LLMReviewerVerdict(Frozen):
 
 
 class SFTReviewerVerdict(Frozen):
-
     model_name: str = Field(..., description="Which model answered.")
     label: str = Field(..., description="Its own answer.")
     confidence: float = Field(..., description="How sure it is, 0 to 1.")
@@ -50,8 +47,17 @@ class LLMModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow", populate_by_name=True)
 
     model_name: str = Field(..., alias="model", description="Which model answers.")
-    base_url: str = Field(..., description="Where it answers.")
-    api_key: str = Field(..., description="What authenticates the call.")
+    base_url: str | None = Field(
+        default=None,
+        description=(
+            "Where it answers. None leaves it to `config/model/<model name>.json`, or to "
+            "the environment where that file names neither."
+        ),
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="What authenticates the call, on the same terms as `base_url`.",
+    )
     settings: Mapping[str, Any] = Field(
         default_factory=dict,
         description="What the provider is handed on top of the three, forwarded untouched.",
@@ -62,8 +68,17 @@ class SFTModelConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow", populate_by_name=True)
 
     model_name: str = Field(..., alias="model", description="Which model answers.")
-    base_url: str = Field(..., description="Where it answers.")
-    api_key: str = Field(..., description="What authenticates the call.")
+    base_url: str | None = Field(
+        default=None,
+        description=(
+            "Where it answers. None leaves it to `config/model/<model name>.json`, or to "
+            "the environment where that file names neither."
+        ),
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="What authenticates the call, on the same terms as `base_url`.",
+    )
     settings: Mapping[str, Any] = Field(
         default_factory=dict,
         description="What the provider is handed on top of the three, forwarded untouched.",
