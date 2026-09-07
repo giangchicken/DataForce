@@ -24,8 +24,10 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "dataforce"
 MARKER = "guard-exempt"
 EXEMPTION = re.compile(
     # An invariant of the spec's, `I6`, or a rule of `AGENTS.md`'s, `H-8` -- both are IDs a line
-    # can name, and a guard reads whichever its own rule is written from.
-    rf"#\s*{MARKER}:\s*(?P<invariant>I\d+|[A-Z]-\d+)"
+    # can name, and a guard reads whichever its own rule is written from. The rule prefixes are
+    # spelled out because `AGENTS.md` uses those five: a wider pattern reads `I-6` as well formed,
+    # and a typo that excuses nothing is the one failure this grammar exists to catch.
+    rf"#\s*{MARKER}:\s*(?P<invariant>I\d+|[CEHRT]-\d+)"
     r"\s*·\s*(?P<reason>[^·]+?)"
     r"\s*·\s*(?P<owner>[^·]+?)"
     r"\s*·\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$"

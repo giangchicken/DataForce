@@ -7,17 +7,29 @@ module: the tree wrote seven things where the rule names five, and two imports h
 wrong way -- `services/` reached for `edge/store`, logic reaching for an adapter, and `edge/cli.py`
 imported a deleted module for four commits.
 
-**A facade is a door, not a destination.** `H-8` gives it no place in the direction -- it holds
-re-exports only, so what it exposes is whatever it re-exports, and checking the tag on the door
-would let every forbidden import through by spelling it one level higher. That is not
+**A facade is a door, not a destination.** As an importer it is `H-8`'s fifth row and may reach
+anything inside the package. As a *target* it is whatever stands behind it, because checking the tag
+on the door would let every forbidden import through by spelling it one level higher. That is not
 hypothetical: `services/` reached for `edge/store` as `from dataforce.edge.store import ...`, and
-`edge/store/__init__.py` is a facade. So a facade resolves to the tags of what it re-exports, and
-`logic` importing that facade is `logic` importing an `adapter`.
+`edge/store/__init__.py` is a facade. So `logic` importing that facade is `logic` importing an
+`adapter`.
+
+What stands behind a door is read two ways, because a facade leaks two ways. `dataforce.edge.store`
+re-exports `records`, so its re-exports say what it opens onto. `dataforce.edge` re-exports
+nothing -- and reading only re-exports made it a hole: `import dataforce.edge` binds a package
+whose `edge.main` is reachable through it the moment anything loads that module, so a `shape` module
+could reach `wiring` through an empty door and no tag would say so. A package name stands for its
+subtree, so the subtree is read as well.
 
 **The tag on the importer is what may be narrowed.** A module may import its own tag -- one `logic`
 module calling another is a decision calling a decision -- and everything below it. `shape` may
 import `shape` and nothing else, which is `H-8`'s "may import: nothing" read at the granularity a
 scan works in: a noun may not reach for a decision.
+
+**A word that is not one of the five permits nothing.** An unknown tag declares no direction, so
+every import it makes is a finding. Reading it as *no constraint* is how one annotation on the
+docstring buys a module unlimited import freedom -- the tag rule and the direction rule would both
+fall to the same line.
 """
 
 import ast
@@ -28,15 +40,16 @@ from .tree import Module, imports, module_from_source, modules_in, not_exempt
 
 RULE = "H-8"
 
-# `H-8`'s fourth column. A facade is absent on purpose: it declares no direction of its own, and
-# `exposed_tags` is what reads it.
+# `H-8`'s fourth column, one row per tag. The values hold no `facade`: a facade is never a
+# destination, because `exposed_tags` resolves it to what stands behind it.
 MAY_IMPORT = {
     "shape": frozenset({"shape"}),
     "logic": frozenset({"shape", "logic"}),
     "adapter": frozenset({"shape", "logic", "adapter"}),
-    "wiring": frozenset({"shape", "logic", "adapter", "wiring", "facade"}),
+    "wiring": frozenset({"shape", "logic", "adapter", "wiring"}),
+    "facade": frozenset({"shape", "logic", "adapter", "wiring"}),
 }
-TAGS = frozenset(MAY_IMPORT) | {"facade"}
+TAGS = frozenset(MAY_IMPORT)
 
 
 def tag_of(module: Module) -> str:
@@ -63,40 +76,39 @@ def reached_modules(module: Module) -> list[tuple[int, str]]:
 
 
 def exposed_tags(name: str, seen: frozenset[str] = frozenset()) -> frozenset[str]:
-    """What importing that module actually reaches: its own tag, or a facade's re-exports.
+    """What importing that module actually reaches: its own tag, or what stands behind a door.
 
-    A facade that re-exports nothing exposes nothing, so an import of it is nothing to check.
+    Behind a facade is what it re-exports and what its subtree holds -- the two ways a door leaks,
+    and a facade that re-exports nothing still names a package.
     """
     tag = TAG.get(name, "")
     if tag != "facade":
         return frozenset({tag})
     if name in seen:
         return frozenset()
+    behind = {reached for _, reached in reached_modules(TREE[name])}
+    behind |= {under for under in TREE if under.startswith(f"{name}.")}
     return frozenset().union(
-        *(
-            exposed_tags(behind, seen | {name})
-            for _, behind in reached_modules(TREE[name])
-        ),
-        frozenset(),
+        *(exposed_tags(one, seen | {name}) for one in behind), frozenset()
     )
 
 
 def tag_findings(module: Module) -> list[str]:
-    """The module whose docstring opens with a word `H-8` does not name."""
+    """The module whose docstring opens with a word `H-8` does not name.
+
+    No hatch: there is no sixth tag to excuse, and the finding is the docstring's own first line, so
+    an exemption could only be written inside the text being rejected.
+    """
     tag = tag_of(module)
     if tag in TAGS:
         return []
     said = f"the tag {tag!r}" if tag else "no docstring"
-    return not_exempt(
-        module, RULE, [(1, f"opens with {said}, not one of {sorted(TAGS)}")]
-    )
+    return [f"{module.name}:1 opens with {said}, not one of {sorted(TAGS)}"]
 
 
 def direction_findings(module: Module) -> list[str]:
     """Every import this module makes that `H-8`'s table sends the other way."""
-    permitted = MAY_IMPORT.get(tag_of(module))
-    if permitted is None:
-        return []
+    permitted = MAY_IMPORT.get(tag_of(module), frozenset())
     return not_exempt(
         module,
         RULE,
@@ -146,21 +158,57 @@ def test_the_scan_rejects_a_module_with_no_docstring() -> None:
         '"""logic · a decision."""\n\nfrom dataforce.edge.store import stored_row',
         '"""shape · a noun."""\n\nfrom dataforce.profile.tool_decision.utils import x',
         '"""adapter · a translation."""\n\nfrom dataforce.edge.main import create_app',
+        '"""shape · a noun."""\n\nimport dataforce.edge',
+        '"""logic · a decision."""\n\nfrom dataforce import edge',
     ],
     ids=[
         "logic-to-adapter",
         "logic-through-a-facade",
         "shape-to-logic",
         "adapter-to-wiring",
+        "shape-through-an-empty-facade",
+        "logic-through-an-empty-facade",
     ],
 )
 def test_the_scan_rejects_an_import_against_the_direction(wrong_way: str) -> None:
     """Proved red, one per row of the table that forbids something.
 
     `logic-through-a-facade` is the case that happened: spelling the same import one level higher
-    is what a scan reading the tag on the door would have allowed.
+    is what a scan reading the tag on the door would have allowed. The two empty-facade cases are
+    the same bypass one level higher again -- `dataforce/edge/__init__.py` re-exports nothing, so
+    only its subtree says that `edge.main` is `wiring`.
     """
     assert direction_findings(module_from_source(wrong_way)) != []
+
+
+def test_an_unknown_tag_permits_no_import_at_all() -> None:
+    """The bypass the two rules would otherwise share.
+
+    A tag rule reported on line 1 and a direction rule that skips a tag it does not know means one
+    annotation on the docstring excuses the tag *and* every import under it. So an unknown tag
+    declares no direction, and every import it makes is a finding.
+    """
+    unknown = (
+        '"""helper · a bucket."""'
+        "  # guard-exempt: H-8 · the reason · the owner · 2026-09-07"
+        "\n\nfrom dataforce.edge.main import create_app"
+    )
+
+    assert direction_findings(module_from_source(unknown)) != []
+
+
+def test_a_facade_importing_across_the_package_is_permitted_by_the_table_itself() -> (
+    None
+):
+    """`H-8`'s fifth row, read rather than fallen through.
+
+    A facade re-exports, so it reaches anything inside the package -- but it has to be *permitted*
+    that, not merely unrecognised: a tag the table does not know must permit nothing.
+    """
+    door = '"""facade · a door."""\n\nfrom dataforce.edge.main import create_app'
+
+    assert MAY_IMPORT["facade"] >= frozenset({"wiring"})
+    assert direction_findings(module_from_source(door)) == []
 
 
 @pytest.mark.parametrize(

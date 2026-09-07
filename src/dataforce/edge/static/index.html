@@ -231,7 +231,7 @@ const stepDuplicate = () => `<section class="step">
   ${head(3, "duplicate", ["noshape", "no shape declared"], "DuplicateDataChecking.duplicate_groups(samples)")}
   ${band("in", "in", "samples: Sequence[str]\n\n" + REVIEW_TEXT)}
   ${band("out", "out", "None", "None")}
-  ${why("No shape. `duplicate_groups` has a `pass` body and `embedding()` is abstract with nothing answering it, so nothing says what a duplicate report is. `DuplicateGroups` is in `schema.py` and this drawing points at nothing.")}
+  ${why("No shape. `duplicate_groups` answers `None` by declaration and `embedding()` is abstract with nothing answering it, so nothing says what a duplicate report is. `DuplicateGroups` is in `schema.py` and this drawing points at nothing.")}
 </section>`;
 
 const stepAbnormal = () => `<section class="step">

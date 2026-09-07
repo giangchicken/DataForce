@@ -51,6 +51,8 @@ def test_an_exemption_missing_a_field_is_caught_rather_than_ignored() -> None:
         "import os  # guard-exempt: the reason · the owner · 2026-08-23",
         "import os  # guard-exempt: I1 · the reason · the owner · someday",
         "import os  # guard-exempt: h-8 · the reason · the owner · 2026-09-07",
+        "import os  # guard-exempt: I-6 · the reason · the owner · 2026-09-07",
+        "import os  # guard-exempt: X-9 · the reason · the owner · 2026-09-07",
     ):
         module = module_from_source(missing)
 

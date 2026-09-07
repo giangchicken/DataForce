@@ -38,7 +38,7 @@ What each part declares, and who answers it:
 | `LLMPrediction` | `predict(turns, label)`, config one model or several | `ToolDecisionLLMPrediction` |
 | `SFTPrediction` | `predict(turns, label)` | `ToolDecisionSFTPrediction` |
 | `PersonalDataChecking` | `scan(sample)` | `ToolDecisionPersonalChecking` |
-| `DuplicateDataChecking` | `embedding(texts)` | `ToolDecisionDuplicateChecking` |
+| `DuplicateDataChecking` | `embedding(texts)` | `ToolDecisionDuplicateChecking` — answers nothing, so the class stays abstract |
 | `CommonAbnormalChecking` | none — `check_verdict` returns `None` | `ToolDecisionAbnormalChecking` |
 
 `human_review/` declares `Annotation` and `ReturnedAnnotation`, which `edge/label_studio.py` builds

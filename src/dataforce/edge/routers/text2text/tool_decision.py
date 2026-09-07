@@ -166,7 +166,7 @@ def models() -> tuple[str, ...]:
 
 @router.post("/data-quality/personal-data", summary="personal data in one sample")
 async def personal_data(request: ScanRequest) -> PersonalDataScan | None:
-    """`None` for as long as `scan` has a `pass` body. The type tightens when the body lands."""
+    """`None` is unreachable while `scan` raises. The arm goes when the body lands."""
     try:
         checked_names((request.verifier_model,))
         return await personal_data_scan(
