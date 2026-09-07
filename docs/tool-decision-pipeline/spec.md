@@ -77,8 +77,9 @@ a juror both read.
 6. `review_text` is the string every span's offsets index — for this task the turns, the tool
    catalog and the label together, because an argument value in a tool call is where personal data
    sits. Nothing afterwards may reorder or reflow it.
-7. Layer one is the four rule scans, called in the order email, phone, OTP, name. That order
-   resolves an overlap: where two scans claim one value, the first to claim it keeps it.
+7. Layer one is the four rule scans, called in the order email, phone, OTP, name, each handed the
+   sample's own language. That order resolves an overlap: where two scans claim one value, the
+   first to claim it keeps it.
 8. Layer two is a model pass over layer one's candidates, and it sets the precision: only a value it
    confirms is replaced. It may not raise — a failed call confirms none.
 9. A span records `start`, `end`, `personal_data_class` and `placeholder`, and
@@ -123,7 +124,9 @@ a juror both read.
 24. The prompt is built inside `predict`, in the profile. It renders `tool_prediction.txt`, filling
     `{{tool_descriptions}}` with `openai_tool_format_to_text(sample["tools"])`,
     `{{conversation_history}}` with the turns before the last, `{{user_message}}` with the last one,
-    and `{{language}}`. The sample's label is not among them.
+    and `{{language}}` with `sample["language"]`. The sample's label is not among them, and a sample
+    that declares no language is a configuration error before the call, never a language guessed
+    from the turns.
 25. A juror's answer is the object the prompt asks for. `reason` and `label` are the model's;
     `model_name` is set by the caller, the only one that knows which juror it asked. `label` is a
     string — the tool-call array as text — and `LLMReviewerVote.label` holds it as one; nothing turns
@@ -294,7 +297,6 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 | `profile/tool_decision/ai_review.py` | `predict` and `rendered_prompt` on both classes |
 | `profile/tool_decision/data_quality.py` | `scan`, `review_text`, and `embedding` |
 | `config/prompts/profiles/tool_decision/personal_data.txt` | new: what layer two is asked |
-| `edge/cli.py` | four subcommands against functions that are not there |
 
 ## Decisions
 
@@ -352,8 +354,13 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
     build step and a lockfile are a mouth to feed (T-3) for a skeleton meant to be deleted (T-5).
 16. **`auto` on step 5 is the outermost rule, not a confidence threshold.** It is the same rule spans
     are resolved by inside `scan`, applied again where a human did not override it.
-17. `Assumption:` a sample is `{id, messages, tools, label}` as the page holds it. No wrapper type is
-    introduced.
+17. **The sample says what language it is in.** Alternative: detect it from the turns, or fix it to
+    one. A detector is a rule to write, test and keep, and it answers a mixed-language chat by
+    guessing; one fixed language is a corpus assumption written into the code that reads every
+    corpus. The corpus already knows, so the key is read and a sample without it is refused. The
+    four rule scans take the same value, so one answer serves both layers.
+18. `Assumption:` a sample is `{id, messages, tools, label, language}` as the page holds it. No
+    wrapper type is introduced.
 
 ## Versions
 
