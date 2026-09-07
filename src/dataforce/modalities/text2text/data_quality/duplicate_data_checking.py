@@ -24,5 +24,10 @@ class DuplicateDataChecking(ABC):
     async def embedding(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         pass
 
-    async def duplicate_groups(self, samples: Sequence[str]) -> DuplicateGroups:
-        pass
+    async def duplicate_groups(self, samples: Sequence[str]) -> DuplicateGroups | None:
+        """The two groups this batch falls into. Undecided -- returns None for now.
+
+        None rather than an empty `DuplicateGroups`, because a placeholder shape is the one thing
+        a caller would start depending on.
+        """
+        return None

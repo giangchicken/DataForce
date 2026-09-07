@@ -20,4 +20,4 @@ class SFTPrediction(ABC):
         pass
 
     def verdict(self, answered: SFTReviewerVerdict, label: str) -> bool:
-        pass
+        raise NotImplementedError

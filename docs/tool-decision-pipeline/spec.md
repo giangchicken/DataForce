@@ -295,7 +295,7 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 | `modalities/text2text/ai_review/SFTmodel_prediction.py` | body for `verdict` |
 | `modalities/text2text/__init__.py` | write the tag `facade`, without the cedilla |
 | `profile/tool_decision/ai_review.py` | `predict` and `rendered_prompt` on both classes |
-| `profile/tool_decision/data_quality.py` | `scan`, `review_text`, and `embedding` |
+| `profile/tool_decision/data_quality.py` | `scan` and `review_text` |
 | `config/prompts/profiles/tool_decision/personal_data.txt` | new: what layer two is asked |
 
 ## Decisions

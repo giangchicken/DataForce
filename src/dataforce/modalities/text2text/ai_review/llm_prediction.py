@@ -39,10 +39,10 @@ class LLMPrediction(ABC):
 
     async def verdict(self, turns: Sequence[str], label: str) -> LLMReviewerVerdict:
         """What the panel said: the votes, how many agree with the label, and its one answer."""
-        pass
+        raise NotImplementedError
 
     def exact_match_consensus(self, answers: Sequence[str]) -> str | None:
-        pass
+        raise NotImplementedError
 
     def llm_judge_consensus(self, answers: Sequence[str]) -> str | None:
-        pass
+        raise NotImplementedError

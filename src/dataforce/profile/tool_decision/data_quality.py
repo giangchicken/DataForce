@@ -5,7 +5,7 @@ catalog of tools it was offered: an argument value in a tool call is where a pho
 sits, so a scan that reads only the turns misses the half that matters.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 from dataforce.modalities.text2text.data_quality import (
@@ -27,11 +27,11 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         The rule scans are called in one declared order and the first class to claim a value keeps
         it; the model pass then sets the precision, and only a confirmed value is replaced.
         """
-        pass
+        raise NotImplementedError
 
     def review_text(self, sample: Mapping[str, Any]) -> str:
         """The one string every span's offsets index: the turns, the catalog, and the label."""
-        pass
+        raise NotImplementedError
 
     def tool_catalog(self, sample: Mapping[str, Any]) -> str:
         """The tools this sample was offered, as the text a reviewer and a juror both read."""
@@ -40,10 +40,6 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
 
 class ToolDecisionDuplicateChecking(DuplicateDataChecking):
     """Two samples that offer the same tools and say the same thing."""
-
-    async def embedding(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
-        """One vector per text, in the order given."""
-        pass
 
 
 class ToolDecisionAbnormalChecking(CommonAbnormalChecking):

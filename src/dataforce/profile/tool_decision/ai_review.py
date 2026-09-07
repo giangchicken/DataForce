@@ -28,11 +28,11 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         `label` is compared against, never sent: the prompt returns `reason` and `label`, and
         `model_name` is set from the juror this asked.
         """
-        pass
+        raise NotImplementedError
 
     def rendered_prompt(self, turns: Sequence[str], tools: Sequence[object]) -> str:
         """`tool_prediction.txt` with its four slots filled, ready to send."""
-        pass
+        raise NotImplementedError
 
     def tool_catalog(self, tools: Sequence[object]) -> str:
         """The tools this sample was offered, as the text the prompt's catalog slot takes."""
@@ -44,4 +44,4 @@ class ToolDecisionSFTPrediction(SFTPrediction):
 
     async def predict(self, turns: Sequence[str], label: str) -> SFTReviewerVerdict:
         """Its own answer and how sure it is, from the same prompt the jurors read."""
-        pass
+        raise NotImplementedError

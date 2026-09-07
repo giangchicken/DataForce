@@ -12,4 +12,3 @@ from collections.abc import Sequence
 class CommonAbnormalChecking:
     def check_verdict(self, turns: Sequence[str]) -> None:
         """What the checks that need no opinion found. Undecided -- returns nothing yet."""
-        pass
