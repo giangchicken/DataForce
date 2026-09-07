@@ -1,5 +1,5 @@
 """facade · one router per task."""
 
-from .text2text import tool_decision_router
+from .tool_decision import router as tool_decision_router
 
 __all__ = ["tool_decision_router"]

@@ -62,17 +62,9 @@ async def run_sft_review(
         raise SystemExit("no finetuned reviewer is configured; declare SFT_MODEL")
     return [
         {"sample_id": row["sample_id"]}
-        | (await parts.reviewer.predict(row["turns"], row.get("label", ""))).model_dump()
-        for row in rows
-    ]
-
-
-async def run_decide(parts: Parts, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    from dataforce.modalities.text2text.human_review import Evidence, label_decision
-
-    return [
-        {"sample_id": row["sample_id"]}
-        | label_decision(Evidence.model_validate(row.get("evidence", {}))).model_dump()
+        | (
+            await parts.reviewer.predict(row["turns"], row.get("label", ""))
+        ).model_dump()
         for row in rows
     ]
 
@@ -82,7 +74,6 @@ PARTS = {
     "duplicate-data": run_duplicate_data,
     "llm-review": run_llm_review,
     "sft-review": run_sft_review,
-    "decide": run_decide,
 }
 
 
