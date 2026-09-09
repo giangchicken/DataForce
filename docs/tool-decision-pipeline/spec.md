@@ -167,9 +167,10 @@ OpenAI `tools` array as the catalog text a reviewer and a juror both read.
 24. The prompt is built inside `predict`, in the profile. It renders `tool_prediction.txt`, filling
     `{{tool_descriptions}}` with `openai_tool_format_to_text(sample["tools"])`,
     `{{conversation_history}}` with the turns before the last, `{{user_message}}` with the last one,
-    and `{{language}}` with `sample["language"]`. The sample's label is not among them, and a sample
-    that declares no language is a configuration error before the call, never a language guessed
-    from the turns.
+    and `{{language}}` with the language declared for the request. The sample's label is not among
+    them, and the language is never guessed from the turns. Where an ai-review request declares it
+    is undecided: Decision 17 makes the language a declaration about the request, `ScanRequest`
+    carries one and `ReviewRequest` does not, so this slot has no source until that is settled.
 25. A juror's answer is the object the prompt asks for. `reason` and `label` are the model's;
     `model_name` is set by the caller, the only one that knows which juror it asked. `label` is a
     string — the tool-call array as text — and `LLMReviewerVote.label` holds it as one; nothing turns

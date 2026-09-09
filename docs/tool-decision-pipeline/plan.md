@@ -66,9 +66,9 @@ what its *Source* points at, do it, run its *Verify*, commit.
 | # | Phase | Goal — the outcome that ends it |
 |---|---|---|
 | 0 | The gate reads the package | `make check` is green, and `mypy --strict` type-checks `dataforce` instead of skipping it |
-| 1 | The scan answers | `POST .../data-quality/personal-data` returns a real `PersonalDataScan` over a hand-written sample |
+| 1 | The scan answers | `POST .../data-quality/personal-data` returns a real `PersonalDataDetected` over a hand-written sample, and `.../personal-data/replace` the copy over the spans handed back |
 | 2 | The panel answers | `POST .../ai-review` returns both verdicts against stubbed model calls |
-| 3 | Every endpoint is drivable alone | Each of the six routes is exercised by its own arguments, and one record makes the round trip |
+| 3 | Every endpoint is drivable alone | Each of the seven routes is exercised by its own arguments, and one record makes the round trip |
 
 Phase 0 comes first and is not optional: every later *Verify* is `make check`, and until Phase 0
 lands that command reports 38 errors whether the task worked or not. Phases 1 and 2 are independent
@@ -196,7 +196,7 @@ answers `None` without it. Give each of the seven pending bodies `raise NotImple
 
 The cost of the seven, stated: a route that reached a `pass` used to answer `null` and now answers
 500 until its body lands. That is the honest report of the same state, and it is why
-`personal_data` is typed `PersonalDataScan | None` today — T9 removes that once T7 lands.
+`personal_data` is typed with a `| None` today — T9 removes that once T7 lands.
 
 **Acceptance criteria.** `make check` is green. No method in `src/` has a `pass` body except an
 `@abstractmethod`. `spec.md` § *Files* no longer lists `embedding` as a body to write.
@@ -287,8 +287,9 @@ finding to report, not a rendering to adjust so the test passes.
 
 ## Phase 1 · The scan answers
 
-**Goal.** `POST .../data-quality/personal-data` returns a real `PersonalDataScan` over a
-hand-written sample.
+**Goal.** `POST .../data-quality/personal-data` returns a real `PersonalDataDetected` over a
+hand-written sample, and `.../personal-data/replace` the copy over the spans a reviewer handed
+back.
 
 ### T6 · What layer two is asked
 
@@ -306,8 +307,8 @@ prose around the JSON, and says what each key is for.
 
 **Approach.** One prompt, handed the review text and layer one's candidates, returning one JSON
 object whose only content is which candidates are real. No markdown fence, no prose. Its placeholders
-follow `tool_prediction.txt`'s `{{name}}` spelling and include the sample's language, which
-Requirement 24 and Decision 17 make the sample's own answer.
+follow `tool_prediction.txt`'s `{{name}}` spelling and include the language the request declared
+(Decision 17).
 
 **Acceptance criteria.** The file exists, asks for confirmation of a given list, and states its output
 shape as strict JSON. A value not in the candidate list is out of contract by the prompt's own words,
@@ -333,10 +334,10 @@ sits. It is built once and nothing afterwards may reorder or reflow it — § *I
 that, and Decision 6 is why `redacted_text` is a second string rather than a rewrite: replacing in
 place would invalidate every span on the same object.
 
-`scan` runs layer one, then layer two, then numbers the placeholders. Layer one is
+`detect` runs layer one, then layer two, then numbers the placeholders. Layer one is
 `agent_toolkit.string_utils`' four scans in the declared order email, phone, OTP, name, each handed
-the sample's language (Requirement 7) — they take `language: str = "vi"`, and Decision 17 says the
-sample answers it. Each returns `list[str]`: **values, not offsets**, so the offsets are this code's
+the declared language (Requirement 7) — they take `language: str = "vi"`, and Decision 17 says the
+request declares it, not the record. Each returns `list[str]`: **values, not offsets**, so the offsets are this code's
 to find, and a value occurring twice is two spans with one placeholder (Requirement 10). Layer two
 is the model pass and it may not raise — a failed call confirms none (Requirement 8), and the
 failure is a structured event on stdout, never a log file (`H-6`).
@@ -346,17 +347,19 @@ run inside an email address. Email is scanned first, so it keeps the value, and 
 falling inside it is dropped by Requirement 11's outermost rule.
 
 **Approach.** `review_text` first, and separately: it is the frame of reference for everything else
-and is a rule worth naming (Decision 4's second half). Then `scan`, in the order the requirements
-are numbered — candidates, confirmation, placeholder map keyed by value, spans, `redacted_text`
-longest value first (Requirement 12), `decision` last (Requirement 13). `resolve_config` reads the
+and is a rule worth naming (Decision 4's second half). Then `detect`, in the order the requirements
+are numbered — candidates, confirmation, placeholder map keyed by value, spans. `redacted_text`
+longest value first (Requirement 12) and `outcome` (Requirement 13) are the second call's, over the
+spans a reviewer handed back (Decision 19). `resolve_config` reads the
 model's config by name and whatever `VerifierModelConfig` carries replaces what the file said —
 Decision 10, and the merge is the library's, so none is written here.
 
-**Acceptance criteria.** `scan` returns a `PersonalDataScan` where: every span slices back to its
-value; one value has one placeholder wherever it appears; no span survives inside a longer one;
-`redacted_text` is `None` where nothing was rewritten and otherwise holds no candidate verbatim;
-`decision` is `reported`, `redacted` or `withheld` by Requirement 13's three cases. A layer-two call
-that raises yields a scan, not an exception.
+**Acceptance criteria.** `detect` returns a `PersonalDataDetected` where: every span slices back to
+its value; one value has one placeholder wherever it appears; no span survives inside a longer one.
+`replace` over those spans returns a `PersonalDataReplaced` where `redacted_text` is `None` where
+nothing was rewritten and otherwise holds no claimed value verbatim, and `outcome` is `reported`,
+`redacted` or `withheld` by Requirement 13's three cases. A layer-two call that raises yields an
+answer, not an exception.
 
 **Source.** Requirements 5–14, 26; Decisions 4, 6, 10, 17; § *Invariants*, the first four lines.
 
@@ -397,18 +400,15 @@ inverted.
 
 **Goal.** The route's return type says what the route returns.
 
-**Context.** `personal_data` is typed `PersonalDataScan | None`, and its docstring says why: *"`None`
-for as long as `scan` has a `pass` body. The type tightens when the body lands."* The body lands in
-T7. § *Invariants* asks that no endpoint's response mention a part it does not own, and a `| None`
-that exists because of a missing body is the response model documenting the schedule.
+**Context.** `personal_data` is typed with a `| None`, and its docstring says why: *"`None` for as
+long as the body is `pass`. The type tightens when the body lands."* The body lands in T7.
+§ *Invariants* asks that no endpoint's response mention a part it does not own, and a `| None` that
+exists because of a missing body is the response model documenting the schedule.
 
-**Acceptance criteria.** `personal_data` returns `PersonalDataScan`. The OpenAPI schema for that
-route holds no `null` branch. `mypy --strict` green.
-
-**Landed as** `PersonalDataDetected`, beside a second route `.../personal-data/replace` answering
-`PersonalDataReplaced`. The part became two calls with a human between them (Decision 19), so the
-one shape this task was written against was split: `{review_text, claims, spans}` out of detecting,
-`{redacted_text, outcome}` out of replacing. Neither route has a `| None`, which is what T9 asked.
+**Acceptance criteria.** `personal_data` returns `PersonalDataDetected`, and the second route
+`.../personal-data/replace` returns `PersonalDataReplaced` — the part is two calls with a human
+between them (Decision 19). Neither route's OpenAPI schema holds a `null` branch. `mypy --strict`
+green.
 
 **Source.** Requirement 32; § *Invariants*.
 
@@ -444,6 +444,13 @@ over the votes that came back, never over the panel that was asked: a juror that
 and every juror failing is a verdict with no votes, `label_agreement` 0.0 and `consensus` `None` —
 a valid answer, not an exception.
 
+Absent is not silent. Phase 1 set the pattern and left the writer behind it: `edge/events.py`
+turns a log record into one JSON object per line on stdout, and each asking class writes
+`logger.warning("<step>_failed", extra={"model": ..., "error": f"{type(e).__name__}: {e}"})`
+outside the answer it returns (`H-6`). A juror that fails or answers the wrong shape is one such
+event naming the juror, on the same two keys, so a panel that quietly shrank is readable from the
+output rather than only from `label_agreement`.
+
 **Acceptance criteria.** `verdict` calls `predict` once. `label_agreement` is over returned votes.
 `exact_match_consensus` returns only a strict majority. `llm_judge_consensus` is not called when the
 exact match found one, and returns only an answer some juror gave. `SFTPrediction.verdict` compares
@@ -465,9 +472,17 @@ two labels and asks no model.
 shape it must return are read in one file. Four slots:
 `{{tool_descriptions}}` from `openai_tool_format_to_text(sample["tools"])` — T5 pins that rendering
 — `{{conversation_history}}` with the turns before the last, `{{user_message}}` with the last one,
-and `{{language}}` from `sample["language"]`, which Decision 17 makes the sample's own answer and a
-sample without it a configuration error rather than a guess. **The sample's label is not among
-them** (Decision 12): a model shown the label answers about the label.
+and `{{language}}` from the language the request declared. **The sample's label is not among them**
+(Decision 12): a model shown the label answers about the label.
+
+`{{language}}` has no source yet, and this task is where that is settled. Decision 17 makes the
+language a declaration about the request rather than a key of the record: `ScanRequest` carries it,
+`ReviewRequest` does not, and `Sample` never did. So either `ReviewRequest` grows
+`language: Language = "vi"` — symmetric with the scan, and one more thing every caller may declare
+— or the slot goes and the prompt asks in one language. Whichever way, the signatures change:
+`predict(turns, label)` and `rendered_prompt(turns, tools)` carry no language today, and
+`tool_decision_llm_predict` passes the turns and the label and nothing else. `rendered_prompt` also
+needs `tools`, which `verdict(turns, label)` never receives — the same threading settles both.
 
 The answer comes back as one JSON object, `{reason, label}`. `label` stays a **string** — the
 tool-call array as text (Requirement 25, Decision 11) — and nothing turns it into a structure;
@@ -505,9 +520,10 @@ empty label, which then agrees with nothing and quietly drags `label_agreement` 
 
 **Acceptance criteria.** Two of three matching gives that answer; two-two gives `None`; a mode that
 is not a strict majority gives `None`. `verdict` over a stubbed `predict` counts agreement over
-returned votes only. Every juror failing gives a verdict with no votes, `0.0` and `None`. The judge
-fallback is not called when the exact match answered, and a judge returning a string no juror wrote
-is refused.
+returned votes only. Every juror failing gives a verdict with no votes, `0.0` and `None`, and one
+event per failed juror on stdout, read back through `capsys` as the scan's two failure tests
+already do. The judge fallback is not called when the exact match answered, and a judge returning a
+string no juror wrote is refused.
 
 **Source.** § *Testing Strategy*, bullets two and three; § *Error Behavior*.
 
@@ -519,13 +535,13 @@ is refused.
 
 ## Phase 3 · Every endpoint is drivable alone
 
-**Goal.** Each of the six routes is exercised by its own arguments, and one record makes the round
-trip.
+**Goal.** Each of the seven routes is exercised by its own arguments, and one record makes the
+round trip.
 
 ### T13 · Each endpoint through its own arguments
 
-**Goal.** Six routes, six tests, and no fixture that threads one payload through more than one of
-them.
+**Goal.** Seven routes, seven tests, and no fixture that threads one payload through more than one
+of them.
 
 **Context.** Requirement 1 and Decision 2 are the whole point of the shape, and a test suite is the
 one place they can be broken silently: a fixture that posts a scan, keeps the response and feeds it
@@ -539,15 +555,22 @@ There are also three `no-any-return` findings in the router that T1 will have su
 `models()`, `duplicate()` and `abnormal()` return what a service handed back without the checker
 being able to see its type. They are the router's own, and this is the task that owns that file.
 
-**Approach.** `TestClient`, model calls stubbed, one test per route: the page, `/models`, the three
+**Approach.** `TestClient`, model calls stubbed, one test per route: the page, `/models`, the four
 data-quality routes, `/ai-review`, `/records`. An unserved model name is refused with 422 naming it
 and the served list (Requirement 29), and `GET /models` is the `config/model/` listing with
 `DATAFORCE_MODEL_DIR` pointed at a temporary directory the test wrote — Decision 13, the directory
 *is* the list.
 
+`.../data-quality/personal-data/replace` is the fourth, and it is the one route that asks no model:
+nothing on it can be refused for a name this deployment does not serve, and its body is the
+`PersonalDataDetected` the detect route answered — the same shape out and back in (Decision 19).
+Posting it is not threading a payload between two parts: it is one part's second call, which is
+what Requirement 1 distinguishes. The scan route's own test posts `language` and `verifier_model`
+as keys of the request rather than of the sample.
+
 **Acceptance criteria.** Every route has a test whose body it is the only route in. `duplicate` and
-`abnormal` answer `null` at 200. An unserved name is 422 before any model is called. `mypy --strict`
-reports no `no-any-return`.
+`abnormal` answer `null` at 200. An unserved name is 422 before any model is called, and the
+replace route answers without a model name at all. `mypy --strict` reports no `no-any-return`.
 
 **Source.** Requirements 27–36, 41; Decisions 2, 13; § *Testing Strategy*, bullet five.
 
@@ -567,15 +590,25 @@ written, and nothing has run the two against each other in this repository — t
 checked once by hand against SQLite while the page was being built, and left no test behind.
 
 Requirement 35 gives the store two refusals: a record with no redacted form, and a row that still
-holds a value its own scan says it replaced. `unreplaced_values` reads only the three `new_` keys,
+holds a value its own scan says it replaced. The first is unimplemented — nothing in
+`human_review.py` reads the field at all — and the field it reads is `personal_data.outcome`, so
+`reported` is the value that refuses. The second is written: `unreplaced_values` reads only the
+three `new_` keys,
 and § *Design* says why the check cannot be wider: *"the originals hold raw content on purpose and
 checking the whole record would fail by design."* The consequence is the one the spec states once
 and this test should not re-litigate — the row holds the personal data verbatim, so the redaction
 protects a reader of the `new_` keys and not the database.
 
 **Acceptance criteria.** `POST .../records` then `latest_row` returns an equal document. A second
-post under one id replaces the row rather than adding one. A record whose `new_messages` still holds
-a replaced value is 422 and is not written. A record with no id is 422.
+post under one id replaces the row rather than adding one. A record whose `personal_data.outcome`
+is `reported` is 422 and is not written. A record whose `new_messages` still holds a replaced value
+is 422 and is not written. A record with no id is 422.
+
+`span_values` needs nothing changed for the split: it reads `review_text` and `spans`, and both are
+on `PersonalDataDetected`. What the record's `personal_data` key holds is the two answers together —
+the page posts the detect answer merged with the replace answer — and no shape declares that
+container. Undecided, and this task does not decide it: the key is typed `Mapping[str, Any] | None`
+and the two refusals read the three fields they name.
 
 **Source.** Requirement 35; § *Design* — *What the row holds*; § *Testing Strategy*, bullet six;
 § *Error Behavior*, the `POST .../records` line.
