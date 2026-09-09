@@ -405,6 +405,11 @@ that exists because of a missing body is the response model documenting the sche
 **Acceptance criteria.** `personal_data` returns `PersonalDataScan`. The OpenAPI schema for that
 route holds no `null` branch. `mypy --strict` green.
 
+**Landed as** `PersonalDataDetected`, beside a second route `.../personal-data/replace` answering
+`PersonalDataReplaced`. The part became two calls with a human between them (Decision 19), so the
+one shape this task was written against was split: `{review_text, claims, spans}` out of detecting,
+`{redacted_text, outcome}` out of replacing. Neither route has a `| None`, which is what T9 asked.
+
 **Source.** Requirement 32; § *Invariants*.
 
 **Verify.** `make check`; `uv run python -c "from dataforce.edge.main import app; import json;

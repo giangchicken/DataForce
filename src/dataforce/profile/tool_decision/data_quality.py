@@ -1,41 +1,330 @@
 """logic · the data-quality checks over a tool-calling sample.
 
-Personal data is the one with a body to write. What this task scans is the conversation *and* the
-catalog of tools it was offered: an argument value in a tool call is where a phone number actually
-sits, so a scan that reads only the turns misses the half that matters.
+Personal data is the one with a body to write, and it is two calls. `detect` is the frame of
+reference every offset indexes, two detectors unioned, and the modality's confirmation over the
+spans they earn. `replace_spans_with_placeholders` is the other, over the spans a human handed
+back, and `decide_replacement_outcome` says how far it got. What this task reads is the turns
+*and* the catalog, because an argument value in a tool call is where a phone number sits.
 """
 
-from collections.abc import Mapping
+import json
+import re
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
+from agent_toolkit.file_utils import read_txt
+from agent_toolkit.llm import complete, resolve_config
+from agent_toolkit.llm.exceptions import LLMError
+from agent_toolkit.logging import get_logger
+from agent_toolkit.string_utils import extract_json_from_text, slot_filling
+from pydantic import ValidationError
+
+from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.data_quality import (
     CommonAbnormalChecking,
     DuplicateDataChecking,
     PersonalDataChecking,
-    PersonalDataScan,
+    PersonalDataCheckingConfig,
+    PersonalDataCheckingInput,
+    PersonalDataDetected,
+    PersonalDataSpan,
+    PiiLlmDetected,
+    PiiRuleDetector,
+)
+from dataforce.modalities.text2text.data_quality.schema import (
+    PersonalDataReplacementOutcome,
+    VerifierModelConfig,
 )
 
-from .utils import openai_tool_format_to_text
+from .utils import conversation_turns, openai_tool_format_to_text
+
+# The deployment's, on the same terms as `config/model/`: read from the working directory and named
+# for the method that sends it.
+PII_LLM_DETECT_PROMPT = Path("config/prompts/profiles/tool_decision/pii_llm_detect.txt")
+# A scan claims a value at a word boundary and a search for one knows none, so `09123456789012`
+# would otherwise hold a phone number.
+WORD = re.compile(r"\w")
+
+logger = get_logger(__name__)
+
+
+def find_and_number_spans(
+    text: str, detected: Sequence[tuple[str, str]]
+) -> tuple[PersonalDataSpan, ...]:
+    """Every span those values carry in `text`: numbered, bounded, and the outermost kept.
+
+    Three rules in one pass, all answering where a value stands in the frame of reference:
+    `<CLASS_N>` per distinct value, so a value said twice stays co-referent (Requirement 10); an
+    occurrence with a word character against it is not one; a span inside a longer span is dropped
+    (Requirement 11). `id` is 1-based over what survives, so the ids a prompt shows have no holes.
+
+    Every entry is one non-empty value that occurs in `text` -- `pii_detect` holds both.
+    """
+    found: list[PersonalDataSpan] = []
+    counted: dict[str, int] = {}
+    for personal_data_class, value in detected:
+        counted[personal_data_class] = counted.get(personal_data_class, 0) + 1
+        placeholder = f"<{personal_data_class}_{counted[personal_data_class]}>"
+        start = text.find(value)
+        while start >= 0:
+            end = start + len(value)
+            before = text[start - 1] if start else ""
+            after = text[end] if end < len(text) else ""
+            if not (WORD.match(before) or WORD.match(after)):
+                found.append(
+                    PersonalDataSpan(
+                        id=0,
+                        start=start,
+                        end=end,
+                        personal_data_class=personal_data_class,
+                        placeholder=placeholder,
+                    )
+                )
+            start = text.find(value, end)
+    return tuple(
+        span.model_copy(update={"id": numbered})
+        for numbered, span in enumerate(
+            (
+                span
+                for span in found
+                if not any(
+                    other.start <= span.start
+                    and span.end <= other.end
+                    and other.end - other.start > span.end - span.start
+                    for other in found
+                )
+            ),
+            start=1,
+        )
+    )
+
+
+def replace_spans_with_placeholders(
+    text: str, spans: Sequence[PersonalDataSpan]
+) -> str | None:
+    """`text` copied with every span's value replaced by its placeholder, longest value first.
+
+    `None` where there is nothing to replace, which is what `reported` means (Decision 6). Longest
+    first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is neither
+    redacted nor intact. By value and not by offset, because the same rule runs again over the
+    record's other fields, where there are no offsets to run it by.
+
+    A span whose offsets read nothing is skipped: these arrive from a reviewer, and replacing the
+    empty string puts a placeholder between every character of the text.
+    """
+    pairs = {
+        span.placeholder: text[span.start : span.end]
+        for span in spans
+        if text[span.start : span.end]
+    }
+    if not pairs:
+        return None
+    copy = text
+    for placeholder, value in sorted(pairs.items(), key=lambda pair: -len(pair[1])):
+        copy = copy.replace(value, placeholder)
+    return copy
+
+
+def order_claims_by_class(
+    text: str,
+    claimed: Mapping[str, str],
+    declared: Sequence[str],
+) -> tuple[tuple[str, str], ...]:
+    """The claims as `(class, value)`, one entry per distinct value, in one order.
+
+    Per class, and within a class by first appearance in `text`, which is the order `<CLASS_N>`
+    numbers. The declared classes come first, then a class only the model named, in the order it
+    was first claimed -- so adding a detector cannot renumber what a reviewer was already reading.
+    """
+    named = dict.fromkeys(
+        personal_data_class
+        for personal_data_class in claimed.values()
+        if personal_data_class not in declared
+    )
+    return tuple(
+        (personal_data_class, value)
+        for personal_data_class in (*declared, *named)
+        for value in sorted(
+            (value for value, claim in claimed.items() if claim == personal_data_class),
+            key=text.index,
+        )
+    )
+
+
+def decide_replacement_outcome(
+    text: str,
+    claims: Sequence[tuple[str, str]],
+    spans: Sequence[PersonalDataSpan],
+    redacted: str | None,
+) -> PersonalDataReplacementOutcome:
+    """How far replacing got, read off the copy rather than off what was asked for.
+
+    `reported`: nothing was claimed, so there was nothing to rewrite. `redacted`: every claimed
+    value resolved -- the copy holds it nowhere, and every span kept over it reads as its
+    placeholder. `withheld`: everything between, including a reviewer who handed back no span at
+    all, because a rewrite asked for and not done is not a clean record.
+
+    Read off the copy because two values overlapping *in part* keep both spans (Requirement 11),
+    and then replacement by value has the second looking for a string the first already cut: its
+    placeholder never lands and the copy holds a fragment of a name. Which span should win is
+    undecided; that this is not those values redacted is not. A claim with no span at all is
+    resolved by the longer value it sat inside.
+    """
+    if not claims:
+        return "reported"
+    if redacted is None:
+        return "withheld"
+    placeholders = {text[span.start : span.end]: span.placeholder for span in spans}
+    resolved = [
+        value
+        for _, value in claims
+        if value not in redacted
+        and (value not in placeholders or placeholders[value] in redacted)
+    ]
+    return "redacted" if len(resolved) == len(claims) else "withheld"
+
+
+class PiiLlmDetector:
+    """One model reading the text itself, and answering with the values it found."""
+
+    def __init__(self, verifier_config: VerifierModelConfig) -> None:
+        """The model resolved from what the request declared, or `ConfigError` before any record."""
+        try:
+            self.model = resolve_config(
+                model=verifier_config.model_name,
+                api_key=verifier_config.api_key,
+                base_url=verifier_config.base_url,
+            )
+        except LLMError as error:
+            raise ConfigError(f"{verifier_config.model_name}: {error}") from error
+        if not self.model.base_url:
+            raise ConfigError(
+                f"{verifier_config.model_name}: no base_url in its config file and none"
+                " passed, so there is no endpoint to ask"
+            )
+        self.settings = verifier_config.settings
+
+    async def detect(self, prompt: str) -> dict[str, str]:
+        """Which class the model claims each value as, keyed by value. Never raises (Req. 8).
+
+        The class is upper case and one word, because it is what picks `<CLASS_N>` and
+        `<home address_1>` beside `<HOME_ADDRESS_1>` reads as two kinds of thing; a finding
+        missing either half names nothing. A failed call and an answer of the wrong shape both
+        detect nothing, which leaves the record to the rule scans, and both are one event (`H-6`).
+        """
+        failed: Exception
+        try:
+            said = await complete(
+                prompt,
+                model=self.model.model,
+                api_key=self.model.api_key,
+                base_url=self.model.base_url,
+                **self.settings,
+            )
+        # A refusal, a timeout, a hung-up socket: a provider's failures are its own to name.
+        except Exception as error:
+            failed = error
+        else:
+            try:
+                answered = PiiLlmDetected.model_validate(
+                    extract_json_from_text(said)
+                ).detected
+            # Prose, or JSON that is not the shape asked for.
+            except ValidationError as error:
+                failed = error
+            else:
+                found: dict[str, str] = {}
+                for finding in answered:
+                    named = "_".join(finding.label.upper().split())
+                    if finding.text and named:
+                        found.setdefault(finding.text, named)
+                return found
+        logger.warning(
+            "pii_llm_detect_failed",
+            extra={
+                "model": self.model.model,
+                "error": f"{type(failed).__name__}: {failed}",
+            },
+        )
+        return {}
 
 
 class ToolDecisionPersonalChecking(PersonalDataChecking):
     """Personal data in a tool-calling sample: the turns and the catalog together."""
 
-    async def scan(self, sample: Mapping[str, Any]) -> PersonalDataScan:
-        """The two layers over this sample's review text, and the placeholders they earn.
+    def __init__(self, config: PersonalDataCheckingConfig) -> None:
+        super().__init__(config)
+        self.pii_rule_detector = self.build_pii_rule_detector()
+        self.pii_llm_detector = self.build_pii_llm_detector()
 
-        The rule scans are called in one declared order and the first class to claim a value keeps
-        it; the model pass then sets the precision, and only a confirmed value is replaced.
+    def build_pii_rule_detector(self) -> PiiRuleDetector:
+        """The scans the config declared, in the order that settles a value two of them claim."""
+        return PiiRuleDetector(self.config.list_scan_functions)
+
+    def build_pii_llm_detector(self) -> PiiLlmDetector:
+        """The model the request ticked -- the one the base confirms with -- as its own detector."""
+        return PiiLlmDetector(self.config.verifier_model)
+
+    async def detect(
+        self, checking_input: PersonalDataCheckingInput
+    ) -> PersonalDataDetected:
+        """Both detectors over this sample's review text, and the spans that survive the asking.
+
+        Spans first, then the confirmation, because what it is asked about is a span. Nothing is
+        replaced here: what comes back is what a reviewer is shown.
         """
-        raise NotImplementedError
+        text = self.build_review_text(checking_input.sample)
+        language = checking_input.language
+        claimed = {
+            **await self.pii_llm_detect(text, language),
+            **self.pii_rule_detector.detect(text, language),
+        }
+        claims = order_claims_by_class(text, claimed, self.pii_rule_detector.classes)
+        spans = await self.pii_llm_confirm(
+            checking_input, text, find_and_number_spans(text, claims)
+        )
+        return PersonalDataDetected(review_text=text, claims=claims, spans=spans)
 
-    def review_text(self, sample: Mapping[str, Any]) -> str:
-        """The one string every span's offsets index: the turns, the catalog, and the label."""
-        raise NotImplementedError
+    def build_review_text(self, sample: Mapping[str, Any]) -> str:
+        """The one string every span's offsets index: the turns, the catalog, then the label.
 
-    def tool_catalog(self, sample: Mapping[str, Any]) -> str:
-        """The tools this sample was offered, as the text a reviewer and a juror both read."""
-        return openai_tool_format_to_text(sample.get("tools") or ())
+        The catalog is in it because an argument value in a tool call is where personal data sits,
+        and the label because a label is a tool call.
+        """
+        turns = conversation_turns(sample)
+        catalog = openai_tool_format_to_text(sample.get("tools") or ())
+        label = json.dumps(sample.get("label"), ensure_ascii=False)
+        return "\n".join([*turns, *([catalog] if catalog else []), f"label: {label}"])
+
+    def build_pii_llm_detect_prompt(self, text: str, language: str) -> str:
+        """`pii_llm_detect.txt` with its two slots filled: the language, and the text to read.
+
+        The task's own file, because the text it reads is a tool-calling sample. `ConfigError`
+        where it is missing, so a deployment with no prompt is not a provider having a bad day.
+        """
+        template = read_txt(PII_LLM_DETECT_PROMPT)
+        if not template.strip():
+            raise ConfigError(
+                f"no prompt at {PII_LLM_DETECT_PROMPT}: it is the deployment's file, on"
+                " the same terms as config/model/"
+            )
+        return slot_filling(template, {"language": language, "review_text": text})
+
+    async def pii_llm_detect(self, text: str, language: str) -> dict[str, str]:
+        """What the model claims, keyed by value, once what it cannot have meant is gone.
+
+        A value not in `text` verbatim is dropped: it was asked to copy, and a normalised number
+        carries no offset. The check is here and not in the detector, because only the caller has
+        the text the answer is about.
+        """
+        prompt = self.build_pii_llm_detect_prompt(text, language)
+        claimed = await self.pii_llm_detector.detect(prompt)
+        return {
+            value: personal_data_class
+            for value, personal_data_class in claimed.items()
+            if value in text
+        }
 
 
 class ToolDecisionDuplicateChecking(DuplicateDataChecking):

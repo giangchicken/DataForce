@@ -6,7 +6,7 @@ from .data_quality import (
     ToolDecisionDuplicateChecking,
     ToolDecisionPersonalChecking,
 )
-from .utils import openai_tool_format_to_text
+from .utils import conversation_turns, openai_tool_format_to_text
 
 __all__ = [
     "ToolDecisionAbnormalChecking",
@@ -14,5 +14,6 @@ __all__ = [
     "ToolDecisionLLMPrediction",
     "ToolDecisionPersonalChecking",
     "ToolDecisionSFTPrediction",
+    "conversation_turns",
     "openai_tool_format_to_text",
 ]

@@ -210,12 +210,12 @@ const stepInput = () => `<section class="step">
 </section>`;
 
 const stepPersonal = () => `<section class="step">
-  ${head(2, "personal data", ["pass", "body is pass"], "PersonalDataChecking.scan(sample)")}
+  ${head(2, "personal data", ["pass", "body is pass"], "PersonalDataChecking.detect(input)")}
   <div class="bar"><span class="note">verifier_model — ticked from <code>GET /models</code>:</span>
     <span id="verifier-ticks"></span></div>
   ${band("in", "in", "sample: Mapping[str, Any] — the whole sample, so the scan can reach the tools\n\nits review text:\n" + REVIEW_TEXT)}
   <div class="io out"><div class="lab">out</div><div class="val">
-    <span class="src">PersonalDataScan</span>
+    <span class="src">PersonalDataDetected</span>
     <table id="span-table"><thead><tr>
       <th style="width:26%">value — text[start:end]</th><th>start</th><th>end</th>
       <th style="width:20%">personal_data_class</th><th style="width:20%">placeholder</th>
@@ -224,7 +224,7 @@ const stepPersonal = () => `<section class="step">
       <span class="note">re-reads every row and shows <code>text[new start:new end]</code></span></div>
     <pre id="scan-json" class="big"></pre>
   </div></div>
-  ${why("`review_text` is what every offset indexes, and `redacted_text` is that string copied with each confirmed value replaced by its placeholder. Nothing on the shape records that a human looked: `decision` says what was done to the text, not who agreed to it.")}
+  ${why("`review_text` is what every offset indexes and `claims` is what the two detectors said before the confirmation narrowed it. Nothing is replaced here: the copy is the second call, `POST .../personal-data/replace`, over the spans a human hands back. Nothing on either shape records that a human looked -- `outcome` says what was done to the text, not who agreed to it.")}
 </section>`;
 
 const stepDuplicate = () => `<section class="step">
@@ -244,7 +244,7 @@ const stepAbnormal = () => `<section class="step">
 const stepHumanQuality = () => `<section class="step">
   ${head(5, "human check · data quality", ["person", "a person, not code"], "a person")}
   <div class="io in"><div class="lab">in</div><div class="val">
-    <span class="src">PersonalDataScan from step 2 · None from step 3 · None from step 4</span>
+    <span class="src">PersonalDataDetected from step 2 · None from step 3 · None from step 4</span>
     <table id="approve-table"><thead><tr>
       <th style="width:6%">keep</th><th style="width:30%">value</th><th>start</th><th>end</th>
       <th style="width:22%">personal_data_class</th><th>why</th>
@@ -255,10 +255,10 @@ const stepHumanQuality = () => `<section class="step">
     </div>
   </div></div>
   <div class="io out"><div class="lab">out</div><div class="val">
-    <span class="src">PersonalDataScan, as the human left it <span id="state-5" class="state"></span></span>
+    <span class="src">PersonalDataDetected as the human left it, then PersonalDataReplaced over it <span id="state-5" class="state"></span></span>
     <pre id="out-5" class="big"></pre>
   </div></div>
-  ${why("The whole scan back, not a verdict about it — the same shape in and out, with the spans as the human left them and `redacted_text` rebuilt from those. Nothing here reads step 3 or step 4: neither returns anything to approve.")}
+  ${why("The whole detect answer back, not a verdict about it — the same shape in and out, with the spans as the human left them. `redacted_text` is not rebuilt here: those spans are posted to the replace endpoint and the copy below is what it answers, so the one rule that makes a copy lives in one place. Nothing here reads step 3 or step 4: neither returns anything to approve.")}
 </section>`;
 
 const stepAiReview = () => `<section class="step">
@@ -318,7 +318,7 @@ const stepStore = () => `<section class="step">
   </div></div>
   <div class="why" id="row-note"></div>
   ${why("**The service redacts, not this page.** The body above is posted raw and `stored_record` in `services/tool_decision/records.py` decides what may be written: every span's value replaced wherever it occurs — in `messages` and in `label`, not only in the scan — `review_text` dropped because it is the raw string by definition, and `start`/`end` off the spans because they index a string the row no longer carries. Redacting here as well would be two implementations of one rule, and only the one the client cannot skip is worth having.")}
-  ${why("A record whose `decision` is `reported` is refused with a 422, not stored raw: nothing was rewritten, so there is no safe form of it. The service also refuses a row that still holds a value the scan says it replaced — a rule a store cannot check is a rule it does not have.")}
+  ${why("A record whose `outcome` is `reported` is refused with a 422, not stored raw: nothing was rewritten, so there is no safe form of it. The service also refuses a row that still holds a value the scan says it replaced — a rule a store cannot check is a rule it does not have.")}
 </section>`;
 
 // ---------------------------------------------------------------- the drawing
@@ -368,16 +368,30 @@ function redactedText(spans) {
   return text;
 }
 
+// What the two detectors claimed, `(class, value)` per distinct value, in the order the spans
+// were drawn. It is what `outcome` is measured against, so a span the human unticks leaves a claim
+// nothing replaced and the row is withheld rather than read as clean.
+const CLAIMS = [...new Map(
+  SPANS.map(s => [REVIEW_TEXT.slice(s.start, s.end), s.personal_data_class])
+)].map(([value, personal_data_class]) => [personal_data_class, value]);
+
 // Step 2's answer, and step 5's: one shape, with the spans the human left on it.
-function scanOf(spans) {
+function detectedOf(spans) {
+  return { review_text: REVIEW_TEXT, claims: CLAIMS, spans };
+}
+
+// What `POST .../personal-data/replace` answers over the spans it is handed: the copy, and how far
+// it got. `redacted` only where every claim resolved -- the copy holds none of those values.
+function replacedOf(spans) {
+  const redacted_text = spans.length ? redactedText(spans) : null;
+  const resolved = redacted_text !== null
+    && CLAIMS.every(([, value]) => !redacted_text.includes(value));
   return {
-    review_text: REVIEW_TEXT,
-    redacted_text: spans.length ? redactedText(spans) : null,
-    decision: spans.length ? "redacted" : "reported",
-    spans
+    redacted_text,
+    outcome: !CLAIMS.length ? "reported" : resolved ? "redacted" : "withheld"
   };
 }
-const scanFromCheck = () => scanOf(editedSpans());
+const detectedFromCheck = () => detectedOf(editedSpans());
 
 // One box per row, and `auto` on top of it: a row inside a longer span is dropped whatever the box
 // says, and the box is what the human said about the rows auto left alone.
@@ -385,7 +399,7 @@ const KEPT = SPANS.map(() => true);
 const markedSpans = () => outermostSpans(editedSpans()).map(s => ({
   ...s, dropped: ($("auto").checked && s.inside) || !KEPT[s.i]
 }));
-const scanFromHuman = () => scanOf(
+const detectedFromHuman = () => detectedOf(
   markedSpans().filter(s => !s.dropped).map(({ i, inside, dropped, ...s }) => s)
 );
 
@@ -465,7 +479,8 @@ function rowFindings(row) {
 // review auditable -- you can see what changed -- and it means the redaction protects a reader of
 // `new_*` and not the database: anything with this row has the values.
 function recordAsPosted() {
-  const scan = scanFromHuman();
+  const detected = detectedFromHuman();
+  const scan = { ...detected, ...replacedOf(detected.spans) };
   const pairs = scan.spans
     .map(s => [slicedValue(s.start, s.end), s.placeholder])
     .filter(([got]) => !got.bad)
@@ -496,7 +511,7 @@ function paintAll() {
     cell.textContent = got.bad || got.text;
     cell.className = got.bad ? "value bad" : "value";
   });
-  $("scan-json").textContent = json(scanFromCheck());
+  $("scan-json").textContent = json(detectedFromCheck());
 
   // step 5 -- what auto and the human between them kept, and the scan handed back
   const auto = $("auto").checked;
@@ -510,11 +525,11 @@ function paintAll() {
       <td>${esc(s.personal_data_class)}</td><td>${note}</td></tr>`;
   }).join("");
 
-  const out5 = scanFromHuman();
+  const out5 = detectedFromHuman();
   mark("state-5", same(out5.spans, SPANS),
-    same(out5.spans, SPANS) ? "unchanged — the scan passes through"
+    same(out5.spans, SPANS) ? "unchanged — the answer passes through"
       : `modified — ${SPANS.length} spans in, ${out5.spans.length} out`);
-  $("out-5").textContent = json(out5);
+  $("out-5").textContent = json(out5) + "\n\n" + json(replacedOf(out5.spans));
 
   // step 7 -- correct passes all three on, modify replaces the ones the human typed
   const modify = $("v-modify").checked;

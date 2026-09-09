@@ -1,16 +1,21 @@
 """facade · the full logic behind each tool_decision endpoint."""
 
-from .ai_review import panel_verdict, reviewer_verdict, sample_turns
-from .data_quality import abnormal_report, duplicate_report, personal_data_scan
+from .ai_review import tool_decision_llm_predict, tool_decision_sft_predict
+from .data_quality import (
+    abnormal_report,
+    duplicate_report,
+    personal_data_detect,
+    personal_data_replace,
+)
 from .human_review import reviewed_record, stored_record
 
 __all__ = [
     "abnormal_report",
     "duplicate_report",
-    "panel_verdict",
-    "personal_data_scan",
+    "personal_data_detect",
+    "personal_data_replace",
     "reviewed_record",
-    "reviewer_verdict",
-    "sample_turns",
     "stored_record",
+    "tool_decision_llm_predict",
+    "tool_decision_sft_predict",
 ]

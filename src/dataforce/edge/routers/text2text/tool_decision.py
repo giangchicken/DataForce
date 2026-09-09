@@ -29,15 +29,23 @@ from dataforce.modalities.text2text.ai_review.schema import (
     LLMModelConfig,
     SFTModelConfig,
 )
-from dataforce.modalities.text2text.data_quality import PersonalDataScan
-from dataforce.modalities.text2text.data_quality.schema import VerifierModelConfig
+from dataforce.modalities.text2text.data_quality import (
+    PersonalDataCheckingConfig,
+    PersonalDataDetected,
+    PersonalDataReplaced,
+)
+from dataforce.modalities.text2text.data_quality.schema import (
+    Language,
+    VerifierModelConfig,
+)
 from dataforce.services.tool_decision import (
     abnormal_report,
     duplicate_report,
-    panel_verdict,
-    personal_data_scan,
-    reviewer_verdict,
+    personal_data_detect,
+    personal_data_replace,
     stored_record,
+    tool_decision_llm_predict,
+    tool_decision_sft_predict,
 )
 
 router = APIRouter(prefix="/text2text/tool-decision", tags=["tool_decision"])
@@ -67,12 +75,24 @@ class Sample(BaseModel):
 
 
 class ScanRequest(Sample):
-    """A sample, and the model ticked for layer two.
+    """A sample, the language it is in, and the model ticked for layer two.
 
     `verifier_model` and not `verifier`: a record's keys already say what each reviewer *said*, so
     a request key naming which one to *ask* must not read like the answer.
+
+    `language` is declared here rather than on `Sample` because the scan is the one endpoint that
+    reads it today, and it is one of the two `agent_toolkit`'s scans know: a third value is a
+    `KeyError` from inside the library, so the choice belongs in the schema a caller reads (`H-5`)
+    rather than in a refusal they discover.
     """
 
+    language: Language = Field(
+        default="vi",
+        description=(
+            "What language the conversation is in; every rule scan and both model steps are "
+            "handed it. `vi` is Vietnamese, which this corpus is in."
+        ),
+    )
     verifier_model: str = Field(
         ..., description="Which served model confirms layer one's candidates."
     )
@@ -165,15 +185,36 @@ def models() -> tuple[str, ...]:
 
 
 @router.post("/data-quality/personal-data", summary="personal data in one sample")
-async def personal_data(request: ScanRequest) -> PersonalDataScan | None:
-    """`None` is unreachable while `scan` raises. The arm goes when the body lands."""
+async def personal_data(request: ScanRequest) -> PersonalDataDetected:
+    """What was found, or 422 where no model resolved or the language is not one it can scan.
+
+    `language` and `verifier_model` are declarations about this request and not keys of the
+    record, so the sample handed on is what the corpus carries.
+    """
     try:
         checked_names((request.verifier_model,))
-        return await personal_data_scan(
-            VerifierModelConfig(model=request.verifier_model), request.model_dump()
+        return await personal_data_detect(
+            PersonalDataCheckingConfig(
+                verifier_model=VerifierModelConfig(model=request.verifier_model)
+            ),
+            request.model_dump(exclude={"language", "verifier_model"}),
+            request.language,
         )
     except ConfigError as error:
         raise refused(error) from error
+
+
+@router.post(
+    "/data-quality/personal-data/replace", summary="replace the spans a reviewer left"
+)
+def personal_data_replacement(detected: PersonalDataDetected) -> PersonalDataReplaced:
+    """The same shape back out of the reviewer's hands, and the copy that ships.
+
+    A second call because a human ticks, edits and adds spans in between: what is replaced is
+    what they handed back, not what the detectors claimed. No model is asked, so nothing here
+    can be refused for a name this deployment does not serve.
+    """
+    return personal_data_replace(detected)
 
 
 @router.post("/data-quality/duplicate", summary="which samples this one repeats")
@@ -196,11 +237,11 @@ async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
             request.jury_models + ((request.sft_model,) if request.sft_model else ())
         )
         return ReviewerVerdicts(
-            llm=await panel_verdict(
+            llm=await tool_decision_llm_predict(
                 [LLMModelConfig(model=name) for name in request.jury_models] or None,
                 body,
             ),
-            sft=await reviewer_verdict(
+            sft=await tool_decision_sft_predict(
                 SFTModelConfig(model=request.sft_model) if request.sft_model else None,
                 body,
             ),

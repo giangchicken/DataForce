@@ -1,4 +1,9 @@
-"""logic · every tool a conversation was offered, written out as the text a reviewer reads.
+"""logic · what a task hands a model: one sample, as the text a model reads.
+
+The two renderings live here for the same reason (Decision 8): two definitions of what a turn is,
+or of what a tool looks like, would let a juror and a reviewer disagree about the text they were
+shown, and nothing would say so. `conversation_turns` is the turns; the catalog is the rest of the
+file below it.
 
     [tool_name]
     <description, verbatim>
@@ -16,6 +21,14 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 SPACES_PER_LEVEL = 2
+
+
+def conversation_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
+    """The conversation as the flat turns every part reads, `role: content` per message."""
+    return tuple(
+        f"{turn.get('role', '')}: {turn.get('content', '')}"
+        for turn in sample.get("messages") or ()
+    )
 
 
 def default_values_line(value: Any) -> str:

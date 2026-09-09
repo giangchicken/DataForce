@@ -20,16 +20,11 @@ from dataforce.modalities.text2text.ai_review.schema import (
 from dataforce.profile.tool_decision import (
     ToolDecisionLLMPrediction,
     ToolDecisionSFTPrediction,
+    conversation_turns,
 )
 
 
-def sample_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
-    """The conversation as the flat turns every part takes, `role: content` per message."""
-    messages = sample.get("messages") or ()
-    return tuple(f"{m.get('role', '')}: {m.get('content', '')}" for m in messages)
-
-
-async def panel_verdict(
+async def tool_decision_llm_predict(
     config: LLMModelConfig | Sequence[LLMModelConfig] | None, sample: Mapping[str, Any]
 ) -> LLMReviewerVerdict | None:
     """What the panel said. None where no model was declared.
@@ -40,16 +35,16 @@ async def panel_verdict(
     if config is None:
         return None
     return await ToolDecisionLLMPrediction(config).verdict(
-        sample_turns(sample), str(sample.get("label", ""))
+        conversation_turns(sample), str(sample.get("label", ""))
     )
 
 
-async def reviewer_verdict(
+async def tool_decision_sft_predict(
     config: SFTModelConfig | None, sample: Mapping[str, Any]
 ) -> SFTReviewerVerdict | None:
     """What the finetuned reviewer said. None where no model was declared."""
     if config is None:
         return None
     return await ToolDecisionSFTPrediction(config).predict(
-        sample_turns(sample), str(sample.get("label", ""))
+        conversation_turns(sample), str(sample.get("label", ""))
     )
