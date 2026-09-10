@@ -15,7 +15,6 @@ from agent_toolkit.llm import complete, resolve_config
 from agent_toolkit.llm.exceptions import LLMError
 from agent_toolkit.logging import get_logger
 from agent_toolkit.string_utils import extract_json_from_text, slot_filling
-from pydantic import ValidationError
 
 from dataforce.errors import ConfigError
 
@@ -88,46 +87,39 @@ class PiiLlmConfirmer:
 
         Only ever narrows: an id no span carries is discarded, a span answered twice keeps the
         first answer, and a span nothing came back about is not confirmed -- which is what a
-        failed call and an answer of the wrong shape both come to, as one event on stdout.
+        failed call and an answer of the wrong shape both come to, as one event on stdout (`H-6`).
         """
-        failed: Exception
         try:
-            resp = await complete(
+            resp_text = await complete(
                 prompt,
                 model=self.model.model,
                 api_key=self.model.api_key,
                 base_url=self.model.base_url,
                 **self.settings,
             )
-        # A refusal, a timeout, a hung-up socket: a provider's failures are its own to name.
+            answered = PiiLlmConfirmed.model_validate(
+                extract_json_from_text(resp_text)
+            ).confirmed
+        # A refusal, a timeout, a hung-up socket, prose where JSON was asked for: whatever went
+        # wrong, nothing is confirmed.
         except Exception as error:
-            failed = error
-        else:
-            try:
-                answered = PiiLlmConfirmed.model_validate(
-                    extract_json_from_text(resp)
-                ).confirmed
-            # Prose, or JSON that is not the shape asked for.
-            except ValidationError as error:
-                failed = error
-            else:
-                real: dict[int, str] = {}
-                for one in answered:
-                    if one.confirmed:
-                        real.setdefault(one.id, one.reason)
-                return tuple(
-                    span.model_copy(update={"reason": real[span.id]})
-                    for span in spans
-                    if span.id in real
-                )
-        logger.warning(
-            "pii_llm_confirm_failed",
-            extra={
-                "model": self.model.model,
-                "error": f"{type(failed).__name__}: {failed}",
-            },
+            logger.warning(
+                "pii_llm_confirm_failed",
+                extra={
+                    "model": self.model.model,
+                    "error": f"{type(error).__name__}: {error}",
+                },
+            )
+            return ()
+        real: dict[int, str] = {}
+        for one in answered:
+            if one.confirmed:
+                real.setdefault(one.id, one.reason)
+        return tuple(
+            span.model_copy(update={"reason": real[span.id]})
+            for span in spans
+            if span.id in real
         )
-        return ()
 
 
 class PersonalDataChecking(ABC):

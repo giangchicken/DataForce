@@ -4,8 +4,13 @@ Each function takes the config for the model it asks and builds its own reviewer
 finetuned reviewer are asked separately and neither is folded into the other -- one carries reasons
 and no confidence, the other a confidence and no reason. A config that is `None` is a reviewer the
 deployment did not declare, and answers `None`, which is not a reviewer that disagreed.
+
+The language is declared beside the sample rather than read out of it (Decision 17), and is typed
+here as text: the two the scans know are the boundary's own restriction, and this is a prompt slot
+that nothing can `KeyError` on.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -25,26 +30,35 @@ from dataforce.profile.tool_decision import (
 
 
 async def tool_decision_llm_predict(
-    config: LLMModelConfig | Sequence[LLMModelConfig] | None, sample: Mapping[str, Any]
+    config: LLMModelConfig | Sequence[LLMModelConfig] | None,
+    sample: Mapping[str, Any],
+    language: str,
 ) -> LLMReviewerVerdict | None:
     """What the panel said. None where no model was declared.
 
     One config is a panel of one and several are a panel of several; `LLMPrediction` reads either
     through `jurors`, so nothing here counts models.
+
+    The label is handed over as JSON and not as a Python string: it is a tool-call array, and the
+    panel matches the calls in one answer against the calls in another, so `str()` of a list would
+    hand it a spelling no model would ever write.
     """
     if config is None:
         return None
     return await ToolDecisionLLMPrediction(config).verdict(
-        conversation_turns(sample), str(sample.get("label", ""))
+        conversation_turns(sample),
+        json.dumps(sample.get("label"), ensure_ascii=False),
+        sample.get("tools") or (),
+        language,
     )
 
 
 async def tool_decision_sft_predict(
-    config: SFTModelConfig | None, sample: Mapping[str, Any]
+    config: SFTModelConfig | None, sample: Mapping[str, Any], language: str
 ) -> SFTReviewerVerdict | None:
-    """What the finetuned reviewer said. None where no model was declared."""
+    """What the finetuned reviewer said. None where no model was declared, or where it said nothing."""
     if config is None:
         return None
     return await ToolDecisionSFTPrediction(config).predict(
-        conversation_turns(sample), str(sample.get("label", ""))
+        conversation_turns(sample), sample.get("tools") or (), language
     )

@@ -137,6 +137,25 @@ def resolvable(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(module, "resolve_config", lambda **kwargs: RESOLVED)
 
 
+class StubbedLlmDetector(PiiLlmDetector):
+    """The model detector answered from a dict, so a test about the arithmetic makes no call.
+
+    It keeps the detector's own rule that a value not in the text verbatim is dropped: a stub that
+    answered values the text does not hold would let a test claim an offset nothing can carry.
+    """
+
+    def __init__(self, detected: Mapping[str, str]) -> None:
+        super().__init__(VerifierModelConfig(model=VERIFIER))
+        self.detected = dict(detected)
+
+    async def detect(self, prompt: str, text: str) -> dict[str, str]:
+        return {
+            value: personal_data_class
+            for value, personal_data_class in self.detected.items()
+            if value in text
+        }
+
+
 class StubbedModels(ToolDecisionPersonalChecking):
     """Both model steps answered here: what the model detector finds, and what is confirmed.
 
@@ -155,15 +174,8 @@ class StubbedModels(ToolDecisionPersonalChecking):
     ) -> None:
         super().__init__(checking_config(*scans))
         self.confirmed = confirmed
-        self.detected = dict(detected or {})
+        self.pii_llm_detector = StubbedLlmDetector(detected or {})
         self.asked: list[tuple[str, tuple[PersonalDataSpan, ...], str]] = []
-
-    async def pii_llm_detect(self, text: str, language: str) -> dict[str, str]:
-        return {
-            value: personal_data_class
-            for value, personal_data_class in self.detected.items()
-            if value in text
-        }
 
     async def pii_llm_confirm(
         self,
@@ -178,6 +190,15 @@ class StubbedModels(ToolDecisionPersonalChecking):
             for span in spans
             if real is None or text[span.start : span.end] in real
         )
+
+
+async def llm_claims(
+    checker: ToolDecisionPersonalChecking, text: str, language: Language = "vi"
+) -> dict[str, str]:
+    """What the model detector claims about `text`, asked the way the scan asks it."""
+    return await checker.pii_llm_detector.detect(
+        checker.build_pii_llm_detect_prompt(text, language), text
+    )
 
 
 def given(
@@ -411,7 +432,7 @@ async def test_a_value_the_model_did_not_copy_is_dropped(
     checker = ToolDecisionPersonalChecking(checking_config())
     text = checker.build_review_text(SAMPLE)
 
-    assert await checker.pii_llm_detect(text, "vi") == {ADDRESS: "ADDRESS"}
+    assert await llm_claims(checker, text) == {ADDRESS: "ADDRESS"}
 
 
 async def test_an_entry_missing_a_half_names_nothing(
@@ -434,7 +455,7 @@ async def test_an_entry_missing_a_half_names_nothing(
     checker = ToolDecisionPersonalChecking(checking_config())
     text = checker.build_review_text(SAMPLE)
 
-    assert await checker.pii_llm_detect(text, "vi") == {}
+    assert await llm_claims(checker, text) == {}
     assert set(sliced(await checker.detect(given(SAMPLE)))) == {EMAIL, PHONE, NAME}
 
 
@@ -456,7 +477,7 @@ async def test_a_readable_finding_survives_an_unreadable_one(
     )
     checker = ToolDecisionPersonalChecking(checking_config())
 
-    assert await checker.pii_llm_detect(checker.build_review_text(SAMPLE), "vi") == {
+    assert await llm_claims(checker, checker.build_review_text(SAMPLE)) == {
         NAME: "NAME"
     }
 
@@ -469,7 +490,7 @@ async def test_the_class_the_model_wrote_is_read_in_upper_case(
     checker = ToolDecisionPersonalChecking(checking_config())
     text = checker.build_review_text(SAMPLE)
 
-    assert await checker.pii_llm_detect(text, "vi") == {ADDRESS: "HOME_ADDRESS"}
+    assert await llm_claims(checker, text) == {ADDRESS: "HOME_ADDRESS"}
 
 
 # ----------------------------------------------------------------- the confirmation

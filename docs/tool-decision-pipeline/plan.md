@@ -509,6 +509,28 @@ juror asked. A juror whose call raises, or whose answer is unparseable, is absen
 
 **Blocked by.** T5, so the catalog rendering both halves depend on is already pinned.
 
+**What it settled, and what it left.** `ReviewRequest` grew `language: Language = "vi"`, symmetric
+with the scan; the parts take it as text, because only the scans key a table by it. The label came
+off both `predict`s rather than being passed and unread — Decision 12 is structural now, and
+Requirements 19, 23 and 24 were rewritten to match.
+
+The judge was built here as a fourth request key and then taken back out, which is worth recording
+because the second answer is the better one. An answer to *this* task is a tool-call array, so
+sameness is a rule: `ToolDecisionLLMPrediction.normalize_prediction` matches the calls in one
+answer against the calls in another. It answers a third socket beside `predict` and
+`judge_prediction` -- declared in the modality and left undefined there, because
+`modalities/text2text/` serves any text2text task and cannot know a tool call exists. Reading a
+juror's text back into those calls turned out to be the reverse of a rendering this profile already
+owns, so it landed beside it as `utils.text_to_openai_tool_format`: one definition of what a call
+is, in the file that already holds the one definition of what a tool looks like (Decision 8). Most of what a judge was going to be paid to resolve was never a
+disagreement — two jurors spelling one answer differently — and what is left is two genuinely
+different calls, where Decision 9 already says a model would only be casting the deciding vote
+blind. So `judge_prediction` stays a socket for a task whose answers can only be compared as
+meaning, this profile answers `None`, and no request key names a judge (Decision 20).
+
+`ToolDecisionSFTPrediction.predict` is the one half that did not land: nothing says where its
+`confidence` comes from, so § *Open* now carries that question and the body still raises.
+
 ### T12 · The panel's tests
 
 **Goal.** The three arithmetic rules and the failure paths are proved without a model call.
@@ -634,5 +656,13 @@ decision; `create_all` against a temporary SQLite file is what this test uses.
   unticking a value that another kept value sits inside cuts it in half. § *Design* records both and
   says *"which of the two wins is not decided"*, so no task here decides it. The page shows them
   beside the reviewer who caused them, which is the behaviour that exists.
+- **The finetuned reviewer's own answer.** `SFTReviewerVerdict` carries a `confidence`,
+  `tool_prediction.txt` asks for none, and `complete` answers with text and no logprobs — so T11
+  left `ToolDecisionSFTPrediction.predict` raising rather than inventing a number, and § *Open*
+  states the two ways out. `SFTPrediction.verdict` was written and then withdrawn with it: T10
+  asked for it on the grounds that *"comparing two labels is not a task's answer"*, and that turned
+  out to be wrong -- comparing two answers means knowing what an answer is made of, which is
+  exactly what the modality may not know. It lands in the profile when the rest of this reviewer's
+  half does.
 - **The page's own tests.** § *Testing Strategy*: *"No test drives the page. A browser is the check."*
 - **Auth, batching, a corpus, and which models a deployment picks.** § *Out of Scope*.

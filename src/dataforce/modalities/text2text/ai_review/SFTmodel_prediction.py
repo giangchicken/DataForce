@@ -1,8 +1,12 @@
-"""logic · the finetuned reviewer's own answer, and its verdict on the label.
+"""logic · the finetuned reviewer's own answer, and how sure it is.
 
 A second opinion and not a second juror. It carries a confidence and no reason, the panel carries
 reasons and no confidence, and folding them into one vote would weigh one model's training set
 against N zero-shot opinions without saying so. Two keys keep them weighable apart.
+
+Whether its answer agrees with the label is not asked here. Comparing two answers means knowing
+what an answer is made of, and this layer serves every text2text task -- so that rule, like the
+prompt, belongs to the task, and lands with the rest of this reviewer's half (spec § *Open*).
 """
 
 from abc import ABC, abstractmethod
@@ -16,8 +20,13 @@ class SFTPrediction(ABC):
         self.config = config
 
     @abstractmethod
-    async def predict(self, turns: Sequence[str], label: str) -> SFTReviewerVerdict:
-        pass
+    async def predict(
+        self, turns: Sequence[str], tools: Sequence[object], language: str
+    ) -> SFTReviewerVerdict | None:
+        """Its own answer and how sure it is, or `None` where it did not answer.
 
-    def verdict(self, answered: SFTReviewerVerdict, label: str) -> bool:
-        raise NotImplementedError
+        `None` on the same terms as an absent juror: a reviewer that failed said nothing, and a
+        label of `""` compared against the sample's is a disagreement nobody expressed. The label
+        is not among the arguments -- it is asked the sample's own question, like a juror.
+        """
+        pass

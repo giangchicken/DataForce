@@ -18,7 +18,6 @@ from agent_toolkit.llm import complete, resolve_config
 from agent_toolkit.llm.exceptions import LLMError
 from agent_toolkit.logging import get_logger
 from agent_toolkit.string_utils import extract_json_from_text, slot_filling
-from pydantic import ValidationError
 
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.data_quality import (
@@ -205,49 +204,46 @@ class PiiLlmDetector:
             )
         self.settings = verifier_config.settings
 
-    async def detect(self, prompt: str) -> dict[str, str]:
+    async def detect(self, prompt: str, text: str) -> dict[str, str]:
         """Which class the model claims each value as, keyed by value. Never raises (Req. 8).
 
         The class is upper case and one word, because it is what picks `<CLASS_N>` and
         `<home address_1>` beside `<HOME_ADDRESS_1>` reads as two kinds of thing; a finding
-        missing either half names nothing. A failed call and an answer of the wrong shape both
-        detect nothing, which leaves the record to the rule scans, and both are one event (`H-6`).
+        missing either half names nothing. A failed call and an answer of the wrong shape are one
+        event and one empty answer (`H-6`).
+
+        `text` is what the answer is about, and what a claim is checked against: a value not in it
+        verbatim is dropped, because the model was asked to copy and a number it normalised
+        carries no offset.
         """
-        failed: Exception
         try:
-            said = await complete(
+            resp_text = await complete(
                 prompt,
                 model=self.model.model,
                 api_key=self.model.api_key,
                 base_url=self.model.base_url,
                 **self.settings,
             )
-        # A refusal, a timeout, a hung-up socket: a provider's failures are its own to name.
+            json_parsed = PiiLlmDetected.model_validate(
+                extract_json_from_text(resp_text)
+            ).detected
+        # A refusal, a timeout, a hung-up socket, prose where JSON was asked for: whatever went
+        # wrong, this step detected nothing, which leaves the record to the rule scans.
         except Exception as error:
-            failed = error
-        else:
-            try:
-                answered = PiiLlmDetected.model_validate(
-                    extract_json_from_text(said)
-                ).detected
-            # Prose, or JSON that is not the shape asked for.
-            except ValidationError as error:
-                failed = error
-            else:
-                found: dict[str, str] = {}
-                for finding in answered:
-                    named = "_".join(finding.label.upper().split())
-                    if finding.text and named:
-                        found.setdefault(finding.text, named)
-                return found
-        logger.warning(
-            "pii_llm_detect_failed",
-            extra={
-                "model": self.model.model,
-                "error": f"{type(failed).__name__}: {failed}",
-            },
-        )
-        return {}
+            logger.warning(
+                "pii_llm_detect_failed",
+                extra={
+                    "model": self.model.model,
+                    "error": f"{type(error).__name__}: {error}",
+                },
+            )
+            return {}
+        found: dict[str, str] = {}
+        for finding in json_parsed:
+            named = "_".join(finding.label.upper().split())
+            if finding.text and named and finding.text in text:
+                found.setdefault(finding.text, named)
+        return found
 
 
 class ToolDecisionPersonalChecking(PersonalDataChecking):
@@ -255,16 +251,8 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
 
     def __init__(self, config: PersonalDataCheckingConfig) -> None:
         super().__init__(config)
-        self.pii_rule_detector = self.build_pii_rule_detector()
-        self.pii_llm_detector = self.build_pii_llm_detector()
-
-    def build_pii_rule_detector(self) -> PiiRuleDetector:
-        """The scans the config declared, in the order that settles a value two of them claim."""
-        return PiiRuleDetector(self.config.list_scan_functions)
-
-    def build_pii_llm_detector(self) -> PiiLlmDetector:
-        """The model the request ticked -- the one the base confirms with -- as its own detector."""
-        return PiiLlmDetector(self.config.verifier_model)
+        self.pii_rule_detector = PiiRuleDetector(self.config.list_scan_functions)
+        self.pii_llm_detector = PiiLlmDetector(self.config.verifier_model)
 
     async def detect(
         self, checking_input: PersonalDataCheckingInput
@@ -276,8 +264,9 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         """
         text = self.build_review_text(checking_input.sample)
         language = checking_input.language
+        prompt = self.build_pii_llm_detect_prompt(text, language)
         claimed = {
-            **await self.pii_llm_detect(text, language),
+            **await self.pii_llm_detector.detect(prompt, text),
             **self.pii_rule_detector.detect(text, language),
         }
         claims = order_claims_by_class(text, claimed, self.pii_rule_detector.classes)
@@ -310,21 +299,6 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
                 " the same terms as config/model/"
             )
         return slot_filling(template, {"language": language, "review_text": text})
-
-    async def pii_llm_detect(self, text: str, language: str) -> dict[str, str]:
-        """What the model claims, keyed by value, once what it cannot have meant is gone.
-
-        A value not in `text` verbatim is dropped: it was asked to copy, and a normalised number
-        carries no offset. The check is here and not in the detector, because only the caller has
-        the text the answer is about.
-        """
-        prompt = self.build_pii_llm_detect_prompt(text, language)
-        claimed = await self.pii_llm_detector.detect(prompt)
-        return {
-            value: personal_data_class
-            for value, personal_data_class in claimed.items()
-            if value in text
-        }
 
 
 class ToolDecisionDuplicateChecking(DuplicateDataChecking):

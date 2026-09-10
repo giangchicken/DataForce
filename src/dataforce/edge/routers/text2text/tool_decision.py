@@ -99,8 +99,22 @@ class ScanRequest(Sample):
 
 
 class ReviewRequest(Sample):
-    """A sample, and the models ticked. Named apart from `llm` and `sft`, which hold answers."""
+    """A sample, the language it is in, and the models ticked.
 
+    The model keys are named apart from `llm` and `sft`, which hold answers. `language` is
+    declared here on the same terms as on the scan (Decision 17): it fills the jurors' prompt
+    slot, and one of the two the scans know keeps the two requests asking in one vocabulary.
+    There is no judge to tick: a tie between two tool calls is two different calls, and this task
+    matches the calls rather than asking a model whether they mean the same (Decision 20).
+    """
+
+    language: Language = Field(
+        default="vi",
+        description=(
+            "What language the conversation is in; the jurors' prompt is handed it. `vi` is "
+            "Vietnamese, which this corpus is in."
+        ),
+    )
     jury_models: tuple[str, ...] = Field(
         default=(),
         description="Which served models sit on the panel. Empty asks no panel.",
@@ -231,7 +245,12 @@ async def abnormal(sample: Sample) -> None:
 
 @router.post("/ai-review", summary="what the reviewers say the label should be")
 async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
-    body = request.model_dump()
+    """Both verdicts, or 422 where a name this deployment does not serve was ticked.
+
+    The language and the two model keys are declarations about this request and not keys of the
+    record, so the sample handed on is what the corpus carries.
+    """
+    sample = request.model_dump(exclude={"language", "jury_models", "sft_model"})
     try:
         checked_names(
             request.jury_models + ((request.sft_model,) if request.sft_model else ())
@@ -239,11 +258,13 @@ async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
         return ReviewerVerdicts(
             llm=await tool_decision_llm_predict(
                 [LLMModelConfig(model=name) for name in request.jury_models] or None,
-                body,
+                sample,
+                request.language,
             ),
             sft=await tool_decision_sft_predict(
                 SFTModelConfig(model=request.sft_model) if request.sft_model else None,
-                body,
+                sample,
+                request.language,
             ),
         )
     except ConfigError as error:

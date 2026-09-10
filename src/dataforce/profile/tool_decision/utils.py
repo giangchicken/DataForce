@@ -3,7 +3,8 @@
 The two renderings live here for the same reason (Decision 8): two definitions of what a turn is,
 or of what a tool looks like, would let a juror and a reviewer disagree about the text they were
 shown, and nothing would say so. `conversation_turns` is the turns; the catalog is the rest of the
-file below it.
+file below it, and `text_to_openai_tool_format` at the end reads the other way -- text a model
+wrote, back into the format -- so that what a call *is* is also defined once.
 
     [tool_name]
     <description, verbatim>
@@ -17,8 +18,11 @@ lists its subfields inline while they are plain strings, and puts them on their 
 soon as one carries a type, a description, an enum or a default -- the inline form cannot hold those.
 """
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any
+
+from agent_toolkit.string_utils import extract_json_from_text
 
 SPACES_PER_LEVEL = 2
 
@@ -135,3 +139,50 @@ def openai_tool_format_to_text(tools: Sequence[Any]) -> str:
         if isinstance(function, Mapping) and isinstance(function.get("name"), str):
             blocks.append(tool_block(function))
     return "\n\n".join(blocks)
+
+
+def text_to_openai_tool_format(text: str) -> tuple[dict[str, Any], ...]:
+    """The calls in what a model wrote, as OpenAI tool-call entries. `()` where it wrote none.
+
+    The other direction of `openai_tool_format_to_text`, and lenient in the same way: an entry may
+    be `{"type": "function", "function": {...}}` or the call on its own, and one without a name is
+    left out rather than costing the rest. `extract_json_from_text`, so an array with prose around
+    it is still those calls.
+
+    Each entry carries the call and nothing else: an `id` a provider hung on it is not part of what
+    was called. The arguments come back as the JSON text the format writes them as, under one key
+    ordering -- so a corpus writing the object and a provider writing the text wrote one call, and
+    two orderings of the same arguments are one string. Text that will not parse stays as it is; it
+    is what the model said, and nothing here reads it better than that.
+    """
+    read = extract_json_from_text(text)
+    calls: list[dict[str, Any]] = []
+    for one in read if isinstance(read, list) else [read]:
+        if not isinstance(one, Mapping):
+            continue
+        function = one.get("function") if "function" in one else one
+        if not isinstance(function, Mapping) or not isinstance(
+            function.get("name"), str
+        ):
+            continue
+        # Read the text a provider writes, then write every call's arguments back as that text:
+        # the parse is what makes one key ordering possible, and the ordering is what makes two
+        # spellings of one call one string.
+        arguments = function.get("arguments")
+        if isinstance(arguments, str):
+            as_object = extract_json_from_text(arguments)
+            arguments = arguments if as_object is None else as_object
+        if not isinstance(arguments, str):
+            arguments = json.dumps(
+                arguments or {},
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        calls.append(
+            {
+                "type": "function",
+                "function": {"name": function["name"], "arguments": arguments},
+            }
+        )
+    return tuple(calls)

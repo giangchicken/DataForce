@@ -262,7 +262,7 @@ const stepHumanQuality = () => `<section class="step">
 </section>`;
 
 const stepAiReview = () => `<section class="step">
-  ${head(6, "ai review label", ["pass", "body is pass"], "LLMPrediction.verdict(turns, label) · SFTPrediction.predict(turns, label)")}
+  ${head(6, "ai review label", ["pass", "sft body is pass"], "LLMPrediction.verdict(turns, label, tools, language) · SFTPrediction.predict(turns, tools, language)")}
   <div class="bar"><span class="note">jury_models — tick any number:</span>
     <span id="jury-ticks"></span></div>
   <div class="bar" style="border: 0; padding-top: 0"><span class="note">sft_model — tick one:</span>
@@ -271,7 +271,7 @@ const stepAiReview = () => `<section class="step">
     + "\n\nlabel: " + JSON.stringify(SAMPLE.label)
     + "\n\ncatalog — openai_tool_format_to_text(sample.tools):\n" + CATALOG)}
   ${band("out", "out", json({ llm: LLM, sft: SFT }), "LLMReviewerVerdict · SFTReviewerVerdict")}
-  ${why("Two calls and two returns, not one shape — nothing declares a container holding both, so the page keeps them side by side. It reads the sample, not step 5: the catalog is rendered from `sample.tools` by `profile/tool_decision/utils.py` and fills `{{catalog}}` in `prediction.txt`, which no signature takes.")}
+  ${why("Two calls and two returns, not one shape — nothing declares a container holding both, so the page keeps them side by side. It reads the sample, not step 5: the catalog is rendered from `sample.tools` by `profile/tool_decision/utils.py` and fills `{{tool_descriptions}}` in `tool_prediction.txt`. `consensus` is the answer strictly more than half the jurors gave, where two answers are the same answer when the calls in them are the same calls — `normalize_prediction` reads those out, so no model is asked whether two spellings agree. A tie that survives it is two different calls and stands as no answer.")}
 </section>`;
 
 const stepHumanReview = () => `<section class="step">

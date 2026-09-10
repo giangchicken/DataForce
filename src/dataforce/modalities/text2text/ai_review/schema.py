@@ -1,7 +1,7 @@
 """shape · what the two reviewers return, and the two sockets they answer through.
 
-`LLMReviewerAnswer` and `SFTReviewerAnswer` are what a model said before anything decides whether
-it is usable; `LLMReviewerVote` and `SFTReviewerVerdict` are what this package concluded about that.
+`LLMReviewerAnswer` is what a model said before anything decides whether it is usable;
+`LLMReviewerVote` and `SFTReviewerVerdict` are what this package concluded about that.
 """
 
 from collections.abc import Mapping
@@ -12,6 +12,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class Frozen(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
+
+
+class LLMReviewerAnswer(Frozen):
+    """What a juror's prompt asks it for, in the key order it asks for them.
+
+    Both keys are required: an answer missing either is a model that did not answer
+    (Requirement 25). `label` arrives as the array the prompt asked for, or as text where it asked
+    for text; a vote holds it as one string either way, and what turns the one into the other is
+    the task's, not this file's.
+    """
+
+    reason: str = Field(..., description="Why, for the human who reads a disagreement.")
+    label: str | list[Any] = Field(
+        ...,
+        description="What it answered: the array the prompt asked for, or text already.",
+    )
 
 
 class LLMReviewerVote(Frozen):
