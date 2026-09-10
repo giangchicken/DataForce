@@ -573,9 +573,33 @@ with nothing but its own arguments — no fixture threads one payload through se
 
 Requirement 41 is the same rule on the page: step 6 reads the sample, not step 5.
 
-There are also three `no-any-return` findings in the router that T1 will have surfaced —
-`models()`, `duplicate()` and `abnormal()` return what a service handed back without the checker
-being able to see its type. They are the router's own, and this is the task that owns that file.
+Three `no-any-return` findings in the router were written into this task — `models()`,
+`duplicate()` and `abnormal()` returning what a service handed back without the checker being able
+to see its type. They were fixed in `1a8d693`, when the services axis gave the two reports a
+declared `None`, and `mypy --strict` has been clean since: nothing to do, kept here because the
+acceptance criterion still names it.
+
+**What phase 2 left on this route.** `/ai-review` now takes three declarations rather than one
+model name: `language`, `jury_models` and `sft_model`, and the handler hands the service
+`model_dump(exclude=...)` of the rest, so the ai-review test asserts what the scan's does — the
+sample handed on is what the corpus carries, and a declaration is not a key of the record.
+
+The panel resolves each juror's model *as it is built*, once per request, so the stub is a
+directory and not a patch: `DATAFORCE_MODEL_DIR` pointed at a temporary directory whose files carry
+a `base_url`, set before the app is created because `register_resolver()` reads the directory at
+startup, with only `complete` in `profile.tool_decision.ai_review` answered by the test. Two
+refusals fall out of that and are worth pinning apart: a name the directory does not hold is 422
+from `checked_names` before any model is called, and a name it *does* hold whose file declares no
+endpoint is 422 from `ToolPredictor.__init__` -- also before any call, and for a different reason
+(Requirement 26).
+
+`sft_model` is the one thing this route cannot yet be driven with.
+`ToolDecisionSFTPrediction.predict` raises `NotImplementedError` -- § *Open* says why: nothing
+declares where its `confidence` comes from — so a request that ticks it passes `checked_names`,
+resolves, and then 500s. Posting no `sft_model` gives `sft: null` and tests the panel's half
+cleanly, but what a ticked one *does* is undeclared, and this task is where that shows. Settle it
+here: either the route refuses a finetuned reviewer this deployment cannot run, on the same terms
+as a name it does not serve, or the 500 stands on purpose and is written down as such.
 
 **Approach.** `TestClient`, model calls stubbed, one test per route: the page, `/models`, the four
 data-quality routes, `/ai-review`, `/records`. An unserved model name is refused with 422 naming it
@@ -588,11 +612,15 @@ nothing on it can be refused for a name this deployment does not serve, and its 
 `PersonalDataDetected` the detect route answered — the same shape out and back in (Decision 19).
 Posting it is not threading a payload between two parts: it is one part's second call, which is
 what Requirement 1 distinguishes. The scan route's own test posts `language` and `verifier_model`
-as keys of the request rather than of the sample.
+as keys of the request rather than of the sample, and the ai-review route's posts `language`,
+`jury_models` and `sft_model` the same way.
 
 **Acceptance criteria.** Every route has a test whose body it is the only route in. `duplicate` and
-`abnormal` answer `null` at 200. An unserved name is 422 before any model is called, and the
-replace route answers without a model name at all. `mypy --strict` reports no `no-any-return`.
+`abnormal` answer `null` at 200. An unserved name is 422 before any model is called, a served name
+with no endpoint in its file is 422 for its own reason, and the replace route answers without a
+model name at all. `/ai-review` with no `sft_model` answers `sft: null`, and with one it answers
+whatever this task decides it answers — pinned either way. `mypy --strict` reports no
+`no-any-return`.
 
 **Source.** Requirements 27–36, 41; Decisions 2, 13; § *Testing Strategy*, bullet five.
 
@@ -661,7 +689,7 @@ decision; `create_all` against a temporary SQLite file is what this test uses.
   left `ToolDecisionSFTPrediction.predict` raising rather than inventing a number, and § *Open*
   states the two ways out. `SFTPrediction.verdict` was written and then withdrawn with it: T10
   asked for it on the grounds that *"comparing two labels is not a task's answer"*, and that turned
-  out to be wrong -- comparing two answers means knowing what an answer is made of, which is
+  out to be wrong — comparing two answers means knowing what an answer is made of, which is
   exactly what the modality may not know. It lands in the profile when the rest of this reviewer's
   half does.
 - **The page's own tests.** § *Testing Strategy*: *"No test drives the page. A browser is the check."*
