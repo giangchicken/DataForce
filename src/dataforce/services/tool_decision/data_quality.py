@@ -93,8 +93,8 @@ def personal_data_redact(
     Not async, and no model is asked: the spans arrive from the reviewer who ticked, edited or
     added them. Nothing is kept either -- the sample is read, copied and answered.
     """
-    pairs = span_values(detected.review_text, detected.spans)
-    return {key: replaced_node(value, pairs) for key, value in sample.items()}
+    placeholders = span_values(detected.review_text, detected.spans)
+    return {key: replaced_node(value, placeholders) for key, value in sample.items()}
 
 
 async def duplicate_report(sample: Mapping[str, Any]) -> None:

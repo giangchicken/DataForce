@@ -132,6 +132,6 @@ def annotations_for(project_id: str) -> dict[str, list[Annotation]]:
     tool = client()
     answers: dict[str, list[Annotation]] = {}
     for sample_id, task_id in held_by(tool, project_id).items():
-        read = [as_annotation(one) for one in returned(tool, task_id)]
-        answers[sample_id] = [one for one in read if one is not None]
+        annotations = [as_annotation(one) for one in returned(tool, task_id)]
+        answers[sample_id] = [one for one in annotations if one is not None]
     return answers

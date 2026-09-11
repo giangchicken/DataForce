@@ -155,9 +155,9 @@ def text_to_openai_tool_format(text: str) -> tuple[dict[str, Any], ...]:
     two orderings of the same arguments are one string. Text that will not parse stays as it is; it
     is what the model said, and nothing here reads it better than that.
     """
-    read = extract_json_from_text(text)
+    parsed_json = extract_json_from_text(text)
     calls: list[dict[str, Any]] = []
-    for one in read if isinstance(read, list) else [read]:
+    for one in parsed_json if isinstance(parsed_json, list) else [parsed_json]:
         if not isinstance(one, Mapping):
             continue
         function = one.get("function") if "function" in one else one

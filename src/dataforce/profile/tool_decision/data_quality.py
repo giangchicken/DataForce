@@ -121,19 +121,21 @@ def span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, st
     }
 
 
-def replaced_text(text: str, pairs: Mapping[str, str]) -> str:
-    """`text` copied with every value in `pairs` replaced by its placeholder, longest first.
+def replaced_text(text: str, placeholders: Mapping[str, str]) -> str:
+    """`text` copied with every value `placeholders` has one for replaced by it, longest first.
 
     Longest first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is
     neither redacted nor intact.
     """
-    copy = text
-    for value, placeholder in sorted(pairs.items(), key=lambda pair: -len(pair[0])):
-        copy = copy.replace(value, placeholder)
-    return copy
+    replaced = text
+    for value, placeholder in sorted(
+        placeholders.items(), key=lambda pair: -len(pair[0])
+    ):
+        replaced = replaced.replace(value, placeholder)
+    return replaced
 
 
-def replaced_node(node: Any, pairs: Mapping[str, str]) -> Any:
+def replaced_node(node: Any, placeholders: Mapping[str, str]) -> Any:
     """`node` copied with every string under it replaced the same way `replaced_text` does.
 
     By value and not by offset, which is what makes the rule runnable here at all: the offsets
@@ -145,11 +147,11 @@ def replaced_node(node: Any, pairs: Mapping[str, str]) -> Any:
     boolean and a `null` carry no value to trade back.
     """
     if isinstance(node, str):
-        return replaced_text(node, pairs)
+        return replaced_text(node, placeholders)
     if isinstance(node, Mapping):
-        return {key: replaced_node(value, pairs) for key, value in node.items()}
+        return {key: replaced_node(value, placeholders) for key, value in node.items()}
     if isinstance(node, list | tuple):
-        return [replaced_node(item, pairs) for item in node]
+        return [replaced_node(item, placeholders) for item in node]
     return node
 
 
@@ -160,8 +162,8 @@ def replace_spans_with_placeholders(
 
     `None` where there is nothing to replace, which is what `reported` means.
     """
-    pairs = span_values(text, spans)
-    return replaced_text(text, pairs) if pairs else None
+    placeholders = span_values(text, spans)
+    return replaced_text(text, placeholders) if placeholders else None
 
 
 def order_claims_by_class(
