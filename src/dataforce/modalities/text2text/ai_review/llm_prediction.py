@@ -42,7 +42,7 @@ class LLMPrediction(ABC):
 
         A juror that failed is absent from the sequence -- never a vote, never an empty label. The
         label is not among the arguments: a juror is asked the sample's own question, and a model
-        shown a label answers about the label (Decision 12).
+        shown a label answers about the label.
         """
         pass
 
@@ -78,7 +78,7 @@ class LLMPrediction(ABC):
         `predict` is called once and every number here is read off what it returned, never off the
         panel that was asked: a juror that failed is absent, so a panel of three that answered
         twice agrees out of two. Every juror failing is a verdict with no votes, `0.0` and `None`.
-        Agreement is compared here and never asked of a model (Requirement 20).
+        Agreement is compared here and never asked of a model.
         """
         votes = tuple(await self.predict(turns, tools, language))
         pred_texts = [vote.label for vote in votes]
@@ -96,10 +96,10 @@ class LLMPrediction(ABC):
     def exact_match_consensus(self, pred_texts: Sequence[str]) -> str | None:
         """The answer strictly more than half of them gave, as the juror wrote it. Else `None`.
 
-        A strict majority and never a mode (Requirement 21): two of three is an answer, two of
+        A strict majority and never a mode: two of three is an answer, two of
         four is none, and the most-given of five given twice is none. Counted over
         `normalize_prediction`, so two answers that say the same thing count as one, and returned
-        as written, because that is what a juror said (Decision 11).
+        as written, because that is what a juror said.
         """
         if not pred_texts:
             return None
@@ -118,7 +118,7 @@ class LLMPrediction(ABC):
         Asked only where the exact match found nothing, and nothing answered is nobody asked. What
         comes back is matched against the answers the same way they were matched to each other and
         returned as the juror wrote it, so a judge that rewrote the answer it picked resolves to
-        that juror's answer and one that invented an answer resolves to nothing (Requirement 22).
+        that juror's answer and one that invented an answer resolves to nothing.
         """
         if not pred_texts:
             return None

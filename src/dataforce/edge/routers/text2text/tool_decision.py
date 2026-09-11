@@ -117,10 +117,10 @@ class ReviewRequest(Sample):
     """A sample, the language it is in, and the models ticked.
 
     The model keys are named apart from `llm` and `sft`, which hold answers. `language` is
-    declared here on the same terms as on the scan (Decision 17): it fills the jurors' prompt
+    declared here on the same terms as on the scan: it fills the jurors' prompt
     slot, and one of the two the scans know keeps the two requests asking in one vocabulary.
     There is no judge to tick: a tie between two tool calls is two different calls, and this task
-    matches the calls rather than asking a model whether they mean the same (Decision 20).
+    matches the calls rather than asking a model whether they mean the same.
     """
 
     language: Language = Field(
@@ -219,7 +219,7 @@ def personal_data_replacement(detected: PersonalDataDetected) -> PersonalDataRep
 def personal_data_redaction(request: RedactRequest) -> dict[str, Any]:
     """The sample back with its placeholders in it, wherever a confirmed value occurred.
 
-    The record's three `new_` keys come from here (Requirements 15, 16): the page holds what the
+    The record's three `new_` keys come from here: the page holds what the
     human edited, this replaces over all of it, and the page composes the record out of the
     answer. Replacement is by value, so it reaches `messages` and `label`, which the review
     text's offsets cannot index.

@@ -15,26 +15,20 @@ dependencies = [
     # so without this uv may resolve a major it is not tested on.
     "openai>=3.2",
     "pydantic>=2.13",
-    # Requirement 49: a corrected value an annotator typed by hand either validates
-    # against that record's own `answer_schema` or is `None`. `agent-toolkit` owns
-    # validation and exposes it only inside `complete_structured`, which needs a model
-    # call -- and a hand-written twin of a schema we materialise ourselves is the pair
-    # of definitions I6 exists to prevent. It arrives transitively through
-    # `agent-toolkit[llm]` anyway; declared here because `src/` imports it, under one
-    # annotated I6 exemption in `profiles/tool_decision/answers.py`.
+    # Not imported by `src/`. It arrives transitively through `agent-toolkit[llm]`;
+    # declared for the floor, on the same terms as `openai` above.
     "jsonschema>=4.26",
-    # The question store's engine (§ *The question store*: `publish` writes to a
-    # database we own).
+    # The store's engine, for the store that is deferred: nothing in `src/` imports it yet.
     # Pinned inside 2.0 because the models are written in its declarative style and 2.1
     # is where that changes; SQLite and Postgres are one adapter with two DSNs, not two
     # adapters, which is the whole of why one dependency covers both.
     "sqlalchemy>=2.0.52,<2.1",
     # Migrations. A store whose schema is applied by `create_all` has no way to change
     # one, and the pilot changes one: `alembic upgrade head` against an empty database
-    # is what T23 asserts, so the first schema is a migration rather than a side effect
+    # is the shape intended, so the first schema is a migration rather than a side effect
     # of importing the models.
     "alembic>=1.19.1",
-    # The HTTP shell. One of the two ways every service is driven (Requirement 46), and
+    # The HTTP shell. How every service is driven, and
     # the style reference's `create_app()` factory is written against its `APIRouter`.
     "fastapi>=0.141.1",
     # What serves that app. Named as a dependency rather than left to a deployment
@@ -44,9 +38,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # Only the sync imports this, and only inside the function that builds a client -- so the
-# pipeline installs and `make check` runs with no annotation tool anywhere
-# (§ *The question store*).
-# An install without the extra fails at `POST /human-review/publish/sync` and nowhere else.
+# pipeline installs and `make check` runs with no annotation tool anywhere. No route reaches
+# the sync yet, so an install without the extra fails nowhere.
 label-studio = [
     "label-studio-sdk>=2.1.1",
 ]
@@ -68,7 +61,8 @@ packages = ["src/dataforce"]
 dev = [
     "mypy>=1.14",
     # What `fastapi.testclient` is built on. A test dependency and not a runtime one:
-    # nothing in `src/` imports it, and I15 is the only thing that drives the app.
+    # nothing in `src/` imports it, and the endpoint suite is the only thing that drives
+    # the app.
     "httpx>=0.28",
     # Here as well as in the `[label-studio]` extra, and the two are different jobs.
     # The extra is what a *deployment* opts into to run the sync. This is what

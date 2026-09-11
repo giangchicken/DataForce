@@ -7,7 +7,7 @@ deployment did not declare, and answers `None`, which is not a reviewer that dis
 that is *not* `None` for the finetuned reviewer is refused while § *Open* stands, so the only
 answer it gives today is that one.
 
-The language is declared beside the sample rather than read out of it (Decision 17), and is typed
+The language is declared beside the sample rather than read out of it, and is typed
 here as text: the two the scans know are the boundary's own restriction, and this is a prompt slot
 that nothing can `KeyError` on.
 """

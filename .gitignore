@@ -1,5 +1,5 @@
-# The privacy tier. Never committed: the source's identity is a SHA-256 in
-# params.yaml, and the PII placeholder map lives here (I13).
+# The privacy tier. Never committed: a raw corpus is a person's data, and a copy of it
+# in a public repository is the one mistake that cannot be taken back.
 data/raw/
 
 # Artifacts. Git tracks none of them; the run manifest records their digests, which
@@ -20,10 +20,9 @@ data/cache/
 
 # Per-model LLM settings, read at the edge through `agent-toolkit`'s
 # `JsonDirConfigResolver` (`<model>.json`, the convention it preserves). Never committed:
-# a file naming an endpoint and holding a key is what AGENTS.md section 9 forbids, and the
-# library's own YAML resolver refuses both keys for the same reason. The pattern is the
-# files rather than the directory, so the `.example` beside them is committed -- an
-# endpoint a deployment must attach and nothing says so is the same fault one directory up.
+# a file naming an endpoint and holding a key does not belong in a public repository, and the
+# library's own YAML resolver refuses both keys for the same reason. Nothing is committed in
+# their place -- README names the shape one of these files takes.
 config/model/*.json
 
 # The default question store, for a developer who attached no database (§ *The question

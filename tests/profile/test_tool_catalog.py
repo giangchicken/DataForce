@@ -1,6 +1,6 @@
 """`openai_tool_format_to_text` pinned against its known rendering.
 
-Decision 8 puts one renderer behind both halves of the flow, so a reviewer and a juror cannot
+One renderer stands behind both halves of the flow, so a reviewer and a juror cannot
 disagree about the catalog they read. That makes this text a contract with two parties and no
 schema: every character of it reaches a person on the page and a model in a prompt, and the module
 was finished with nothing asserting any of it.

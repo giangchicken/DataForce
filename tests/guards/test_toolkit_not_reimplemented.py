@@ -1,4 +1,4 @@
-"""I6 · nothing re-implements an `agent-toolkit` function, or imports a dependency it owns.
+"""T-6 · nothing re-implements an `agent-toolkit` function, or imports a dependency it owns.
 
 The library is pinned to a git tag and exists because these things were written once already. A
 second `compute_hash` here is not a duplicate function, it is a second definition of what a
@@ -97,12 +97,12 @@ def toolkit_findings(module: Module) -> list[str]:
         for reached in imports(module)
         if reached.module.split(".")[0] in RE_IMPLEMENTATION_ROOTS
     ]
-    return not_exempt(module, "I6", found)
+    return not_exempt(module, "T-6", found)
 
 
 @pytest.mark.parametrize("module", modules_in(), ids=lambda m: m.name)
 def test_no_module_re_implements_the_library(module: Module) -> None:
-    """I6, over the whole package. The edge reads files too, and reads them through the library."""
+    """T-6, over the whole package. The edge reads files too, and reads them through the library."""
     assert toolkit_findings(module) == []
 
 
@@ -174,7 +174,7 @@ def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
     """`compute_hash` takes a `str`, so the first media part's sha256 has nowhere else to go."""
     excused = (
         "import hashlib"
-        "  # guard-exempt: I6 · a media digest is over bytes · the modality · 2026-08-24"
+        "  # guard-exempt: T-6 · a media digest is over bytes · the modality · 2026-08-24"
     )
 
     assert toolkit_findings(module_from_source(excused)) == []

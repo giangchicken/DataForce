@@ -1,10 +1,10 @@
 """Each of the router's routes through `TestClient`, driven by nothing but its own arguments.
 
 Every test body holds one route, and no fixture carries an answer from one route into another:
-that is Requirement 1, and a suite is the easiest place to break it, because a fixture that posts
-the scan and feeds the answer to `/ai-review` passes while making the parts undrivable apart. The
-one body that arrives from another route is the `PersonalDataDetected` the replace route takes
-back, and that is one part's second call rather than a payload threaded between two (Decision 19).
+that is the flow's first rule, and a suite is the easiest place to break it, because a fixture
+that posts the scan and feeds the answer to `/ai-review` passes while making the parts undrivable
+apart. The one body that arrives from another route is the `PersonalDataDetected` the replace
+route takes back, and that is one part's second call rather than a payload threaded between two.
 `GET /health` is the app's own and not this task's, so it is not among them. `GET /ui/` is the
 app's own too -- a mount rather than a route -- and what is asserted about it is only that it is
 served, because no test drives either page.
@@ -82,7 +82,7 @@ OPEN_TICKET = [{"name": "OpenTicket", "arguments": {"ma_khach": "KH-1"}}]
 
 # The names `edge/static/index.html` writes down. The drawing may: every answer in it is its own,
 # and a picture of a tick list needs names to draw. The UI may not, and lifting that line out of
-# the drawing is exactly how it would come to (Requirement 49).
+# the drawing is exactly how it would come to.
 DRAWN_MODELS = ("DeepSeek-V4-Flash", "bge-m3", "gemma-4-31B-it", "sft-tool-decision")
 
 # The one body that arrives from another route: the detect answer, with the spans as a reviewer
@@ -110,7 +110,7 @@ ASKING: tuple[ModuleType, ...] = (ai_review, data_quality, personal_data_checkin
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    """The app over a model directory this test wrote. Decision 13: the directory *is* the list.
+    """The app over a model directory this test wrote. The directory *is* the list.
 
     The environment is set before `create_app()`, because `register_resolver()` reads it once at
     startup -- so a resolver pointed at the real `config/model/` is what a test that sets it later
@@ -158,7 +158,7 @@ def no_model_answers(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_the_page_is_served_by_its_own_route(client: TestClient) -> None:
-    """Requirement 36. The file, as a file: no test drives the page, and a browser is the check."""
+    """The file, as a file: no test drives the page, and a browser is the check."""
     resp = client.get(f"{BASE}/")
 
     assert resp.status_code == 200
@@ -167,7 +167,7 @@ def test_the_page_is_served_by_its_own_route(client: TestClient) -> None:
 
 
 def test_the_labelling_ui_is_served_at_its_own_mount(client: TestClient) -> None:
-    """Requirement 44. The file, as a file: no test drives the UI, and a browser is the check."""
+    """The file, as a file: no test drives the UI, and a browser is the check."""
     resp = client.get("/ui/")
 
     assert resp.status_code == 200
@@ -176,7 +176,7 @@ def test_the_labelling_ui_is_served_at_its_own_mount(client: TestClient) -> None
 
 
 def test_the_ui_ticks_from_the_endpoint_rather_than_naming_a_model_itself() -> None:
-    """Requirement 49 and Decision 13: the directory is the list, so the UI asks for it.
+    """The directory is the list, so the UI asks for it.
 
     Read off the files rather than out of a browser, because what it pins is a *second
     declaration* of what this deployment serves -- and the one that would appear is the drawing's
@@ -200,7 +200,7 @@ def test_the_ui_ticks_from_the_endpoint_rather_than_naming_a_model_itself() -> N
 def test_models_answers_the_directory_this_deployment_serves(
     client: TestClient,
 ) -> None:
-    """Requirement 27 and Decision 13: the names on disk, sorted, and nothing declared twice."""
+    """The names on disk, sorted, and nothing declared twice."""
     resp = client.get(f"{BASE}/models")
 
     assert resp.status_code == 200
@@ -213,7 +213,7 @@ def test_models_answers_the_directory_this_deployment_serves(
 def test_the_scan_answers_over_the_sample_s_own_review_text(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 32: the sample, the language and the model in, a `PersonalDataDetected` out.
+    """The sample, the language and the model in, a `PersonalDataDetected` out.
 
     Both model steps are answered here: the detector claims nothing this time, so the phone is the
     rule scan's, and the confirmation is what carries its span into the answer. Every offset is
@@ -234,7 +234,7 @@ def test_the_scan_answers_over_the_sample_s_own_review_text(
     answer = resp.json()
     assert answer["claims"] == [["PHONE", PHONE]]
     # The confirmation read the same answer, which carries no `confirmed` key: it confirmed no
-    # span, and a span nothing confirmed is not in the answer (Requirement 8).
+    # span, and a span nothing confirmed is not in the answer.
     assert answer["spans"] == []
     assert PHONE in answer["review_text"]
     assert asked == [VERIFIER, VERIFIER]
@@ -273,7 +273,7 @@ def test_the_scan_confirms_what_the_verifier_confirms(
 def test_the_scan_s_declarations_are_not_keys_of_the_record(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 32, read at the seam the handler owns: what is handed on is what arrived.
+    """Read at the seam the handler owns: what is handed on is what arrived.
 
     `language` and `verifier_model` are declarations about this request, so the sample the service
     is handed is the corpus's own record -- every key it carries, including one nothing here reads,
@@ -306,7 +306,7 @@ def test_the_scan_s_declarations_are_not_keys_of_the_record(
 def test_an_unserved_verifier_is_refused_before_any_model_is_called(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 29: 422 naming the name and the served list, so the caller learns which."""
+    """422 naming the name and the served list, so the caller learns which."""
     no_model_answers(monkeypatch)
 
     resp = client.post(
@@ -325,11 +325,11 @@ def test_an_unserved_verifier_is_refused_before_any_model_is_called(
 def test_the_replace_route_takes_the_detect_answer_back_and_asks_no_model(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 32 and Decision 19: the same shape in, the copy out, and no name to refuse.
+    """The same shape in, the copy out, and no name to refuse.
 
     Its body carries no model at all, which is why nothing on this route can be refused for a name
     this deployment does not serve -- and why the spans it replaces are the reviewer's rather than
-    the detectors' (Requirement 5).
+    the detectors'.
     """
     no_model_answers(monkeypatch)
 
@@ -421,7 +421,7 @@ def test_no_span_handed_back_is_nothing_replaced(
 def test_duplicate_answers_null_at_two_hundred(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 33: nothing failed, and there is nothing to report."""
+    """Nothing failed, and there is nothing to report."""
     no_model_answers(monkeypatch)
 
     resp = client.post(f"{BASE}/data-quality/duplicate", json=dict(SAMPLE))
@@ -433,7 +433,7 @@ def test_duplicate_answers_null_at_two_hundred(
 def test_abnormal_answers_null_at_two_hundred(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 33, the other one. Neither check declares a shape to return."""
+    """The other check with nothing to report. Neither declares a shape to return."""
     no_model_answers(monkeypatch)
 
     resp = client.post(f"{BASE}/data-quality/abnormal", json=dict(SAMPLE))
@@ -448,9 +448,9 @@ def test_abnormal_answers_null_at_two_hundred(
 def test_ai_review_answers_the_panel_and_no_finetuned_reviewer(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 34: both reviewers side by side, and `sft` is `None` where none was ticked.
+    """Both reviewers side by side, and `sft` is `None` where none was ticked.
 
-    Two jurors asked once each, each vote naming the model that cast it (Requirement 31), and the
+    Two jurors asked once each, each vote naming the model that cast it, and the
     consensus is the answer as a juror wrote it. `sft: null` is a reviewer the request declared
     none of, which is not a reviewer that disagreed.
     """
@@ -491,7 +491,7 @@ def test_a_panel_of_none_asks_nothing_and_answers_nothing(
 def test_the_review_s_declarations_are_not_keys_of_the_record(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 34, the same seam as the scan's: the three ticks are not the record's keys."""
+    """The same seam as the scan's: the three ticks are not the record's keys."""
     handed: dict[str, Any] = {}
 
     async def predicting(config: Any, sample: Any, language: Any) -> None:
@@ -513,7 +513,7 @@ def test_the_review_s_declarations_are_not_keys_of_the_record(
 def test_an_unserved_juror_is_refused_before_any_model_is_called(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 29 on the other route, and the first of two refusals that read alike."""
+    """An unserved name on the other route, and the first of two refusals that read alike."""
     no_model_answers(monkeypatch)
 
     resp = client.post(
@@ -528,7 +528,7 @@ def test_an_unserved_juror_is_refused_before_any_model_is_called(
 def test_a_served_juror_whose_file_names_no_endpoint_is_refused_for_its_own_reason(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Requirement 26, and the reason the two 422s are pinned apart.
+    """A name with no file and no explicit URL, and the reason the two 422s are pinned apart.
 
     This name *is* served -- the directory holds its file -- so `checked_names` passes it. The
     refusal comes from the juror being built, before any record: a config naming no endpoint is a

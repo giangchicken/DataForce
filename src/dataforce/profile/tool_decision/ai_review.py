@@ -70,7 +70,7 @@ class ToolPredictor:
         self.settings = config.settings
 
     async def predict(self, prompt: str) -> LLMReviewerVote | None:
-        """Its vote, or `None` where it did not answer. Never raises (Requirement 19).
+        """Its vote, or `None` where it did not answer. Never raises.
 
         A failed call and an answer of the wrong shape come to the same thing -- a juror absent
         from the panel, rather than a vote with an empty label that then agrees with nothing --
@@ -119,7 +119,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         """One asking class per juror, each resolving its model as the panel is built.
 
         Built with the panel and not per record, so a name with no config file and no endpoint is
-        refused before the first sample rather than during it (Requirement 26).
+        refused before the first sample rather than during it.
         """
         return tuple(ToolPredictor(juror) for juror in self.jurors)
 
@@ -155,7 +155,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
 
         An answer with no call readable in it -- prose, or `[]`, which is the answer that no tool
         is needed -- is matched as what it says instead: the JSON it did write under one key
-        ordering, and anything else by the library's own whitespace rule (`I6`). Never as the empty
+        ordering, and anything else by the library's own whitespace rule. Never as the empty
         list of calls, which every other prose would also match.
         """
         norm_tools = sorted(
@@ -177,7 +177,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         An answer here is a tool call, so `normalize_prediction` has already said whether two
         jurors said the same thing. A tie that survives it is two different calls -- not two
         spellings of one -- and a model picking between them would be the deciding vote, cast by a
-        juror that never read the conversation (Decision 9). So the tie stands as no answer, which
+        juror that never read the conversation. So the tie stands as no answer, which
         is what a panel that could not agree said. The socket is for a task whose answers can only
         be compared as meaning, where a summary said twice in different words is one answer.
         """
@@ -189,7 +189,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         """`tool_prediction.txt` with its four slots filled, ready to send.
 
         The catalog, the turns before the last, the last turn, and the language the request
-        declared. The sample's label is in none of them (Decision 12). `ConfigError` where the
+        declared. The sample's label is in none of them. `ConfigError` where the
         file is missing, so a deployment with no prompt is not a model having a bad day.
         """
         template = read_txt(TOOL_PREDICTION_PROMPT)

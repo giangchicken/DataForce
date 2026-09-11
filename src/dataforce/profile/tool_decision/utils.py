@@ -1,6 +1,6 @@
 """logic · what a task hands a model: one sample, as the text a model reads.
 
-The two renderings live here for the same reason (Decision 8): two definitions of what a turn is,
+The two renderings live here for the same reason: two definitions of what a turn is,
 or of what a tool looks like, would let a juror and a reviewer disagree about the text they were
 shown, and nothing would say so. `conversation_turns` is the turns; the catalog is the rest of the
 file below it, and `text_to_openai_tool_format` at the end reads the other way -- text a model

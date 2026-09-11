@@ -82,11 +82,11 @@ def personal_data_redact(
 
     The third personal-data call, and the same rule as the second over a different reach:
     `personal_data_replace` copies `review_text`, and this copies every field the record carries,
-    because an offset indexes the review text and `messages` and `label` are other strings
-    (Requirement 12). Which is why it is handed the detect answer whole rather than the spans
+    because an offset indexes the review text and `messages` and `label` are other strings.
+    Which is why it is handed the detect answer whole rather than the spans
     alone -- the text they index is what says which value each placeholder stands for.
 
-    Where the record's `new_` keys come from (Requirements 15, 16): the page holds what the human
+    Where the record's `new_` keys come from: the page holds what the human
     edited, this replaces over it, and the page composes the record out of what comes back. The
     rule is the service's and not the page's, because a rule a caller can skip is not a rule.
 

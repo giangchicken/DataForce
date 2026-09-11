@@ -56,9 +56,9 @@ def find_and_number_spans(
     """Every span those values carry in `text`: numbered, bounded, and the outermost kept.
 
     Three rules in one pass, all answering where a value stands in the frame of reference:
-    `<CLASS_N>` per distinct value, so a value said twice stays co-referent (Requirement 10); an
-    occurrence with a word character against it is not one; a span inside a longer span is dropped
-    (Requirement 11). `id` is 1-based over what survives, so the ids a prompt shows have no holes.
+    `<CLASS_N>` per distinct value, so a value said twice stays co-referent; an occurrence with a
+    word character against it is not one; a span inside a longer span is dropped. `id` is 1-based
+    over what survives, so the ids a prompt shows have no holes.
 
     Every entry is one non-empty value that occurs in `text` -- `pii_detect` holds both.
     """
@@ -105,8 +105,8 @@ def span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, st
     """What stands in for each value, keyed by the value. The one place a span is read.
 
     Keyed by value and not by placeholder, because one value gets one placeholder throughout a
-    scan (Requirement 10) and the other direction is not a map: two spans a reviewer typed the
-    same placeholder on would be one entry, and the value that lost would never be replaced --
+    scan and the other direction is not a map: two spans a reviewer typed the same placeholder on
+    would be one entry, and the value that lost would never be replaced --
     leaving a record that says it was redacted and was not.
 
     A span whose offsets read nothing is skipped: these arrive from a reviewer, and replacing the
@@ -137,7 +137,7 @@ def replaced_node(node: Any, pairs: Mapping[str, str]) -> Any:
     """`node` copied with every string under it replaced the same way `replaced_text` does.
 
     By value and not by offset, which is what makes the rule runnable here at all: the offsets
-    index `review_text`, and `messages`, `tools` and `label` are other strings (Requirement 12).
+    index `review_text`, and `messages`, `tools` and `label` are other strings.
     So a value confirmed at one occurrence is replaced at every occurrence in every field -- a
     value redacted in one field and left in another is not redacted.
 
@@ -158,7 +158,7 @@ def replace_spans_with_placeholders(
 ) -> str | None:
     """`text` copied with every span's value replaced by its placeholder, longest value first.
 
-    `None` where there is nothing to replace, which is what `reported` means (Decision 6).
+    `None` where there is nothing to replace, which is what `reported` means.
     """
     pairs = span_values(text, spans)
     return replaced_text(text, pairs) if pairs else None
@@ -203,7 +203,7 @@ def decide_replacement_outcome(
     placeholder. `withheld`: everything between, including a reviewer who handed back no span at
     all, because a rewrite asked for and not done is not a clean record.
 
-    Read off the copy because two values overlapping *in part* keep both spans (Requirement 11),
+    Read off the copy because two values overlapping *in part* keep both spans,
     and then replacement by value has the second looking for a string the first already cut: its
     placeholder never lands and the copy holds a fragment of a name. Which span should win is
     undecided; that this is not those values redacted is not. A claim with no span at all is

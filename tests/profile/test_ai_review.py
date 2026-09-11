@@ -181,7 +181,7 @@ def events_on(captured: pytest.CaptureFixture[str]) -> list[Mapping[str, Any]]:
 
 
 async def test_two_of_three_matching_is_the_panel_s_answer() -> None:
-    """Requirement 21, the case a strict majority and a mode agree about."""
+    """A strict majority, in the one case it and a mode agree about."""
     said = StubbedPanel().exact_match_consensus([OPEN_TICKET, OPEN_TICKET, NO_TOOL])
 
     assert said == OPEN_TICKET
@@ -209,7 +209,7 @@ async def test_a_mode_that_is_not_a_strict_majority_is_no_answer() -> None:
 
 
 async def test_two_answers_that_mean_the_same_count_as_one() -> None:
-    """One whitespace and one key ordering (Requirement 21), which is what makes this a majority.
+    """One whitespace and one key ordering, which is what makes this a majority.
 
     Compared as written, these are three different strings and the panel has no answer. What comes
     back is the answer as the juror wrote it, not the canonical form nothing was written in.
@@ -222,7 +222,7 @@ async def test_two_answers_that_mean_the_same_count_as_one() -> None:
 
 
 async def test_a_panel_of_one_is_its_own_majority() -> None:
-    """One config is a panel of one (Requirement 18), and one answer is more than half of one."""
+    """One config is a panel of one, and one answer is more than half of one."""
     assert StubbedPanel().exact_match_consensus([NO_TOOL]) == NO_TOOL
 
 
@@ -235,7 +235,7 @@ async def test_nothing_answered_is_no_answer() -> None:
 
 
 async def test_agreement_is_counted_over_the_votes_that_came_back() -> None:
-    """Requirement 20, and § *Error Behavior*: a juror that failed is absent, not a disagreement.
+    """§ *Error Behavior*: a juror that failed is absent, not a disagreement.
 
     Three jurors asked, one silent, and one of the two answers matches the label. Half the panel
     said what the label says and half of what came back did too -- the number that would drag it
@@ -296,10 +296,10 @@ async def test_the_judge_is_not_asked_where_the_exact_match_answered() -> None:
 
 
 async def test_the_judge_breaks_a_tie_with_the_answer_the_juror_wrote() -> None:
-    """Requirement 22: what comes back is matched to an answer given, and returned as written.
+    """What comes back is matched to an answer given, and returned as written.
 
     The judge is handed the two answers and picks the first, spelled its own way. What the verdict
-    carries is the juror's spelling, because that is what a juror said (Decision 11).
+    carries is the juror's spelling, because that is what a juror said.
     """
     tied = StubbedPanel(OPEN_TICKET, CLOSE_TICKET, judged=OPEN_TICKET_TIGHT)
 
@@ -325,11 +325,11 @@ async def test_a_judge_answer_no_juror_wrote_is_refused() -> None:
 async def test_this_task_asks_no_judge_and_pays_for_no_call_to_say_so(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Decision 20: the tie that survives the matching is two different calls, and it stands.
+    """The tie that survives the matching is two different calls, and it stands.
 
     Two jurors, two calls made, and nothing else asked. A model picking between `OpenTicket` and
-    no tool at all would be the deciding vote, cast by a juror that never read the conversation
-    (Decision 9); what the record carries instead is a panel that disagreed.
+    no tool at all would be the deciding vote, cast by a juror that never read the
+    conversation; what the record carries instead is a panel that disagreed.
     """
     prompts: list[str] = []
     answering(
@@ -352,7 +352,7 @@ async def test_this_task_asks_no_judge_and_pays_for_no_call_to_say_so(
 async def test_one_vote_per_juror_that_answered_names_the_juror_asked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Requirement 25 and 31: `model_name` is the caller's, so a record says who answered.
+    """`model_name` is the caller's, so a record says who answered.
 
     The array a juror answers with is held as one string and nothing turns it into a structure --
     the calls in it are the same calls, and the field is text.
@@ -387,7 +387,7 @@ async def test_one_vote_per_juror_that_answered_names_the_juror_asked(
 async def test_a_juror_that_did_not_answer_the_shape_is_absent(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], resp: Any
 ) -> None:
-    """Requirement 19 and 25: never a vote, and never an empty label.
+    """Never a vote, and never an empty label.
 
     An empty-label vote is the cheapest wrong implementation: it agrees with nothing, so it drags
     `label_agreement` down and reads as a juror that disagreed rather than one that failed.
@@ -427,7 +427,7 @@ async def test_the_settings_a_request_declared_reach_the_call(
 async def test_the_prediction_prompt_carries_the_catalog_the_turns_and_the_language() -> (
     None
 ):
-    """Requirement 24: four slots, and the sample's label in none of them (Decision 12).
+    """Four slots, and the sample's label in none of them.
 
     Each value is under its own heading, because two slots filled with each other's value is a
     prompt that reads as nonsense and passes a containment check. The last turn is the question
@@ -445,7 +445,7 @@ async def test_the_prediction_prompt_carries_the_catalog_the_turns_and_the_langu
 
 
 async def test_the_prediction_prompt_is_the_sample_s_and_holds_no_label() -> None:
-    """Decision 12, stated as the one thing the prompt must not contain.
+    """A juror is not shown the label, stated as the one thing the prompt must not contain.
 
     A model shown the label answers about the label, and the signal this service runs on is a
     model answering the sample's own question -- so the label reaches no slot, by any spelling.

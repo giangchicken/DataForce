@@ -1,1 +1,2 @@
-"""TOOL · I1-I7, I16-I17 and AGENTS.md's H-8 and E-1, proved against synthetic source."""
+"""TOOL · the exemption grammar, and `AGENTS.md`'s `H-8`, `E-1` and `T-6`, proved against
+synthetic source."""

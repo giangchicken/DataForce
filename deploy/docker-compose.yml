@@ -1,11 +1,11 @@
 # Label Studio, for the one endpoint that needs an instance.
 #
 # Running it is optional. `POST /human-review/publish/sync` is the only route that talks
-# to this; every other endpoint, and the whole of `make check`, runs with nothing here
-# (§ *The question store*). The version is pinned because the sync is written against a release and
+# to this; every other endpoint, and the whole of `make check`, runs with nothing here.
+# The version is pinned because the sync is written against a release and
 # not against "latest" -- spec.md section *Versions* names the same one.
 #
-# No credentials in this file (AGENTS.md section 9). The variables below come from the
+# No credentials in this file. The variables below come from the
 # environment, and the API key is the one Label Studio mints for a user after first
 # login -- it is set in the shell that runs the sync, never written down here:
 #
@@ -22,8 +22,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # Community edition, which is what Requirement 52 costs and what the composed
-      # annotation config is written for.
+      # Community edition, which is what the composed annotation config is written for.
       LABEL_STUDIO_HOST: ${LABEL_STUDIO_HOST:-http://localhost:8080}
       # SQLite inside the volume by default. Point it at a Postgres if the pilot needs
       # one; the store this repository owns is a different database either way.

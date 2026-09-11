@@ -7,9 +7,9 @@ it. Nothing here knows any rule.
 **Exemptions.** A rule with no escape hatch gets bypassed entirely -- the import moves to a
 helper, or someone deletes the check -- so a line may carry::
 
-    # guard-exempt: I2 · why · who owns it · 2026-08-23
+    # guard-exempt: H-8 · why · who owns it · 2026-08-23
 
-and the guard that invariant belongs to will pass over that line. Every guard filters through
+and the guard that rule belongs to will pass over that line. Every guard filters through
 `not_exempt`, and `test_exemptions.py` keeps the list well-formed and short.
 """
 
@@ -23,11 +23,11 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "dataforce"
 
 MARKER = "guard-exempt"
 EXEMPTION = re.compile(
-    # An invariant of the spec's, `I6`, or a rule of `AGENTS.md`'s, `H-8` -- both are IDs a line
-    # can name, and a guard reads whichever its own rule is written from. The rule prefixes are
-    # spelled out because `AGENTS.md` uses those five: a wider pattern reads `I-6` as well formed,
-    # and a typo that excuses nothing is the one failure this grammar exists to catch.
-    rf"#\s*{MARKER}:\s*(?P<invariant>I\d+|[CEHRT]-\d+)"
+    # A rule of `AGENTS.md`'s, `H-8` or `T-6`, which is the only ID scheme anything defines. The
+    # five prefixes are spelled out because that document uses those five: a wider pattern reads
+    # `I6` as well formed, and a typo that excuses nothing is the one failure this grammar exists
+    # to catch.
+    rf"#\s*{MARKER}:\s*(?P<rule>[CEHRT]-\d+)"
     r"\s*·\s*(?P<reason>[^·]+?)"
     r"\s*·\s*(?P<owner>[^·]+?)"
     r"\s*·\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$"
@@ -132,20 +132,20 @@ def called_name(node: ast.Call) -> str:
 
 
 def not_exempt(
-    module: Module, invariant: str, found: Iterable[tuple[int, str]]
+    module: Module, rule: str, found: Iterable[tuple[int, str]]
 ) -> list[str]:
-    """The findings whose line carries no annotated exemption for that invariant."""
+    """The findings whose line carries no annotated exemption for that rule."""
     return [
         f"{module.name}:{line} {message}"
         for line, message in found
-        if not _exemption_on(module, line, invariant)
+        if not _exemption_on(module, line, rule)
     ]
 
 
 def exemptions(modules: Iterable[Module]) -> list[str]:
     """Every well-formed exemption in those modules -- the list that is meant to stay short."""
     return [
-        f"{module.name}:{number} {match['invariant']} · {match['reason']} ·"
+        f"{module.name}:{number} {match['rule']} · {match['reason']} ·"
         f" {match['owner']} · {match['date']}"
         for module in modules
         for number, line in enumerate(module.lines, start=1)
@@ -154,7 +154,7 @@ def exemptions(modules: Iterable[Module]) -> list[str]:
 
 
 def malformed_exemptions(modules: Iterable[Module]) -> list[str]:
-    """Every line claiming an exemption without naming an invariant, a reason, an owner, a date."""
+    """Every line claiming an exemption without naming a rule, a reason, an owner, a date."""
     return [
         f"{module.name}:{number} {line.strip()}"
         for module in modules
@@ -172,8 +172,8 @@ def _absolute(module: Module, node: ast.ImportFrom) -> str:
     return ".".join([*base, node.module] if node.module else base)
 
 
-def _exemption_on(module: Module, line: int, invariant: str) -> bool:
+def _exemption_on(module: Module, line: int, rule: str) -> bool:
     if not 0 < line <= len(module.lines):
         return False
     match = EXEMPTION.search(module.lines[line - 1])
-    return match is not None and match["invariant"] == invariant
+    return match is not None and match["rule"] == rule

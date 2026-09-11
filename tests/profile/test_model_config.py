@@ -1,11 +1,12 @@
 """The two ways a model's config is not one this deployment can act on, proved in both classes.
 
-Requirement 26 and Decision 10 are one rule, and every class that asks a model now states it
-itself: the confirmation in the modality, and the model detector and each juror in the profile. So
-the tests are parametrised over all three -- there is no one function left to prove it against, and
-a rule written three times is a rule that can rot in two places while the third still passes. Each
-row carries the `<X>ModelConfig` its own part declares, because that is the other half of what is
-being proved: whatever a request handed the part is what reaches the library.
+Reading both sources with the explicit one first is one rule, and every class that asks a model
+now states it itself: the confirmation in the modality, and the model detector and each juror in
+the profile. So the tests are parametrised over all three -- there is no one function left to
+prove it against, and a rule written three times is a rule that can rot in two places while the
+third still passes. Each row carries the `<X>ModelConfig` its own part declares, because that is
+the other half of what is being proved: whatever a request handed the part is what reaches the
+library.
 
 What the *merge* does is the library's own and is not restated. What these say is that the
 declaration a request carried is handed over, and that a config with no endpoint is refused when
@@ -50,7 +51,7 @@ ASKING = [
 def test_the_declaration_a_request_carried_is_what_the_library_is_handed(
     monkeypatch: pytest.MonkeyPatch, asking: Any, module: ModuleType, declaring: Any
 ) -> None:
-    """Decision 10, explicit first. The precedence is the library's; the handing over is ours.
+    """Both sources, explicit first. The precedence is the library's; the handing over is ours.
 
     Whatever the part's own `<X>ModelConfig` carries goes over the file's value, and the file
     answers for the rest -- so a `None` has to reach `resolve_config` as `None`. Dropped instead,
@@ -99,7 +100,7 @@ def test_a_model_with_no_endpoint_is_refused_before_the_call(
     declaring: Any,
     declared: str | None,
 ) -> None:
-    """Requirement 26: a name with no file and no explicit URL is a configuration error.
+    """A name with no file and no explicit URL is a configuration error.
 
     Never a default. A provider's own default endpoint is a call to somewhere nobody declared, and
     the deployment that keeps its endpoint in the environment reads as exactly this case.

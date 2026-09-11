@@ -2,7 +2,7 @@
 
 The labelling UI is mounted here and nowhere else. `wiring` is the one layer allowed to know both
 the API and the thing that calls it, and one process serving both is what lets a labeller open a
-URL and start with nothing installed but the service (Decision 22).
+URL and start with nothing installed but the service.
 """
 
 import logging
@@ -46,7 +46,7 @@ def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
 
     app.include_router(tool_decision_router)
     # `html=True` so `/ui/` answers the directory's `index.html`; the three files are served as
-    # they are written, because there is no build step to serve the output of (Decision 22).
+    # they are written, because there is no build step to serve the output of.
     app.mount("/ui", StaticFiles(directory=UI, html=True), name="ui")
     return app
 

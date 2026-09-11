@@ -237,7 +237,7 @@ function unreadable() {
 
 // An answer is an answer about what it was asked with. Change that, and it is not an answer about
 // what this page now holds -- so it is dropped rather than carried into a record it is not about.
-// This is Requirement 48 read strictly: what the human edited is what the next call is made with,
+// The edit rule read strictly: what the human edited is what the next call is made with,
 // which means a call made before the edit is not that call.
 function forget(...steps) {
   for (const step of steps) {
@@ -553,7 +553,7 @@ async function assemble() {
     new_messages: redacted.messages,
     // `null` where nothing made a new version of the catalog: a copy of it under a second key is
     // one more thing to keep in step. The human leaving it alone is not enough on its own --
-    // `review_text` holds the catalog (Requirement 6), so a confirmed value can sit in a tool's
+    // `review_text` holds the catalog, so a confirmed value can sit in a tool's
     // description and the route rewrites it there. A redacted catalog *is* a new version.
     new_tools: same(held.edited.tools, held.sample.tools ?? [])
       && same(redacted.tools, held.sample.tools ?? []) ? null : redacted.tools,
@@ -613,7 +613,7 @@ $("keep-table").onchange = event => {
   }
 };
 // The language is a declaration about the sample, so an answer given in the other one was an
-// answer about something else (Requirement 47).
+// answer about something else.
 $("language").onchange = forgetTheAnswers;
 $("replace-run").onclick = replace;
 $("review-run").onclick = review;
@@ -631,7 +631,7 @@ for (const button of document.querySelectorAll("button.fix")) {
 }
 
 // Re-asked on focus, not on a timer: the directory is edited by a person, and coming back to the
-// tab is when they want to see what they edited (Requirement 49).
+// tab is when they want to see what they edited.
 window.addEventListener("focus", paintTicks);
 
 paintTicks();

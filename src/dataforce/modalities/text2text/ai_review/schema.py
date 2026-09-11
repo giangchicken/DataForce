@@ -17,8 +17,8 @@ class Frozen(BaseModel):
 class LLMReviewerAnswer(Frozen):
     """What a juror's prompt asks it for, in the key order it asks for them.
 
-    Both keys are required: an answer missing either is a model that did not answer
-    (Requirement 25). `label` arrives as the array the prompt asked for, or as text where it asked
+    Both keys are required: an answer missing either is a model that did not answer.
+    `label` arrives as the array the prompt asked for, or as text where it asked
     for text; a vote holds it as one string either way, and what turns the one into the other is
     the task's, not this file's.
     """

@@ -83,7 +83,7 @@ class PiiLlmConfirmer:
     async def confirm(
         self, prompt: str, spans: Sequence[PersonalDataSpan]
     ) -> tuple[PersonalDataSpan, ...]:
-        """The spans the model confirmed, each carrying its reason. Never raises (Requirement 8).
+        """The spans the model confirmed, each carrying its reason. Never raises.
 
         Only ever narrows: an id no span carries is discarded, a span answered twice keeps the
         first answer, and a span nothing came back about is not confirmed -- which is what a

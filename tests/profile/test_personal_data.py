@@ -301,7 +301,8 @@ def section(prompt: str, heading: str) -> list[str]:
 
 
 async def test_review_text_holds_the_turns_the_catalog_and_the_label() -> None:
-    """Requirement 6, and it is why the phone number is there three times rather than once.
+    """The frame of reference is turns, catalog and label together, which is why the phone number
+    is there three times rather than once.
 
     The turns alone would miss the argument value in the label, which is exactly where a phone
     number sits in a tool-calling sample.
@@ -321,7 +322,7 @@ async def test_review_text_holds_the_turns_the_catalog_and_the_label() -> None:
 
 
 def test_the_first_scan_to_claim_a_value_keeps_it() -> None:
-    """Requirement 7, which is what the declared order is for.
+    """Two scans claiming one value: the first keeps it, which is what the declared order is for.
 
     The four scans are the library's and none of them returns another's value on this sample, so
     the collision is put in on purpose: the rule under test is the detector's own, not a regex's.
@@ -399,7 +400,7 @@ async def test_a_class_only_the_model_named_is_numbered_after_the_declared_four(
     cannot renumber what a reviewer was already reading.
 
     Read off `claims` and not off the spans: `Quận 1` sits inside the address it was claimed
-    beside, so its span is dropped as nested (Requirement 11) and the ordering the claims carry
+    beside, so its span is dropped as nested and the ordering the claims carry
     would be invisible on the answer.
     """
     checker = StubbedModels(detected={ADDRESS: "ADDRESS", "Quận 1": "DISTRICT"})
@@ -519,7 +520,7 @@ async def test_the_confirmation_is_handed_the_spans_the_text_and_the_language() 
 
     Spans and not values, because the same characters are personal data in one line and an order
     number in another -- so the question is about where a hit sits, and the ids are what an answer
-    names. The language is the input's (Decision 17) and reaches every step, so one declaration
+    names. The language is the input's and reaches every step, so one declaration
     serves all of them.
     """
     checker = StubbedModels(detected={ADDRESS: "ADDRESS"})
@@ -666,7 +667,7 @@ async def test_every_returned_offset_slices_back_to_its_value() -> None:
 
 
 async def test_a_value_said_twice_keeps_one_placeholder() -> None:
-    """Requirement 10. The phone number is in a turn, inside the email, and in the label.
+    """The phone number is in a turn, inside the email, and in the label.
 
     Two placeholders over one value is two people as far as anything reading the row can tell,
     which is what co-referent means here.
@@ -683,7 +684,7 @@ async def test_a_value_said_twice_keeps_one_placeholder() -> None:
 
 
 async def test_the_digit_run_inside_the_email_earns_no_span() -> None:
-    """Requirement 11's case as the page draws it, whichever of the two rules drops it.
+    """The containment case as the page draws it, whichever of the two rules drops it.
 
     The email scan claims the longer value; the phone-shaped digit run inside it is a *different*
     value, so nothing about the values says one sits in the other -- the offsets do, and so does
@@ -701,7 +702,7 @@ async def test_the_digit_run_inside_the_email_earns_no_span() -> None:
 
 
 async def test_a_span_inside_a_longer_span_is_dropped() -> None:
-    """Requirement 11 on its own, over a shorter value the word boundary cannot reject.
+    """Containment on its own, over a shorter value the word boundary cannot reject.
 
     `Văn` sits inside `Trần Văn Minh` with a space on each side, so it is a legitimate occurrence
     of its own value and only the offsets say it is inside another span. Both rules drop something
@@ -736,7 +737,7 @@ async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> No
 
     What the copy does with that order number is *not* fixed by the boundary and is pinned here as
     it behaves: replacement is by value, so the run inside it goes too and the row reads
-    `<PHONE_1>9012`. Requirement 12 asks for replacement by value and § *The store* calls this cut
+    `<PHONE_1>9012`. Replacement is by value and § *Out of Scope* calls this cut
     undecided; the boundary keeps the scan from *reporting* the order number, which is the half
     this code owns.
     """
@@ -759,7 +760,7 @@ async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> No
 
 
 async def test_the_longest_value_is_replaced_first() -> None:
-    """Requirement 12, and the string this keeps out of the row: `minh<PHONE_1>@vd.vn`.
+    """Replacement by value, and the string this keeps out of the row: `minh<PHONE_1>@vd.vn`.
 
     Replacement is by value over the whole text, so a shorter value inside a longer one cuts it in
     half unless the longer one goes first.
@@ -798,7 +799,7 @@ async def test_two_addresses_each_get_their_own_placeholder() -> None:
 
 
 async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() -> None:
-    """Requirement 10's other half: `N` follows the text, not the order a detector answered in.
+    """The numbering's other half: `N` follows the text, not the order a detector answered in.
 
     The scan is made to answer out of order on purpose. A detector that returns its matches in
     some other order -- or a fifth one that does -- would otherwise hand a reviewer `<EMAIL_2>`
@@ -821,7 +822,7 @@ async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() 
 
 
 async def test_the_outcome_is_reported_where_nothing_was_detected() -> None:
-    """Requirement 13's first case: nothing was rewritten, so there is nothing to hold back."""
+    """`reported`: nothing was rewritten, so there is nothing to hold back."""
     detected = await StubbedModels().detect(given(NOTHING_TO_FIND))
     replaced = personal_data_replace(detected)
 
@@ -831,7 +832,7 @@ async def test_the_outcome_is_reported_where_nothing_was_detected() -> None:
 
 
 async def test_the_outcome_is_redacted_where_every_detected_value_resolved() -> None:
-    """Requirement 13's second case: the copy was made and the confirmation confirmed all of it."""
+    """`redacted`: the copy was made and the confirmation confirmed all of it."""
     detected = await StubbedModels().detect(given(SAMPLE))
     replaced = personal_data_replace(detected)
 
@@ -839,7 +840,7 @@ async def test_the_outcome_is_redacted_where_every_detected_value_resolved() -> 
 
 
 async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
-    """Requirement 13, and the case Requirement 11 does not answer: spans that overlap in part.
+    """`withheld`, in the case containment does not answer: spans that overlap in part.
 
     Two names sharing a word -- `anh` is a title cue *and* a common given name, so the real
     detector claims `Trần Văn Anh Minh` and `Minh Hoàng Long` off one sentence. Neither contains
@@ -870,7 +871,7 @@ async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
 
 
 def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() -> None:
-    """Requirement 10 read from the other end: the map is keyed by value, never by placeholder.
+    """One placeholder per value, from the other end: the map is keyed by value, never by placeholder.
 
     `placeholder` is a column a reviewer edits, so two rows can carry the same one. Keyed by
     placeholder they would be one entry, and the value that lost would stay in a copy that reports
@@ -918,7 +919,7 @@ def test_a_span_with_no_placeholder_replaces_nothing_and_holds_the_record_back()
 
 
 async def test_a_value_confirmed_once_is_replaced_wherever_it_occurs() -> None:
-    """Requirement 12 over the record, which is the reach the offsets do not have.
+    """Replacement by value over the record, which is the reach the offsets do not have.
 
     A span indexes `review_text`; `messages` and `label` are other strings, so the rule that
     reaches them is replacement by value -- and the phone number confirmed in the turn is replaced
@@ -1001,7 +1002,7 @@ def test_a_number_a_boolean_and_a_null_carry_no_value_to_trade_back() -> None:
     ids=["null", "blank", "spaces", "a-list", "spelled-out", "unsupported", "another"],
 )
 async def test_a_language_the_scans_cannot_read_is_refused(declared: Any) -> None:
-    """Decision 17, and it is the shape that holds it: the input takes `vi` or `en`, nothing else.
+    """The language is declared and one of two, and the shape holds it: `vi` or `en`, nothing else.
 
     Every rule scan and both model steps take that one value, and `agent_toolkit` keys its `vi`
     and `en` tables by it -- a third value reaches the library as a dictionary lookup and raises a
@@ -1049,7 +1050,7 @@ async def test_a_record_that_says_nothing_about_its_language_is_scanned_in_vietn
 async def test_a_failed_call_answers_nothing_and_says_so_on_stdout(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Requirement 8 and § *Error Behavior*: neither step may raise, and a failure is an event.
+    """§ *Error Behavior*: Neither step may raise, and a failure is an event.
 
     Both steps fail here. The model detector answers nothing, which leaves the rule scans' values
     detected; the confirmation then confirms none of them, so nothing is replaced and the decision
@@ -1190,7 +1191,7 @@ async def test_a_sample_quoting_a_slot_name_is_refilled_until_the_toolkit_stops(
     `{{review_text}}` gets its own text substituted into itself, pass after pass, until
     `MAX_SLOT_FILLING_PASSES` stops it -- the prompt grows by the record's length each pass and
     one slot is still unfilled at the end. Bounded and wasteful rather than wrong, and it is the
-    library's fill (`I6`) rather than one written here.
+    library's own fill rather than one written here.
 
     Held by a test because it is what a reviewer would otherwise discover on a bill: a record can
     quote a slot name by accident, and nothing about the answer would look wrong.
@@ -1222,7 +1223,7 @@ async def test_a_sample_quoting_a_slot_name_is_refilled_until_the_toolkit_stops(
 async def test_both_steps_ask_the_model_the_request_named(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Decision 10, and one resolution per step rather than one per record.
+    """Both config sources, and one resolution per step rather than one per record.
 
     What the part carries is what the library is handed; the merge is its own. Both steps resolve
     the one name the request ticked, and the `settings` it declared reach the call untouched --

@@ -4,7 +4,7 @@
 
 **Enforcement:** `[lint]` a check that fails the build · `[review]` caught by a human reading the diff · `[none]` judgement only, no check exists.
 
-Worked examples and the folded commentary live in `nguyen-tac.vi.md`, same IDs.
+**When this applies.** Twice: while writing code, and while reviewing code already written — a review cites rule IDs. It does not say *what* to build; that is the spec's job. And an instruction from the author outranks every document here, this one included: carry it out, state the cost in one sentence, then rewrite the rule or the passage it contradicts. A document that disagrees with a landed decision is a stale document.
 
 ---
 
@@ -59,6 +59,7 @@ Read this first. These four words carry the rest of the document.
 The fourth column is the declaration `E-1` enforces. The tag set and the import direction are one thing, not two.
 
 - **H-9** `[review]` Start with one codebase and real module boundaries inside it. Split out a service only when scaling, ownership or reliability genuinely differ — scale itself is bought with indexes, queues and caches. A split does not reduce connascence: both sides still change together, at the same strength and degree. It changes the kind of coupling — an in-process call becomes a network call — and it makes locality worse. If the joint change does not get weaker, you have traded a function call for a network call and bought nothing.
+- **H-10** `[review]` A layer that serves many cases may not be written in terms of one case's vocabulary. Declare an abstract method and let the case answer it. A *default* implementation is the trap: it looks harmless and smuggles the knowledge back in, where a socket makes the omission an error at construction. Test: read the docstring — if the reasoning needs one case's nouns, the layer has learned that case. Grep the layer for them, docstrings and field descriptions included.
 
 ## 1B — Manage the connascence
 
@@ -87,7 +88,8 @@ The fourth column is the declaration `E-1` enforces. The tag set and the import 
 - **R-3** `[lint]` Name a module for what it holds or the job it does, never helpers, utilities, managers or entities. Those name a bucket, not a job.
 - **R-4** `[review]` Make the top of the source tree name the domain, not the framework.
 - **R-5** `[review]` Comment the abstraction, not the implementation: state the invariants, the units, the ordering and the error modes next to the signature, because none of them are in it. Code does not document itself — if a caller has to read the body to learn the rule, the comment is missing, not redundant.
-- **R-6** `[review]` Name a function with a noun phrase of at least two words — never a bare noun, which reads as the variable holding the result rather than the call producing it, and never a leading underscore or an `of`/`for` suffix.
+- **R-6** `[review]` Name a function with a noun phrase of at least two words — never a bare noun, which reads as the variable holding the result rather than the call producing it, and never a leading underscore or an `of`/`for` suffix. The grammatical form is the signal, and this is one convention with `R-1` rather than two: a verb phrase is the act, a bare noun is the thing, a past participle is the thing after the act, `-er`/`-or` is what performs it. One stem per step, inflected — so the form alone says which side of the call a name sits on, and the noun stays free for the variable.
+- **R-7** `[review]` Cite a rule by words a reader can search for — the sentence itself, or a named section. Never by a number or a position in a list: nothing checks a number, it names when a rule was taken rather than what it says, and a list cited by position can never be reordered afterwards.
 
 ---
 
@@ -102,18 +104,22 @@ The fourth column is the declaration `E-1` enforces. The tag set and the import 
 - **T-3** `[review]` Add something that has to run — a queue, a cache, a scheduled job — only to fix a problem you can name. Everything that runs is something to keep alive.
 - **T-4** `[review]` Optimise for clarity first, then for a bottleneck you can name. A bottleneck you cannot name is a guess.
 - **T-5** `[review]` Delete a module that nothing gets harder without.
+- **T-6** `[lint]` Do not re-implement what a dependency already provides. Two definitions of one rule rot apart, and the copy is the one that will be wrong.
+- **T-7** `[review]` A check, a guard, an invariant or a numbered requirement is something that has to run or be kept in step, so `T-3` governs it too: write one for a rule that has been broken *here*, and only once the shape it defends has been accepted. Machinery around a design nobody has agreed to makes a wrong design self-consistent, and every satellite multiplies the cost of reversing it.
 
 ---
 
 # 0. Enforcement
 
-> **Principle.** A rule with no check is a rule already broken — you just have not found out yet. This branch adds no design rule; it keeps the three above from rotting.
+> **Principle.** A rule with no check is a rule already broken — you just have not found out yet. But a check is earned, not anticipated: write one for a rule that has been broken here, never for one you expect to be broken. And a suite passing is evidence the design agrees with itself, never evidence it is right. This branch adds no design rule; it keeps the three above from rotting.
 >
 > *Ford, Parsons and Kua.* Their observation is that the IDE actively encourages the imports that break module discipline, that a written coding standard on its own does not hold, and that the only thing that does hold is a check running in the pipeline.
 
 - **E-1** `[lint]` Declare the import direction once and enforce it with a check that fails the build, not with discipline.
 - **E-2** `[none]` Expect a boundary to follow ownership: one that no single team owns will not hold. Draw the modules and divide the teams together rather than fighting the pull.
 - **E-3** `[none]` Redraw the boundaries when a typical change keeps touching more files.
+- **E-4** `[review]` Rules lose to reasons. Break one where it makes the code worse here, and write the break where the next reader will hit it — an exemption names the rule, the reason, an owner and a date.
+- **E-5** `[review]` Two rules disagreeing in one place is a fact about the design. Write it down rather than settling it silently, and say which one you followed.
 
 Known gap in `E-1`: two modules sharing one database table are coupled through the schema, and schema coupling never shows up in the import graph. No rule here covers it yet.
 
