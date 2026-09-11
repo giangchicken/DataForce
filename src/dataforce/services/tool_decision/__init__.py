@@ -5,6 +5,7 @@ from .data_quality import (
     abnormal_report,
     duplicate_report,
     personal_data_detect,
+    personal_data_redact,
     personal_data_replace,
 )
 
@@ -12,6 +13,7 @@ __all__ = [
     "abnormal_report",
     "duplicate_report",
     "personal_data_detect",
+    "personal_data_redact",
     "personal_data_replace",
     "tool_decision_llm_predict",
     "tool_decision_sft_predict",

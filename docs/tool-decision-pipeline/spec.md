@@ -10,7 +10,8 @@ it. The page is what remembers the answers, and it assembles them into one recor
 which is the only place a record exists.
 
 This specs the two parts that have a shape to act on — `ai_review` and the personal-data check — the
-endpoint per part, and the page. Where that record is then kept is not specified here: the store,
+endpoint per part, and the two pages: `edge/static/index.html`, which *draws* the flow for whoever
+is building it, and `ui/`, which *drives* it for whoever is labelling. Where that record is then kept is not specified here: the store,
 the route that would take it and the records it may refuse are deferred until the flow is finished
 (§ *Out of Scope*). The other two data-quality checks declare nothing, so they answer `None` and
 this specs no more about them.
@@ -26,8 +27,9 @@ Three axes and an edge hold the code, and each one imports only downward.
 - `services/tool_decision/<part>.py` — `ai_review.py` and `data_quality.py`, mirroring the profile
   file for file — is the full logic behind one endpoint. One function per endpoint, each callable
   without the others, and each takes the config for the model it asks and builds its own reviewer.
-- `edge/routers/text2text/tool_decision.py` is the HTTP shell and `edge/static/index.html` the
-  page. There is no table: nothing here writes the record down.
+- `edge/routers/text2text/tool_decision.py` is the HTTP shell, `edge/static/index.html` the
+  drawing of the flow, and `ui/` the labelling UI that calls the routes. There is no table:
+  nothing here writes the record down.
 
 A service never imports `edge/`. That direction is what a store would be built against when there
 is one — an adapter handed to logic as an argument, never imported by it — and it is `H-8`'s fourth
@@ -82,7 +84,9 @@ format's own shape, arguments as JSON text under one key ordering.
    it, and no route takes it: where it is kept is deferred (§ *Out of Scope*). It keeps what
    arrived and adds what the review made of it:
    `{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
-   abnormal, llm, sft}`.
+   abnormal, llm, sft}`. A key the corpus carries that nothing here reads stays under its own
+   name: what arrived is kept whole, and dropping one at the last step would make the record a
+   lossy copy of the sample it is about.
 4. `duplicate` and `abnormal` are `None`. Neither check declares a shape.
 
 **Personal data.**
@@ -119,7 +123,9 @@ format's own shape, arguments as JSON text under one key ordering.
    answer on this flow writes its `reason` key before the value or the verdict it justifies, so
    what a model concludes is read off the reason it has already written.
 9. A span records `id`, `start`, `end`, `personal_data_class`, `placeholder` and `reason`, and
-   `review_text[start:end]` is the value the span was made from. `id` is 1-based in the order the
+   `review_text[start:end]` is the value the span was made from. Both offsets are non-negative:
+   a negative one is a slice counted from the end of the text, which reads a value nothing
+   detected, so the shape refuses it rather than answering about it. `id` is 1-based in the order the
    spans were found and is what the confirmation is asked about and answers with; `reason` is the
    confirmation's own words for that span, and the one thing on a span no rule here computes.
 10. One placeholder per distinct value, `<CLASS_N>` numbered per class in first-appearance order. A
@@ -131,7 +137,13 @@ format's own shape, arguments as JSON text under one key ordering.
     occurrence — which is what keeps the same rule runnable over the record's other fields, where
     there are no offsets to run it by. It is `None` where nothing was rewritten. A span whose
     offsets read nothing is skipped, because replacing the empty string would place a placeholder
-    between every character. The original is never overwritten: `review_text` stays on the detect
+    between every character; a span with no placeholder is skipped for the same reason read the
+    other way round — there is nothing to put in the text, and replacing a value with nothing
+    deletes it rather than marking it, and says `redacted` about a copy that lost a stretch of
+    itself. The claim such a span named is then unresolved, which is `withheld`.
+    The values are read into a map keyed by *value*: one value has one placeholder
+    (Requirement 10), and keyed the other way two spans a reviewer typed the same placeholder on
+    would be one entry, leaving the value that lost in a copy reporting itself redacted. The original is never overwritten: `review_text` stays on the detect
     answer and the copy is on the replace answer.
 13. `outcome` is `reported` where no detector claimed anything — there was nothing to rewrite —
     `redacted` where the copy was made and every claimed value resolved, and `withheld` everywhere
@@ -144,8 +156,12 @@ format's own shape, arguments as JSON text under one key ordering.
     and the flow's own answer is that the human returned the spans.
 15. The human may edit `messages`, `tools` and `label`. What they edited to, redacted, is
     `new_messages`, `new_tools` and `new_label`; what arrived stays under the original three.
-    `new_tools` is `null` where the catalog was left alone — an unmodified catalog has no new
-    version to carry, and a copy of it under a second key is one more thing to keep in step.
+    `new_tools` is `null` where nothing made a new version of the catalog — a copy of it under a
+    second key is one more thing to keep in step. The human leaving it alone is not that
+    condition on its own: `review_text` holds the catalog (Requirement 6), so a confirmed value
+    can sit in a tool's description and the redaction rewrites it there, and a redacted catalog
+    *is* a new version. `null` therefore means the human left it alone **and** the redaction
+    changed nothing in it.
 16. Redaction runs after the edit, so a value the human typed is redacted too.
 17. The record holds the raw content as well as the redacted content. That is what makes a review
     auditable — what changed is readable against what arrived — and it means the redaction protects
@@ -237,20 +253,31 @@ format's own shape, arguments as JSON text under one key ordering.
     `PersonalDataDetected` back and returns a `PersonalDataReplaced`. Two calls for one part
     because a human sits between them; the second asks no model, so nothing about it can be
     refused for a name this deployment does not serve.
+    `.../personal-data/redact` is the third. It takes the sample as the human left it with that
+    same `PersonalDataDetected` beside it under `detected`, and answers the sample copied with
+    every handed-back span's value replaced wherever it occurs — which is where the record's three
+    `new_` keys come from, because a span's offsets index `review_text` and `messages` and `label`
+    are other strings (Requirement 12). `detected` is named apart from the record's own keys on the
+    same terms as the other declarations, so what comes back is the record's keys and nothing about
+    how it was redacted. It asks no model either, and it keeps nothing: the sample is read, copied
+    and answered. A reviewer who handed back no span asked for nothing to be rewritten, and gets
+    the sample as it arrived rather than a refusal.
 33. `POST /text2text/tool-decision/data-quality/duplicate` and `.../abnormal` return `null` at
     HTTP 200. Nothing failed; there is nothing to report.
 34. `POST /text2text/tool-decision/ai-review` takes the sample, the language it is in and the models
     ticked, and returns an `LLMReviewerVerdict` and an `SFTReviewerVerdict` side by side. The
     language and the two model keys are declarations about the request rather than keys of the
     record, so the sample handed on is what the corpus carries.
-35. There is no route that stores a record. The page assembles one and posts it nowhere: the
-    store, the route that takes it, where the redaction runs and which records it refuses are one
-    decision, deferred until the flow is finished (§ *Out of Scope*). Nothing else here depends on
+35. There is no route that stores a record. The redaction route reads one and keeps neither it
+    nor the copy it answers (Requirement 32). The page assembles one and posts it nowhere: the
+    store, the route that takes it and which records it refuses are one decision, deferred until
+    the flow is finished (§ *Out of Scope*). Nothing else here depends on
     it — every step above answers its own call — so the record is the flow's last answer and the
     number is kept rather than reused.
 36. `GET /text2text/tool-decision/` serves the page.
 
-**The page.**
+**The page that draws the flow.** Read by whoever is building it, and driven by nobody: every
+answer in it is recomputed in its own script over a sample written into the file.
 
 37. Eight rectangles: `input`, `personal data`, `duplicate`, `abnormal`,
     `human check · data quality`, `ai review label`, `human check · label`, `final result`.
@@ -259,11 +286,14 @@ format's own shape, arguments as JSON text under one key ordering.
     `placeholder` — beside the value `review_text[start:end]` currently reads. A **check** button
     re-reads every row and re-slices. An unreadable edit says why: not an integer, end not past
     start, or outside the text.
-40. Step 5 carries an `auto` toggle. On, it keeps the outermost span and drops any span inside a
-    longer one. Off, every span stands. Its output is the `PersonalDataDetected` it was handed with
-    the spans that survived, badged `unchanged` where the spans leaving equal the spans step 2
-    produced and `modified` otherwise, and the `PersonalDataReplaced` the replace endpoint answers
-    with over those spans.
+40. Step 5 carries an `auto` toggle. On, it keeps the outermost *kept* span and drops any span
+    inside one — measured over the rows still ticked, because a span is inside a kept longer one or
+    it is inside nothing: untick an email and the phone number inside it is what is left to hand
+    back. Off, every span stands. What the step holds is the `PersonalDataDetected` it hands on
+    with the spans that survived — its input, on Requirement 46's terms, since it is the body of
+    the call the step makes — badged `unchanged` where the spans leaving equal the spans step 2
+    produced and `modified` otherwise; its output is the `PersonalDataReplaced` the replace
+    endpoint answers with over those spans.
 41. Step 6 reads the sample, not step 5. It is a check on the label, and no data-quality answer is an
     argument to it.
 42. Step 7 offers `correct` and `modify`. `correct` returns the label as it arrived. `modify` opens
@@ -271,9 +301,86 @@ format's own shape, arguments as JSON text under one key ordering.
     `{unparsed: <text>}` rather than dropped.
 43. Step 8 shows the assembled record, raw and as computed, and beside it the three `new_` keys —
     what would ship. It says on its face that the page built it, that no step above did, and that
-    nothing stores it: the store is deferred, and so is where the redaction runs once there is
-    one. The redaction the page draws is its own, so the two conflicts a reviewer can leave behind
-    stay readable.
+    nothing stores it: the store is deferred. The redaction the drawing draws is its own — the
+    labelling UI asks the route for it (Requirement 32) — so the two conflicts a reviewer can
+    leave behind stay readable in one file with no service running.
+
+**The labelling UI.** The other page, and the one a labeller works in: the same eight rectangles,
+but every answer in it came from a route, and every rectangle carries the buttons that make the
+next call.
+
+44. `ui/` is the UI: `index.html`, `app.js`, `style.css`, mounted as static files at `/ui` by
+    `create_app()`. Three files, no build step, no npm, nothing from a CDN — the rule the drawing
+    already follows, and the reason a labeller needs nothing installed but the service.
+45. It computes no answer of its own. Every rectangle shows what a route answered, and the only
+    thing the UI composes is the record at the end (Requirement 3) — so a rule lives in one place,
+    and the page that labels cannot disagree with the service about what a span or a vote is. The
+    redaction behind the three `new_` keys is a route for that reason and not a walk over the
+    record in the client (Requirement 32, Decision 24): a rule a caller can skip is not a rule.
+46. One rectangle per step, in flow order, each showing what it was handed and what it answered,
+    and each carrying its own buttons. What it was handed is the request body itself, written into
+    the rectangle before it is sent, so what the page shows as a step's input is what went over the
+    wire rather than the page's account of it. A button calls that step's route and no other: a step is
+    re-runnable on its own, and no rectangle waits for a rectangle beside it. That is
+    Requirement 1 on screen, which is why the UI is drawn as the flow rather than as one form with
+    a submit button.
+47. The sample is pasted, as JSON, into the first rectangle — `{id, messages, tools, label}`, with
+    an example already in the box. A **check** button parses it and says why not where it does not
+    parse. The language it is in is declared beside it, once, from the two the scans know: it is a
+    declaration about this sample and both model steps are handed it (Decision 17), so it is ticked
+    where the sample is rather than twice in the two rectangles that send it. One sample at a time:
+    what every endpoint takes is one sample, and a corpus is out of scope. Checking a sample into
+    the box that is not the one already read clears the other rectangles, because their answers are
+    answers about something else.
+48. The user can edit. Every rectangle holding data the flow carries — the sample, the spans, the
+    label — is editable in place, with a **check** button that re-reads what was typed, and what
+    they edited is what the next call is made with. A human step *is* that edit plus the call after
+    it (Requirement 2); nothing records that a human looked (Requirement 14).
+    Which cuts the other way too: an answer given before an edit is not the answer to the edit, so
+    an edit drops the answers made with what it replaced. Moving a span, unticking one or asking
+    for the spans again drops the copy made over the old ones, and the step reads as unanswered
+    until **replace** is pressed again; changing the language drops both model steps' answers.
+    Nothing is silently carried into a record it is not about, and nothing is re-called on the
+    user's behalf.
+49. Which models answer is ticked, not typed: the lists are `GET /models`' answer, one tick for the
+    verifier, many for the jury, one for the finetuned reviewer, and the ticks become
+    `verifier_model`, `jury_models` and `sft_model` on the two requests. A UI that hard-codes the
+    names is a second declaration of what this deployment serves, which is exactly what
+    Requirement 27 refuses.
+    The answer is asked for again whenever the window is focused, because `config/model/` is a
+    directory a deployment edits while the service is up and the endpoint reads it per call — so a
+    model added to it appears in the lists without a reload. On focus and not on an interval: a
+    poll picks a number nobody chose, and the person who edited the directory is the person coming
+    back to the tab. A redraw keeps every tick whose name is still served; a ticked name that is
+    gone is unticked, and the list says which one, because a name off the list cannot be asked for
+    (Requirement 29).
+50. Personal data is two buttons in two rectangles, because it is two calls with a human between
+    them (Requirement 5): **detect** fills step 2 with the spans, the user ticks, edits or adds
+    them there and in step 5, and step 5's **replace** answers over what they handed back —
+    which is also what Requirement 40 asks of step 5, the rectangle the human sits in. Nothing is
+    replaced before they looked. A row can be added as well as edited, since a reviewer may add a
+    span: it is numbered after the last, because `id` is what the confirmation was asked about and
+    nothing asks it again about a span it never saw.
+51. A refusal is shown where it happened. A 422's `detail` goes in that rectangle, in the words the
+    service used, and every answer the page already holds stays: one part failing fails that one
+    call, and the step is re-runnable. The UI never retries on its own and never hides a refusal
+    behind a spinner that stops. A rectangle asked before it has what it needs says *not asked*
+    instead, and says it in its own marking: nothing was called, so nothing refused anything, and
+    the two must not look alike.
+52. The last rectangle is the record after every step, as the page assembled it, and it offers
+    **assemble**, **fix** and **approve**. **assemble** is its own call — the redaction route
+    (Requirement 32) — and the record is composed out of that answer and everything the page
+    already holds. **fix** hands the record back to the rectangle that produced the part being
+    fixed — editing there, then that step's own button again, is how a correction is made — and the
+    rectangle names which steps have not answered at all, so a record assembled early says so
+    rather than reading as complete. **approve** freezes the record and shows the final body.
+53. **approve** posts nowhere. Nothing stores a record (Requirement 35), so the UI says so on its
+    face and the labeller takes the body from the screen. When there is a store, this is the body
+    it is posted, and this rectangle is the one place that changes.
+54. The drawing and the UI are two files and neither is generated from the other. `index.html`
+    explains the flow — its rectangles carry prose about why each step is shaped as it is — and
+    `ui/` labels with it. The cost, stated: a change to the flow is drawn in one and driven in the
+    other, and the drawing is the one that goes stale silently, because no test drives either.
 
 ## Design
 
@@ -292,9 +399,9 @@ answer that did not come back, or came back the wrong shape, confirms none. Neit
 task. Which model confirms does, so a checker is *constructed* with the declaration its
 request carried, and the confirmation resolves it in `__init__`.
 
-`services/tool_decision/` is what an endpoint calls: `personal_data_detect` and
-`personal_data_replace` in `data_quality.py`, `tool_decision_llm_predict` and
-`tool_decision_sft_predict` in `ai_review.py`. Each takes a config and one sample and constructs
+`services/tool_decision/` is what an endpoint calls: `personal_data_detect`,
+`personal_data_replace` and `personal_data_redact` in `data_quality.py`,
+`tool_decision_llm_predict` and `tool_decision_sft_predict` in `ai_review.py`. Each takes a config and one sample and constructs
 the profile class it needs — a config, not a built object, because the config is the only thing
 that varies and a bag of pre-built reviewers passed between layers is one more thing to keep in
 step. A `None` config is a
@@ -303,9 +410,18 @@ reviewer the deployment did not declare and answers `None`. `duplicate_report` a
 has a model to ask. A handler is then three lines: read the body, call one function, map
 `ConfigError` to 422.
 
-**Personal data is one socket and one function beside it.** `detect` is abstract and the profile
-writes the whole of it; replacing is not a socket, because a copy with placeholders in it is the
-same rule for every task and needs nothing a task knows. What a
+**Personal data is one socket and three functions beside it.** `detect` is abstract and the
+profile writes the whole of it; replacing is not a socket, because a copy with placeholders in it
+is one rule rather than a question two tasks answer differently. It sits in the profile beside
+`detect` and not in the modality, and the reason is only that it has one caller: none of the three
+names anything a task knows — `replaced_node(node, pairs)` walks strings, mappings and lists — so
+the day a second task replaces anything they move up a layer unchanged. A shared body with one
+user is a body nobody has held against a second question. It is written once and reached twice: `span_values` reads what each placeholder stands for off `review_text` — the only thing a
+span's offsets are good for — `replaced_text` puts the placeholders into one string longest value
+first, and `replaced_node` walks a record doing the same to every string under it. The second
+reach is the one the offsets cannot have: a span indexes `review_text`, and `messages`, `tools` and
+`label` are other strings, so the rule that carries a confirmed value into them is replacement *by
+value* (Requirement 12). What a
 sample is scanned *as* is the task's answer, not the modality's: a tool-calling sample is its turns
 plus the catalog it was offered, and a base that composed the text from turns alone would be wrong
 for the only task there is. So the input carries the sample whole, and the
@@ -362,16 +478,16 @@ and falling back to text where none is readable are one rule, and a method whose
 `judge_prediction` answering `None` here: a panel whose answers can be matched needs no model to
 match them.
 
-**One record, and only at the end.** The page holds the eight answers and composes them into one
+**One record, and only at the end.** The UI holds the eight answers and composes them into one
 record. Nothing else composes one: a handler answers for its own part and knows nothing about the
-others, which is what makes each endpoint drivable by itself. `llm` and `sft` are
-the names the votes carry; `personal_data`, `duplicate` and `abnormal` are the three checks' own. No
-pydantic model declares the envelope.
+others, which is what makes each endpoint drivable by itself. `llm` and `sft` are the names the
+votes carry; `personal_data`, `duplicate` and `abnormal` are the three checks' own. No pydantic
+model declares the envelope.
 
 **Which models a deployment serves, and which a request asks.** A model is served when
 `config/model/<model name>.json` exists — `edge/served_models.py` reads that directory and nothing
 declares the names a second time, so the list cannot disagree with what is actually configured.
-`GET /models` is that list, the page ticks from it, and a request carries the names it ticked. A
+`GET /models` is that list, the UI ticks from it, and a request carries the names it ticked. A
 name off the list is refused before any model is called, with the served list in the message.
 
 The choice being per request rather than per deployment costs nothing in traceability: every vote
@@ -392,14 +508,49 @@ and it says how the model behaves: temperature, concurrency, the token ceiling. 
 keeps the endpoint in the environment leaves `base_url` and `api_key` out of both and lets
 `LLM_BASE_URL` and `LLM_API_KEY` answer.
 
-**The page.** One file, `edge/static/index.html` — markup, style and script inline, no build step and
-no npm, nothing loaded from a CDN. Every shape in it is read off the tree, and the span offsets are
-found with `indexOf` rather than written down, so the check button can always reproduce them.
+**The page that draws the flow.** One file, `edge/static/index.html` — markup, style and script
+inline, no build step and no npm, nothing loaded from a CDN. Every shape in it is read off the
+tree, and the span offsets are found with `indexOf` rather than written down, so the check button
+can always reproduce them. It calls nothing: what each rectangle shows is recomputed in its own
+script, which is what makes it readable as a description of the flow and useless as a labelling
+tool.
+
+**The labelling UI.** `src/dataforce/ui/` — `index.html`, `app.js`, `style.css` — mounted by
+`create_app()` with Starlette's `StaticFiles` at `/ui`, so one process serves the API and the tool
+that drives it and a labeller needs nothing installed. Three files rather than one, because this
+one has a script worth reading on its own; still no build step and no npm, so what is deployed is
+what is written.
+
+Inside the package and not at `src/ui/`, because `[tool.hatch.build.targets.wheel]` declares
+`packages = ["src/dataforce"]` and ships every file under it — which is how
+`edge/static/index.html` reaches an install. A directory beside the package would need a
+`force-include` entry to ship at all, and a UI that is missing from the wheel is a UI that works
+until someone installs the thing.
+
+What it holds is one function per rectangle's worth of behaviour and one `fetch` per route, and it
+holds no rule: the spans, the votes, the copy, the outcome and the redacted record are the
+service's answers, rendered. The record at the end is the exception the spec already names — the
+page composes it (Requirement 3), because nothing else does.
+
+Each rectangle is in one of four states — untouched, waiting, answered, refused — and a fifth
+sentence it can say instead: *not asked*, for a step whose button was pressed before it had what it
+needs. That is not a refusal and is not marked like one, because nothing was called and so nothing
+refused anything, and someone reading *refused* would go looking through a service log for a
+request that was never made. A refusal is a 422's own `detail`, in the rectangle that asked, with
+every other rectangle's answer left standing.
+
+One rule does live in three places, and it is the containment Requirement 11 states: the scan
+applies it to what it detects, the drawing draws it, and the UI's `auto` toggle applies it to the
+rows the reviewer moved (Requirement 40). That is the cost of a reviewer being able to edit an
+offset at all — a row they typed has to be resolved against the rows beside it, and only the page
+knows which rows those are. It is the one rule two sides hold, and it is stated here so the next
+person reading § *Invariants* knows what the claim does not cover.
 
 **No store yet, and the record therefore stops at the page.** Where a reviewed record is kept is
-one decision with several halves -- the table, the route that takes it, whether the redaction runs
-in the service or on the page, and which records are refused -- and it is deferred until the flow
-above it is finished (§ *Out of Scope*). Nothing above depends on it: every step answers its own
+one decision with several halves -- the table, the route that takes it, and which records are
+refused -- and it is deferred until the flow above it is finished (§ *Out of Scope*). Where the
+redaction runs is no longer among them: it is a route (Decision 24), which is what the record's
+three `new_` keys are answered by. Nothing above depends on it: every step answers its own
 call, and the record is what the page composes out of those answers.
 
 What that leaves is the consequence of keeping both halves, stated once because it does not depend
@@ -420,13 +571,17 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 | `modalities/text2text/ai_review/llm_prediction.py` | bodies for `verdict`, `exact_match_consensus`, `llm_judge_consensus`; the `judge_prediction` and `normalize_prediction` sockets |
 | `modalities/text2text/data_quality/personal_data_checking.py` | `PiiRuleDetector`, and `PiiLlmConfirmer` — which resolves its own model and makes its own call |
 | `modalities/text2text/data_quality/schema.py` | `PersonalDataCheckingConfig`, `PersonalDataCheckingInput`, `Language`, `RuleScan`, `SCAN_FUNCTIONS` and the `SCANS` a config defaults to |
-| `services/tool_decision/data_quality.py` | builds the scan's input, and turns a record it cannot read into a `ConfigError` |
+| `services/tool_decision/data_quality.py` | builds the scan's input, turns a record it cannot read into a `ConfigError`, and runs the replacement over the record the reviewer left |
 | `modalities/text2text/ai_review/SFTmodel_prediction.py` | the `predict` socket, and nothing else: comparing two answers needs what a task knows |
 | `profile/tool_decision/ai_review.py` | `ToolPredictor`, `predict`, `build_tool_prediction_prompt`, and `normalize_prediction` — the rule for matching two answers as calls |
-| `profile/tool_decision/data_quality.py` | `detect`, `build_review_text`, the two detectors, and `order_claims_by_class`, `find_and_number_spans`, `replace_spans_with_placeholders`, `decide_replacement_outcome` |
+| `profile/tool_decision/data_quality.py` | `detect`, `build_review_text`, the two detectors, and `order_claims_by_class`, `find_and_number_spans`, `span_values`, `replaced_text`, `replaced_node`, `replace_spans_with_placeholders`, `decide_replacement_outcome` |
 | `profile/tool_decision/utils.py` | `conversation_turns`, which both parts read, and the two directions of the OpenAI tool format: the catalog as text, and text as calls |
 | `config/prompts/profiles/tool_decision/pii_llm_detect.txt` | what the second detector is asked |
 | `config/prompts/modalities/text2text/data_quality/pii_llm_confirm.txt` | the spans the confirmation is shown, and the `{id, reason, confirmed}` it answers |
+| `ui/index.html` | the eight rectangles, their buttons and their editable boxes |
+| `ui/app.js` | one `fetch` per route, the ticks read off `GET /models`, and the record composed at the end |
+| `ui/style.css` | the flow's layout, and the states a rectangle can be in |
+| `edge/main.py` | mounts `ui/` at `/ui`; it is `wiring`, which is the layer allowed to know both |
 
 ## Decisions
 
@@ -534,6 +689,38 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
     corpus whose calls must run in the order they were written would read two answers as one, and
     the `sorted` in `normalize_prediction` is the one line that would change.
 
+21. **Two pages: one draws the flow, one drives it.** `edge/static/index.html` is read by whoever
+    is building this and answers *what is each step handed, and what does it answer*; `ui/` is
+    worked in by whoever is labelling and answers *what did this sample come to*. Alternative: one
+    page doing both, which is what it would become — the prose that makes the drawing readable is
+    noise in a tool used every day, and the loading states that make the tool usable are noise in
+    a description. The cost, stated: two files to keep in step, and the drawing is the one that
+    rots quietly, because no test drives either.
+22. **Three static files, no build step, inside the package.** Alternative: the `ui/` layout with
+    npm and a bundler. That buys components and a dependency tree, a second toolchain in the gate,
+    and a `dist/` that can disagree with its source; what this UI does is eight rectangles and
+    seven `fetch` calls. Inside `src/dataforce/` because the wheel ships every file under the
+    package and nothing else, so a UI beside it would be missing from an install. Reversible: it
+    is three files and a mount.
+23. **Approve posts nowhere, and says so.** Alternative: have approve write the record somewhere —
+    a file, a queue, the store that was just deferred. Every one of those is the store's decision
+    taken in the UI, and the UI is the last place that decision should be made. So approve freezes
+    the record and shows it, the labeller takes it from the screen, and the one rectangle that
+    changes when a store exists is that one.
+
+24. **The redaction of the three `new_` keys is a route.** `POST .../personal-data/redact` takes
+    the sample as the human left it and the spans they handed back, and answers the copy. The UI
+    then composes the record out of it, which keeps Requirement 45 whole: the page renders answers
+    and composes the record, and holds no rule.
+    Alternative, and the one the drawing already does: the page walks the record replacing by
+    value. It needs no route, and it is what `edge/static/index.html` is written with. The cost is
+    the whole of why it was not chosen — a redaction rule living in the client, where a caller who
+    skips it gets a record that says it was redacted and was not, and a second definition of
+    replacement to keep in step with the service's. The rule was the service's before the store was
+    deleted, in `replaced_node`; this puts it back in the service rather than in the page. The
+    cost, stated: a route nothing but this UI asks for yet, and the store's decision may well
+    absorb it — at which point this is the endpoint that changes, not the page.
+
 ## Versions
 
 No new dependency. FastAPI `>=0.141.1` serves the page through Starlette's `StaticFiles`.
@@ -547,7 +734,8 @@ when one is written.
   span's `start`/`end` yields the value it was made from.
 - No span offset indexes `redacted_text`. A placeholder is not the length of the value it replaced,
   so the two strings do not share offsets, and only `review_text` is a span's frame of reference.
-- One value gets one placeholder throughout a scan. Check: the placeholder map is keyed by value.
+- One value gets one placeholder throughout a scan. Check: the map replacement runs over is keyed
+  by value, so two spans carrying one placeholder are two entries and both values are replaced.
 - No span survives inside a longer span. Check: no pair where one range contains the other.
 - No juror sees another juror's answer. Check: `predict` builds each juror's prompt from the sample
   alone.
@@ -560,6 +748,13 @@ when one is written.
 - What a human step returns differs from what it was given only where the human changed something.
 - No endpoint's response mentions a part it does not own. Check: each response model is one part's
   own shape.
+- The UI holds no rule the service holds. Check: `ui/app.js` computes no span, no consensus, no
+  copy, no outcome and no redacted record — each of those is a field it read off a response. The
+  record it composes is the one thing nothing else composes, and it composes it out of answers.
+- One rule turns a value into a placeholder. Check: `replaced_text` is the only place a value is
+  swapped for one, `replaced_node` is that rule over a record's strings, and both are handed the
+  same `{value: placeholder}` pairs `span_values` read off `review_text` — which is also the map
+  the outcome is measured against, so what was replaced and what counts as replaced cannot drift.
 - Property order is preserved through `openai_tool_format_to_text`, so text re-rendered from the same
   tools is byte-identical.
 
@@ -592,6 +787,17 @@ when one is written.
   `ConfigError` here as everywhere else on the route. Its message says *unimplemented* rather than
   *unserved*, so the two refusals do not read alike.
 - A handler stays thin: it calls the part and maps the error through `errors.py`.
+- A call the UI makes that fails shows the service's own `detail` in the rectangle that made it,
+  and every answer the page already holds stays. The step is re-runnable from its own button. The
+  UI retries nothing by itself: a second call is a person pressing the button again.
+- A rectangle asked before it has what it needs — no sample read, no verifier ticked, a span row
+  that does not parse — says *not asked* and names what is missing. It is not a refusal and does
+  not read as one: nothing was called, so no answer was withheld, and someone reading *refused*
+  would go looking through the service's log for a request it never received.
+- The redaction route asks no model, so nothing about it can be refused for a name this deployment
+  does not serve. A body it cannot read is a `ValidationError` at the boundary and 422 in the
+  rectangle that sent it — which is what a label edited into something that is not a list of
+  messages comes back as.
 
 ## Testing Strategy
 
@@ -619,18 +825,30 @@ when one is written.
 - The `PersonalDataDetected` the replace route takes back is written out in the test, not fetched
   from the detect route: it is one part's second call, and a fixture that fetched it would be the
   threading Requirement 1 forbids.
-- No test drives the page. A browser is the check.
+- The redaction route over the same written-out `PersonalDataDetected`: a value handed back is
+  replaced in the turns and in the label's arguments, a field it was not in comes back as it
+  arrived, a corpus key nothing here reads comes back under its own name, and no span handed back
+  answers the sample unchanged. Its own rule is pinned in the profile's tests as well — that the
+  longest value goes first here too, that a value the reviewer dropped is readable in the copy,
+  and that a node holding no string is copied rather than stringified.
+- No test drives either page. A browser is the check, and what a test says about them is only that
+  they are served: `GET /text2text/tool-decision/` answers the drawing, and `GET /ui/` answers the
+  UI's `index.html`. One more thing is read off the files rather than driven: no model name the
+  drawing writes down appears anywhere under `ui/`, because the second declaration of what this
+  deployment serves is the one that would arrive by someone copying that line across
+  (Requirement 49).
 
 ## Out of Scope
 
 - `DuplicateDataChecking.duplicate_groups` and `CommonAbnormalChecking.check_verdict` bodies. Neither
   declares a shape and this spec invents none.
-- Auth, rate limiting, batching, and running any of this over a corpus rather than one sample.
+- Auth, rate limiting, batching, and running any of this over a corpus rather than one sample —
+  the UI labels the one sample pasted into it, and walking a file of them, tracking which are done
+  and where the labelled ones go is a corpus by another name.
 - Which models the panel asks, and how many. A composition is a deployment's declaration, and
   nothing in this spec picks one.
 - **The store, and everything that answers for it.** Where a reviewed record is kept, the route
-  that takes it, whether the redaction runs in the service or on the page, which records are
-  refused, and the schema management under all of it — one decision, deferred until the flow above
+  that takes it, which records are refused, and the schema management under all of it — one decision, deferred until the flow above
   it is finished. The table and the route it was reached through were written and are deleted
   rather than left half-answering: a route nothing may post to is worse than no route, and the
   history is in the plan (T14).

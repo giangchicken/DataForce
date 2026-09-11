@@ -1,9 +1,11 @@
 """logic · the full logic behind each data-quality endpoint.
 
-Personal data is two calls, because a human sits between them. `personal_data_detect` builds the
+Personal data is two calls a reviewer sits between, and a third over the record they left. `personal_data_detect` builds the
 checker from its config and the scan's input out of what arrived -- the record whole, and the
 language declared beside it -- and answers what a reviewer is shown. `personal_data_replace` takes
 that answer back with the spans as the reviewer left them, and replaces those and nothing else.
+`personal_data_redact` runs the same replacement over the record's own fields, which is the one
+place the review text's offsets cannot reach.
 
 `duplicate_report` and `abnormal_report` take a sample and nothing else: neither declares a shape
 to return, so neither has a model to ask, and a config they ignore would be one a caller has to
@@ -27,6 +29,8 @@ from dataforce.profile.tool_decision import ToolDecisionPersonalChecking
 from dataforce.profile.tool_decision.data_quality import (
     decide_replacement_outcome,
     replace_spans_with_placeholders,
+    replaced_node,
+    span_values,
 )
 
 
@@ -69,6 +73,28 @@ def personal_data_replace(detected: PersonalDataDetected) -> PersonalDataReplace
             detected.review_text, detected.claims, detected.spans, redacted
         ),
     )
+
+
+def personal_data_redact(
+    detected: PersonalDataDetected, sample: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The sample as the human left it, with every handed-back span's value replaced.
+
+    The third personal-data call, and the same rule as the second over a different reach:
+    `personal_data_replace` copies `review_text`, and this copies every field the record carries,
+    because an offset indexes the review text and `messages` and `label` are other strings
+    (Requirement 12). Which is why it is handed the detect answer whole rather than the spans
+    alone -- the text they index is what says which value each placeholder stands for.
+
+    Where the record's `new_` keys come from (Requirements 15, 16): the page holds what the human
+    edited, this replaces over it, and the page composes the record out of what comes back. The
+    rule is the service's and not the page's, because a rule a caller can skip is not a rule.
+
+    Not async, and no model is asked: the spans arrive from the reviewer who ticked, edited or
+    added them. Nothing is kept either -- the sample is read, copied and answered.
+    """
+    pairs = span_values(detected.review_text, detected.spans)
+    return {key: replaced_node(value, pairs) for key, value in sample.items()}
 
 
 async def duplicate_report(sample: Mapping[str, Any]) -> None:

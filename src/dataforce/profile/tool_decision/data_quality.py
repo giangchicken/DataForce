@@ -2,8 +2,10 @@
 
 Personal data is the one with a body to write, and it is two calls. `detect` is the frame of
 reference every offset indexes, two detectors unioned, and the modality's confirmation over the
-spans they earn. `replace_spans_with_placeholders` is the other, over the spans a human handed
-back, and `decide_replacement_outcome` says how far it got. What this task reads is the turns
+spans they earn. `replace_spans_with_placeholders` is the second, over the spans a human handed
+back, and `decide_replacement_outcome` says how far it got. `replaced_node` is the third: the same
+replacement over the record's own fields rather than over the review text, which is where the
+record's `new_` keys come from. What this task reads is the turns
 *and* the catalog, because an argument value in a tool call is where a phone number sits.
 """
 
@@ -99,30 +101,67 @@ def find_and_number_spans(
     )
 
 
+def span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, str]:
+    """What stands in for each value, keyed by the value. The one place a span is read.
+
+    Keyed by value and not by placeholder, because one value gets one placeholder throughout a
+    scan (Requirement 10) and the other direction is not a map: two spans a reviewer typed the
+    same placeholder on would be one entry, and the value that lost would never be replaced --
+    leaving a record that says it was redacted and was not.
+
+    A span whose offsets read nothing is skipped: these arrive from a reviewer, and replacing the
+    empty string puts a placeholder between every character of the text. So is a span with no
+    placeholder, for the same reason read the other way round -- there is nothing to put in the
+    text, and replacing a value with nothing deletes it silently instead of marking it.
+    """
+    return {
+        text[span.start : span.end]: span.placeholder
+        for span in spans
+        if text[span.start : span.end] and span.placeholder
+    }
+
+
+def replaced_text(text: str, pairs: Mapping[str, str]) -> str:
+    """`text` copied with every value in `pairs` replaced by its placeholder, longest first.
+
+    Longest first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is
+    neither redacted nor intact.
+    """
+    copy = text
+    for value, placeholder in sorted(pairs.items(), key=lambda pair: -len(pair[0])):
+        copy = copy.replace(value, placeholder)
+    return copy
+
+
+def replaced_node(node: Any, pairs: Mapping[str, str]) -> Any:
+    """`node` copied with every string under it replaced the same way `replaced_text` does.
+
+    By value and not by offset, which is what makes the rule runnable here at all: the offsets
+    index `review_text`, and `messages`, `tools` and `label` are other strings (Requirement 12).
+    So a value confirmed at one occurrence is replaced at every occurrence in every field -- a
+    value redacted in one field and left in another is not redacted.
+
+    Anything that is not a string, a mapping or a list is answered as it arrived: a number, a
+    boolean and a `null` carry no value to trade back.
+    """
+    if isinstance(node, str):
+        return replaced_text(node, pairs)
+    if isinstance(node, Mapping):
+        return {key: replaced_node(value, pairs) for key, value in node.items()}
+    if isinstance(node, list | tuple):
+        return [replaced_node(item, pairs) for item in node]
+    return node
+
+
 def replace_spans_with_placeholders(
     text: str, spans: Sequence[PersonalDataSpan]
 ) -> str | None:
     """`text` copied with every span's value replaced by its placeholder, longest value first.
 
-    `None` where there is nothing to replace, which is what `reported` means (Decision 6). Longest
-    first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is neither
-    redacted nor intact. By value and not by offset, because the same rule runs again over the
-    record's other fields, where there are no offsets to run it by.
-
-    A span whose offsets read nothing is skipped: these arrive from a reviewer, and replacing the
-    empty string puts a placeholder between every character of the text.
+    `None` where there is nothing to replace, which is what `reported` means (Decision 6).
     """
-    pairs = {
-        span.placeholder: text[span.start : span.end]
-        for span in spans
-        if text[span.start : span.end]
-    }
-    if not pairs:
-        return None
-    copy = text
-    for placeholder, value in sorted(pairs.items(), key=lambda pair: -len(pair[1])):
-        copy = copy.replace(value, placeholder)
-    return copy
+    pairs = span_values(text, spans)
+    return replaced_text(text, pairs) if pairs else None
 
 
 def order_claims_by_class(
@@ -169,12 +208,16 @@ def decide_replacement_outcome(
     placeholder never lands and the copy holds a fragment of a name. Which span should win is
     undecided; that this is not those values redacted is not. A claim with no span at all is
     resolved by the longer value it sat inside.
+
+    The map is `span_values`' own, so a span nothing could be replaced through -- no value at
+    those offsets, or no placeholder to put there -- is not in it, and the value it named has to
+    be gone from the copy on its own. It is not, because nothing replaced it: `withheld`.
     """
     if not claims:
         return "reported"
     if redacted is None:
         return "withheld"
-    placeholders = {text[span.start : span.end]: span.placeholder for span in spans}
+    placeholders = span_values(text, spans)
     resolved = [
         value
         for _, value in claims

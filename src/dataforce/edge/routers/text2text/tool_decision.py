@@ -3,8 +3,9 @@
 A handler is thin. It reads the body, calls one function in `services/tool_decision/`, and maps the
 error; it names no stage sequence, and no response carries a part the handler does not own.
 
-There is no route that stores anything: the record the page assembles is posted nowhere until the
-store is written, which waits for the flow to be finished (spec § *Out of Scope*).
+There is no route that stores anything: the record the labelling UI assembles is posted nowhere
+until the store is written, which waits for the flow to be finished (spec § *Out of Scope*). The
+redaction route reads a sample and answers a copy of it; it keeps neither.
 
 Which models answer is the caller's choice, not a declaration: `GET /models` lists what this
 deployment serves, and each request names the ones it wants. A name with no config file is refused
@@ -42,6 +43,7 @@ from dataforce.services.tool_decision import (
     abnormal_report,
     duplicate_report,
     personal_data_detect,
+    personal_data_redact,
     personal_data_replace,
     tool_decision_llm_predict,
     tool_decision_sft_predict,
@@ -94,6 +96,20 @@ class ScanRequest(Sample):
     )
     verifier_model: str = Field(
         ..., description="Which served model confirms layer one's candidates."
+    )
+
+
+class RedactRequest(Sample):
+    """A sample as the human left it, and the spans they handed back over it.
+
+    `detected` is named apart from the sample's own keys on the same terms as the scan's two
+    declarations: it is what a reviewer handed back about this request, not a key the corpus
+    carries. The detect answer whole rather than its spans alone, because `review_text` is what
+    the offsets index and therefore the only thing that says which value a placeholder stands for.
+    """
+
+    detected: PersonalDataDetected = Field(
+        ..., description="The spans as the reviewer left them, in the text they index."
     )
 
 
@@ -194,6 +210,26 @@ def personal_data_replacement(detected: PersonalDataDetected) -> PersonalDataRep
     can be refused for a name this deployment does not serve.
     """
     return personal_data_replace(detected)
+
+
+@router.post(
+    "/data-quality/personal-data/redact",
+    summary="the sample with every handed-back span's value replaced",
+)
+def personal_data_redaction(request: RedactRequest) -> dict[str, Any]:
+    """The sample back with its placeholders in it, wherever a confirmed value occurred.
+
+    The record's three `new_` keys come from here (Requirements 15, 16): the page holds what the
+    human edited, this replaces over all of it, and the page composes the record out of the
+    answer. Replacement is by value, so it reaches `messages` and `label`, which the review
+    text's offsets cannot index.
+
+    No model is asked, so nothing here can be refused for a name this deployment does not serve,
+    and nothing is kept: the sample is read, copied and answered.
+    """
+    return personal_data_redact(
+        request.detected, request.model_dump(exclude={"detected"})
+    )
 
 
 @router.post("/data-quality/duplicate", summary="which samples this one repeats")

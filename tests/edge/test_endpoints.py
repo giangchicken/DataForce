@@ -5,7 +5,9 @@ that is Requirement 1, and a suite is the easiest place to break it, because a f
 the scan and feeds the answer to `/ai-review` passes while making the parts undrivable apart. The
 one body that arrives from another route is the `PersonalDataDetected` the replace route takes
 back, and that is one part's second call rather than a payload threaded between two (Decision 19).
-`GET /health` is the app's own and not this task's, so it is not among them.
+`GET /health` is the app's own and not this task's, so it is not among them. `GET /ui/` is the
+app's own too -- a mount rather than a route -- and what is asserted about it is only that it is
+served, because no test drives either page.
 
 Which models a request may tick is a directory, so the stub is a directory: `DATAFORCE_MODEL_DIR`
 points at files this test wrote, set before the app is created because `register_resolver()` reads
@@ -24,7 +26,7 @@ import pytest
 from agent_toolkit.llm import set_config_resolver
 from fastapi.testclient import TestClient
 
-from dataforce.edge.main import create_app
+from dataforce.edge.main import UI, create_app
 from dataforce.edge.routers.text2text import tool_decision as route
 from dataforce.modalities.text2text.data_quality import (
     PersonalDataDetected,
@@ -77,6 +79,11 @@ SAMPLE: Mapping[str, Any] = {
 }
 
 OPEN_TICKET = [{"name": "OpenTicket", "arguments": {"ma_khach": "KH-1"}}]
+
+# The names `edge/static/index.html` writes down. The drawing may: every answer in it is its own,
+# and a picture of a tick list needs names to draw. The UI may not, and lifting that line out of
+# the drawing is exactly how it would come to (Requirement 49).
+DRAWN_MODELS = ("DeepSeek-V4-Flash", "bge-m3", "gemma-4-31B-it", "sft-tool-decision")
 
 # The one body that arrives from another route: the detect answer, with the spans as a reviewer
 # left them. Written out here rather than fetched, so this test drives one route.
@@ -157,6 +164,37 @@ def test_the_page_is_served_by_its_own_route(client: TestClient) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/html")
     assert resp.text == route.PAGE.read_text(encoding="utf-8")
+
+
+def test_the_labelling_ui_is_served_at_its_own_mount(client: TestClient) -> None:
+    """Requirement 44. The file, as a file: no test drives the UI, and a browser is the check."""
+    resp = client.get("/ui/")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert resp.text == (UI / "index.html").read_text(encoding="utf-8")
+
+
+def test_the_ui_ticks_from_the_endpoint_rather_than_naming_a_model_itself() -> None:
+    """Requirement 49 and Decision 13: the directory is the list, so the UI asks for it.
+
+    Read off the files rather than out of a browser, because what it pins is a *second
+    declaration* of what this deployment serves -- and the one that would appear is the drawing's
+    `SERVED`, copied across. The drawing is read too, so the day those names change there the
+    constant here fails rather than quietly guarding nothing.
+    """
+    drawing = route.PAGE.read_text(encoding="utf-8")
+    written = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in sorted(UI.iterdir())
+        if path.is_file()
+    }
+
+    assert "/models" in written["app.js"]
+    for name in DRAWN_MODELS:
+        assert name in drawing
+        for said in written.values():
+            assert name not in said
 
 
 def test_models_answers_the_directory_this_deployment_serves(
@@ -302,6 +340,79 @@ def test_the_replace_route_takes_the_detect_answer_back_and_asks_no_model(
         "redacted_text": REVIEW_TEXT.replace(PHONE, "<PHONE_1>"),
         "outcome": "redacted",
     }
+
+
+# ----------------------------------------------------------------- redacting, with no model
+
+
+def test_the_redact_route_replaces_a_handed_back_value_in_every_field(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the record's three `new_` keys come from, and the reach `replace` does not have.
+
+    A span indexes `review_text`; the turns and the label are other strings, so this replaces by
+    value across the record. Its body carries no model either, so there is no name here to refuse.
+    """
+    no_model_answers(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/redact",
+        json={**SAMPLE, "detected": DETECTED},
+    )
+
+    assert resp.status_code == 200
+    answer = resp.json()
+    assert PHONE not in json.dumps(answer, ensure_ascii=False)
+    assert answer["messages"][0]["content"] == str(
+        SAMPLE["messages"][0]["content"]
+    ).replace(PHONE, "<PHONE_1>")
+    # Everything the value was not in comes back as it arrived, including a corpus key this
+    # service does not read: what is answered is the record, not a copy of the part it rewrote.
+    assert answer["messages"][1] == SAMPLE["messages"][1]
+    assert answer["tools"] == SAMPLE["tools"]
+    assert answer["label"] == SAMPLE["label"]
+    assert answer["id"] == SAMPLE["id"]
+    assert answer["source"] == SOURCE
+
+
+def test_the_spans_handed_back_are_not_a_key_of_the_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`detected` is a declaration about this request, on the same terms as the scan's two.
+
+    So what comes back is the record's own keys and nothing about how it was redacted: the page
+    composes the record, and this route answers one of its parts.
+    """
+    no_model_answers(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/redact",
+        json={**SAMPLE, "detected": DETECTED},
+    )
+
+    assert set(resp.json()) == set(SAMPLE)
+
+
+def test_no_span_handed_back_is_nothing_replaced(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reviewer who handed back no span asked for nothing to be rewritten.
+
+    Which is also what the last rectangle sends where the scan was never run: the record comes
+    back as it arrived rather than refused, because nothing was confirmed to replace.
+    """
+    no_model_answers(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/redact",
+        json={
+            **SAMPLE,
+            "detected": {"review_text": "", "claims": [], "spans": []},
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == dict(SAMPLE)
 
 
 # ----------------------------------------------------------------- the two that report nothing

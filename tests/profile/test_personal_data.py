@@ -54,8 +54,13 @@ from dataforce.profile.tool_decision.data_quality import (
     ToolDecisionPersonalChecking,
     find_and_number_spans,
     order_claims_by_class,
+    replaced_node,
 )
-from dataforce.services.tool_decision import personal_data_detect, personal_data_replace
+from dataforce.services.tool_decision import (
+    personal_data_detect,
+    personal_data_redact,
+    personal_data_replace,
+)
 
 EMAIL = "minh0912345678@vd.vn"
 PHONE = "0912345678"
@@ -257,6 +262,19 @@ def occurrences(text: str, value: str) -> list[int]:
 def sliced(found: PersonalDataDetected) -> list[str]:
     """What each span's offsets actually read in the text the answer says they index."""
     return [found.review_text[span.start : span.end] for span in found.spans]
+
+
+def span_over(
+    text: str, value: str, personal_data_class: str, placeholder: str, id: int
+) -> PersonalDataSpan:
+    """One span a reviewer typed, with its offsets found rather than written down."""
+    return PersonalDataSpan(
+        id=id,
+        start=text.index(value),
+        end=text.index(value) + len(value),
+        personal_data_class=personal_data_class,
+        placeholder=placeholder,
+    )
 
 
 def placeholders_of(found: PersonalDataDetected, value: str) -> set[str]:
@@ -849,6 +867,129 @@ async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
     assert "<NAME_1>" in replaced.redacted_text
     assert "<NAME_2>" not in replaced.redacted_text
     assert replaced.outcome == "withheld"
+
+
+def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() -> None:
+    """Requirement 10 read from the other end: the map is keyed by value, never by placeholder.
+
+    `placeholder` is a column a reviewer edits, so two rows can carry the same one. Keyed by
+    placeholder they would be one entry, and the value that lost would stay in a copy that reports
+    itself `redacted` -- which is the one thing an outcome may not do.
+    """
+    said = f"{NAME} và {PHONE}"
+    detected = PersonalDataDetected(
+        review_text=said,
+        claims=(("NAME", NAME), ("PHONE", PHONE)),
+        spans=(
+            span_over(said, NAME, "NAME", "<X_1>", 1),
+            span_over(said, PHONE, "PHONE", "<X_1>", 2),
+        ),
+    )
+
+    replaced = personal_data_replace(detected)
+
+    assert replaced.redacted_text == "<X_1> và <X_1>"
+    assert replaced.outcome == "redacted"
+
+
+def test_a_span_with_no_placeholder_replaces_nothing_and_holds_the_record_back() -> (
+    None
+):
+    """A value replaced by the empty string is deleted rather than redacted, and silently.
+
+    So a span carrying no placeholder is skipped on the same terms as one whose offsets read
+    nothing, and the claim it named stays unresolved. `withheld`, not a copy that quietly lost a
+    stretch of its text and called itself clean.
+    """
+    said = f"số {PHONE}"
+    detected = PersonalDataDetected(
+        review_text=said,
+        claims=(("PHONE", PHONE),),
+        spans=(span_over(said, PHONE, "PHONE", "", 1),),
+    )
+
+    replaced = personal_data_replace(detected)
+
+    assert replaced.redacted_text is None
+    assert replaced.outcome == "withheld"
+
+
+# ----------------------------------------------------------------- the copy over the record
+
+
+async def test_a_value_confirmed_once_is_replaced_wherever_it_occurs() -> None:
+    """Requirement 12 over the record, which is the reach the offsets do not have.
+
+    A span indexes `review_text`; `messages` and `label` are other strings, so the rule that
+    reaches them is replacement by value -- and the phone number confirmed in the turn is replaced
+    in the argument value too. What the reviewer did *not* hand over stays: the address nothing
+    claimed is still in the copy, so this replaces confirmed values rather than scrubbing text.
+    """
+    detected = await StubbedModels().detect(given(SAMPLE))
+
+    redacted = personal_data_redact(detected, SAMPLE)
+
+    said = json.dumps(redacted, ensure_ascii=False)
+    assert redacted["label"] == [
+        {"name": "OpenTicket", "arguments": {"ma_khach": "<PHONE_1>"}}
+    ]
+    for value in (EMAIL, PHONE, NAME):
+        assert value not in said
+    # Longest value first, here too: the phone inside the email must not cut it in half.
+    assert "minh<PHONE_1>@vd.vn" not in said
+    assert ADDRESS in said
+    # Nothing structural moved with the values: the catalog holds no personal data, so it comes
+    # back as it arrived, keys, nesting and all.
+    assert redacted["tools"] == SAMPLE["tools"]
+    assert redacted["id"] == SAMPLE["id"]
+
+
+async def test_no_span_handed_back_leaves_the_record_as_it_arrived() -> None:
+    """A reviewer who handed back nothing asked for nothing to be replaced.
+
+    Not a refusal and not an empty record: the same rule with no pair to apply, which is what the
+    last rectangle sends before the scan has been run at all.
+    """
+    detected = await StubbedModels().detect(given(SAMPLE))
+
+    redacted = personal_data_redact(detected.model_copy(update={"spans": ()}), SAMPLE)
+
+    assert redacted == dict(SAMPLE)
+
+
+async def test_a_value_the_reviewer_dropped_stays_in_the_record() -> None:
+    """§ *Design*'s first unresolved case, pinned as the behaviour that exists.
+
+    Unticking a span leaves its value in the record, which is then redacted as far as the reviewer
+    allowed and no further. Nothing here decides that for them -- what they handed back is what is
+    replaced -- and the value they let through is readable in the copy, which is what makes the
+    consequence of their tick visible rather than silent.
+    """
+    detected = await StubbedModels().detect(given(SAMPLE))
+    kept = tuple(span for span in detected.spans if span.personal_data_class != "PHONE")
+
+    redacted = personal_data_redact(detected.model_copy(update={"spans": kept}), SAMPLE)
+
+    said = json.dumps(redacted, ensure_ascii=False)
+    assert PHONE in said
+    assert "<EMAIL_1>" in said
+    assert "<NAME_1>" in said
+
+
+def test_a_number_a_boolean_and_a_null_carry_no_value_to_trade_back() -> None:
+    """`replaced_node` walks a record and rewrites its strings. Everything else is copied.
+
+    The walk is the point: a value sits in an argument three levels down as readily as in a turn,
+    and a node nothing can hold a value in is answered as it arrived rather than stringified.
+    """
+    node = {"n": 42, "yes": True, "nothing": None, "said": [PHONE, {"deep": PHONE}]}
+
+    assert replaced_node(node, {PHONE: "<PHONE_1>"}) == {
+        "n": 42,
+        "yes": True,
+        "nothing": None,
+        "said": ["<PHONE_1>", {"deep": "<PHONE_1>"}],
+    }
 
 
 # ----------------------------------------------------------------- what may not raise

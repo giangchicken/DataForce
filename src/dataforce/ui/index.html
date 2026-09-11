@@ -1,0 +1,244 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tool_decision · label one sample</title>
+<link rel="stylesheet" href="style.css">
+
+<header>
+  <h1>tool_decision — label one sample</h1>
+  <div class="sub">
+    One rectangle per step, and <b>every rectangle is one call</b>: its button calls its own route
+    and no other, so a step is re-runnable on its own and nothing waits for the rectangle beside
+    it. The yellow cells are yours to edit — what you leave in them is what the next call is made
+    with, and that edit plus the button after it <i>is</i> the human step. Step 8 is the record
+    this page assembles out of the eight answers. <b>Nothing here stores it.</b>
+    The model lists are what <b>config/model/</b> holds, asked for again every time you come back
+    to this tab — so a file you add while the service is up shows up without a reload, and your
+    ticks survive it.
+  </div>
+  <div class="legend">
+    <span class="state">answered</span>
+    <span class="state wait">waiting</span>
+    <span class="state edited">edited</span>
+    <span class="state bad">refused</span>
+    <span class="state unasked">not asked</span>
+    <span class="note">a refusal is shown in the rectangle that asked, in the service's own words;
+      <b>not asked</b> is the other thing, and means nothing was called</span>
+  </div>
+</header>
+
+<main>
+
+  <section class="step" id="s1">
+    <div class="head"><span class="n">1</span><span class="title">input</span>
+      <span class="src">one sample, pasted as JSON <span class="state" data-state="1"></span></span>
+    </div>
+    <div class="io in"><div class="lab">in</div><div class="val">
+      <textarea id="sample-text" spellcheck="false"></textarea>
+      <div class="bar">
+        <button id="sample-check">check</button>
+        <label class="mode">language
+          <select id="language"><option value="vi">vi</option><option value="en">en</option></select>
+        </label>
+        <span class="note" id="sample-note"></span>
+      </div>
+    </div></div>
+    <div class="io out"><div class="lab">out</div><div class="val">
+      <pre id="out-1" class="big"></pre>
+    </div></div>
+    <div class="why">One sample at a time: what every endpoint takes is one sample. No route is
+      called here — <b>check</b> only parses what you typed. The language is a declaration about
+      this sample, and both model steps are handed it.</div>
+  </section>
+
+  <div class="arrow">▼<span>the same sample to each of the three, and none of them to another</span></div>
+
+  <div class="row fan">
+    <section class="step" id="s2">
+      <div class="head"><span class="n">2</span><span class="title">personal data</span>
+        <span class="state" data-state="2"></span>
+      </div>
+      <div class="ticks"><div class="lab">verifier — one model confirms each span</div>
+        <div id="verifier-ticks" class="tickbox"></div>
+      </div>
+      <div class="io in"><div class="lab">in</div><div class="val">
+        <pre id="in-2" class="big"></pre>
+      </div></div>
+      <div class="bar">
+        <button id="detect">detect</button>
+        <span class="note">POST /data-quality/personal-data</span>
+      </div>
+      <div class="io out"><div class="lab">out</div><div class="val">
+        <div class="tablewrap"><table id="span-table"><thead><tr>
+          <th>id</th><th>start</th><th>end</th><th>class</th><th>placeholder</th><th>value it reads</th>
+        </tr></thead><tbody></tbody></table></div>
+        <div class="bar">
+          <button id="span-check">check</button>
+          <button id="span-add">add a span</button>
+          <span class="note" id="span-note"></span>
+        </div>
+        <pre id="out-2" class="big"></pre>
+      </div></div>
+      <div class="why">The spans are the service's answer, and the offsets index
+        <b>review_text</b>. <b>check</b> re-reads every row and re-slices it; an unreadable edit
+        says which rule it broke and calls nothing.</div>
+    </section>
+
+    <section class="step" id="s3">
+      <div class="head"><span class="n">3</span><span class="title">duplicate</span>
+        <span class="state" data-state="3"></span>
+      </div>
+      <div class="io in"><div class="lab">in</div><div class="val">
+        <pre id="in-3" class="big"></pre>
+      </div></div>
+      <div class="bar">
+        <button id="duplicate-run">check</button>
+        <span class="note">POST /data-quality/duplicate</span>
+      </div>
+      <div class="io out"><div class="lab">out</div><div class="val">
+        <pre id="out-3" class="big"></pre>
+      </div></div>
+      <div class="why">Answers <b>null</b> at 200. Nothing failed: nothing declares what a
+        duplicate report is, so there is nothing to report.</div>
+    </section>
+
+    <section class="step" id="s4">
+      <div class="head"><span class="n">4</span><span class="title">abnormal</span>
+        <span class="state" data-state="4"></span>
+      </div>
+      <div class="io in"><div class="lab">in</div><div class="val">
+        <pre id="in-4" class="big"></pre>
+      </div></div>
+      <div class="bar">
+        <button id="abnormal-run">check</button>
+        <span class="note">POST /data-quality/abnormal</span>
+      </div>
+      <div class="io out"><div class="lab">out</div><div class="val">
+        <pre id="out-4" class="big"></pre>
+      </div></div>
+      <div class="why">The same: <b>null</b> at 200, and nothing to report.</div>
+    </section>
+  </div>
+
+  <div class="arrow">▼<span>the spans, to the person who says which of them are real</span></div>
+
+  <section class="step" id="s5">
+    <div class="head"><span class="n">5</span><span class="title">human check · data quality</span>
+      <span class="src">the spans as you leave them, then the copy made over them
+        <span class="state" data-state="5"></span></span>
+    </div>
+    <div class="io in"><div class="lab">in</div><div class="val">
+      <div class="tablewrap"><table id="keep-table"><thead><tr>
+        <th>keep</th><th>class</th><th>placeholder</th><th>value</th><th></th>
+      </tr></thead><tbody></tbody></table></div>
+      <div class="bar">
+        <label class="mode"><input type="checkbox" id="auto" checked> auto — drop any span inside a longer one</label>
+      </div>
+      <pre id="in-5" class="big"></pre>
+    </div></div>
+    <div class="bar">
+      <button id="replace-run">replace</button>
+      <span class="note">POST /data-quality/personal-data/replace</span>
+    </div>
+    <div class="io out"><div class="lab">out</div><div class="val">
+      <pre id="out-5" class="big"></pre>
+    </div></div>
+    <div class="why">Two calls with you between them: <b>detect</b> claimed, you tick and edit, and
+      <b>replace</b> answers over what you handed back. Nothing was replaced before you looked, and
+      nothing here records that you looked — the answer is the spans you returned.</div>
+  </section>
+
+  <div class="arrow">▼<span>the sample again, not step 5: this is a check on the label</span></div>
+
+  <section class="step" id="s6">
+    <div class="head"><span class="n">6</span><span class="title">ai review label</span>
+      <span class="state" data-state="6"></span>
+    </div>
+    <div class="ticks"><div class="lab">jury — every model ticked sits on the panel</div>
+      <div id="jury-ticks" class="tickbox"></div>
+    </div>
+    <div class="ticks"><div class="lab">finetuned reviewer — one, or none</div>
+      <div id="sft-ticks" class="tickbox"></div>
+    </div>
+    <div class="io in"><div class="lab">in</div><div class="val">
+      <pre id="in-6" class="big"></pre>
+    </div></div>
+    <div class="bar">
+      <button id="review-run">review</button>
+      <span class="note">POST /ai-review</span>
+    </div>
+    <div class="io out"><div class="lab">out</div><div class="val">
+      <pre id="out-6" class="big"></pre>
+    </div></div>
+    <div class="why">No data-quality answer is an argument to this. A juror is asked the sample's
+      own question and is never shown the label; <b>label_agreement</b> is what the service made of
+      its votes against the label that arrived.</div>
+  </section>
+
+  <div class="arrow">▼<span>the label, to the person who says whether it ships</span></div>
+
+  <section class="step" id="s7">
+    <div class="head"><span class="n">7</span><span class="title">human check · label</span>
+      <span class="src">what ships, before redaction <span class="state" data-state="7"></span></span>
+    </div>
+    <div class="bar">
+      <label class="mode"><input type="radio" name="verdict" id="v-correct" checked> correct — everything ships as it arrived</label>
+      <label class="mode"><input type="radio" name="verdict" id="v-modify"> modify — edit any of the three below</label>
+    </div>
+    <div id="label-editor" class="editor hidden">
+      <div class="lab">messages</div>
+      <textarea id="messages-text" spellcheck="false"></textarea>
+      <div class="lab">tools</div>
+      <textarea id="tools-text" spellcheck="false"></textarea>
+      <div class="lab">label</div>
+      <textarea id="label-text" spellcheck="false"></textarea>
+      <div class="bar">
+        <button id="label-check">check</button>
+        <span class="note" id="label-note"></span>
+      </div>
+    </div>
+    <div class="io out"><div class="lab">out</div><div class="val">
+      <pre id="out-7" class="big"></pre>
+    </div></div>
+    <div class="why">A label that is not JSON is carried as <b>{unparsed: …}</b> rather than
+      dropped or guessed at. No route is called here — the edit is the step, and the call after it
+      is step 8's.</div>
+  </section>
+
+  <div class="arrow">▼<span>the eight answers, as one record</span></div>
+
+  <section class="step" id="s8">
+    <div class="head"><span class="n">8</span><span class="title">final result</span>
+      <span class="src">the record this page assembles <span class="state" data-state="8"></span></span>
+    </div>
+    <div class="io in"><div class="lab">in</div><div class="val">
+      <pre id="in-8" class="big"></pre>
+    </div></div>
+    <div class="bar">
+      <button id="assemble">assemble</button>
+      <span class="note">POST /data-quality/personal-data/redact, then the record</span>
+    </div>
+    <div class="io out"><div class="lab">out</div><div class="val">
+      <pre id="record" class="big"></pre>
+    </div></div>
+    <div class="bar">
+      <span class="note">fix — back to the rectangle that produced the part:</span>
+      <button class="fix" data-fix="1">the sample</button>
+      <button class="fix" data-fix="2">the spans</button>
+      <button class="fix" data-fix="5">what you kept</button>
+      <button class="fix" data-fix="6">the reviewers</button>
+      <button class="fix" data-fix="7">the label</button>
+    </div>
+    <div class="bar">
+      <button id="approve">approve</button>
+      <span class="note" id="approve-note"></span>
+    </div>
+    <div class="why"><b>approve posts nowhere.</b> Nothing stores a record: the store, the route
+      that would take it and which records it refuses are one decision, deferred until this flow is
+      finished. Take the body off the screen. When there is a store, this rectangle is the one
+      place that changes.</div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>

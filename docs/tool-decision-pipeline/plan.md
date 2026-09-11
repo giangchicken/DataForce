@@ -54,8 +54,8 @@ what its *Source* points at, do it, run its *Verify*, commit.
 
 | Written | Lives in |
 |---|---|
-| `Requirement 24` | `spec.md` § *Requirements* — 43 of them |
-| `Decision 10` | `spec.md` § *Decisions* — 18 of them, the last an `Assumption:` |
+| `Requirement 24` | `spec.md` § *Requirements* — 54 of them, the last eleven the labelling UI's |
+| `Decision 10` | `spec.md` § *Decisions* — 24 of them |
 | `H-8`, `E-1`, `T-5` | a rule in `AGENTS.md`. The ID is stable and citable |
 | `T7` | a task in this file. The number is its name, not its place in the order |
 | step 5 | one of the page's eight rectangles, `spec.md` Requirement 37. Steps are numbered by the page, and only there |
@@ -70,11 +70,13 @@ what its *Source* points at, do it, run its *Verify*, commit.
 | 1 | The scan answers | `POST .../data-quality/personal-data` returns a real `PersonalDataDetected` over a hand-written sample, and `.../personal-data/replace` the copy over the spans handed back |
 | 2 | The panel answers | `POST .../ai-review` returns both verdicts against stubbed model calls |
 | 3 | Every endpoint is drivable alone | Each route is exercised by its own arguments, and nothing threads one payload through two of them |
+| 4 | A labeller can label | `ui/` walks one pasted sample through every step, the user edits what each one answered, and the last rectangle is the record they approve |
 
 Phase 0 comes first and is not optional: every later *Verify* is `make check`, and until Phase 0
 lands that command reports 38 errors whether the task worked or not. Phases 1 and 2 are independent
 of each other — the scan and the panel share only the catalog rendering, which T5 pins — so they can
-run in either order or at once. Phase 3 needs both.
+run in either order or at once. Phase 3 needs both, and Phase 4 needs Phase 3: a UI is worth
+writing once every route it calls is known to answer from its own arguments.
 
 ---
 
@@ -100,6 +102,10 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T12 | The panel's tests | 2 | T10, T11 | M |
 | T13 | Each endpoint through its own arguments | 3 | T9, T12 | M |
 | T14 | ~~The record's round trip~~ — withdrawn with the store | 3 | T13 | S |
+| T15 | The UI is served, and knows which models answer | 4 | T13 | S |
+| T16 | Eight rectangles, each calling its own route | 4 | T15 | L |
+| T17 | The user edits, and the human steps are those edits | 4 | T16 | M |
+| T18 | The last rectangle: the record, fixed or approved | 4 | T17 | M |
 
 ---
 
@@ -680,6 +686,230 @@ deferred (spec § *Out of Scope*).
 
 ---
 
+## Phase 4 · A labeller can label
+
+**Goal.** `ui/` walks one pasted sample through every step, the user edits what each step answered,
+and the last rectangle is the record they approve.
+
+**What this phase is not.** It is not the drawing. `edge/static/index.html` stays what it is — the
+flow explained, for whoever is building it — and nothing in it is generated from `ui/` or the other
+way round (Requirement 54, Decision 21). It is also not a corpus: one pasted sample at a time,
+because that is what every endpoint takes.
+
+### T15 · The UI is served, and knows which models answer
+
+**Goal.** `GET /ui/` answers the UI's `index.html`, and the three tick lists are what `GET /models`
+answered.
+
+**Context.** Requirement 44 puts three files under `src/dataforce/ui/` and mounts them at `/ui`
+from `create_app()` -- `wiring` is the layer allowed to know both the API and the thing that calls
+it, and one process serving both is what lets a labeller open a URL and start (Decision 22).
+Inside the package, because the wheel ships every file under `src/dataforce` and nothing beside it.
+
+Requirement 49 is the rule with a wrong answer already written down: the drawing hard-codes
+`SERVED = ["DeepSeek-V4-Flash", ...]` at `index.html:165`, which is fine for a picture and is a
+second declaration of what this deployment serves the moment a tool reads it. `GET /models` is the
+list (Requirement 27, Decision 13), and an empty directory is a UI that says nothing is served
+rather than one that offers nothing and explains nothing.
+
+**Approach.** `app.mount("/ui", StaticFiles(directory=Path(__file__).parent.parent / "ui",
+html=True))`, the three files with the flow's layout and no behaviour yet, and one `fetch` for
+`/models` painting the verifier tick (one), the jury ticks (many) and the finetuned tick (one).
+CORS is already `*`, so nothing needs a second server.
+
+**Acceptance criteria.** `GET /ui/` is 200 and `text/html`. The ticks render from the endpoint, and
+an empty model directory renders a UI that says so. No model name appears anywhere in `ui/` — which
+is a test rather than a reading: the names the *drawing* writes down are read out of it and looked
+for in every file under `ui/`, so the copy that would create the second declaration is the one the
+test catches.
+
+**Source.** Requirements 27, 44, 49; Decisions 13, 21, 22.
+
+**Verify.** `uv run pytest tests/edge -q`; then `uv run uvicorn dataforce.edge.main:app` with
+`DATAFORCE_MODEL_DIR` set, and open `/ui/`.
+
+**Out of scope.** Every rectangle's behaviour — T16.
+
+**Blocked by.** T13.
+
+### T16 · Eight rectangles, each calling its own route
+
+**Goal.** Each rectangle shows what its own route answered, from its own button, and a refusal is
+shown where it happened.
+
+**Context.** Requirements 45, 46, 50 and 51. The eight are Requirement 37's, in that order, and
+the calls are one per rectangle -- which is Requirement 1 made visible: a step is re-runnable from
+its own button and nothing waits for the rectangle beside it. Personal data is the one rectangle
+with two buttons, because it is two calls with a human between them (Requirement 5, Decision 19).
+
+Three things here have a wrong answer that looks right. `duplicate` and `abnormal` answer `null` at
+200 (Requirement 33): a rectangle that renders that as a failure reads as a broken service, and it
+is *nothing to report*. The ai-review rectangle reads the sample and not the data-quality answers
+(Requirement 41), and it sends the sample *whole*, label included: what Decision 12 keeps the label
+out of is the juror's prompt, and `label_agreement` is the share of the votes that agree with it
+(Requirement 20), so a request that dropped it would be asking for agreement with nothing. And a 422 is the
+service's sentence, shown in the rectangle that asked: the UI does not paraphrase it, does not
+retry, and keeps every answer the page already holds (Requirement 51, § *Error Behavior*).
+
+**Approach.** One `fetch` per route in `app.js`, each rectangle holding what it was handed, what it
+answered, and which of the four states it is in — untouched, waiting, answered, refused. The sample
+comes from rectangle 1, which is a box with an example in it and a **check** that parses
+(Requirement 47).
+
+**Acceptance criteria.** Every button calls exactly one route, readable in the network tab.
+`duplicate` and `abnormal` render as nothing to report. A 422 shows the service's own `detail` in
+that rectangle and leaves the others' answers standing. Nothing in `app.js` computes a span, a
+consensus, a copy, an outcome or a redacted record (§ *Invariants*).
+
+**What this task added to the four states.** A fifth sentence, *not asked*, for a button pressed
+before its rectangle has what it needs — no sample read, no verifier ticked, an unreadable span
+row. It is not a refusal and says so, because *refused* sends whoever reads it to a service log
+for a request that was never made (§ *Error Behavior*). And each rectangle's `in` band holds the
+request body itself, written down before it is sent (Requirement 46), so what a step shows as its
+input is what went over the wire. The language is declared once, in rectangle 1 beside the sample,
+and carried by both requests that take one (Requirement 47).
+
+**Source.** Requirements 33, 37, 41, 45, 46, 47, 50, 51; Decisions 12, 19.
+
+**Verify.** A browser, with the service running and the model calls answered by whatever the
+deployment serves; `make check` stays green.
+
+**Out of scope.** Editing — T17. The record and its two buttons — T18.
+
+**Blocked by.** T15.
+
+### T17 · The user edits, and the human steps are those edits
+
+**Goal.** Every rectangle holding data the flow carries is editable, and the next call is made with
+what was typed.
+
+**Context.** Requirement 48, and Requirement 2 is why it is the whole of the human step: a human
+step returns the shape it was handed, so *the edit plus the button after it* is the step, and
+nothing records that a human looked (Requirement 14).
+
+The span rows are the case with rules already written: Requirement 39 lists every span as
+`start`, `end`, `personal_data_class`, `placeholder` beside the value `review_text[start:end]`
+currently reads, a **check** re-slices every row, and an unreadable edit says which rule it broke
+— not an integer, end not past start, outside the text. Requirement 40's `auto` toggle keeps the
+outermost span or lets every span stand. The drawing already does all of this over its built-in
+sample, so the rules are readable there; what changes is that the spans then go to
+`.../personal-data/replace` rather than to a local function.
+
+The label is Requirement 42: `correct` returns it as it arrived, `modify` opens the editor, and a
+label that is not JSON is carried as `{unparsed: <text>}` rather than dropped or guessed at.
+
+**Acceptance criteria.** Editing a span's offsets and pressing check re-slices the value shown.
+`replace` is called with the spans as the user left them, and its answer is what the rectangle
+shows. An unreadable edit names the rule it broke and makes no call. A label edited to something
+that is not JSON is carried as `{unparsed: <text>}`. A rectangle whose data was edited says so.
+
+**One thing the requirement names and the drawing has no button for.** A reviewer may *add* a span
+(Requirement 5), so step 2 carries **add a span**: a blank row, numbered after the last, because
+`id` is what the confirmation was asked about and nothing asks it again about a span it never saw.
+The offsets are then the reviewer's to type, and **check** is what says whether they read anything
+(Requirement 50). Slicing is by code point and not by UTF-16 unit, which is what `review_text`'s
+offsets are counted in -- a browser's own `slice` reads a different string from the same two
+numbers the moment something outside the BMP is in the text.
+
+**Source.** Requirements 2, 14, 39, 40, 42, 48; Decision 19.
+
+**Verify.** A browser: edit a span to an offset outside the text, confirm it refuses and calls
+nothing; then untick one and confirm the copy changes.
+
+**Out of scope.** The record — T18.
+
+**Blocked by.** T16.
+
+### T18 · The last rectangle: the record, fixed or approved
+
+**Goal.** The record after every step, with **fix** and **approve**, and approve posts nowhere.
+
+**Context.** Requirements 3, 15, 16, 17, 52 and 53, and Decision 23. The record is
+`{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
+abnormal, llm, sft}`: what arrived, and what ships beside it. **fix** hands it back to the
+rectangle that produced the part being fixed — a correction is an edit there and that step's own
+button again, not a second editor at the end. **approve** freezes it and shows the body, and says
+on its face that nothing stores it: the store is deferred, and this rectangle is the one place that
+changes when there is one.
+
+**What this task had to settle, and what was settled.** The three `new_` keys are the human's
+edits with every confirmed value replaced *wherever it occurs* — in `messages` and in `label`, not
+only in `review_text` (Requirements 12, 15, 16). The replace endpoint answers over `review_text`
+alone, and the function that did it across the record, `replaced_node`, was deleted with the store
+in T13. Two ways out, and the choice was the user's:
+
+- **The UI replaces by value.** Consistent with Requirement 3 — the page composes the record and
+  nothing else does — and it is what the drawing already does. The cost: a rule in the client, and
+  the deleted requirement's own words were *"redaction is the service's, never the client's: a rule
+  the caller can skip is not a rule."*
+- **A route answers the redacted record.** ← **chosen** (Decision 24). `POST
+  .../data-quality/personal-data/redact` takes the sample as the human left it with the spans they
+  handed back under `detected`, and answers the sample copied. The rule is the service's and the
+  UI stays a renderer, so Requirement 45 holds as written; `replaced_node` is back, in
+  `profile/tool_decision/data_quality.py` beside `replace_spans_with_placeholders`, which is where
+  its own docstring had been pointing all along — *"by value and not by offset, because the same
+  rule runs again over the record's other fields."* The cost, stated in Decision 24: a route
+  nothing but this UI asks for yet, which the store's decision may absorb.
+
+What that left in the spec: Requirement 32 grew the third call, Requirement 35 says the route reads
+a record and keeps neither half, Requirement 45 gained the clause naming the redaction as a route,
+and § *Out of Scope* and § *Design* stopped listing *where the redaction runs* among the store's
+undecided halves.
+
+**Acceptance criteria.** The last rectangle shows the record, raw and as computed, and says nothing
+stores it. **fix** returns to the rectangle that owns the part, and re-running that step updates
+the record. **approve** freezes it, and the frozen body is the one the store would be posted. The
+three `new_` keys hold what the redaction route answered and nothing the page computed, and
+`new_tools` is `null` only where nothing made a new version of the catalog. A record assembled
+before every step has answered says which ones have not.
+
+**Source.** Requirements 3, 12, 15, 16, 17, 32, 35, 45, 52, 53; Decisions 23, 24; § *Design* —
+*The labelling UI*.
+
+**Verify.** A browser: label the sample end to end, edit one value, approve, and read the record.
+
+**Out of scope.** The store (§ *Out of Scope*), and a corpus.
+
+**Blocked by.** T17.
+
+### What the review of this phase caught
+
+Five defects, all in what the page does between two calls — which is exactly where § *Testing
+Strategy* says no test drives, so they are the stated cost of that decision arriving rather than a
+surprise. Each is now the behaviour the spec states:
+
+- **The copy went stale.** `replace` was called, then a span was edited, unticked or re-detected,
+  and **assemble** still posted the *old* spans: the three `new_` keys were redacted against a span
+  set the screen was no longer showing, and step 5 still read as answered. An edit now drops the
+  answers made with what it replaced (Requirement 48), so the step reads as unanswered until
+  **replace** is pressed again. A value the reviewer *added* and never re-replaced was the bad
+  case: it stayed in the record verbatim with nothing saying so.
+- **`new_tools: null` threw away a redacted catalog.** `review_text` holds the tool catalog
+  (Requirement 6), so a confirmed value can sit in a tool's description and the route rewrites it
+  there — and *the human left it alone* was being read as *there is no new version*. Requirement 15
+  now says `null` means both.
+- **Unticking an outer span dropped the span inside it.** The `auto` containment ran over every
+  row, including unticked ones, so unticking an email took the phone number inside it out of what
+  was handed back, with its checkbox still disabled. It runs over the kept rows now
+  (Requirement 40) — a span is inside a *kept* longer one or it is inside nothing.
+- **The value map was keyed by placeholder.** `placeholder` is a column a reviewer edits, so two
+  rows can carry one, and the second entry overwrote the first: a value never replaced, in a copy
+  reporting itself `redacted`. § *Invariants* had said *keyed by value* all along and the code had
+  never been; it is keyed by value now, which is also the map the outcome is measured against.
+  A span with a blank placeholder used to delete its value silently and still say `redacted`; it is
+  skipped, on the same terms as one whose offsets read nothing, and the claim goes `withheld`.
+- **Step 1's check discarded step 7's edits.** Re-checking the same sample refilled the label
+  editors from what arrived. It only refills where the sample actually changed.
+
+**Left alone, and why.** A body nested ~1000 deep answers 500 rather than 422 — both `replaced_node`
+and pydantic's serializer give out, and what depth is too deep is a number nobody has decided. A
+placeholder a reviewer types that happens to *be* another span's value chains, making two values
+co-referent; it is the same class as the two redaction conflicts § *Design* already records as
+undecided. Negative offsets are refused by the shape now (`ge=0`), which is the half that was a
+wrong answer rather than an undecided one.
+
+---
+
 ## Not in this plan, and why
 
 - **`DuplicateDataChecking.duplicate_groups` and `CommonAbnormalChecking.check_verdict`.** Neither
@@ -703,7 +933,9 @@ deferred (spec § *Out of Scope*).
   half does.
 - **The page's own tests.** § *Testing Strategy*: *"No test drives the page. A browser is the check."*
 - **The store.** Deleted in Phase 3 rather than left half-answering: the table, the route that
-  takes a record, whether the redaction runs in the service or on the page, and which records are
-  refused are one decision, and it is taken after the flow above it is finished. T14 is the
-  history, and § *Out of Scope* is what the spec says now.
+  takes a record and which records are refused are one decision, and it is taken after the flow
+  above it is finished. T14 is the history, and § *Out of Scope* is what the spec says now. One
+  half of it came out and was settled on its own in T18 — where the redaction runs — because the
+  record's three `new_` keys needed an answer before the UI could assemble one, and the store's
+  other halves did not.
 - **Auth, batching, a corpus, and which models a deployment picks.** § *Out of Scope*.

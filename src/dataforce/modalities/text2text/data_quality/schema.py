@@ -141,10 +141,13 @@ class PersonalDataSpan(Frozen):
     # Code points, because that is what slicing `review_text` in Python counts. A reader counting
     # UTF-16 units -- a browser does -- reads a different string from the same two numbers.
     start: int = Field(
-        ..., description="Code-point offset of the hit in `review_text`, inclusive."
+        ...,
+        ge=0,
+        description="Code-point offset of the hit in `review_text`, inclusive.",
     )
     end: int = Field(
         ...,
+        ge=0,
         description="Code-point offset of the hit's end in `review_text`, exclusive.",
     )
     personal_data_class: str = Field(
