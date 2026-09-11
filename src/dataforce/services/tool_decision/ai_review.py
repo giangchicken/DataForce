@@ -27,7 +27,6 @@ from dataforce.modalities.text2text.ai_review.schema import (
 from dataforce.profile.tool_decision import (
     ToolDecisionLLMPrediction,
     ToolDecisionSFTPrediction,
-    conversation_turns,
 )
 
 
@@ -41,17 +40,15 @@ async def tool_decision_llm_predict(
     One config is a panel of one and several are a panel of several; `LLMPrediction` reads either
     through `jurors`, so nothing here counts models.
 
-    The label is handed over as JSON and not as a Python string: it is a tool-call array, and the
-    panel matches the calls in one answer against the calls in another, so `str()` of a list would
-    hand it a spelling no model would ever write.
+    The sample goes over whole and only the label is unpacked -- as JSON and not as a Python
+    string, because it is a tool-call array and the panel matches the calls in one answer against
+    the calls in another, so `str()` of a list would hand it a spelling no model would ever
+    write.
     """
     if config is None:
         return None
     return await ToolDecisionLLMPrediction(config).verdict(
-        conversation_turns(sample),
-        json.dumps(sample.get("label"), ensure_ascii=False),
-        sample.get("tools") or (),
-        language,
+        sample, json.dumps(sample.get("label"), ensure_ascii=False), language
     )
 
 
@@ -65,6 +62,4 @@ async def tool_decision_sft_predict(
     """
     if config is None:
         return None
-    return await ToolDecisionSFTPrediction(config).predict(
-        conversation_turns(sample), sample.get("tools") or (), language
-    )
+    return await ToolDecisionSFTPrediction(config).predict(sample, language)

@@ -18,7 +18,8 @@ meaning.
 
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from .schema import LLMModelConfig, LLMReviewerVerdict, LLMReviewerVote
 
@@ -36,13 +37,14 @@ class LLMPrediction(ABC):
 
     @abstractmethod
     async def predict(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> Sequence[LLMReviewerVote]:
         """One vote per juror that answered, each asked once from the sample alone.
 
         A juror that failed is absent from the sequence -- never a vote, never an empty label. The
         label is not among the arguments: a juror is asked the sample's own question, and a model
-        shown a label answers about the label.
+        shown a label answers about the label. The record arrives whole and the task reads what
+        its prompt needs out of it, because which keys a sample carries is the task's to know.
         """
         pass
 
@@ -67,11 +69,7 @@ class LLMPrediction(ABC):
         pass
 
     async def verdict(
-        self,
-        turns: Sequence[str],
-        label: str,
-        tools: Sequence[object],
-        language: str,
+        self, sample: Mapping[str, Any], label: str, language: str
     ) -> LLMReviewerVerdict:
         """What the panel said: the votes, how many agree with the label, and its one answer.
 
@@ -80,7 +78,7 @@ class LLMPrediction(ABC):
         twice agrees out of two. Every juror failing is a verdict with no votes, `0.0` and `None`.
         Agreement is compared here and never asked of a model.
         """
-        votes = tuple(await self.predict(turns, tools, language))
+        votes = tuple(await self.predict(sample, language))
         pred_texts = [vote.label for vote in votes]
         wanted = self.normalize_prediction(label)
         agreed = [one for one in pred_texts if self.normalize_prediction(one) == wanted]

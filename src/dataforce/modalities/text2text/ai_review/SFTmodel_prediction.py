@@ -10,7 +10,8 @@ prompt, belongs to the task, and lands with the rest of this reviewer's half (sp
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping
+from typing import Any
 
 from .schema import SFTModelConfig, SFTReviewerVerdict
 
@@ -21,7 +22,7 @@ class SFTPrediction(ABC):
 
     @abstractmethod
     async def predict(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> SFTReviewerVerdict | None:
         """Its own answer and how sure it is, or `None` where it did not answer.
 

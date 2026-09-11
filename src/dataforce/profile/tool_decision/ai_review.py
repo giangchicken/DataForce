@@ -15,8 +15,9 @@ only be compared as meaning.
 
 import json
 from asyncio import gather
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from agent_toolkit.file_utils import read_txt
 from agent_toolkit.llm import complete, resolve_config
@@ -38,7 +39,11 @@ from dataforce.modalities.text2text.ai_review import (
 )
 from dataforce.modalities.text2text.ai_review.schema import LLMModelConfig
 
-from .utils import openai_tool_format_to_text, text_to_openai_tool_format
+from .utils import (
+    conversation_turns,
+    openai_tool_format_to_text,
+    text_to_openai_tool_format,
+)
 
 # The deployment's, on the same terms as `config/model/`: read from the working directory and named
 # for the step that sends it.
@@ -124,7 +129,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         return tuple(ToolPredictor(juror) for juror in self.jurors)
 
     async def predict(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> Sequence[LLMReviewerVote]:
         """One vote per juror that answered, each asked once and shown no other juror's answer.
 
@@ -133,7 +138,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         for nothing. A juror that failed is dropped here and named on stdout by the class that
         asked it.
         """
-        prompt = self.build_tool_prediction_prompt(turns, tools, language)
+        prompt = self.build_tool_prediction_prompt(sample, language)
         predicted_results: tuple[LLMReviewerVote | None, ...] = tuple(
             await gather(*(juror.predict(prompt) for juror in self.tool_predictors))
         )
@@ -184,14 +189,17 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         return None
 
     def build_tool_prediction_prompt(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> str:
         """`tool_prediction.txt` with its four slots filled, ready to send.
 
         The catalog, the turns before the last, the last turn, and the language the request
-        declared. The sample's label is in none of them. `ConfigError` where the
-        file is missing, so a deployment with no prompt is not a model having a bad day.
+        declared, read off the record here rather than handed in already unpacked: `messages` and
+        `tools` are this task's keys, and the layer that calls this knows no task (`H-10`). The
+        sample's label is in none of the slots. `ConfigError` where the file is missing, so a
+        deployment with no prompt is not a model having a bad day.
         """
+        turns = conversation_turns(sample)
         template = read_txt(TOOL_PREDICTION_PROMPT)
         if not template.strip():
             raise ConfigError(
@@ -201,7 +209,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         return slot_filling(
             template,
             {
-                "tool_descriptions": self.build_tool_catalog(tools),
+                "tool_descriptions": self.build_tool_catalog(sample.get("tools") or ()),
                 "conversation_history": "\n".join(turns[:-1]),
                 "user_message": turns[-1] if turns else "",
                 "language": language,
@@ -217,7 +225,7 @@ class ToolDecisionSFTPrediction(SFTPrediction):
     """The finetuned reviewer's own answer to the same question."""
 
     async def predict(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> SFTReviewerVerdict | None:
         """`ConfigError`: this deployment serves no finetuned reviewer, and says so as a refusal.
 

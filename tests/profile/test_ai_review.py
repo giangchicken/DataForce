@@ -71,6 +71,16 @@ TOOLS: tuple[Mapping[str, Any], ...] = (
     },
 )
 
+# The record as a corpus carries it, built from the turns above so the two cannot disagree:
+# `conversation_turns(SAMPLE)` is `TURNS`, which is what the prompt assertions read.
+SAMPLE: Mapping[str, Any] = {
+    "messages": tuple(
+        {"role": role, "content": content}
+        for role, content in (turn.split(": ", 1) for turn in TURNS)
+    ),
+    "tools": TOOLS,
+}
+
 JUROR = "a-juror"
 SECOND = "another-juror"
 RESOLVED = LLMConfig(model=JUROR, base_url="http://a-model.invalid")
@@ -121,7 +131,7 @@ class StubbedPanel(ToolDecisionLLMPrediction):
         self.asked: list[tuple[str, ...]] = []
 
     async def predict(
-        self, turns: Sequence[str], tools: Sequence[object], language: str
+        self, sample: Mapping[str, Any], language: str
     ) -> Sequence[LLMReviewerVote]:
         return tuple(
             LLMReviewerVote(model_name=f"{JUROR}-{number}", reason="stubbed", label=one)
@@ -243,7 +253,7 @@ async def test_agreement_is_counted_over_the_votes_that_came_back() -> None:
     """
     panel_of_three = StubbedPanel(OPEN_TICKET, NO_TOOL, silent=1)
 
-    said = await panel_of_three.verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await panel_of_three.verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert len(panel_of_three.jurors) == 3
     assert [vote.label for vote in said.votes] == [OPEN_TICKET, NO_TOOL]
@@ -252,9 +262,7 @@ async def test_agreement_is_counted_over_the_votes_that_came_back() -> None:
 
 async def test_agreement_reads_the_label_the_way_the_answers_are_read() -> None:
     """The label arrives as JSON and a juror answers in JSON, so one spelling is not a disagreement."""
-    said = await StubbedPanel(OPEN_TICKET_TIGHT).verdict(
-        TURNS, OPEN_TICKET, TOOLS, "vi"
-    )
+    said = await StubbedPanel(OPEN_TICKET_TIGHT).verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.label_agreement == 1.0
 
@@ -271,7 +279,7 @@ async def test_every_juror_failing_is_a_verdict_and_not_an_exception(
         },
     )
 
-    said = await panel(JUROR, SECOND).verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await panel(JUROR, SECOND).verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.votes == ()
     assert said.label_agreement == 0.0
@@ -289,7 +297,7 @@ async def test_the_judge_is_not_asked_where_the_exact_match_answered() -> None:
     """§ *Design*: only where that is `None` does `verdict` ask the judge."""
     agreeing = StubbedPanel(OPEN_TICKET, OPEN_TICKET, judged=NO_TOOL)
 
-    said = await agreeing.verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await agreeing.verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus == OPEN_TICKET
     assert agreeing.asked == []
@@ -303,7 +311,7 @@ async def test_the_judge_breaks_a_tie_with_the_answer_the_juror_wrote() -> None:
     """
     tied = StubbedPanel(OPEN_TICKET, CLOSE_TICKET, judged=OPEN_TICKET_TIGHT)
 
-    said = await tied.verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await tied.verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert tied.asked == [(OPEN_TICKET, CLOSE_TICKET)]
     assert said.consensus == OPEN_TICKET
@@ -317,7 +325,7 @@ async def test_a_judge_answer_no_juror_wrote_is_refused() -> None:
     """
     tied = StubbedPanel(OPEN_TICKET, CLOSE_TICKET, judged='[{"name": "Escalate"}]')
 
-    said = await tied.verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await tied.verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus is None
 
@@ -339,7 +347,7 @@ async def test_this_task_asks_no_judge_and_pays_for_no_call_to_say_so(
     )
     asked = panel(JUROR, SECOND)
 
-    said = await asked.verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+    said = await asked.verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus is None
     assert await asked.judge_prediction([OPEN_TICKET, NO_TOOL]) is None
@@ -366,7 +374,7 @@ async def test_one_vote_per_juror_that_answered_names_the_juror_asked(
         },
     )
 
-    votes = await panel(JUROR, SECOND).predict(TURNS, TOOLS, "vi")
+    votes = await panel(JUROR, SECOND).predict(SAMPLE, "vi")
 
     assert [vote.model_name for vote in votes] == [JUROR, SECOND]
     assert [vote.reason for vote in votes] == ["Khách đã cho mã.", "Chưa đủ thông tin."]
@@ -394,7 +402,7 @@ async def test_a_juror_that_did_not_answer_the_shape_is_absent(
     """
     answering(monkeypatch, voted={JUROR: resp, SECOND: voting([])})
 
-    votes = await panel(JUROR, SECOND).predict(TURNS, TOOLS, "vi")
+    votes = await panel(JUROR, SECOND).predict(SAMPLE, "vi")
 
     assert [vote.model_name for vote in votes] == [SECOND]
     events = events_on(capsys)
@@ -415,7 +423,7 @@ async def test_the_settings_a_request_declared_reach_the_call(
     monkeypatch.setattr(ai_review, "complete", answered)
     declared = LLMModelConfig(model=JUROR, settings={"temperature": 0.0})
 
-    await ToolDecisionLLMPrediction(declared).predict(TURNS, TOOLS, "vi")
+    await ToolDecisionLLMPrediction(declared).predict(SAMPLE, "vi")
 
     assert asked["model"] == JUROR
     assert asked["temperature"] == 0.0
@@ -433,7 +441,7 @@ async def test_the_prediction_prompt_carries_the_catalog_the_turns_and_the_langu
     prompt that reads as nonsense and passes a containment check. The last turn is the question
     and the ones before it are the history, so a juror is not asked about the turn it cannot see.
     """
-    prompt = panel(JUROR).build_tool_prediction_prompt(TURNS, TOOLS, "vi")
+    prompt = panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
 
     assert "{{" not in prompt
     assert section(prompt, "## Conversation History") == list(TURNS[:-1])
@@ -450,7 +458,7 @@ async def test_the_prediction_prompt_is_the_sample_s_and_holds_no_label() -> Non
     A model shown the label answers about the label, and the signal this service runs on is a
     model answering the sample's own question -- so the label reaches no slot, by any spelling.
     """
-    prompt = panel(JUROR).build_tool_prediction_prompt(TURNS, TOOLS, "vi")
+    prompt = panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
 
     assert OPEN_TICKET not in prompt
     assert "KH-1" in prompt  # the customer said it; that is the turn, not the label
@@ -469,7 +477,7 @@ async def test_a_missing_prompt_is_not_a_failed_call(
     monkeypatch.setattr(ai_review, "TOOL_PREDICTION_PROMPT", Path("nowhere.txt"))
 
     with pytest.raises(ConfigError, match="nowhere.txt"):
-        await panel(JUROR).verdict(TURNS, OPEN_TICKET, TOOLS, "vi")
+        await panel(JUROR).verdict(SAMPLE, OPEN_TICKET, "vi")
 
 
 # ----------------------------------------------------------------- the calls, matched
@@ -545,7 +553,7 @@ async def test_the_same_calls_in_two_orders_are_a_majority_and_ask_no_judge() ->
         BOTH_CALLS, BOTH_CALLS_REVERSED, CLOSE_TICKET, judged=CLOSE_TICKET
     )
 
-    said = await panel_of_three.verdict(TURNS, BOTH_CALLS, TOOLS, "vi")
+    said = await panel_of_three.verdict(SAMPLE, BOTH_CALLS, "vi")
 
     assert said.consensus == BOTH_CALLS
     assert said.label_agreement == pytest.approx(2 / 3)
@@ -569,4 +577,4 @@ async def test_a_finetuned_reviewer_is_refused_rather_than_answered_with_a_numbe
     reviewer = ToolDecisionSFTPrediction(SFTModelConfig(model=JUROR))
 
     with pytest.raises(ConfigError, match="confidence"):
-        await reviewer.predict(TURNS, TOOLS, "vi")
+        await reviewer.predict(SAMPLE, "vi")
