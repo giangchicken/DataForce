@@ -23,8 +23,9 @@ out to have been the checker admitting it could not see the base class. `edge/cl
 raises and the `dataforce` console script is broken — and nothing in the gate said so.
 
 **Scope.** The two parts with a shape to act on — the personal-data scan and `ai_review` — the four
-endpoints, the record the page posts, and the tests § *Testing Strategy* names. Phase 0 is the gate
-itself: not discoveries to be made in Phase 2, but the reason a Phase 2 *Verify* means anything.
+endpoints, the record the page assembles, and the tests § *Testing Strategy* names. Phase 0 is the
+gate itself: not discoveries to be made in Phase 2, but the reason a Phase 2 *Verify* means
+anything.
 
 **Assumption:** no corpus is declared. Every fixture is hand-written, and § *Testing Strategy* asks
 for nothing else.
@@ -68,7 +69,7 @@ what its *Source* points at, do it, run its *Verify*, commit.
 | 0 | The gate reads the package | `make check` is green, and `mypy --strict` type-checks `dataforce` instead of skipping it |
 | 1 | The scan answers | `POST .../data-quality/personal-data` returns a real `PersonalDataDetected` over a hand-written sample, and `.../personal-data/replace` the copy over the spans handed back |
 | 2 | The panel answers | `POST .../ai-review` returns both verdicts against stubbed model calls |
-| 3 | Every endpoint is drivable alone | Each of the seven routes is exercised by its own arguments, and one record makes the round trip |
+| 3 | Every endpoint is drivable alone | Each route is exercised by its own arguments, and nothing threads one payload through two of them |
 
 Phase 0 comes first and is not optional: every later *Verify* is `make check`, and until Phase 0
 lands that command reports 38 errors whether the task worked or not. Phases 1 and 2 are independent
@@ -98,7 +99,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T11 | The prompt, and the two `predict`s | 2 | T5 | M |
 | T12 | The panel's tests | 2 | T10, T11 | M |
 | T13 | Each endpoint through its own arguments | 3 | T9, T12 | M |
-| T14 | The record's round trip | 3 | T13 | S |
+| T14 | ~~The record's round trip~~ — withdrawn with the store | 3 | T13 | S |
 
 ---
 
@@ -249,8 +250,10 @@ importing an `adapter`. `make check` green.
 `modalities/text2text/__init__.py` row. **Sourced from `AGENTS.md`, not from `spec.md`:** the
 cedilla is the spec's, the other six tags and the guard are the rule's.
 
-**Verify.** `uv run pytest tests/guards -q`; then add `from dataforce.edge.store import stored_row`
-to `services/tool_decision/data_quality.py`, confirm the guard fails, and revert.
+**Verify.** `uv run pytest tests/guards -q`; then add
+`from dataforce.edge.served_models import served_models` to
+`services/tool_decision/data_quality.py`, confirm the guard fails, and revert. (`edge/store` was
+the module this named; T13 deleted it, and the guard's own cases moved with it.)
 
 **Out of scope.** `tests/guards/tree.py`'s own `TOOL ·` tag. `H-8` is a rule about the package;
 widening a guard to scan the guards is a second decision.
@@ -557,13 +560,12 @@ string no juror wrote is refused.
 
 ## Phase 3 · Every endpoint is drivable alone
 
-**Goal.** Each of the seven routes is exercised by its own arguments, and one record makes the
-round trip.
+**Goal.** Each route is exercised by its own arguments, and no fixture threads one payload through
+two of them.
 
 ### T13 · Each endpoint through its own arguments
 
-**Goal.** Seven routes, seven tests, and no fixture that threads one payload through more than one
-of them.
+**Goal.** Every route has a test whose body it is the only route in.
 
 **Context.** Requirement 1 and Decision 2 are the whole point of the shape, and a test suite is the
 one place they can be broken silently: a fixture that posts a scan, keeps the response and feeds it
@@ -593,19 +595,32 @@ from `checked_names` before any model is called, and a name it *does* hold whose
 endpoint is 422 from `ToolPredictor.__init__` -- also before any call, and for a different reason
 (Requirement 26).
 
-`sft_model` is the one thing this route cannot yet be driven with.
-`ToolDecisionSFTPrediction.predict` raises `NotImplementedError` -- § *Open* says why: nothing
-declares where its `confidence` comes from — so a request that ticks it passes `checked_names`,
-resolves, and then 500s. Posting no `sft_model` gives `sft: null` and tests the panel's half
-cleanly, but what a ticked one *does* is undeclared, and this task is where that shows. Settle it
-here: either the route refuses a finetuned reviewer this deployment cannot run, on the same terms
-as a name it does not serve, or the 500 stands on purpose and is written down as such.
+`sft_model` was the one thing this route could not be driven with, and this task settled it as a
+refusal. `ToolDecisionSFTPrediction.predict` raised `NotImplementedError` -- § *Open* says why:
+nothing declares where its `confidence` comes from — so a request that ticked it passed
+`checked_names`, resolved, and then 500d. It now raises `ConfigError`, which the handler already
+maps: ticking a reviewer this deployment cannot run is a declaration it cannot act on, and the
+caller is told 422 by the name they ticked. The refusal is the profile's and not the router's, so
+the edge never learns which profile has a body. Posting no `sft_model` still gives `sft: null`,
+which is a reviewer nobody asked for.
+
+**What this task deleted.** The store went with it, at the user's decision: `edge/store/`,
+`services/tool_decision/human_review.py` and `POST .../records` are gone, and where a reviewed
+record is kept — the table, the route, whether the redaction runs in the service or on the page,
+and which records are refused — is one decision to be taken after the flow above it is finished.
+It stood in this task's way twice: Requirement 35's first refusal was unimplemented, and the field
+the plan read it off (`personal_data.outcome`) makes `reported` the refusing value — which is the
+word for a sample with no personal data in it, so the rule as written would have made a clean
+record unstorable. Rather than pick a rule for a store nobody has decided on, the store is deferred
+whole (spec § *Out of Scope*), and T14 is withdrawn with it.
 
 **Approach.** `TestClient`, model calls stubbed, one test per route: the page, `/models`, the four
-data-quality routes, `/ai-review`, `/records`. An unserved model name is refused with 422 naming it
-and the served list (Requirement 29), and `GET /models` is the `config/model/` listing with
-`DATAFORCE_MODEL_DIR` pointed at a temporary directory the test wrote — Decision 13, the directory
-*is* the list.
+data-quality routes and `/ai-review` — the seven that exist. An unserved model name is refused with
+422 naming it and the served list (Requirement 29), and `GET /models` is the `config/model/`
+listing with `DATAFORCE_MODEL_DIR` pointed at a temporary directory the test wrote — Decision 13,
+the directory *is* the list. `complete` is stubbed in each of the three modules that call one, and
+a refusal test installs one that fails if it is reached at all: that is what *before any model is
+called* asserts.
 
 `.../data-quality/personal-data/replace` is the fourth, and it is the one route that asks no model:
 nothing on it can be refused for a name this deployment does not serve, and its body is the
@@ -619,56 +634,49 @@ as keys of the request rather than of the sample, and the ai-review route's post
 `abnormal` answer `null` at 200. An unserved name is 422 before any model is called, a served name
 with no endpoint in its file is 422 for its own reason, and the replace route answers without a
 model name at all. `/ai-review` with no `sft_model` answers `sft: null`, and with one it answers
-whatever this task decides it answers — pinned either way. `mypy --strict` reports no
-`no-any-return`.
+422 naming what is undecided. `mypy --strict` reports no `no-any-return`.
 
 **Source.** Requirements 27–36, 41; Decisions 2, 13; § *Testing Strategy*, bullet five.
 
-**Verify.** `uv run pytest tests/ -q -k endpoint`; `make check`.
+**Verify.** `uv run pytest tests/edge -q`; `make check`.
 
-**Out of scope.** The record round trip — T14. The page: § *Testing Strategy* is explicit that no
-test drives it and a browser is the check.
+**Out of scope.** The store and the record's round trip — deleted and deferred, above. The page:
+§ *Testing Strategy* is explicit that no test drives it and a browser is the check.
 
 **Blocked by.** T9, T12.
 
-### T14 · The record's round trip
+### T14 · The record's round trip — withdrawn
 
-**Goal.** A record posted comes back equal, and one that has not been redacted does not get stored.
+**Withdrawn in Phase 3, with the store it was written over.** `edge/store/`,
+`services/tool_decision/human_review.py` and `POST .../records` are deleted, and where a reviewed
+record is kept is one decision to be taken after the flow above it is finished. The task is kept
+here because what it found is what withdrew it.
 
-**Context.** `services/tool_decision/human_review.py` is written and `edge/store/records.py` is
-written, and nothing has run the two against each other in this repository — the round trip was
-checked once by hand against SQLite while the page was being built, and left no test behind.
+**What it was.** A record posted comes back equal, and one that has not been redacted does not get
+stored. `human_review.py` was written and `edge/store/records.py` was written, and nothing had run
+the two against each other -- the round trip was checked once by hand against SQLite while the page
+was being built, and left no test behind.
 
-Requirement 35 gives the store two refusals: a record with no redacted form, and a row that still
-holds a value its own scan says it replaced. The first is unimplemented — nothing in
-`human_review.py` reads the field at all — and the field it reads is `personal_data.outcome`, so
-`reported` is the value that refuses. The second is written: `unreplaced_values` reads only the
-three `new_` keys,
-and § *Design* says why the check cannot be wider: *"the originals hold raw content on purpose and
-checking the whole record would fail by design."* The consequence is the one the spec states once
-and this test should not re-litigate — the row holds the personal data verbatim, so the redaction
-protects a reader of the `new_` keys and not the database.
+**Why it stopped.** Requirement 35 gave the store two refusals: a record with no redacted form, and
+a row that still holds a value its own scan says it replaced. The second was written --
+`unreplaced_values` over the three `new_` keys, and § *Design* said why it could not be wider:
+*"the originals hold raw content on purpose and checking the whole record would fail by design."*
+The first was not, and this task's own context named the field to read it off:
+`personal_data.outcome`, refusing `reported`. But `reported` is Requirement 13's word for *no
+detector claimed anything* -- a clean sample -- so the rule as written would have refused every
+record with no personal data in it, while `withheld`, the rewrite asked for and not finished, would
+have stored. Which of the three values refuses is a decision about a store, and no store had been
+decided on: the table was there because the page needed something to post to.
 
-**Acceptance criteria.** `POST .../records` then `latest_row` returns an equal document. A second
-post under one id replaces the row rather than adding one. A record whose `personal_data.outcome`
-is `reported` is 422 and is not written. A record whose `new_messages` still holds a replaced value
-is 422 and is not written. A record with no id is 422.
+**What it leaves for whoever picks the store up.** The two refusals to choose between (`reported`,
+`withheld`, or only `redacted` storing), where the redaction runs -- the service the client cannot
+skip, or the page that already computes it -- and what the record's `personal_data` key is, which
+no shape declares: the page merges the detect answer with the replace answer and nothing names that
+container. `span_values` and `replaced_node` read `review_text`, `spans` and the three `new_` keys,
+and are in the history at `1ecd94f`.
 
-`span_values` needs nothing changed for the split: it reads `review_text` and `spans`, and both are
-on `PersonalDataDetected`. What the record's `personal_data` key holds is the two answers together —
-the page posts the detect answer merged with the replace answer — and no shape declares that
-container. Undecided, and this task does not decide it: the key is typed `Mapping[str, Any] | None`
-and the two refusals read the three fields they name.
-
-**Source.** Requirement 35; § *Design* — *What the row holds*; § *Testing Strategy*, bullet six;
-§ *Error Behavior*, the `POST .../records` line.
-
-**Verify.** `uv run pytest tests/ -q -k record`.
-
-**Out of scope.** The store's schema management. § *Out of Scope* defers Alembic and migrations by
-decision; `create_all` against a temporary SQLite file is what this test uses.
-
-**Blocked by.** T13.
+**Source.** Requirement 35 and § *Design* as they stood at `1ecd94f`; both now say the store is
+deferred (spec § *Out of Scope*).
 
 ---
 
@@ -680,17 +688,22 @@ decision; `create_all` against a temporary SQLite file is what this test uses.
 - **`ToolDecisionDuplicateChecking.embedding`.** § *Files* lists it, and it is a body for nothing
   while `duplicate_groups` is undecided — its only caller. T3 deletes the override and retires that
   half of the row (`T-1`).
-- **The two redaction conflicts the page draws.** Unticking a span leaves its value in the row;
+- **The two redaction conflicts the page draws.** Unticking a span leaves its value in the record;
   unticking a value that another kept value sits inside cuts it in half. § *Design* records both and
   says *"which of the two wins is not decided"*, so no task here decides it. The page shows them
   beside the reviewer who caused them, which is the behaviour that exists.
 - **The finetuned reviewer's own answer.** `SFTReviewerVerdict` carries a `confidence`,
   `tool_prediction.txt` asks for none, and `complete` answers with text and no logprobs — so T11
-  left `ToolDecisionSFTPrediction.predict` raising rather than inventing a number, and § *Open*
+  left `ToolDecisionSFTPrediction.predict` raising rather than inventing a number, T13 made what it
+  raises a `ConfigError` so a ticked reviewer is 422 rather than a 500, and § *Open*
   states the two ways out. `SFTPrediction.verdict` was written and then withdrawn with it: T10
   asked for it on the grounds that *"comparing two labels is not a task's answer"*, and that turned
   out to be wrong — comparing two answers means knowing what an answer is made of, which is
   exactly what the modality may not know. It lands in the profile when the rest of this reviewer's
   half does.
 - **The page's own tests.** § *Testing Strategy*: *"No test drives the page. A browser is the check."*
+- **The store.** Deleted in Phase 3 rather than left half-answering: the table, the route that
+  takes a record, whether the redaction runs in the service or on the page, and which records are
+  refused are one decision, and it is taken after the flow above it is finished. T14 is the
+  history, and § *Out of Scope* is what the spec says now.
 - **Auth, batching, a corpus, and which models a deployment picks.** § *Out of Scope*.

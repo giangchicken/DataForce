@@ -7,15 +7,19 @@ module: the tree wrote seven things where the rule names five, and two imports h
 wrong way -- `services/` reached for `edge/store`, logic reaching for an adapter, and `edge/cli.py`
 imported a deleted module for four commits.
 
+Every case below is written over a module that is in the tree *now*: a hypothetical naming a
+deleted one reaches nothing, so a red-first proof would go green by deletion. `edge/store` is that
+deletion -- the store waits for the flow to be finished -- and the cases it used to be written
+over are written over `edge/served_models` and the door in front of it.
+
 **A facade is a door, not a destination.** As an importer it is `H-8`'s fifth row and may reach
 anything inside the package. As a *target* it is whatever stands behind it, because checking the tag
 on the door would let every forbidden import through by spelling it one level higher. That is not
-hypothetical: `services/` reached for `edge/store` as `from dataforce.edge.store import ...`, and
-`edge/store/__init__.py` is a facade. So `logic` importing that facade is `logic` importing an
-`adapter`.
+hypothetical: `services/` reached for the store as `from dataforce.edge.store import ...`, and that
+`__init__.py` was a facade. So `logic` importing that facade is `logic` importing an `adapter`.
 
-What stands behind a door is read two ways, because a facade leaks two ways. `dataforce.edge.store`
-re-exports `records`, so its re-exports say what it opens onto. `dataforce.edge` re-exports
+What stands behind a door is read two ways, because a facade leaks two ways. `dataforce.edge.routers`
+re-exports one router, so its re-exports say what it opens onto. `dataforce.edge` re-exports
 nothing -- and reading only re-exports made it a hole: `import dataforce.edge` binds a package
 whose `edge.main` is reachable through it the moment anything loads that module, so a `shape` module
 could reach `wiring` through an empty door and no tag would say so. A package name stands for its
@@ -154,8 +158,8 @@ def test_the_scan_rejects_a_module_with_no_docstring() -> None:
 @pytest.mark.parametrize(
     "wrong_way",
     [
-        '"""logic · a decision."""\n\nfrom dataforce.edge.store.records import stored_row',
-        '"""logic · a decision."""\n\nfrom dataforce.edge.store import stored_row',
+        '"""logic · a decision."""\n\nfrom dataforce.edge.served_models import served_models',
+        '"""logic · a decision."""\n\nfrom dataforce.edge.routers import tool_decision_router',
         '"""shape · a noun."""\n\nfrom dataforce.profile.tool_decision.utils import x',
         '"""adapter · a translation."""\n\nfrom dataforce.edge.main import create_app',
         '"""shape · a noun."""\n\nimport dataforce.edge',
@@ -218,7 +222,7 @@ def test_a_facade_importing_across_the_package_is_permitted_by_the_table_itself(
         '"""logic · a decision."""\n\nfrom dataforce.profile.tool_decision.utils import x',
         '"""adapter · a translation."""\n\nfrom dataforce.services.tool_decision import x',
         '"""wiring · the root."""\n\nfrom dataforce.edge.routers import router',
-        '"""facade · a door."""\n\nfrom dataforce.edge.store.records import stored_row',
+        '"""facade · a door."""\n\nfrom dataforce.edge.served_models import served_models',
         '"""logic · a decision."""\n\nfrom agent_toolkit.llm import complete',
     ],
     ids=[
@@ -243,7 +247,7 @@ def test_an_annotated_exemption_covers_one_import() -> None:
     """The hatch, on the line -- so an excused import is readable as one, with an owner and a date."""
     excused = (
         '"""logic · a decision."""\n\n'
-        "from dataforce.edge.store import stored_row"
+        "from dataforce.edge.served_models import served_models"
         "  # guard-exempt: H-8 · the reason · the owner · 2026-09-07"
     )
 

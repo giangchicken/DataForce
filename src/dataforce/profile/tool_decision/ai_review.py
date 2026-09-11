@@ -219,10 +219,21 @@ class ToolDecisionSFTPrediction(SFTPrediction):
     async def predict(
         self, turns: Sequence[str], tools: Sequence[object], language: str
     ) -> SFTReviewerVerdict | None:
-        """Undecided, and so still unwritten: nothing says where its confidence comes from.
+        """`ConfigError`: this deployment serves no finetuned reviewer, and says so as a refusal.
 
-        `SFTReviewerVerdict` carries one, `tool_prediction.txt` asks for none, and `complete`
-        answers with text and no logprobs -- so a number here would be invented rather than
-        measured. Which prompt asks for it is the decision this waits on.
+        `SFTReviewerVerdict` carries a confidence, `tool_prediction.txt` asks for none, and
+        `complete` answers with text and no logprobs -- so a number here would be invented rather
+        than measured, and which prompt asks for it is the decision this waits on (§ *Open*).
+
+        Until then, ticking one is a declaration this service cannot act on, which is what
+        `ConfigError` means everywhere else on this route: the caller is told 422 by the name they
+        ticked rather than handed a 500 out of a step that was asked for an answer it has none of.
+
+        The message says *unimplemented* and not *unserved*, because the name may well be served
+        -- `GET /models` lists it and `checked_names` passed it -- and two 422s that read alike are
+        two the caller cannot tell apart.
         """
-        raise NotImplementedError
+        raise ConfigError(
+            "no finetuned reviewer is implemented here: nothing declares where its"
+            " confidence comes from, so there is no answer to give"
+        )

@@ -3,7 +3,9 @@
 Each function takes the config for the model it asks and builds its own reviewer. The panel and the
 finetuned reviewer are asked separately and neither is folded into the other -- one carries reasons
 and no confidence, the other a confidence and no reason. A config that is `None` is a reviewer the
-deployment did not declare, and answers `None`, which is not a reviewer that disagreed.
+deployment did not declare, and answers `None`, which is not a reviewer that disagreed. A config
+that is *not* `None` for the finetuned reviewer is refused while § *Open* stands, so the only
+answer it gives today is that one.
 
 The language is declared beside the sample rather than read out of it (Decision 17), and is typed
 here as text: the two the scans know are the boundary's own restriction, and this is a prompt slot
@@ -56,7 +58,11 @@ async def tool_decision_llm_predict(
 async def tool_decision_sft_predict(
     config: SFTModelConfig | None, sample: Mapping[str, Any], language: str
 ) -> SFTReviewerVerdict | None:
-    """What the finetuned reviewer said. None where no model was declared, or where it said nothing."""
+    """What the finetuned reviewer said. None where no model was declared.
+
+    Nothing else comes back today: a request that ticks one is refused, because where its
+    confidence comes from is undecided (spec § *Open*).
+    """
     if config is None:
         return None
     return await ToolDecisionSFTPrediction(config).predict(

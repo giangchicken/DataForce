@@ -305,20 +305,19 @@ const stepHumanReview = () => `<section class="step">
   ${why("The whole of each thing back, not a per-person row. `Annotation` and `ReturnedAnnotation` in `human_review/schema.py` are the annotation tool's shapes and nothing on this path builds one.")}
 </section>`;
 
-const stepStore = () => `<section class="step">
-  ${head(8, "final result", ["none", "nothing exists yet"], "POST → the engine stores one record")}
+const stepFinal = () => `<section class="step">
+  ${head(8, "final result", ["none", "nothing exists yet"], "the record this page assembles; no route takes it yet")}
   <div class="io in"><div class="lab">in</div><div class="val">
-    <span class="src">the request body — what arrived, and the scan over it</span>
+    <span class="src">the record, as the page assembled it — what arrived, and the scan over it</span>
     <pre id="record" class="big"></pre>
   </div></div>
   <div class="io out"><div class="lab">out</div><div class="val">
-    <span class="src">the same body's <code>new_</code> keys — what ships
+    <span class="src">the same record's <code>new_</code> keys — what ships
       <span id="state-8" class="state"></span></span>
-    <pre id="stored" class="big"></pre>
+    <pre id="ships" class="big"></pre>
   </div></div>
   <div class="why" id="row-note"></div>
-  ${why("**The service redacts, not this page.** The body above is posted raw and `stored_record` in `services/tool_decision/records.py` decides what may be written: every span's value replaced wherever it occurs — in `messages` and in `label`, not only in the scan — `review_text` dropped because it is the raw string by definition, and `start`/`end` off the spans because they index a string the row no longer carries. Redacting here as well would be two implementations of one rule, and only the one the client cannot skip is worth having.")}
-  ${why("A record whose `outcome` is `reported` is refused with a 422, not stored raw: nothing was rewritten, so there is no safe form of it. The service also refuses a row that still holds a value the scan says it replaced — a rule a store cannot check is a rule it does not have.")}
+  ${why("**Nothing stores this yet.** The store, the route that posts to it and which records it may refuse are all deferred until the flow is finished (spec § *Out of Scope*), so what step 8 shows is the record this page assembled and nowhere it went. The redaction below is this page's own, drawn so the two conflicts a reviewer can leave behind are readable; where it runs once a store exists — here, or in the service the client cannot skip — is undecided with it.")}
 </section>`;
 
 // ---------------------------------------------------------------- the drawing
@@ -333,7 +332,7 @@ $("flow").innerHTML =
   + arrow("the label, and what the two reviewers said")
   + `<div class="row">${stepHumanReview()}</div>`
   + arrow("every answer above, assembled by the page")
-  + `<div class="row">${stepStore()}</div>`;
+  + `<div class="row">${stepFinal()}</div>`;
 
 // ------------------------------------------------------------------ behaviour
 $("span-table").querySelector("tbody").innerHTML = SPANS.map((s, i) => `<tr>
@@ -370,7 +369,7 @@ function redactedText(spans) {
 
 // What the two detectors claimed, `(class, value)` per distinct value, in the order the spans
 // were drawn. It is what `outcome` is measured against, so a span the human unticks leaves a claim
-// nothing replaced and the row is withheld rather than read as clean.
+// nothing replaced and the record is withheld rather than read as clean.
 const CLAIMS = [...new Map(
   SPANS.map(s => [REVIEW_TEXT.slice(s.start, s.end), s.personal_data_class])
 )].map(([value, personal_data_class]) => [personal_data_class, value]);
@@ -436,17 +435,17 @@ function toolsFromHuman() {
   return same(parsed, SAMPLE.tools) ? null : parsed;
 }
 
-// What the row turned out to be, read off the row rather than asserted about it.
+// What the record turned out to be, read off it rather than asserted about it.
 //
 // Two things a reviewer can do that redaction cannot paper over.
 //
-// Unticking a span leaves its value in the row, so the row is redacted *as far as the reviewer
+// Unticking a span leaves its value in the record, which is then redacted *as far as the reviewer
 // allowed* and no further. And unticking a value that another kept value sits inside cuts it in
 // half instead of leaving it whole -- replacement is by value across every field, so the phone
 // inside an email the reviewer chose to keep still becomes `minh<PHONE_1>@vd.vn`. That is a
 // containment test between the two *values*, not between their offsets: the offsets index
 // `review_text` and the corruption happens in `messages` and `label`, which are other strings.
-function rowFindings(row) {
+function recordFindings(record) {
   const valued = spans => spans
     .map(s => [slicedValue(s.start, s.end), s])
     .filter(([got]) => !got.bad)
@@ -458,7 +457,7 @@ function rowFindings(row) {
   // Only the three `new_` keys. The originals hold the raw content on purpose, so checking the
   // whole record would fail by design and prove nothing.
   const text = json({
-    new_messages: row.new_messages, new_tools: row.new_tools, new_label: row.new_label
+    new_messages: record.new_messages, new_tools: record.new_tools, new_label: record.new_label
   });
   const conflicts = [];
   for (const [keptValue, k] of kept) {
@@ -471,14 +470,14 @@ function rowFindings(row) {
   return { flagged: flagged.length, left: flagged.filter(value => text.includes(value)), conflicts };
 }
 
-// The record the store is posted. What arrived is kept, and what ships sits beside it under
-// `new_`: the human's edits applied, then every confirmed value replaced. Redaction runs after the
-// edit, so a value the human typed is redacted too.
+// The record this page assembles at the last step. What arrived is kept, and what ships sits
+// beside it under `new_`: the human's edits applied, then every confirmed value replaced.
+// Redaction runs after the edit, so a value the human typed is redacted too.
 //
-// The row therefore holds the raw content as well as the redacted content. That is what makes a
+// The record therefore holds the raw content as well as the redacted content. That is what makes a
 // review auditable -- you can see what changed -- and it means the redaction protects a reader of
-// `new_*` and not the database: anything with this row has the values.
-function recordAsPosted() {
+// `new_*` and not whatever ends up holding the record: anything with it has the values.
+function assembledRecord() {
   const detected = detectedFromHuman();
   const scan = { ...detected, ...replacedOf(detected.spans) };
   const pairs = scan.spans
@@ -552,11 +551,12 @@ function paintAll() {
   $("out-7").textContent = json(shipped);
 
   // step 8 -- what arrived, and what ships beside it
-  const row = recordAsPosted();
-  $("record").textContent = json({ id: row.id, messages: row.messages, tools: row.tools,
-                                   label: row.label, personal_data: row.personal_data });
+  const record = assembledRecord();
+  $("record").textContent = json({ id: record.id, messages: record.messages,
+                                   tools: record.tools, label: record.label,
+                                   personal_data: record.personal_data });
   {
-    const found = rowFindings(row);
+    const found = recordFindings(record);
     const clean = found.left.length === 0 && found.conflicts.length === 0;
     const replaced = found.flagged - found.left.length;
     mark("state-8", clean, clean
@@ -564,21 +564,23 @@ function paintAll() {
       : found.left.length
         ? `${replaced} of ${found.flagged} flagged values replaced`
         : `${replaced} replaced, ${found.conflicts.length} cut in half`);
-    $("stored").textContent = json({
-      new_messages: row.new_messages, new_tools: row.new_tools, new_label: row.new_label
+    $("ships").textContent = json({
+      new_messages: record.new_messages, new_tools: record.new_tools,
+      new_label: record.new_label
     });
-    const notes = [`The store answers \`{"record_id": "${row.id}", "stored_at": <its own clock>}\``
-      + ", and the row it writes is the whole record — what arrived and what ships."];
+    const notes = ["This record is the flow's last answer and is posted nowhere: the store waits"
+      + " for the flow to be finished. What it would hold is the whole record — what arrived and"
+      + " what ships."];
     if (found.left.length) {
-      notes.push(`${found.left.length} flagged value(s) stay in this row, unticked by the reviewer: `
-        + found.left.map(value => JSON.stringify(value)).join(", ")
-        + ". The row is redacted as far as the reviewer allowed and no further.");
+      notes.push(`${found.left.length} flagged value(s) stay in this record, unticked by the `
+        + `reviewer: ${found.left.map(value => JSON.stringify(value)).join(", ")}`
+        + ". It is redacted as far as the reviewer allowed and no further.");
     }
     for (const c of found.conflicts) {
       notes.push(`${c.inner} sits inside ${JSON.stringify(c.droppedValue)}, which the reviewer `
         + `unticked as not personal. Replacing ${c.inner} cuts that value in half rather than `
-        + "leaving it whole, so the row holds neither the value nor a clean placeholder. Which of "
-        + "the two wins is not decided here.");
+        + "leaving it whole, so the record holds neither the value nor a clean placeholder. "
+        + "Which of the two wins is not decided here.");
     }
     $("row-note").textContent = notes.join(" ");
   }

@@ -26,9 +26,15 @@ from agent_toolkit.llm import LLMConfig
 
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.ai_review import LLMReviewerVote
-from dataforce.modalities.text2text.ai_review.schema import LLMModelConfig
+from dataforce.modalities.text2text.ai_review.schema import (
+    LLMModelConfig,
+    SFTModelConfig,
+)
 from dataforce.profile.tool_decision import ai_review
-from dataforce.profile.tool_decision.ai_review import ToolDecisionLLMPrediction
+from dataforce.profile.tool_decision.ai_review import (
+    ToolDecisionLLMPrediction,
+    ToolDecisionSFTPrediction,
+)
 from dataforce.profile.tool_decision.utils import openai_tool_format_to_text
 
 OPEN_TICKET = '[{"name": "OpenTicket", "arguments": {"ma_khach": "KH-1"}}]'
@@ -544,3 +550,23 @@ async def test_the_same_calls_in_two_orders_are_a_majority_and_ask_no_judge() ->
     assert said.consensus == BOTH_CALLS
     assert said.label_agreement == pytest.approx(2 / 3)
     assert panel_of_three.asked == []
+
+
+# ----------------------------------------------------------------- the finetuned reviewer
+
+
+async def test_a_finetuned_reviewer_is_refused_rather_than_answered_with_a_number() -> (
+    None
+):
+    """§ *Open*: `SFTReviewerVerdict` carries a confidence and nothing says where it comes from.
+
+    So the answer is a refusal and not an invented number -- a `ConfigError`, which is what this
+    codebase calls a declaration it cannot act on, so the route answers 422 by the name that was
+    ticked. `NotImplementedError` was the other option and is a 500: the caller's declaration is
+    well formed, and telling them it failed inside a call would be a lie about which side is
+    missing something.
+    """
+    reviewer = ToolDecisionSFTPrediction(SFTModelConfig(model=JUROR))
+
+    with pytest.raises(ConfigError, match="confidence"):
+        await reviewer.predict(TURNS, TOOLS, "vi")

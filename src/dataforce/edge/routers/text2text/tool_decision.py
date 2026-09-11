@@ -1,9 +1,10 @@
 """adapter · one APIRouter for tool_decision: a request body in, one part's answer out.
 
 A handler is thin. It reads the body, calls one function in `services/tool_decision/`, and maps the
-error; it names no stage sequence, and no response carries a part the handler does not own. The
-record the store is posted is validated here, at the one boundary an outside body becomes a domain
-value.
+error; it names no stage sequence, and no response carries a part the handler does not own.
+
+There is no route that stores anything: the record the page assembles is posted nowhere until the
+store is written, which waits for the flow to be finished (spec § *Out of Scope*).
 
 Which models answer is the caller's choice, not a declaration: `GET /models` lists what this
 deployment serves, and each request names the ones it wants. A name with no config file is refused
@@ -19,7 +20,6 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from dataforce.edge.served_models import served_models
-from dataforce.edge.store import stored_row
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.ai_review import (
     LLMReviewerVerdict,
@@ -43,7 +43,6 @@ from dataforce.services.tool_decision import (
     duplicate_report,
     personal_data_detect,
     personal_data_replace,
-    stored_record,
     tool_decision_llm_predict,
     tool_decision_sft_predict,
 )
@@ -57,12 +56,12 @@ class Sample(BaseModel):
     """One tool-calling sample, as it is posted.
 
     `extra="allow"` because a corpus carries keys this service does not read, and dropping them
-    would make the stored row a lossy copy of what arrived.
+    would make what is handed on a lossy copy of what arrived.
     """
 
     model_config = ConfigDict(extra="allow")
 
-    id: str = Field(..., description="What the sample is called; the store's key.")
+    id: str = Field(..., description="What the sample is called.")
     messages: tuple[Mapping[str, Any], ...] = Field(
         default=(), description="The conversation, in order."
     )
@@ -125,31 +124,6 @@ class ReviewRequest(Sample):
     )
 
 
-class Record(Sample):
-    """A sample and what the review made of it. The body the store is posted.
-
-    `messages`, `tools` and `label` are what arrived. The three `new_` keys are what ships: the
-    human's edits applied, then every confirmed value replaced. `new_tools` is None where the human
-    left the catalog alone -- an unmodified catalog has no new version to carry.
-    """
-
-    new_messages: tuple[Mapping[str, Any], ...] = Field(
-        default=(), description="The conversation that ships, edited and redacted."
-    )
-    new_tools: tuple[Mapping[str, Any], ...] | None = Field(
-        default=None,
-        description="The catalog that ships, or None where it was not modified.",
-    )
-    new_label: Any = Field(
-        default=None, description="The label that ships, edited and redacted."
-    )
-    personal_data: Mapping[str, Any] | None = Field(default=None)
-    duplicate: None = Field(default=None)
-    abnormal: None = Field(default=None)
-    llm: Mapping[str, Any] | None = Field(default=None)
-    sft: Mapping[str, Any] | None = Field(default=None)
-
-
 class ReviewerVerdicts(BaseModel):
     """What each reviewer said. None where the request ticked no such model."""
 
@@ -157,15 +131,6 @@ class ReviewerVerdicts(BaseModel):
 
     llm: LLMReviewerVerdict | None = Field(default=None)
     sft: SFTReviewerVerdict | None = Field(default=None)
-
-
-class Stored(BaseModel):
-    """What one row came to."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    record_id: str
-    stored_at: Any
 
 
 def refused(error: ConfigError) -> HTTPException:
@@ -245,8 +210,9 @@ async def abnormal(sample: Sample) -> None:
 
 @router.post("/ai-review", summary="what the reviewers say the label should be")
 async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
-    """Both verdicts, or 422 where a name this deployment does not serve was ticked.
+    """Both verdicts, or 422 for a declaration this deployment cannot act on.
 
+    Two of those: a name it does not serve, and a finetuned reviewer at all while § *Open* stands.
     The language and the two model keys are declarations about this request and not keys of the
     record, so the sample handed on is what the corpus carries.
     """
@@ -255,25 +221,21 @@ async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
         checked_names(
             request.jury_models + ((request.sft_model,) if request.sft_model else ())
         )
+        # The finetuned reviewer is asked first, and the order is the point: while § *Open*
+        # stands, a ticked one is a refusal, and a refusal raised after the panel has answered is
+        # N model calls paid for and thrown away.
+        sft = await tool_decision_sft_predict(
+            SFTModelConfig(model=request.sft_model) if request.sft_model else None,
+            sample,
+            request.language,
+        )
         return ReviewerVerdicts(
             llm=await tool_decision_llm_predict(
                 [LLMModelConfig(model=name) for name in request.jury_models] or None,
                 sample,
                 request.language,
             ),
-            sft=await tool_decision_sft_predict(
-                SFTModelConfig(model=request.sft_model) if request.sft_model else None,
-                sample,
-                request.language,
-            ),
+            sft=sft,
         )
-    except ConfigError as error:
-        raise refused(error) from error
-
-
-@router.post("/records", summary="store one reviewed record")
-def records(record: Record) -> Stored:
-    try:
-        return Stored(**stored_record(record.model_dump(), write=stored_row))
     except ConfigError as error:
         raise refused(error) from error

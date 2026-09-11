@@ -7,11 +7,13 @@ part, one call, the arguments its own signature declares and the value its own m
 step is handed another step's result to carry. A human step returns the whole shape it was given —
 untouched where the human says it is right, edited where the human edited it — never a verdict about
 it. The page is what remembers the answers, and it assembles them into one record at the last step,
-which is the only place a record exists and exists only to be stored.
+which is the only place a record exists.
 
 This specs the two parts that have a shape to act on — `ai_review` and the personal-data check — the
-endpoint per part, the page, and the store the last step posts to. The other two data-quality checks
-declare nothing, so they answer `None` and this specs no more about them.
+endpoint per part, and the page. Where that record is then kept is not specified here: the store,
+the route that would take it and the records it may refuse are deferred until the flow is finished
+(§ *Out of Scope*). The other two data-quality checks declare nothing, so they answer `None` and
+this specs no more about them.
 
 ## Context
 
@@ -21,15 +23,15 @@ Three axes and an edge hold the code, and each one imports only downward.
   class, and a body only where the rule is shared by every task the modality serves.
 - `profile/tool_decision/<part>.py` answers those sockets — one file per part, and the task's own
   logic.
-- `services/tool_decision/<part>.py` — `ai_review.py`, `data_quality.py`, `human_review.py`,
-  mirroring the profile file for file — is the full logic behind one endpoint. One function per
-  endpoint, each callable without the others, and each takes the config for the model it asks and
-  builds its own reviewer.
-- `edge/routers/text2text/tool_decision.py` is the HTTP shell, `edge/store/` the table, and
-  `edge/static/index.html` the page.
+- `services/tool_decision/<part>.py` — `ai_review.py` and `data_quality.py`, mirroring the profile
+  file for file — is the full logic behind one endpoint. One function per endpoint, each callable
+  without the others, and each takes the config for the model it asks and builds its own reviewer.
+- `edge/routers/text2text/tool_decision.py` is the HTTP shell and `edge/static/index.html` the
+  page. There is no table: nothing here writes the record down.
 
-A service never imports `edge/`: the store is an adapter and a service is logic, so `stored_record`
-takes the write as an argument and the router is what connects the two.
+A service never imports `edge/`. That direction is what a store would be built against when there
+is one — an adapter handed to logic as an argument, never imported by it — and it is `H-8`'s fourth
+column, not a rule this feature invented.
 
 What each part declares, and who answers it:
 
@@ -76,8 +78,9 @@ format's own shape, arguments as JSON text under one key ordering.
 2. A human step returns the shape it was handed: a `PersonalDataDetected` for a
    `PersonalDataDetected`, a label for a label. Where the human changed nothing, what it returns
    equals what it was given.
-3. The record is assembled by the page, once, as the body it posts to be stored. No step above
-   produces it. It keeps what arrived and adds what the review made of it:
+3. The record is assembled by the page, once, as the flow's last answer. No step above produces
+   it, and no route takes it: where it is kept is deferred (§ *Out of Scope*). It keeps what
+   arrived and adds what the review made of it:
    `{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
    abnormal, llm, sft}`.
 4. `duplicate` and `abnormal` are `None`. Neither check declares a shape.
@@ -146,7 +149,8 @@ format's own shape, arguments as JSON text under one key ordering.
 16. Redaction runs after the edit, so a value the human typed is redacted too.
 17. The record holds the raw content as well as the redacted content. That is what makes a review
     auditable — what changed is readable against what arrived — and it means the redaction protects
-    a reader of the three `new_` keys and not the store: anything holding the row holds the values.
+    a reader of the three `new_` keys and nothing else: anything holding the record holds the
+    values, whatever ends up holding it.
 
 **AI review.**
 
@@ -239,10 +243,11 @@ format's own shape, arguments as JSON text under one key ordering.
     ticked, and returns an `LLMReviewerVerdict` and an `SFTReviewerVerdict` side by side. The
     language and the two model keys are declarations about the request rather than keys of the
     record, so the sample handed on is what the corpus carries.
-35. `POST /text2text/tool-decision/records` takes the record **raw**, redacts it, stores the
-    redacted row and returns `{record_id, stored_at}`. Redaction is the service's, never the
-    client's: a rule the caller can skip is not a rule. A record with no redacted form is refused
-    with 422, and so is a row that still holds a value its own scan says it replaced.
+35. There is no route that stores a record. The page assembles one and posts it nowhere: the
+    store, the route that takes it, where the redaction runs and which records it refuses are one
+    decision, deferred until the flow is finished (§ *Out of Scope*). Nothing else here depends on
+    it — every step above answers its own call — so the record is the flow's last answer and the
+    number is kept rather than reused.
 36. `GET /text2text/tool-decision/` serves the page.
 
 **The page.**
@@ -264,9 +269,11 @@ format's own shape, arguments as JSON text under one key ordering.
 42. Step 7 offers `correct` and `modify`. `correct` returns the label as it arrived. `modify` opens
     the label editor; a **check** button re-parses it, and a label that is not JSON is returned as
     `{unparsed: <text>}` rather than dropped.
-43. Step 8 shows the assembled record as the request body, raw and as computed, and beside it the
-    row the service would store. It says on its face that the page built the body, that no step
-    above did, and that the redaction is the service's.
+43. Step 8 shows the assembled record, raw and as computed, and beside it the three `new_` keys —
+    what would ship. It says on its face that the page built it, that no step above did, and that
+    nothing stores it: the store is deferred, and so is where the redaction runs once there is
+    one. The redaction the page draws is its own, so the two conflicts a reviewer can leave behind
+    stay readable.
 
 ## Design
 
@@ -285,11 +292,12 @@ answer that did not come back, or came back the wrong shape, confirms none. Neit
 task. Which model confirms does, so a checker is *constructed* with the declaration its
 request carried, and the confirmation resolves it in `__init__`.
 
-`services/tool_decision/` is what an endpoint calls: `personal_data_scan` in `data_quality.py`,
-`tool_decision_llm_predict` and `tool_decision_sft_predict` in `ai_review.py`, `reviewed_record` and `stored_record` in
-`human_review.py`. Each takes a config and one sample and constructs the profile class it needs —
-a config, not a built object, because the config is the only thing that varies and a bag of
-pre-built reviewers passed between layers is one more thing to keep in step. A `None` config is a
+`services/tool_decision/` is what an endpoint calls: `personal_data_detect` and
+`personal_data_replace` in `data_quality.py`, `tool_decision_llm_predict` and
+`tool_decision_sft_predict` in `ai_review.py`. Each takes a config and one sample and constructs
+the profile class it needs — a config, not a built object, because the config is the only thing
+that varies and a bag of pre-built reviewers passed between layers is one more thing to keep in
+step. A `None` config is a
 reviewer the deployment did not declare and answers `None`. `duplicate_report` and
 `abnormal_report` take a sample and nothing else: neither declares a shape to return, so neither
 has a model to ask. A handler is then three lines: read the body, call one function, map
@@ -354,9 +362,9 @@ and falling back to text where none is readable are one rule, and a method whose
 `judge_prediction` answering `None` here: a panel whose answers can be matched needs no model to
 match them.
 
-**One record, and only at the end.** The page holds the eight answers and composes them into the
-record the store is posted. Nothing else composes one: a handler answers for its own part and knows
-nothing about the others, which is what makes each endpoint drivable by itself. `llm` and `sft` are
+**One record, and only at the end.** The page holds the eight answers and composes them into one
+record. Nothing else composes one: a handler answers for its own part and knows nothing about the
+others, which is what makes each endpoint drivable by itself. `llm` and `sft` are
 the names the votes carry; `personal_data`, `duplicate` and `abnormal` are the three checks' own. No
 pydantic model declares the envelope.
 
@@ -388,36 +396,19 @@ keeps the endpoint in the environment leaves `base_url` and `api_key` out of bot
 no npm, nothing loaded from a CDN. Every shape in it is read off the tree, and the span offsets are
 found with `indexOf` rather than written down, so the check button can always reproduce them.
 
-**The store.** One table, `record`, keyed by `record_id`, holding the row as JSON and the time it
-landed. A repeated id replaces the row through `session.merge()` -- a record posted twice is one
-record reviewed twice, not two, and merge is a primary-key read then an insert or update, so no
-dialect-specific `insert` is reached for. The cost, stated: the review the row used to hold is gone,
-with no trace it existed.
+**No store yet, and the record therefore stops at the page.** Where a reviewed record is kept is
+one decision with several halves -- the table, the route that takes it, whether the redaction runs
+in the service or on the page, and which records are refused -- and it is deferred until the flow
+above it is finished (§ *Out of Scope*). Nothing above depends on it: every step answers its own
+call, and the record is what the page composes out of those answers.
 
-**What the row holds, and what the store checks.** The whole record: what arrived under
-`messages`, `tools` and `label`, and what ships under the three `new_` keys.
-`services/tool_decision/human_review.py` composes it -- the human's edits applied, then every value
-the scan carries replaced wherever it occurs, so a value the human typed is redacted too.
-
-Keeping both halves is the decision, and its consequence is stated once: the row holds the personal
-data verbatim, so the redaction protects a reader of the `new_` keys and not the database. Anything
-holding a row holds the values.
-
-What the store therefore checks is narrow, and it is the only check available server-side: a
-posted record carries the spans the reviewer kept and no trace of the ones they dropped, so nothing
-there can report what a reviewer let through. `unreplaced_values` proves the one provable thing --
-the three `new_` keys hold none of the values the scan says it replaced -- reading only that half,
-because the originals hold raw content on purpose and checking the whole record would fail by
-design. A record that fails it is refused with 422 rather than written.
-
-The service's one check is a self-check, and it is the only one available there: a posted record
-carries the spans the reviewer kept and no trace of the ones they dropped, so nothing server-side
-can report what a reviewer let through. `unreplaced_values` proves the narrower thing worth
-proving — a row holds none of the values it claims to have replaced — and a row that fails it is
-refused rather than written.
+What that leaves is the consequence of keeping both halves, stated once because it does not depend
+on where the record lands: it holds the personal data verbatim under `messages`, `tools` and
+`label`, so the redaction protects a reader of the three `new_` keys and nothing else. Anything
+holding the record holds the values.
 
 What a reviewer let through is the page's to show, beside the reviewer who did it. Two cases it
-draws and neither side resolves: unticking a span leaves its value in the row, so the row is
+draws and neither side resolves: unticking a span leaves its value in the record, which is then
 redacted as far as the reviewer allowed and no further; and unticking a value another kept value
 sits inside cuts it in half, because replacement is by value across every field, so a phone inside
 a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided.
@@ -445,7 +436,7 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
    HTTP, cannot be tested without a client, and `edge/` grows the task's logic — while every
    endpoint's handler grows a second reason to change. The cost, stated: one more layer to open when
    following a call.
-2. **Every step is independent, and the record exists only for the store.** Alternative: thread one
+2. **Every step is independent, and the record exists only at the end.** Alternative: thread one
    envelope through the endpoints, each filling its key. That gives every handler a reason to know
    the whole shape, makes a part undrivable without the parts before it, and puts one pydantic model
    in the path of every change to any part. Reversible.
@@ -546,8 +537,9 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 ## Versions
 
 No new dependency. FastAPI `>=0.141.1` serves the page through Starlette's `StaticFiles`.
-`sqlalchemy >=2.0.52,<2.1` and `alembic >=1.19.1` are already declared in `pyproject.toml` and are
-what the store is built on.
+`sqlalchemy >=2.0.52,<2.1` and `alembic >=1.19.1` stay declared in `pyproject.toml` and nothing
+here imports either: they are the wider pipeline's, and they are what a store would be built on
+when one is written.
 
 ## Invariants
 
@@ -594,7 +586,11 @@ what the store is built on.
   and never guessed at.
 - One part failing fails that one call. The page keeps every answer it already has, and the step is
   re-runnable on its own.
-- `POST .../records` with an `id` already stored replaces that row.
+- A request that ticks `sft_model` is refused with 422, and refused before the panel is asked. The
+  name may well be served — `checked_names` passes it — but `ToolDecisionSFTPrediction.predict` has
+  no answer to give while § *Open* stands, and a declaration this service cannot act on is a
+  `ConfigError` here as everywhere else on the route. Its message says *unimplemented* rather than
+  *unserved*, so the two refusals do not read alike.
 - A handler stays thin: it calls the part and maps the error through `errors.py`.
 
 ## Testing Strategy
@@ -615,8 +611,14 @@ what the store is built on.
 - `openai_tool_format_to_text` pinned against its known rendering, and `text_to_openai_tool_format`
   against the shape it reads a call into — which spellings of a call are one call, and which are two.
 - Each endpoint through `TestClient` with the model calls stubbed, called with nothing but its own
-  arguments — no fixture threads one payload through several of them.
-- Round trip: `POST .../records` then read it back, equal.
+  arguments — no fixture threads one payload through several of them. Which models may be ticked is
+  a directory, so it is stubbed as one: `DATAFORCE_MODEL_DIR` pointed at files the test wrote,
+  before the app is created. The two 422s are pinned apart — a name the directory does not hold,
+  and a name it holds whose file declares no endpoint — and both are proved to happen with a
+  `complete` installed that fails the test if it is reached.
+- The `PersonalDataDetected` the replace route takes back is written out in the test, not fetched
+  from the detect route: it is one part's second call, and a fixture that fetched it would be the
+  threading Requirement 1 forbids.
 - No test drives the page. A browser is the check.
 
 ## Out of Scope
@@ -626,9 +628,12 @@ what the store is built on.
 - Auth, rate limiting, batching, and running any of this over a corpus rather than one sample.
 - Which models the panel asks, and how many. A composition is a deployment's declaration, and
   nothing in this spec picks one.
-- The store's schema management. `edge/store/records.py` declares the table and `create_all` is
-  what has been run against it; Alembic, migrations, and how a schema changes are deferred by
-  decision, to be settled when the database is.
+- **The store, and everything that answers for it.** Where a reviewed record is kept, the route
+  that takes it, whether the redaction runs in the service or on the page, which records are
+  refused, and the schema management under all of it — one decision, deferred until the flow above
+  it is finished. The table and the route it was reached through were written and are deleted
+  rather than left half-answering: a route nothing may post to is worse than no route, and the
+  history is in the plan (T14).
 
 ## Open
 
@@ -636,10 +641,12 @@ what the store is built on.
 asks for none, and `agent_toolkit.llm.complete` answers with text and no logprobs — so a number
 put there today would be invented rather than measured. Either the finetuned reviewer gets a prompt
 of its own asking for `{reason, label, confidence}`, or the shared prompt grows a key every juror
-answers and nothing reads. Until that is settled `ToolDecisionSFTPrediction.predict` has no body,
-`POST .../ai-review` answers `sft: null` for a request that ticks none, and a request that ticks
-one fails. Its comparison against the label waits with it: that rule needs to know what an answer
-is made of, so it belongs beside the prompt that asked for one and not in the modality.
+answers and nothing reads. Until that is settled `ToolDecisionSFTPrediction.predict` gives no
+answer: `POST .../ai-review` answers `sft: null` for a request that ticks none, and refuses one
+that ticks a reviewer with 422 — this deployment serves none, which is a declaration it cannot act
+on rather than a failure inside a call. Its comparison against the label waits with it: that rule
+needs to know what an answer is made of, so it belongs beside the prompt that asked for one and
+not in the modality.
 
 Everything else this spec opened has an answer above; the one thing deliberately deferred is the
-store's schema management, under Out of Scope.
+store, under Out of Scope.
