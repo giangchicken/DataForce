@@ -862,6 +862,9 @@ when one is written.
   it is finished. The table and the route it was reached through were written and are deleted
   rather than left half-answering: a route nothing may post to is worse than no route, and the
   history is in the plan (T14).
+  The flow is now finished, and that decision is being made in `docs/tool-decision-store/spec.md`,
+  which is in review. Nothing above changes until it is accepted: Requirements 3, 35 and 53 still
+  describe a page that posts its record nowhere, because that is still what the code does.
 
 ## Open
 
