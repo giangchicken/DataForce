@@ -127,84 +127,70 @@ result and is the only table anything is ever exported from.
       `personal_data_class`: `["EMAIL", "PHONE", "NAME"]`, `[]` where the sample had none. This is
       the patterns the scan redacts by, listed, and it is what tells a buyer what *kind* of
       personal data used to be in a corpus they are being told is clean.
-    - `turns` — how many messages the shipped conversation holds.
-    - `calls` — how many tool calls the shipped label makes. `0` is the no-call sample.
-    - `tools_called` — the distinct tool names the label calls.
-    - `tools_offered` — how many tools the catalog holds. One offered tool and five are not the
-      same question asked of a model.
-    - `call_shape` — the part of the trigger taxonomy a single sample can prove: `no_call`,
-      `single`, `parallel` (two or more calls in one label). Whether the catalog forced a choice is
-      `tools_offered > 1`, so it is read off that rather than stored twice.
+    - `number_turns` — how many messages the shipped conversation holds.
+    - `number_label_tools` — how many tool calls the shipped label makes. `0` is the no-call
+      sample, and `2` or more is a turn answered by several calls at once.
+    - `number_provided_tools` — how many tools the catalog offers. One offered tool and five are
+      not the same question asked of a model: above one, the sample is also a choice.
     - `schema_valid` — whether every call names a tool in this row's own catalog and supplies that
       tool's required parameters.
 14. **Declared, by the person at step 7 or by the corpus:**
     - `direction` — `inbound` (the customer called) or `outbound` (the bot called). Nothing in a
       transcript says which reliably, so it is ticked.
     - `domain` — the **bot's business function**, not the customer's industry: `debt_collection`
-      (thu hồi nợ), `telesale`, `bill_reminder` (nhắc cước), `customer_care` (CSKH),
-      `order_confirmation` (xác nhận đơn hàng), `appointment_reminder` (nhắc lịch hẹn),
-      `survey` (khảo sát), `reactivation` (kích hoạt lại khách hàng không hoạt động),
-      `technical_support` (hỗ trợ kỹ thuật), `kyc` (xác minh danh tính). The list is the profile's
-      and grows there. An industry — banking, retail, insurance — is a different axis and is
-      § *Open*.
+      (đòi nợ), `telesale`, `bill_reminder` (nhắc cước), `customer_care` (tổng đài chăm sóc khách
+      hàng). The list is the profile's and grows there when a bot does a job that is not one of
+      these. An industry — banking, retail, insurance — is a different axis and is § *Open*.
     - `language` — `vi` or `en`. The flow already declares it per request and then throws it away;
       it belongs on the row, because a scan, a juror and a buyer all need to know.
-    - `flow` — whether the sample is a step in a scripted conversation, and which one. See
-      *a sample is not a conversation*, below.
-    - `trigger` — the call conditions a single flat sample cannot prove. See the table below.
+    - `have_conversation_flow` — true where the sample is a step in a scripted conversation, one
+      the bot walks through in order and where reaching a given step is what obliges a call.
+    - `call_shape` — **how the call is triggered**, which is the verb of the sample and the facet a
+      buyer is really shopping for. One value per call, so a sample holds the set of them:
+      - `condition_met` — the bot calls it the moment the arguments and preconditions are there,
+        without being asked.
+      - `user_utterance` — it fires only because the customer said a particular thing.
+      - `every_turn` — the flow obliges it on every turn, whatever was said.
+      The list is the profile's and grows there, on the same terms as `domain`. Where the label
+      calls nothing, there is no trigger to describe and the facet is empty — the no-call sample is
+      `number_label_tools: 0`, and that is where it is counted.
     - `ambiguous` — the reviewer says this sample is genuinely arguable. Two annotators differing
       on one of these is signal about the task, not a mistake by either, and a corpus that cannot
       mark them will keep re-litigating the same rows.
-15. **A sample is not a conversation, and this is the gap that has to be closed.** "Has a
-    conversation flow", "a tool that is called on every turn", and "which tool was called before
-    this one" are properties of a *sequence* of samples. The corpus today is flat: one sample, its
-    own turns, its own label, and no key joining it to the sample before it. So `class` carries
-    `conversation_id` and `turn_index`, both declared, and with them those three facets become
-    derivable later instead of being permanently unanswerable. Without them, the store can count
-    what a corpus contains but never what a *dialogue* does, and the flow-shaped half of the
-    taxonomy below stays a thing people assert.
-16. **`trigger` — the taxonomy, and where each value comes from.** The vocabulary is the
-    function-calling literature's, because a corpus described in the same words as the benchmarks
-    it will be measured against is a corpus whose gaps are legible to a buyer.
-
-    | value | what it is | derived? |
-    |---|---|---|
-    | `user_utterance` | the customer's turn is the whole trigger | yes — the default where nothing else holds |
-    | `no_call` | no tool is appropriate; the right answer is to call nothing | yes — *irrelevance detection*, BFCL |
-    | `choice` | several tools offered, one is right | yes — `tools_offered > 1` |
-    | `parallel` | two or more calls for one turn | yes — `calls > 1` |
-    | `sequential` | one call's result is an argument of the next | **no** — a flat label array cannot express it; nested sequences are where models collapse (NESTFUL: 28% full-sequence accuracy) |
-    | `prior_call` | this turn's call depends on a tool called in an earlier turn | **no** — needs `conversation_id`; BFCL's multi-turn, state-tracked |
-    | `every_turn` | the flow obliges a tool on every turn | **no** — a property of the flow, not the sample |
-    | `missing_parameter` | the right tool is clear, a required argument is not; the bot must ask | **no** — declared. Parameter-value errors dominate complex tool-calling failures (up to 78.8% on ComplexFuncBench), so a corpus with none of these teaches a bot to invent arguments |
-    | `missing_function` | nothing offered can do what is asked | **no** — declared |
-
-    The three *no*s in the middle are not an oversight to write around. They are the measurement
-    that says this corpus is flat, and `conversation_id` with `turn_index` is the one change that
-    turns them on.
+15. **`call_shape` is declared because a flat sample cannot prove it.** Whether a tool fired
+    because its arguments were finally complete, because the customer said one particular thing, or
+    because the flow obliges it every turn is a fact about *the bot's design*, and the evidence for
+    it is not inside one sample. The record holds this sample's turns, its catalog and its label,
+    and no key joining it to the sample before it — so nothing can tell a tool that happens to be
+    called here from a tool that is called every time. It is ticked by the person who knows the
+    flow, and `conversation_id` under § *What else to add* is what would let it be checked.
 
 **The figures.**
 
-17. `GET /text2text/tool-decision/records/stats` answers the figures, per task, reading and keeping
+16. `GET /text2text/tool-decision/records/stats` answers the figures, per task, reading and keeping
     nothing. Every figure is a count with the denominator it came out of — never a bare
     percentage, because a share over nine rows and a share over nine thousand are different claims.
-18. **How much, how fresh, and how much of it is sellable.** `record` rows; `dataset` rows; the
+17. **How much, how fresh, and how much of it is sellable.** `record` rows; `dataset` rows; the
     difference, split by why — `withheld`, never scanned. Rows created in the last 7 and 30 days;
     newest and oldest `modified_time`. Điều 17's `tính đầy đủ` and `mức độ cập nhật`, and the first
     number anyone building the corpus needs: reviewed is not the same as sellable.
-19. **The coverage matrix, which is the point of `class`.** Counts per facet — `direction`,
-    `domain`, `call_shape`, `trigger`, `language`, `turns` bucketed, `calls`, each
-    `personal_data` class — and the cross of `domain` × `call_shape`. **The finding is the
-    zeros.** A corpus with 4,000 `customer_care` rows and no `parallel` call in `debt_collection`
-    is a corpus that will fail in production in a way its size hides completely, and the page's
-    job is to show that cell, empty, next to the full ones.
-20. **What the evidence buys**, and it is only measurable because `record` keeps it:
+18. **The coverage matrix, which is the point of `class`.** Counts per facet — `direction`,
+    `domain`, `call_shape`, `language`, `have_conversation_flow`, `number_turns` bucketed,
+    `number_label_tools`, each `personal_data` class — and the cross of `domain` × `call_shape`.
+    **The finding is the zeros.** A corpus with 4,000 `customer_care` rows and no `every_turn` call
+    anywhere in `debt_collection` is a corpus that will fail in production in a way its size hides
+    completely, and the page's job is to show that cell, empty, next to the full ones.
+    **The no-call share** falls out of the same count and is worth naming on its own: how many rows
+    label nothing, out of the total. A corpus that is all tool calls cannot teach a bot to keep its
+    hands in its pockets and cannot measure whether it does — *irrelevance detection* is a
+    first-class BFCL metric, and a corpus with no such rows scores it at zero by construction.
+19. **What the evidence buys**, and it is only measurable because `record` keeps it:
     - `human_edit_rate` — the share of records whose `new_label` differs from `label`. The humans
       are correcting the machine this often.
     - `panel_disagreement` — the mean `llm.label_agreement`, and the share of records with
       `consensus: null`. Where it is high, either the labels or the guideline are in trouble.
     - `redaction_outcomes` — `redacted` / `reported` / `withheld`.
-21. **The same input twice**, under the names `DuplicateGroups` already uses:
+20. **The same input twice**, under the names `DuplicateGroups` already uses:
     - `duplicate_content_same_label` — redundancy. Safe to drop one, and worth dropping:
       deduplicating training data measurably reduces memorisation and speeds convergence (Lee et
       al., ACL 2022).
@@ -212,28 +198,29 @@ result and is the only table anything is ever exported from.
       is wrong, or the task is ambiguous where the guideline claimed it was not. A queue to
       inspect, not an error count (VariErr NLI, arXiv:2403.01931) — which is also why
       the declared `ambiguous` facet exists.
-22. **Schema validity** — the share of `dataset` rows whose `class.schema_valid` is true. BFCL's
+21. **Schema validity** — the share of `dataset` rows whose `class.schema_valid` is true. BFCL's
     AST check turned on the corpus rather than on a model: a label calling a tool the sample was
     never offered is not a hard example, it is a broken row.
-23. **Tool coverage** — distinct tools offered, distinct tools ever called, and the count per
-    called tool. The tail is the finding: a corpus where two tools carry 90% of the calls trains a
+22. **Tool coverage**, read out of `input.tools` and `label` rather than off a facet — distinct
+    tools offered, distinct tools ever called, and the count per called tool. The tail is the
+    finding: a corpus where two tools carry 90% of the calls trains a
     model that knows two tools.
-24. **What is not shown, and is said so on the page.** **Inter-annotator agreement.**
+23. **What is not shown, and is said so on the page.** **Inter-annotator agreement.**
     Krippendorff's α — ≥ 0.800 for a firm conclusion, ≥ 0.667 for a tentative one (Krippendorff,
     2004) — needs at least two people labelling one sample, and this flow puts one human in front
     of each record. The panel proxies above are not it and must not be drawn as it. The
     page says *not measured*, and § *What else to add* says what would change that.
-25. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
+24. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
 
 **The page.**
 
-26. The figures are a band under the header of `ui/`, above step 1 — not a ninth rectangle. The
+25. The figures are a band under the header of `ui/`, above step 1 — not a ninth rectangle. The
     eight rectangles are one sample's journey; this is the corpus.
-27. Asked for on load and again after a record is written. Not on a timer.
-28. Where no database is attached the band says so in the service's own words and all eight steps
+26. Asked for on load and again after a record is written. Not on a timer.
+27. Where no database is attached the band says so in the service's own words and all eight steps
     work exactly as they do today. The store is a place to put the result, never a dependency of
     the review.
-29. Step 7 grows the ticks for the declared facets, because that is where the
+28. Step 7 grows the ticks for the declared facets, because that is where the
     human already is and a second form at the end would be a second place to describe one sample.
     **approve** posts the record, and step 8 says which tables took it — or, for a `withheld`
     record, that `record` has it and `dataset` does not, and why.
@@ -256,9 +243,9 @@ for a path expression into `record`.
 
 **Why `class` is derived where it can be.** Every facet a person types is a facet that can be
 wrong, and a corpus's description going quietly stale is the failure mode that makes people stop
-trusting the numbers. So `personal_data`, `turns`, `calls`, `call_shape` and `schema_valid` are
-computed from the row every time it is written, and the declared half is small, ticked once, and
-visibly a claim, and `conversation_id` exists to move three more facets across that line.
+trusting the numbers. So `personal_data`, `number_turns`, `number_label_tools`,
+`number_provided_tools` and `schema_valid` are computed from the row every time it is written, and
+the declared half is small, ticked once, and visibly a claim.
 
 **One adapter, two DSNs.** `Session.merge` for both writes, inside one transaction — a read by
 primary key then an insert or an update, so no dialect-specific upsert is reached for and a
@@ -278,9 +265,17 @@ instant, because the figure is identical either way.
 
 Proposals, not decisions:
 
-- **`conversation_id` and `turn_index`.** The single highest-value addition. Three
-  of the facets you named are unanswerable without it, and no amount of extra samples fixes that —
-  only this does.
+- **`conversation_id` and `turn_index`.** The single highest-value addition. `call_shape` and
+  `have_conversation_flow` are both assertions today, and with a key joining a sample to the one
+  before it they become checkable: `every_turn` is then a thing the corpus can be asked about
+  rather than a thing someone ticked. No amount of extra samples fixes that — only this does.
+- **A facet for what the *right answer* is**, which `call_shape` does not cover: the right tool is
+  clear but a required argument is missing and the bot must ask for it, or nothing offered can do
+  what was asked. Parameter-value errors dominate complex tool-calling failures — up to 78.8% on
+  ComplexFuncBench — so a corpus holding none of these teaches a bot to invent arguments rather
+  than ask. Related, and equally unrepresentable in a flat label array: one call whose result is an
+  argument of the next, which is where models collapse hardest (NESTFUL reports 28% full-sequence
+  accuracy).
 - **`source`** — which corpus, batch or customer a sample came from. Điều 17 requires a
   `hồ sơ chứng minh việc thu thập, tạo lập`, and a per-row origin is what makes that dossier
   possible to assemble instead of being written from memory. It is also what lets you pull one
@@ -297,7 +292,7 @@ Proposals, not decisions:
 - **`industry`** as a second axis beside `domain` — banking, retail, insurance, logistics,
   healthcare, education. `domain` is what the bot is *doing*; industry is who it is doing it for,
   and the same `debt_collection` flow differs between a bank and a telco.
-- **A `difficulty` or `turns`-band facet** derived once rather than bucketed in every query, if the
+- **A `difficulty` or turn-band facet** derived once rather than bucketed in every query, if the
   coverage matrix turns out to be read by band more often than by count.
 
 ## Invariants
@@ -352,13 +347,12 @@ Law:
 - [Luật Bảo vệ dữ liệu cá nhân có hiệu lực từ 01/01/2026 (Bộ Công an)](https://bocongan.gov.vn/chinh-sach-phap-luat/bai-viet/luat-bao-ve-du-lieu-ca-nhan-chinh-thuc-co-hieu-luc-thi-hanh-tu-ngay-01-01-2026-1767186124)
 - [Luật Dữ liệu 2024, số 60/2024/QH15 (Công báo, chinhphu.vn)](https://datafiles.chinhphu.vn/cpp/files/vbpq/2025/01/luat60.pdf)
 
-The `trigger` taxonomy:
+Tool calling:
 
 - Patil, S.G., Mao, H., Yan, F., Ji, C.C., Suresh, V., Stoica, I. & Gonzalez, J.E. (2025). *The
   Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large
-  Language Models.* ICML 2025, PMLR 267:48371–48392. Single / multiple / parallel / parallel-multiple,
-  live and non-live, multi-turn with state tracking, relevance and irrelevance detection, and the
-  augmented categories — missing function, long context.
+  Language Models.* ICML 2025, PMLR 267:48371–48392. *Irrelevance detection* — the share of no-call
+  cases a model correctly abstains on — and the AST check behind `schema_valid`.
   [proceedings.mlr.press/v267/patil25a.html](https://proceedings.mlr.press/v267/patil25a.html) ·
   [leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html)
 - *NESTFUL: A Benchmark for Evaluating LLMs on Nested Sequences of API Calls.* arXiv:2409.03797
@@ -366,9 +360,9 @@ The `trigger` taxonomy:
 - *ComplexFuncBench: Exploring Multi-Step and Constrained Function Calling under Long-Context
   Scenario.* arXiv:2501.10132. Parameter-value errors as the dominant failure mode, which is the
   argument for `missing_parameter`.
-- τ-bench, for the multi-turn simulated-user framing behind `every_turn` and flow policy.
+- τ-bench, for the multi-turn simulated-user framing behind `every_turn` and a flow's policy.
 
-Measurement:
+Dataset quality:
 
 - Northcutt, C.G., Athalye, A. & Mueller, J. (2021). *Pervasive Label Errors in Test Sets
   Destabilize Machine Learning Benchmarks.* NeurIPS 2021 D&B. arXiv:2103.14749 — ten widely used
