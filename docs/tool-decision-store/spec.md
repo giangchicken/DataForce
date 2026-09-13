@@ -1,21 +1,27 @@
-# tool_decision store: six columns, and the figures a corpus is judged by
+# tool_decision store: two tables, one projection, and the figures that show what is missing
 
 ## What
 
-The flow is finished, so the thing it deferred can be decided. A reviewed record lands in one
-table, one row per sample, and the row holds **what ships** — the input and the label as the
-review left them — and not what arrived. Six columns: `id`, `task`, `created_time`,
-`modified_time`, `input`, `label`.
+A reviewed sample lands in **two** tables, written in one transaction.
 
-Two halves come with it. **What the door refuses**, because a row that still holds a person's
-phone number is a row that cannot be sold and a table that holds one is a liability rather than a
-corpus. And **the figures**, because a corpus is bought and trained on by someone who has to
-decide whether to trust it, and under Vietnamese law a seller has to publish them anyway
-(Điều 17, Nghị định 314/2026/NĐ-CP — § *The law this is written against*).
+- **`record`** keeps the whole of what the eight steps answered — what arrived, what ships, the
+  spans, the outcome, every juror's vote. It holds personal data verbatim, so it is never exported
+  and never sold. It is the evidence for trusting the other table.
+- **`dataset`** keeps what a buyer gets: the input and the label as the review left them,
+  de-identified, plus one `class` column saying what kind of sample it is. It is queryable, it is
+  counted, and it is the thing that goes on a *sàn dữ liệu*.
 
-This spec answers the whole of `docs/tool-decision-pipeline/spec.md` § *Out of Scope*'s first
-paragraph: the table, the route that takes a record, which records are refused, and the schema
-management under all of it.
+`dataset` is a **projection of `record`**, never an independent edit, and it exists only for
+records the redaction actually finished. That split is the whole design: the table that must be
+protected and the table that is sold are different tables, rather than one table and a promise
+about which columns anyone reads.
+
+The `class` column is why this is worth more than a place to put rows. A corpus is scaled by
+knowing which kinds of sample it is short of, and a label alone cannot say. `class` is what turns
+the figures from *how much data do we have* into *which cells are empty*.
+
+This answers `docs/tool-decision-pipeline/spec.md` § *Out of Scope*: the tables, the route that
+takes a record, which records are refused, and the schema management under all of it.
 
 ## Context
 
@@ -26,17 +32,21 @@ What the repository already decided, and what this spec therefore does not:
 - `alembic.ini` names `migrations/` and no `sqlalchemy.url`: the DSN is read once, from
   `DATAFORCE_DATABASE_URL`, and a credential-shaped line does not go in a public repository. The
   first schema is a migration and never a `create_all` side effect.
-- `edge/store/` held `records.py` until `34ae87f` deleted it — *the store waits*. It kept one JSON
-  `document` column under the record's id, and said why: "a column is added when a query needs
-  one". A query now needs them. The figures below cannot be computed over an opaque document, and
-  that is the whole of what changed.
+- `edge/store/` held `records.py` until `34ae87f` deleted it — *the store waits*. It kept the
+  record as one JSON `document` under its id, and said why: nothing but the boundary declares the
+  envelope, so "a column is added when a query needs one". That reasoning is kept exactly, and the
+  two tables are what it comes to: `record.document` stays one JSON column because no query reads
+  inside it, and `dataset` is the columns the queries need.
 - The store is an adapter in `edge/`. A service never imports it; it is handed to logic as an
   argument (`H-8`). Nothing in `modalities/` or `profile/` learns that a table exists.
+- What a `class` value *means* is the task's, not the store's. `inbound`, `debt_collection` and
+  `parallel` are `tool_decision`'s nouns, and a layer that serves many cases may not be written in
+  one case's vocabulary (`H-10`). The store writes the column and counts over it without ever
+  reading a value.
 
 ### The law this is written against
 
-Not background. Three of the requirements below exist only because of it, and a corpus built
-without them is one that cannot be sold on the exchange the Vietnamese market is about to have.
+Not background. Three requirements exist only because of it, and the dates are close.
 
 - **Nghị định 314/2026/NĐ-CP**, in force **25/9/2026**, governs data exchanges (*sàn dữ liệu*).
   Điều 17: traded data must have `nguồn gốc hợp pháp, có hồ sơ chứng minh việc thu thập, tạo lập
@@ -46,196 +56,295 @@ without them is one that cannot be sold on the exchange the Vietnamese market is
   giao dịch trên sàn dữ liệu khi đáp ứng điều kiện về khử nhận dạng` — data derived from personal
   data is tradeable **only once de-identified**. Khoản 6, Điều 4 forbids using an exchange to buy
   or sell personal data at all.
-- **Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15**, in force **1/1/2026**, prohibits the buying and
-  selling of personal data outright, with an administrative fine of up to **10× the proceeds**.
-- No licence is needed to *sell on* an exchange. What is needed is a lawfully established
-  Vietnamese legal entity (or a foreign one with commercial presence), a VNeID level-2 trading
-  account and a registered payment account (Điều 18), and a certificate only where the data
-  service falls in a conditional business line. *Operating* an exchange is the licensed activity,
-  and is restricted to public non-business units and state-owned enterprises (Luật Dữ liệu
-  60/2024/QH15) — so this is a spec for a seller, never for an exchange.
+- **Luật Bảo vệ dữ liệu cá nhân 91/2025/QH15**, in force **1/1/2026**, prohibits buying and selling
+  personal data outright, with a fine of up to **10× the proceeds**, and gives a data subject the
+  right to demand deletion.
+- No licence is needed to *sell on* an exchange: a lawfully established Vietnamese legal entity (or
+  a foreign one with commercial presence), a VNeID level-2 trading account, a registered payment
+  account (Điều 18), and a certificate only where the data service is a conditional business line.
+  *Operating* an exchange is the licensed activity and is restricted to public non-business units
+  and state-owned enterprises (Luật Dữ liệu 60/2024/QH15). This is a spec for a seller.
 
-A corpus of customer-support conversations is `dữ liệu có nguồn gốc từ dữ liệu cá nhân`. This
-pipeline's redaction is what satisfies `khử nhận dạng`, and Requirements 9–12 are what make the
-table able to prove it.
+The two tables are the legal shape, not only a tidy one. `record` holds `dữ liệu cá nhân` and is
+the table a deletion request under 91/2025/QH15 acts on. `dataset` holds the `khử nhận dạng`
+result and is the only table anything is ever exported from.
 
 ## Requirements
 
-**The row.**
+**`record` — what the review answered.**
 
-1. One table, `record`. One row is one reviewed sample. Six columns and no seventh: `id`, `task`,
-   `created_time`, `modified_time`, `input`, `label`.
-2. `id` is the sample's own — what the corpus called it and what the record at step 8 keeps.
-   `task` is the task that produced the row, `tool_decision` for every row this flow writes. One
-   table serves every task: the row's shape does not vary by task, and a table per task would be a
-   second declaration of which tasks exist.
-3. The primary key is `(task, id)`. A sample id is unique inside the corpus it came from and
-   nothing makes two corpora agree; `task` is a column precisely so that one table holds more than
-   one of them.
-4. `input` is the sample as it ships: `{messages, tools}`. The turns and the catalog together, in
-   one column, because a tool call is a call *against a catalog* — a label stored apart from the
+1. One row per reviewed sample: `task`, `id`, `document`, `created_time`, `modified_time`. The
+   primary key is `(task, id)`.
+2. `document` is the record the page assembles, whole and unaltered —
+   `{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
+   abnormal, llm, sft}` — in one JSON column. No query reads inside it (Requirement 20 is the one
+   exception, and it reads three named keys, never a path expression), so no part of it becomes a
+   column and the envelope stays declared where it is built.
+3. A record is written whatever its outcome, the refused ones included. A sample whose redaction
+   did not finish is a fact about the corpus worth keeping and worth counting; dropping it on the
+   floor is how a pipeline comes to have no idea what it is failing at.
+4. `created_time` is when the row was first written and never changes. `modified_time` changes on
+   every write. Both UTC, both timezone-aware. A second post under one `(task, id)` replaces the
+   row, because a record posted twice is one sample reviewed twice — and the review it used to hold
+   is gone, which is the cost of replacing and is stated rather than designed around.
+
+**`dataset` — what a buyer gets.**
+
+5. One row per **sellable** sample: `task`, `id`, `input`, `label`, `class`, `created_time`,
+   `modified_time`, keyed `(task, id)` — the same key, so a row here always has its evidence there.
+6. `input` is the sample as it ships, `{messages, tools}` in one column. The turns and the catalog
+   together, because a tool call is a call *against a catalog*, and a label stored apart from the
    catalog it was written for is a label nothing can check.
-5. `label` is the calls as they ship.
-6. Both are what the review left and never what arrived: `new_messages` and `new_tools` where the
-   human or the redaction made a new version, what arrived where neither did, and `new_label` for
-   the label. `messages`, `tools` and `label` as they arrived are not columns and are not written.
-   That is not tidiness — it is Requirement 9.
-7. `created_time` is when the row was first written and never changes. `modified_time` is when it
-   was last written and changes on every write. Both UTC, both timezone-aware.
-8. A second post under one `(task, id)` replaces the row and keeps its `created_time`: a record
-   posted twice is one sample reviewed twice. The cost, stated: the review the row used to hold is
-   gone, with no trace that it existed.
+7. `label` is the calls as they ship.
+8. Both are what the review left, never what arrived: `new_messages`, `new_tools` where the human
+   or the redaction made a new version and what arrived where neither did, and `new_label`. The raw
+   `messages`, `tools` and `label` exist only in `record.document`.
+9. **`class`** is one JSON column holding the facets of Requirements 12–16. One column and not a
+   column per facet: a facet is added by writing one, and a corpus that grows a new way of being
+   described should not need a migration to say so.
+10. `dataset` is a projection. Every column in it is computed from the `record` row of the same
+    key, so it can be dropped and rebuilt from `record` at any time, and nothing writes to it
+    except that computation. A `dataset` row that disagrees with its `record` is a bug with one
+    possible cause.
 
-**What the door refuses.**
+**The door.**
 
-9. **A row is written only where the sample is de-identified.** The record's `personal_data`
-   carries the replacement outcome, and two of the three are admissible: `redacted` — every value
-   the detectors claimed resolved in the copy — and `reported` — nothing was claimed, so there was
-   nothing to rewrite. `withheld` is refused: it means a rewrite was asked for and not finished,
-   and `khử nhận dạng` is a condition, not an intention.
-10. A record whose `personal_data` is `null` is refused. Nothing scanned it, so nothing says it is
-    clean; a record nobody looked at is not the same as a record with nothing to find, and the
-    difference is the one the exchange asks about.
-11. A refusal is `422` naming the outcome it saw, on the same terms as every other refusal on this
-    router: a declaration the service cannot act on, told to the caller in the service's own words.
-12. What Requirements 9–11 buy is why there are six columns and not seven. **The admission rule is
-    the evidence.** Every row in the table passed it, so the guarantee is a property of the table
-    rather than a field inside a row that whoever wrote the row could have set. A corpus is
-    exported by selecting from it; there is nothing to filter on and nothing to trust.
+11. **A `dataset` row is written only where the sample is de-identified.** The record's
+    `personal_data.outcome` must be `redacted` — every claimed value resolved in the copy — or
+    `reported` — nothing was claimed, so there was nothing to rewrite. `withheld` writes no
+    `dataset` row, and neither does a record whose `personal_data` is `null`, which is a sample
+    nobody scanned. The write of `record` still succeeds, and the response says which of the two
+    tables took the row and why the other did not. `khử nhận dạng` is a condition, not an
+    intention, and the table is what has to be able to prove it: every row in `dataset` passed this
+    door, so an export is a `SELECT` and there is nothing to remember to filter.
+
+**`class` — the facets, and which of them anything may derive.**
+
+12. A facet is **derived** or **declared**, and the two are never mixed. A derived facet is
+    computed from the record at write time and can be recomputed from it; nobody may type one, so
+    it cannot disagree with the sample. A declared facet is a claim a person or the corpus made;
+    nothing can check it, and it says who said so by existing in the other half.
+13. **Derived, from the record alone:**
+    - `personal_data` — the classes actually redacted, read off the confirmed spans'
+      `personal_data_class`: `["EMAIL", "PHONE", "NAME"]`, `[]` where the sample had none. This is
+      the patterns the scan redacts by, listed, and it is what tells a buyer what *kind* of
+      personal data used to be in a corpus they are being told is clean.
+    - `turns` — how many messages the shipped conversation holds.
+    - `calls` — how many tool calls the shipped label makes. `0` is the no-call sample.
+    - `tools_called` — the distinct tool names the label calls.
+    - `tools_offered` — how many tools the catalog holds. One offered tool and five are not the
+      same question asked of a model.
+    - `call_shape` — the part of the trigger taxonomy a single sample can prove: `no_call`,
+      `single`, `parallel` (two or more calls in one label). Whether the catalog forced a choice is
+      `tools_offered > 1`, so it is read off that rather than stored twice.
+    - `schema_valid` — whether every call names a tool in this row's own catalog and supplies that
+      tool's required parameters.
+14. **Declared, by the person at step 7 or by the corpus:**
+    - `direction` — `inbound` (the customer called) or `outbound` (the bot called). Nothing in a
+      transcript says which reliably, so it is ticked.
+    - `domain` — the **bot's business function**, not the customer's industry: `debt_collection`
+      (thu hồi nợ), `telesale`, `bill_reminder` (nhắc cước), `customer_care` (CSKH),
+      `order_confirmation` (xác nhận đơn hàng), `appointment_reminder` (nhắc lịch hẹn),
+      `survey` (khảo sát), `reactivation` (kích hoạt lại khách hàng không hoạt động),
+      `technical_support` (hỗ trợ kỹ thuật), `kyc` (xác minh danh tính). The list is the profile's
+      and grows there. An industry — banking, retail, insurance — is a different axis and is
+      § *Open*.
+    - `language` — `vi` or `en`. The flow already declares it per request and then throws it away;
+      it belongs on the row, because a scan, a juror and a buyer all need to know.
+    - `flow` — whether the sample is a step in a scripted conversation, and which one. See
+      Requirement 15.
+    - `trigger` — the call conditions a single flat sample cannot prove. See Requirement 16.
+    - `ambiguous` — the reviewer says this sample is genuinely arguable. Two annotators differing
+      on one of these is signal about the task, not a mistake by either, and a corpus that cannot
+      mark them will keep re-litigating the same rows.
+15. **A sample is not a conversation, and this is the gap that has to be closed.** "Has a
+    conversation flow", "a tool that is called on every turn", and "which tool was called before
+    this one" are properties of a *sequence* of samples. The corpus today is flat: one sample, its
+    own turns, its own label, and no key joining it to the sample before it. So `class` carries
+    `conversation_id` and `turn_index`, both declared, and with them those three facets become
+    derivable later instead of being permanently unanswerable. Without them, the store can count
+    what a corpus contains but never what a *dialogue* does, and the flow-shaped half of the
+    taxonomy below stays a thing people assert.
+16. **`trigger` — the taxonomy, and where each value comes from.** The vocabulary is the
+    function-calling literature's, because a corpus described in the same words as the benchmarks
+    it will be measured against is a corpus whose gaps are legible to a buyer.
+
+    | value | what it is | derived? |
+    |---|---|---|
+    | `user_utterance` | the customer's turn is the whole trigger | yes — the default where nothing else holds |
+    | `no_call` | no tool is appropriate; the right answer is to call nothing | yes — *irrelevance detection*, BFCL |
+    | `choice` | several tools offered, one is right | yes — `tools_offered > 1` |
+    | `parallel` | two or more calls for one turn | yes — `calls > 1` |
+    | `sequential` | one call's result is an argument of the next | **no** — a flat label array cannot express it; nested sequences are where models collapse (NESTFUL: 28% full-sequence accuracy) |
+    | `prior_call` | this turn's call depends on a tool called in an earlier turn | **no** — needs `conversation_id` (Requirement 15); BFCL's multi-turn, state-tracked |
+    | `every_turn` | the flow obliges a tool on every turn | **no** — a property of the flow, not the sample |
+    | `missing_parameter` | the right tool is clear, a required argument is not; the bot must ask | **no** — declared. Parameter-value errors dominate complex tool-calling failures (up to 78.8% on ComplexFuncBench), so a corpus with none of these teaches a bot to invent arguments |
+    | `missing_function` | nothing offered can do what is asked | **no** — declared |
+
+    The three *no*s in the middle are not an oversight to write around. They are the measurement
+    that says this corpus is currently flat, and Requirement 15 is the one change that turns them
+    on.
 
 **The figures.**
 
-13. `GET /text2text/tool-decision/records/stats` answers the figures over the table, per task. It
-    reads and keeps nothing. Every figure is a count with the denominator it is a count out of —
-    never a bare percentage, because a share over nine rows and a share over nine thousand are not
-    the same claim.
-14. **How much, and how fresh.** Rows in total; rows whose `created_time` falls in the last 7 and
-    30 days; the oldest and newest `modified_time`. This is Điều 17's `tính đầy đủ` and
-    `mức độ cập nhật`, and a corpus whose newest row is eleven months old is a fact a buyer is
-    entitled to before the sale rather than after it.
-15. **The same input twice**, split the two ways the codebase already names them
-    (`DuplicateGroups`):
-    - `duplicate_content_same_label` — the same input carrying the same label. Redundancy. Safe to
-      drop one, and worth dropping: deduplicating training data measurably reduces memorisation
-      and speeds convergence (Lee et al., ACL 2022).
-    - `duplicate_content_diff_label` — **the same input carrying a different label**. The figure
-      the labelling lead actually needs: one of the two is wrong, or the task is ambiguous where
-      the guideline claimed it was not. It is a queue to inspect and not an error count — for a
-      genuinely debatable input, two annotators differing is signal about the task rather than a
-      mistake by either (Weber-Genzel et al., *VariErr NLI*, arXiv:2403.01931).
-16. **The no-call share.** How many rows carry a label that calls nothing — `[]`, and `null` where
-    the corpus spells it that way — out of the total. A tool-decision corpus with no such rows
-    cannot teach a model to keep its hands in its pockets, and cannot measure whether it does:
-    *irrelevance detection*, the share of no-call cases where a model correctly abstains, is a
-    first-class metric on the Berkeley Function Calling Leaderboard (Patil et al., ICML 2025). A
-    corpus that is 100% tool calls scores that metric at zero by construction.
-17. **Schema validity.** The share of rows whose every call names a tool that is in that row's own
-    catalog, and supplies that tool's required parameters. This is the leaderboard's AST check
-    (*ibid.*) turned on the corpus rather than on a model: a label that calls a tool the sample was
+17. `GET /text2text/tool-decision/records/stats` answers the figures, per task, reading and keeping
+    nothing. Every figure is a count with the denominator it came out of — never a bare
+    percentage, because a share over nine rows and a share over nine thousand are different claims.
+18. **How much, how fresh, and how much of it is sellable.** `record` rows; `dataset` rows; the
+    difference, split by why — `withheld`, never scanned. Rows created in the last 7 and 30 days;
+    newest and oldest `modified_time`. Điều 17's `tính đầy đủ` and `mức độ cập nhật`, and the first
+    number anyone building the corpus needs: reviewed is not the same as sellable.
+19. **The coverage matrix, which is the point of `class`.** Counts per facet — `direction`,
+    `domain`, `call_shape`, `trigger`, `language`, `turns` bucketed, `calls`, each
+    `personal_data` class — and the cross of `domain` × `call_shape`. **The finding is the
+    zeros.** A corpus with 4,000 `customer_care` rows and no `parallel` call in `debt_collection`
+    is a corpus that will fail in production in a way its size hides completely, and the page's
+    job is to show that cell, empty, next to the full ones.
+20. **What the evidence buys**, and it is only measurable because `record` keeps it:
+    - `human_edit_rate` — the share of records whose `new_label` differs from `label`. The humans
+      are correcting the machine this often.
+    - `panel_disagreement` — the mean `llm.label_agreement`, and the share of records with
+      `consensus: null`. Where it is high, either the labels or the guideline are in trouble.
+    - `redaction_outcomes` — `redacted` / `reported` / `withheld`.
+21. **The same input twice**, under the names `DuplicateGroups` already uses:
+    - `duplicate_content_same_label` — redundancy. Safe to drop one, and worth dropping:
+      deduplicating training data measurably reduces memorisation and speeds convergence (Lee et
+      al., ACL 2022).
+    - `duplicate_content_diff_label` — **the same input carrying a different label.** One of them
+      is wrong, or the task is ambiguous where the guideline claimed it was not. A queue to
+      inspect, not an error count (VariErr NLI, arXiv:2403.01931) — which is also why
+      Requirement 14's `ambiguous` exists.
+22. **Schema validity** — the share of `dataset` rows whose `class.schema_valid` is true. BFCL's
+    AST check turned on the corpus rather than on a model: a label calling a tool the sample was
     never offered is not a hard example, it is a broken row.
-18. **Tool coverage.** How many distinct tools the catalogs offer, how many are ever called, and
-    the count per called tool. The tail is the finding — a corpus where two tools carry 90% of the
-    calls trains a model that knows two tools.
-19. **What is not shown, and is said so on the page.** Two figures a buyer will ask for and these
-    six columns cannot answer:
-    - **Label error rate.** It needs a second opinion per row, and the row keeps none. The
-      published yardstick is that ten widely used test sets average **3.3%** label errors, ImageNet
-      validation about 6% (Northcutt et al., NeurIPS 2021 D&B) — worth knowing as the number to
-      beat, and worth not inventing.
-    - **Inter-annotator agreement.** Krippendorff's α is the metric for it — α ≥ 0.800 for a firm
-      conclusion, ≥ 0.667 for a tentative one (Krippendorff, 2004) — and it needs at least two
-      people labelling the same sample. This flow puts one human in front of each record. Until
-      two see one record, this panel shows *not measured*, never a number.
-    The page names both as gaps rather than leaving a blank a reader fills in optimistically.
-20. No figure is stored. Each is a query at the time it is asked, so a panel cannot be stale and
-    there is nothing to keep in step with the table.
+23. **Tool coverage** — distinct tools offered, distinct tools ever called, and the count per
+    called tool. The tail is the finding: a corpus where two tools carry 90% of the calls trains a
+    model that knows two tools.
+24. **What is not shown, and is said so on the page.** **Inter-annotator agreement.**
+    Krippendorff's α — ≥ 0.800 for a firm conclusion, ≥ 0.667 for a tentative one (Krippendorff,
+    2004) — needs at least two people labelling one sample, and this flow puts one human in front
+    of each record. The panel proxies in Requirement 20 are not it and must not be drawn as it. The
+    page says *not measured*, and § *What else to add* says what would change that.
+25. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
 
 **The page.**
 
-21. The figures are a band under the header of `ui/`, above step 1 — not a ninth rectangle. The
-    eight rectangles are one sample's journey; this is the corpus, and a step that is not part of
-    the flow must not be drawn as one.
-22. It is asked for on load, and again after a record is written. Not on a timer.
-23. Where the service answers no figures — no database attached, nothing migrated — the band says
-    so in the service's own words and the eight steps work exactly as they do today. The store is
-    an adapter, and a flow that cannot label without one would have made it a dependency of the
-    review rather than a place to put the result.
-24. **approve** is where the record is posted, and step 8 is the only rectangle that changes
-    (pipeline spec, Requirement 53). It says which id it wrote, or shows the refusal.
+26. The figures are a band under the header of `ui/`, above step 1 — not a ninth rectangle. The
+    eight rectangles are one sample's journey; this is the corpus.
+27. Asked for on load and again after a record is written. Not on a timer.
+28. Where no database is attached the band says so in the service's own words and all eight steps
+    work exactly as they do today. The store is a place to put the result, never a dependency of
+    the review.
+29. Step 7 grows the ticks for the declared facets of Requirement 14, because that is where the
+    human already is and a second form at the end would be a second place to describe one sample.
+    **approve** posts the record, and step 8 says which tables took it — or, for a `withheld`
+    record, that `record` has it and `dataset` does not, and why.
 
 ## Design
 
-**Why the columns and not the document.** The deleted `records.py` kept the record as one JSON
-blob under its id, for a stated reason: nothing but the boundary declares the envelope, and a
-relational schema for it would put that declaration in the layer furthest from where the record is
-built. That reason still holds for everything the record carries *about the review* — the votes,
-the agreement, the spans, the outcome. It stops holding for the two things the corpus **is**.
-`duplicate_content_diff_label` is a group-by on the input; the no-call share is a predicate on the
-label; schema validity reads the catalog against the calls. None of those is expressible over an
-opaque column in both SQLite and Postgres. So exactly two parts of the record become columns, and
-the rest becomes the admission rule at the door.
+**Why two tables and not one with a filter.** A filter is a thing every future reader has to
+remember. Selling a corpus is a `SELECT` someone writes in a hurry, possibly a year from now,
+possibly not the person who wrote this. If the personal data is one `WHERE` away from the export,
+one day it will be in the export. Two tables make the mistake impossible to make silently: the
+export reads `dataset`, and `dataset` has never at any point held a raw transcript.
 
-**Where the evidence goes.** Nowhere, and that is the decision. The record's `llm`, `sft` and
-`personal_data` halves are read by the route and not written down: `personal_data` decides whether
-the row is admitted at all, and the reviewers' verdicts were the human's aid in deciding the label
-that is now in the `label` column. Stated plainly because it is a real loss: **after this store,
-you cannot ask a row what the panel thought of it.** Requirement 12 is what is bought with it, and
-§ *Open* carries the alternative.
+**Why `record` is one opaque column and `dataset` is many.** The deleted store's reason holds
+exactly where it was aimed — the record's envelope is declared at the boundary that receives it,
+and mirroring it into columns would put that declaration in the layer furthest from where it is
+built. What changed is that some queries now exist, and all of them are about the *corpus* rather
+than the *review*. So they get their own table with their own columns, and the review stays a
+document. Requirement 20 is the seam: three named keys read out of `document` for three figures,
+and the day a fourth is wanted, that is the argument for a fourth column in `dataset` rather than
+for a path expression into `record`.
 
-**One adapter, two DSNs.** `Session.merge` for the write — a read by primary key then an insert or
-an update — so no dialect-specific upsert is reached for and a developer's SQLite file and a
-deployment's Postgres are one code path. The figures are SQLAlchemy Core queries over the same
-table; the two that read inside `input` and `label` (Requirements 17 and 18) are computed in
-Python over the rows rather than in JSON path expressions, because that is the part where the two
-dialects stop being one adapter.
+**Why `class` is derived where it can be.** Every facet a person types is a facet that can be
+wrong, and a corpus's description going quietly stale is the failure mode that makes people stop
+trusting the numbers. So `personal_data`, `turns`, `calls`, `call_shape` and `schema_valid` are
+computed from the row every time it is written, and the declared half is small, ticked once, and
+visibly a claim. Requirement 15 exists to move three more facets across that line.
 
-**The digest, and why it is not a seventh column yet.** Requirement 15 groups rows by *the same
-input*. Two JSON columns are not comparable for equality across dialects, and no index can be
-built on that comparison. The honest options are a stored `sha256` of the input canonicalised
-under one key ordering — fast, indexable, and a seventh column — or a full scan hashed in Python,
-which is correct and is fine at the size this corpus is starting from. This spec takes the second
-and names the first as the change to make when the scan stops being instant, because the figure is
-the same figure either way and a column added before a query needs it is the mistake the deleted
-store already documented.
+**One adapter, two DSNs.** `Session.merge` for both writes, inside one transaction — a read by
+primary key then an insert or an update, so no dialect-specific upsert is reached for and a
+developer's SQLite file and a deployment's Postgres are one code path. The figures are Core
+queries over `dataset`, except Requirement 20's three, which read `record.document` in Python over
+the rows rather than in JSON path expressions — that is the part where the two dialects stop being
+one adapter.
+
+**Grouping by input.** Requirement 21 groups rows by *the same input*. Two JSON columns are not
+comparable for equality across dialects and no index can be built on that comparison. The options
+are a stored `sha256` of the input canonicalised under one key ordering — fast, indexable, one
+more column — or a scan hashed in Python, which is correct and instant at the size this corpus
+starts from. This takes the scan and names the digest as the change to make when it stops being
+instant, because the figure is identical either way.
+
+## What else to add
+
+Asked for, and these are proposals rather than decisions:
+
+- **`conversation_id` and `turn_index`** (Requirement 15). The single highest-value addition. Three
+  of the facets you named are unanswerable without it, and no amount of extra samples fixes that —
+  only this does.
+- **`source`** — which corpus, batch or customer a sample came from. Điều 17 requires a
+  `hồ sơ chứng minh việc thu thập, tạo lập`, and a per-row origin is what makes that dossier
+  possible to assemble instead of being written from memory. It is also what lets you pull one
+  customer's data back out if their contract ends.
+- **`annotator`** — who reviewed the row. Cheap now, and the precondition for ever computing
+  Requirement 24's agreement: the day two people review one sample, the store either knows who they
+  were or the number cannot be computed retroactively.
+- **`reviewed_at`** distinct from `created_time` — when the human answered, as against when the row
+  landed. They differ when a backlog is posted, and any per-annotator quality figure needs the
+  former.
+- **A `consent` or lawful-basis marker** on `record`. 91/2025/QH15 gives the data subject rights
+  over the personal data in that table; which basis each source was collected under is the thing
+  nobody can reconstruct later.
+- **`industry`** as a second axis beside `domain` — banking, retail, insurance, logistics,
+  healthcare, education. `domain` is what the bot is *doing*; industry is who it is doing it for,
+  and the same `debt_collection` flow differs between a bank and a telco.
+- **A `difficulty` or `turns`-band facet** derived once rather than bucketed in every query, if the
+  coverage matrix turns out to be read by band more often than by count.
 
 ## Invariants
 
-- No row holds a value the redaction was asked to remove and did not. Requirement 9 is checked at
-  the one door rows come through.
-- `created_time` never moves. `modified_time` never precedes it.
-- The table is the corpus. Anything true of the corpus is a query over it, and nothing is a figure
-  someone wrote down.
-- Nothing below `edge/` knows the table exists.
+- No row in `dataset` holds a value the redaction was asked to remove and did not. It is checked at
+  the one door rows come through (Requirement 11).
+- `dataset` is a function of `record`. Drop it, rebuild it, get the same table.
+- Every `dataset` row has a `record` row under the same key. The reverse does not hold, and the
+  difference is a figure (Requirement 18).
+- No derived facet was ever typed by a person; no declared facet is ever computed.
+- `created_time` never moves; `modified_time` never precedes it.
+- Nothing below `edge/` knows a table exists, and the store never reads a `class` value it counts.
 
 ## Out of Scope
 
-- Reading rows back out. This spec writes them and counts them. An export — which is what selling
-  one actually needs, with its manifest and its licence file — is its own decision.
-- Deleting a row, and what a data subject's deletion request does to a corpus already sold. It is a
-  real obligation under 91/2025/QH15 and it is not a column; it is a process.
-- Auth on the write route. Today's flow has none anywhere, and adding it at one route would be the
-  only guarded door in an unguarded building.
-- The provenance dossier itself (`hồ sơ chứng minh việc thu thập, tạo lập`). It is per corpus, not
-  per row, and it is a document rather than a table.
+- The export itself — the manifest, the licence file, the format a buyer receives. Selling needs
+  it; it is its own decision and it reads only `dataset`.
+- Deleting a row, and what a deletion request under 91/2025/QH15 does to a corpus already sold. It
+  is a real obligation and it is a process, not a column.
+- Auth on the write route. Today's flow has none anywhere, and one guarded door in an unguarded
+  building is theatre. It becomes urgent the moment `record` holds real transcripts.
+- The provenance dossier itself. Per corpus, not per row, and a document rather than a table —
+  though `source` above is what it would be assembled from.
 - `DuplicateDataChecking.duplicate_groups`. Step 3 finally has a corpus to compare a sample
-  against, and the shape it should return is still undeclared. Nothing here invents one.
+  against, and the shape it returns is still undeclared. Nothing here invents one.
 
 ## Open
 
-- **Whether the evidence is kept.** Six columns lose the reviewers' verdicts and the span record.
-  The alternative is a seventh JSON column holding the rest of the record — which brings back
-  exactly what the deleted store held, next to the two columns that replaced it, and makes the
-  row able to answer *why should I believe this label* per row rather than per table. It is not
-  written here because the schema asked for is six columns, and the loss is stated above rather
-  than designed around.
-- **Whether `(task, id)` is the key, or `id` alone.** Alone is simpler and is what the deleted
-  store did. It assumes ids are unique across every corpus this table ever holds, which nothing
+- **Whether `(task, id)` is the key, or `id` alone.** Alone is simpler and is what the deleted store
+  did. It assumes ids are unique across every corpus this table will ever hold, which nothing
   enforces and no corpus promised.
-- **What a `null` label means.** `[]` and `null` both read as *no tool call is needed* in the
-  corpus, and Requirement 16 counts both. The pipeline does not treat them as one answer:
-  `label: null` canonicalises as the text `null` and never matches a panel that answered `[]`, so
-  `label_agreement` reads 0.0 for a sample the panel agreed with. Either the corpus writes one
-  spelling, or `normalize_prediction` folds them — a task rule, and undecided here.
+- **Who declares the `domain` list, and what happens to rows already written when it grows.** A
+  closed list catches typos and needs an edit to extend; an open one never blocks a labeller and
+  drifts into `cskh`, `CSKH` and `cham_soc_kh` being three domains. The list belongs in
+  `profile/tool_decision/`, but closed-versus-open is a decision about how the labelling team
+  works, not about the code.
+- **`industry` as a second axis** — see above. It is a column or a facet or neither.
+- **What a `null` label means.** `[]` and `null` both read as *no tool call is needed*, and
+  `class.calls` counts both as `0`. The pipeline does not treat them as one answer: `label: null`
+  canonicalises as the text `null` and never matches a panel that answered `[]`, so
+  `label_agreement` reads 0.0 for a sample the panel agreed with — which would then feed
+  Requirement 20's `panel_disagreement` as a disagreement that did not happen. Either the corpus
+  writes one spelling or `normalize_prediction` folds them. A task rule, still undecided, and now
+  with a second consumer.
 
 ## Sources
 
@@ -243,31 +352,46 @@ Law:
 
 - [Nghị định 314/2026/NĐ-CP, toàn văn (Cổng TTĐT Chính phủ)](https://xaydungchinhsach.chinhphu.vn/toan-van-nghi-dinh-314-2026-nd-cp-quy-dinh-hoat-dong-cua-san-du-lieu-119260817104316631.htm)
 - [Điều kiện tham gia giao dịch trên sàn dữ liệu (Xây dựng chính sách, Chính phủ)](https://xaydungchinhsach.chinhphu.vn/dieu-kien-tham-gia-giao-dich-tren-san-du-lieu-119260818085308618.htm)
-- [Nghị định 314/2026/NĐ-CP về hoạt động của sàn dữ liệu từ 25/9/2026 (LuatVietnam)](https://luatvietnam.vn/tin-van-ban-moi/da-co-nghi-dinh-314-2026-nd-cp-ve-hoat-dong-cua-san-du-lieu-tu-ngay-25-9-2026-186-111449-article.html)
 - [Luật Bảo vệ dữ liệu cá nhân 2025, số 91/2025/QH15 (Thư viện pháp luật)](https://thuvienphapluat.vn/van-ban/Bo-may-hanh-chinh/Luat-Bao-ve-du-lieu-ca-nhan-2025-so-91-2025-QH15-625628.aspx)
 - [Luật Bảo vệ dữ liệu cá nhân có hiệu lực từ 01/01/2026 (Bộ Công an)](https://bocongan.gov.vn/chinh-sach-phap-luat/bai-viet/luat-bao-ve-du-lieu-ca-nhan-chinh-thuc-co-hieu-luc-thi-hanh-tu-ngay-01-01-2026-1767186124)
 - [Luật Dữ liệu 2024, số 60/2024/QH15 (Công báo, chinhphu.vn)](https://datafiles.chinhphu.vn/cpp/files/vbpq/2025/01/luat60.pdf)
 
-Measurement:
+The taxonomy of Requirement 16:
 
 - Patil, S.G., Mao, H., Yan, F., Ji, C.C., Suresh, V., Stoica, I. & Gonzalez, J.E. (2025). *The
   Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large
-  Language Models.* ICML 2025, PMLR 267:48371–48392.
+  Language Models.* ICML 2025, PMLR 267:48371–48392. Single / multiple / parallel / parallel-multiple,
+  live and non-live, multi-turn with state tracking, relevance and irrelevance detection, and the
+  augmented categories — missing function, long context.
   [proceedings.mlr.press/v267/patil25a.html](https://proceedings.mlr.press/v267/patil25a.html) ·
   [leaderboard](https://gorilla.cs.berkeley.edu/leaderboard.html)
+- *NESTFUL: A Benchmark for Evaluating LLMs on Nested Sequences of API Calls.* arXiv:2409.03797
+  (EMNLP 2025). Where `sequential` comes from, and why it is worth counting separately.
+- *ComplexFuncBench: Exploring Multi-Step and Constrained Function Calling under Long-Context
+  Scenario.* arXiv:2501.10132. Parameter-value errors as the dominant failure mode, which is the
+  argument for `missing_parameter`.
+- τ-bench, for the multi-turn simulated-user framing behind `every_turn` and flow policy.
+
+Measurement:
+
 - Northcutt, C.G., Athalye, A. & Mueller, J. (2021). *Pervasive Label Errors in Test Sets
-  Destabilize Machine Learning Benchmarks.* NeurIPS 2021 Datasets & Benchmarks. arXiv:2103.14749 ·
-  [labelerrors.com](https://labelerrors.com)
+  Destabilize Machine Learning Benchmarks.* NeurIPS 2021 D&B. arXiv:2103.14749 — ten widely used
+  test sets average 3.3% label errors; the number to beat, and not to invent.
 - Lee, K. et al. (2022). *Deduplicating Training Data Makes Language Models Better.* ACL 2022,
   8424–8445. arXiv:2107.06499
 - Weber-Genzel, L. et al. *VariErr NLI: Separating Annotation Error from Human Label Variation.*
   arXiv:2403.01931
 - Krippendorff, K. (2004). *Content Analysis: An Introduction to Its Methodology.* The α thresholds
-  used in Requirement 19 — ≥ 0.800 satisfactory, ≥ 0.667 tentative — are his decision criterion.
+  in Requirement 24 are his decision criterion.
 - Gebru, T. et al. (2021). *Datasheets for Datasets.* Communications of the ACM 64(12), 86–92.
-  DOI 10.1145/3458723 — what a published corpus states about itself, and the shape Điều 17's
-  disclosure list already resembles.
+  DOI 10.1145/3458723 — what a published corpus states about itself, which Điều 17's disclosure
+  list already resembles.
 
-The law is cited from the government portal and a legal publisher, not from the gazette PDF of the
-decree itself; the article numbers above should be checked against the official text before
-anything is sold against them.
+Vietnamese callbot business functions in Requirement 14 are drawn from what the local market
+actually deploys — telesale, thu hồi nợ, nhắc cước và nhắc thanh toán, xác nhận đơn hàng, chăm sóc
+khách hàng, khảo sát — rather than from a standard; there is no taxonomy to cite, and the list is
+the profile's to keep.
+
+The law is cited from the government portal and a legal publisher, not from the gazette text of the
+decree; the article numbers should be checked against the official text before anything is sold
+against them.
