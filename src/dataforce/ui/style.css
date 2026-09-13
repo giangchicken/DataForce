@@ -97,3 +97,11 @@ label.mode input { width: auto; }
 .state.unasked { border-style: dashed; border-color: var(--dim); color: var(--dim); }
 pre.big.unasked { color: var(--dim); background: var(--none); border-style: dashed; }
 .hidden { display: none; }
+
+/* The rectangle a **back to** sent the reviewer to, and the only marking that is an instruction
+   rather than a report: every other state says what happened, this one says where to type. One
+   at a time, and it goes as soon as this step answers again. */
+.step.returned { border-color: var(--mark); }
+.backnote { font-size: 10.5px; color: var(--mark); }
+.backnote:empty { display: none; }
+.bar.back { color: var(--dim); }

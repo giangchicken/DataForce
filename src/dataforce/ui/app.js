@@ -50,6 +50,13 @@ function mark(step, state, text) {
   const el = document.querySelector(`[data-state="${step}"]`);
   el.className = `state${state === "answered" ? "" : ` ${state}`}`;
   el.textContent = text;
+  // Answering the rectangle you were sent back to is the end of the return. The marker is a
+  // standing instruction to make the correction here, and one left on a step that has since
+  // answered points at nothing.
+  if (held.returned === step) {
+    held.returned = null;
+    paintReturn();
+  }
 }
 
 function show(id, value, kind = "") {
@@ -121,7 +128,8 @@ const held = {
   review: null,     // step 6
   edited: null,     // step 7: the three, as they ship before redaction
   record: null,     // step 8
-  asked: {}         // which steps answered at all, so `null` at 200 is not `not asked`
+  asked: {},        // which steps answered at all, so `null` at 200 is not `not asked`
+  returned: null    // which rectangle a **back to** sent the reviewer to, if any
 };
 
 const ticked = { verifier: null, jury: [], sft: null };
@@ -526,6 +534,13 @@ function paintShipped() {
   show("out-7", held.edited);
 }
 
+// Step 7 answers without calling anything, so its **check** is the whole of the human step -- and
+// a record assembled before it was pressed is a record assembled out of the other three.
+function checkLabel() {
+  paintShipped();
+  forget(8);
+}
+
 // --------------------------------------------------------------------------- 8 · the record
 
 // The record this page assembles, and the only thing it composes. What arrived is kept and what
@@ -583,12 +598,35 @@ function approve() {
   $("approve-note").textContent = "approved, and posted nowhere. This body is the record — take it off the screen.";
 }
 
-// **fix** hands the record back to the rectangle that produced the part: a correction is an edit
-// there and that step's own button again, not a second editor at the end.
-function fix(step) {
+// --------------------------------------------------------------------------- back to a step
+
+// A correction is made where the part was made. Every rectangle names the ones above it that hold
+// something to change, and **back to** goes there: the edit plus that step's own button again is
+// how the answer is replaced, which is the same human step as everywhere else -- there is no
+// second editor at the end, and nothing is re-called on the reviewer's behalf.
+//
+// What pressing it drops is the record and nothing more. Step 8 was assembled out of an answer
+// you have just called wrong, so it stops reading as assembled; every other answer stands until
+// the step it came from is actually edited, which is the rule each edit above already runs.
+const RETURNABLE = [1, 2, 5, 6, 7];
+
+function back(to, from) {
   forget(8);
-  $("approve-note").textContent = `fixing step ${step}: edit it there, then press that step's own button again`;
-  $(`s${step}`).scrollIntoView({ behavior: "smooth", block: "center" });
+  held.returned = to;
+  paintReturn();
+  $(`s${to}`).scrollIntoView({ behavior: "smooth", block: "center" });
+  $("approve-note").className = "note";
+  $("approve-note").textContent = `sent back to step ${to} from step ${from}: change it there, then press that step's own button again`;
+}
+
+// One return at a time: two rectangles both saying they are where the correction goes is two
+// places to make it.
+function paintReturn() {
+  for (const step of RETURNABLE) {
+    const here = held.returned === step;
+    $(`back-${step}`).textContent = here ? "← make the correction here" : "";
+    $(`s${step}`).classList.toggle("returned", here);
+  }
 }
 
 // --------------------------------------------------------------------------- wiring
@@ -620,14 +658,15 @@ $("review-run").onclick = review;
 for (const id of ["v-correct", "v-modify"]) {
   $(id).onchange = () => {
     $("label-editor").classList.toggle("hidden", !$("v-modify").checked);
-    paintShipped();
+    checkLabel();
   };
 }
-$("label-check").onclick = paintShipped;
+$("label-check").onclick = checkLabel;
 $("assemble").onclick = assemble;
 $("approve").onclick = approve;
-for (const button of document.querySelectorAll("button.fix")) {
-  button.onclick = () => fix(button.dataset.fix);
+for (const button of document.querySelectorAll("button.back")) {
+  button.onclick = () =>
+    back(Number(button.dataset.back), Number(button.closest(".step").id.slice(1)));
 }
 
 // Re-asked on focus, not on a timer: the directory is edited by a person, and coming back to the

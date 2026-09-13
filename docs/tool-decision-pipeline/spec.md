@@ -342,6 +342,16 @@ next call.
     until **replace** is pressed again; changing the language drops both model steps' answers.
     Nothing is silently carried into a record it is not about, and nothing is re-called on the
     user's behalf.
+    Which rectangle the correction belongs in is not always the one the reviewer is standing in, so
+    every step names the ones above it that hold something to change — the sample, the spans, what
+    was kept, the reviewers, the label — and **back to** goes there. What it leaves is a marking
+    that says *make the correction here*: the one marking on the page that is an instruction rather
+    than a report, and the reason it is worth drawing is that the edit itself is the human step and
+    it has to happen somewhere. It drops the record and nothing else — step 8 was assembled out of
+    an answer the reviewer has just called wrong — and it re-opens **assemble** and **approve**
+    where **approve** had frozen them. Every other answer stands until the step it came from is
+    actually edited, which is this requirement's own rule and not a second one. One return is live
+    at a time, and it ends when the step returned to answers again.
 49. Which models answer is ticked, not typed: the lists are `GET /models`' answer, one tick for the
     verifier, many for the jury, one for the finetuned reviewer, and the ticks become
     `verifier_model`, `jury_models` and `sft_model` on the two requests. A UI that hard-codes the
@@ -368,12 +378,12 @@ next call.
     instead, and says it in its own marking: nothing was called, so nothing refused anything, and
     the two must not look alike.
 52. The last rectangle is the record after every step, as the page assembled it, and it offers
-    **assemble**, **fix** and **approve**. **assemble** is its own call — the redaction route
+    **assemble**, **back to** and **approve**. **assemble** is its own call — the redaction route
     (Requirement 32) — and the record is composed out of that answer and everything the page
-    already holds. **fix** hands the record back to the rectangle that produced the part being
-    fixed — editing there, then that step's own button again, is how a correction is made — and the
-    rectangle names which steps have not answered at all, so a record assembled early says so
-    rather than reading as complete. **approve** freezes the record and shows the final body.
+    already holds. **back to** is the same control every rectangle above carries (Requirement 48),
+    and here it reaches all five: the record is assembled out of every step, so the part to correct
+    may have been produced anywhere. The rectangle also names which steps have not answered at all,
+    so a record assembled early says so rather than reading as complete. **approve** freezes the record and shows the final body.
 53. **approve** posts nowhere. Nothing stores a record (Requirement 35), so the UI says so on its
     face and the labeller takes the body from the screen. When there is a store, this is the body
     it is posted, and this rectangle is the one place that changes.
