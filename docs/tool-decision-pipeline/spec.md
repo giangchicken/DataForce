@@ -12,7 +12,7 @@ which is the only place a record exists.
 This specs the two parts that have a shape to act on — `ai_review` and the personal-data check — the
 endpoint per part, and the two pages: `edge/static/index.html`, which *draws* the flow for whoever
 is building it, and `ui/`, which *drives* it for whoever is labelling. Where that record is then kept is not specified here: the store,
-the route that would take it and the records it may refuse are deferred until the flow is finished
+the route that would take it and the records it may refuse are another spec's
 (§ *Out of Scope*). The other two data-quality checks declare nothing, so they answer `None` and
 this specs no more about them.
 
@@ -270,8 +270,8 @@ format's own shape, arguments as JSON text under one key ordering.
     record, so the sample handed on is what the corpus carries.
 35. There is no route that stores a record. The redaction route reads one and keeps neither it
     nor the copy it answers (Requirement 32). The page assembles one and posts it nowhere: the
-    store, the route that takes it and which records it refuses are one decision, deferred until
-    the flow is finished (§ *Out of Scope*). Nothing else here depends on
+    store, the route that takes it and which records it refuses are one decision, and not this
+    spec's (§ *Out of Scope*). Nothing else here depends on
     it — every step above answers its own call — so the record is the flow's last answer and the
     number is kept rather than reused.
 36. `GET /text2text/tool-decision/` serves the page.
@@ -558,8 +558,8 @@ person reading § *Invariants* knows what the claim does not cover.
 
 **No store yet, and the record therefore stops at the page.** Where a reviewed record is kept is
 one decision with several halves -- the table, the route that takes it, and which records are
-refused -- and it is deferred until the flow above it is finished (§ *Out of Scope*). Where the
-redaction runs is no longer among them: it is a route (Decision 24), which is what the record's
+refused -- and it is not this spec's (§ *Out of Scope*). Where the
+redaction runs is not among them: it is a route (Decision 24), which is what the record's
 three `new_` keys are answered by. Nothing above depends on it: every step answers its own
 call, and the record is what the page composes out of those answers.
 
@@ -858,13 +858,11 @@ when one is written.
 - Which models the panel asks, and how many. A composition is a deployment's declaration, and
   nothing in this spec picks one.
 - **The store, and everything that answers for it.** Where a reviewed record is kept, the route
-  that takes it, which records are refused, and the schema management under all of it — one decision, deferred until the flow above
-  it is finished. The table and the route it was reached through were written and are deleted
-  rather than left half-answering: a route nothing may post to is worse than no route, and the
-  history is in the plan (T14).
-  The flow is now finished, and that decision is being made in `docs/tool-decision-store/spec.md`,
-  which is in review. Nothing above changes until it is accepted: Requirements 3, 35 and 53 still
-  describe a page that posts its record nowhere, because that is still what the code does.
+  that takes it, which records are refused, and the schema management under all of it — one
+  decision, and not this spec's. There is no table and no route that stores anything: a route
+  nothing may post to is worse than no route.
+  That decision is `docs/tool-decision-store/spec.md`. Until it is built, Requirements 3, 35 and 53
+  stand: the page assembles a record and posts it nowhere.
 
 ## Open
 
@@ -879,5 +877,5 @@ on rather than a failure inside a call. Its comparison against the label waits w
 needs to know what an answer is made of, so it belongs beside the prompt that asked for one and
 not in the modality.
 
-Everything else this spec opened has an answer above; the one thing deliberately deferred is the
-store, under Out of Scope.
+Everything else this spec opened has an answer above; the one thing left to another is the store,
+under Out of Scope.

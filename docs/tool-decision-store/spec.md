@@ -32,11 +32,9 @@ What the repository already decided, and what this spec therefore does not:
 - `alembic.ini` names `migrations/` and no `sqlalchemy.url`: the DSN is read once, from
   `DATAFORCE_DATABASE_URL`, and a credential-shaped line does not go in a public repository. The
   first schema is a migration and never a `create_all` side effect.
-- `edge/store/` held `records.py` until `34ae87f` deleted it — *the store waits*. It kept the
-  record as one JSON `document` under its id, and said why: nothing but the boundary declares the
-  envelope, so "a column is added when a query needs one". That reasoning is kept exactly, and the
-  two tables are what it comes to: `record.document` stays one JSON column because no query reads
-  inside it, and `dataset` is the columns the queries need.
+- A column is added when a query needs one. Nothing but the boundary declares the record's
+  envelope, so `record.document` is one JSON column — no query reads inside it — and `dataset`
+  holds the columns the queries do need.
 - The store is an adapter in `edge/`. A service never imports it; it is handed to logic as an
   argument (`H-8`). Nothing in `modalities/` or `profile/` learns that a table exists.
 - What a `class` value *means* is the task's, not the store's. `inbound`, `debt_collection` and
@@ -246,14 +244,13 @@ result and is the only table anything is ever exported from.
 remember. Selling a corpus is a `SELECT` someone writes in a hurry, possibly a year from now,
 possibly not the person who wrote this. If the personal data is one `WHERE` away from the export,
 one day it will be in the export. Two tables make the mistake impossible to make silently: the
-export reads `dataset`, and `dataset` has never at any point held a raw transcript.
+export reads `dataset`, and `dataset` holds no raw transcript to find.
 
-**Why `record` is one opaque column and `dataset` is many.** The deleted store's reason holds
-exactly where it was aimed — the record's envelope is declared at the boundary that receives it,
-and mirroring it into columns would put that declaration in the layer furthest from where it is
-built. What changed is that some queries now exist, and all of them are about the *corpus* rather
-than the *review*. So they get their own table with their own columns, and the review stays a
-document. Requirement 20 is the seam: three named keys read out of `document` for three figures,
+**Why `record` is one opaque column and `dataset` is many.** The record's envelope is declared at
+the boundary that receives it, and mirroring it into columns would put that declaration in the
+layer furthest from where it is built — so the review stays a document. Every query this store
+answers is about the *corpus* and not about the *review*, and those get their own table with their
+own columns. Requirement 20 is the seam: three named keys read out of `document` for three figures,
 and the day a fourth is wanted, that is the argument for a fourth column in `dataset` rather than
 for a path expression into `record`.
 
@@ -279,7 +276,7 @@ instant, because the figure is identical either way.
 
 ## What else to add
 
-Asked for, and these are proposals rather than decisions:
+Proposals, not decisions:
 
 - **`conversation_id` and `turn_index`** (Requirement 15). The single highest-value addition. Three
   of the facets you named are unanswerable without it, and no amount of extra samples fixes that —
@@ -329,9 +326,8 @@ Asked for, and these are proposals rather than decisions:
 
 ## Open
 
-- **Whether `(task, id)` is the key, or `id` alone.** Alone is simpler and is what the deleted store
-  did. It assumes ids are unique across every corpus this table will ever hold, which nothing
-  enforces and no corpus promised.
+- **Whether `(task, id)` is the key, or `id` alone.** Alone is simpler, and it assumes ids are
+  unique across every corpus these tables hold — which nothing enforces and no corpus promised.
 - **Who declares the `domain` list, and what happens to rows already written when it grows.** A
   closed list catches typos and needs an edit to extend; an open one never blocks a labeller and
   drifts into `cskh`, `CSKH` and `cham_soc_kh` being three domains. The list belongs in
@@ -343,8 +339,8 @@ Asked for, and these are proposals rather than decisions:
   canonicalises as the text `null` and never matches a panel that answered `[]`, so
   `label_agreement` reads 0.0 for a sample the panel agreed with — which would then feed
   Requirement 20's `panel_disagreement` as a disagreement that did not happen. Either the corpus
-  writes one spelling or `normalize_prediction` folds them. A task rule, still undecided, and now
-  with a second consumer.
+  writes one spelling or `normalize_prediction` folds them. A task rule, and one with a consumer on
+  either side of it: the panel's agreement, and this store's figures.
 
 ## Sources
 
