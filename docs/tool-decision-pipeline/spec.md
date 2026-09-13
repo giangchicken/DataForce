@@ -861,8 +861,8 @@ when one is written.
   that takes it, which records are refused, and the schema management under all of it — one
   decision, and not this spec's. There is no table and no route that stores anything: a route
   nothing may post to is worse than no route.
-  That decision is `docs/tool-decision-store/spec.md`. Until it is built, Requirements 3, 35 and 53
-  stand: the page assembles a record and posts it nowhere.
+  That decision is `docs/tool-decision-store/spec.md`. Until it is built, the page assembles a
+  record and posts it nowhere.
 
 ## Open
 

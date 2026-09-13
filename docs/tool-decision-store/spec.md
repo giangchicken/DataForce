@@ -75,7 +75,7 @@ result and is the only table anything is ever exported from.
    primary key is `(task, id)`.
 2. `document` is the record the page assembles, whole and unaltered —
    `{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
-   abnormal, llm, sft}` — in one JSON column. No query reads inside it (Requirement 20 is the one
+   abnormal, llm, sft}` — in one JSON column. No query reads inside it (*what the evidence buys* is the one
    exception, and it reads three named keys, never a path expression), so no part of it becomes a
    column and the envelope stays declared where it is built.
 3. A record is written whatever its outcome, the refused ones included. A sample whose redaction
@@ -97,7 +97,7 @@ result and is the only table anything is ever exported from.
 8. Both are what the review left, never what arrived: `new_messages`, `new_tools` where the human
    or the redaction made a new version and what arrived where neither did, and `new_label`. The raw
    `messages`, `tools` and `label` exist only in `record.document`.
-9. **`class`** is one JSON column holding the facets of Requirements 12–16. One column and not a
+9. **`class`** is one JSON column holding the facets named under § *`class`*. One column and not a
    column per facet: a facet is added by writing one, and a corpus that grows a new way of being
    described should not need a migration to say so.
 10. `dataset` is a projection. Every column in it is computed from the `record` row of the same
@@ -150,8 +150,8 @@ result and is the only table anything is ever exported from.
     - `language` — `vi` or `en`. The flow already declares it per request and then throws it away;
       it belongs on the row, because a scan, a juror and a buyer all need to know.
     - `flow` — whether the sample is a step in a scripted conversation, and which one. See
-      Requirement 15.
-    - `trigger` — the call conditions a single flat sample cannot prove. See Requirement 16.
+      *a sample is not a conversation*, below.
+    - `trigger` — the call conditions a single flat sample cannot prove. See the table below.
     - `ambiguous` — the reviewer says this sample is genuinely arguable. Two annotators differing
       on one of these is signal about the task, not a mistake by either, and a corpus that cannot
       mark them will keep re-litigating the same rows.
@@ -174,14 +174,14 @@ result and is the only table anything is ever exported from.
     | `choice` | several tools offered, one is right | yes — `tools_offered > 1` |
     | `parallel` | two or more calls for one turn | yes — `calls > 1` |
     | `sequential` | one call's result is an argument of the next | **no** — a flat label array cannot express it; nested sequences are where models collapse (NESTFUL: 28% full-sequence accuracy) |
-    | `prior_call` | this turn's call depends on a tool called in an earlier turn | **no** — needs `conversation_id` (Requirement 15); BFCL's multi-turn, state-tracked |
+    | `prior_call` | this turn's call depends on a tool called in an earlier turn | **no** — needs `conversation_id`; BFCL's multi-turn, state-tracked |
     | `every_turn` | the flow obliges a tool on every turn | **no** — a property of the flow, not the sample |
     | `missing_parameter` | the right tool is clear, a required argument is not; the bot must ask | **no** — declared. Parameter-value errors dominate complex tool-calling failures (up to 78.8% on ComplexFuncBench), so a corpus with none of these teaches a bot to invent arguments |
     | `missing_function` | nothing offered can do what is asked | **no** — declared |
 
     The three *no*s in the middle are not an oversight to write around. They are the measurement
-    that says this corpus is currently flat, and Requirement 15 is the one change that turns them
-    on.
+    that says this corpus is flat, and `conversation_id` with `turn_index` is the one change that
+    turns them on.
 
 **The figures.**
 
@@ -211,7 +211,7 @@ result and is the only table anything is ever exported from.
     - `duplicate_content_diff_label` — **the same input carrying a different label.** One of them
       is wrong, or the task is ambiguous where the guideline claimed it was not. A queue to
       inspect, not an error count (VariErr NLI, arXiv:2403.01931) — which is also why
-      Requirement 14's `ambiguous` exists.
+      the declared `ambiguous` facet exists.
 22. **Schema validity** — the share of `dataset` rows whose `class.schema_valid` is true. BFCL's
     AST check turned on the corpus rather than on a model: a label calling a tool the sample was
     never offered is not a hard example, it is a broken row.
@@ -221,7 +221,7 @@ result and is the only table anything is ever exported from.
 24. **What is not shown, and is said so on the page.** **Inter-annotator agreement.**
     Krippendorff's α — ≥ 0.800 for a firm conclusion, ≥ 0.667 for a tentative one (Krippendorff,
     2004) — needs at least two people labelling one sample, and this flow puts one human in front
-    of each record. The panel proxies in Requirement 20 are not it and must not be drawn as it. The
+    of each record. The panel proxies above are not it and must not be drawn as it. The
     page says *not measured*, and § *What else to add* says what would change that.
 25. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
 
@@ -233,7 +233,7 @@ result and is the only table anything is ever exported from.
 28. Where no database is attached the band says so in the service's own words and all eight steps
     work exactly as they do today. The store is a place to put the result, never a dependency of
     the review.
-29. Step 7 grows the ticks for the declared facets of Requirement 14, because that is where the
+29. Step 7 grows the ticks for the declared facets, because that is where the
     human already is and a second form at the end would be a second place to describe one sample.
     **approve** posts the record, and step 8 says which tables took it — or, for a `withheld`
     record, that `record` has it and `dataset` does not, and why.
@@ -250,7 +250,7 @@ export reads `dataset`, and `dataset` holds no raw transcript to find.
 the boundary that receives it, and mirroring it into columns would put that declaration in the
 layer furthest from where it is built — so the review stays a document. Every query this store
 answers is about the *corpus* and not about the *review*, and those get their own table with their
-own columns. Requirement 20 is the seam: three named keys read out of `document` for three figures,
+own columns. *What the evidence buys* is the seam: three named keys read out of `document`,
 and the day a fourth is wanted, that is the argument for a fourth column in `dataset` rather than
 for a path expression into `record`.
 
@@ -258,16 +258,16 @@ for a path expression into `record`.
 wrong, and a corpus's description going quietly stale is the failure mode that makes people stop
 trusting the numbers. So `personal_data`, `turns`, `calls`, `call_shape` and `schema_valid` are
 computed from the row every time it is written, and the declared half is small, ticked once, and
-visibly a claim. Requirement 15 exists to move three more facets across that line.
+visibly a claim, and `conversation_id` exists to move three more facets across that line.
 
 **One adapter, two DSNs.** `Session.merge` for both writes, inside one transaction — a read by
 primary key then an insert or an update, so no dialect-specific upsert is reached for and a
 developer's SQLite file and a deployment's Postgres are one code path. The figures are Core
-queries over `dataset`, except Requirement 20's three, which read `record.document` in Python over
+queries over `dataset`, except the three evidence figures, which read `record.document` in Python over
 the rows rather than in JSON path expressions — that is the part where the two dialects stop being
 one adapter.
 
-**Grouping by input.** Requirement 21 groups rows by *the same input*. Two JSON columns are not
+**Grouping by input.** The duplicate figures group rows by *the same input*. Two JSON columns are not
 comparable for equality across dialects and no index can be built on that comparison. The options
 are a stored `sha256` of the input canonicalised under one key ordering — fast, indexable, one
 more column — or a scan hashed in Python, which is correct and instant at the size this corpus
@@ -278,7 +278,7 @@ instant, because the figure is identical either way.
 
 Proposals, not decisions:
 
-- **`conversation_id` and `turn_index`** (Requirement 15). The single highest-value addition. Three
+- **`conversation_id` and `turn_index`.** The single highest-value addition. Three
   of the facets you named are unanswerable without it, and no amount of extra samples fixes that —
   only this does.
 - **`source`** — which corpus, batch or customer a sample came from. Điều 17 requires a
@@ -286,7 +286,7 @@ Proposals, not decisions:
   possible to assemble instead of being written from memory. It is also what lets you pull one
   customer's data back out if their contract ends.
 - **`annotator`** — who reviewed the row. Cheap now, and the precondition for ever computing
-  Requirement 24's agreement: the day two people review one sample, the store either knows who they
+  the agreement figure: the day two people review one sample, the store either knows who they
   were or the number cannot be computed retroactively.
 - **`reviewed_at`** distinct from `created_time` — when the human answered, as against when the row
   landed. They differ when a backlog is posted, and any per-annotator quality figure needs the
@@ -303,10 +303,10 @@ Proposals, not decisions:
 ## Invariants
 
 - No row in `dataset` holds a value the redaction was asked to remove and did not. It is checked at
-  the one door rows come through (Requirement 11).
+  the one door rows come through (§ *The door*).
 - `dataset` is a function of `record`. Drop it, rebuild it, get the same table.
 - Every `dataset` row has a `record` row under the same key. The reverse does not hold, and the
-  difference is a figure (Requirement 18).
+  difference is itself a figure.
 - No derived facet was ever typed by a person; no declared facet is ever computed.
 - `created_time` never moves; `modified_time` never precedes it.
 - Nothing below `edge/` knows a table exists, and the store never reads a `class` value it counts.
@@ -338,7 +338,7 @@ Proposals, not decisions:
   `class.calls` counts both as `0`. The pipeline does not treat them as one answer: `label: null`
   canonicalises as the text `null` and never matches a panel that answered `[]`, so
   `label_agreement` reads 0.0 for a sample the panel agreed with — which would then feed
-  Requirement 20's `panel_disagreement` as a disagreement that did not happen. Either the corpus
+  `panel_disagreement` as a disagreement that did not happen. Either the corpus
   writes one spelling or `normalize_prediction` folds them. A task rule, and one with a consumer on
   either side of it: the panel's agreement, and this store's figures.
 
@@ -352,7 +352,7 @@ Law:
 - [Luật Bảo vệ dữ liệu cá nhân có hiệu lực từ 01/01/2026 (Bộ Công an)](https://bocongan.gov.vn/chinh-sach-phap-luat/bai-viet/luat-bao-ve-du-lieu-ca-nhan-chinh-thuc-co-hieu-luc-thi-hanh-tu-ngay-01-01-2026-1767186124)
 - [Luật Dữ liệu 2024, số 60/2024/QH15 (Công báo, chinhphu.vn)](https://datafiles.chinhphu.vn/cpp/files/vbpq/2025/01/luat60.pdf)
 
-The taxonomy of Requirement 16:
+The `trigger` taxonomy:
 
 - Patil, S.G., Mao, H., Yan, F., Ji, C.C., Suresh, V., Stoica, I. & Gonzalez, J.E. (2025). *The
   Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large
@@ -378,12 +378,12 @@ Measurement:
 - Weber-Genzel, L. et al. *VariErr NLI: Separating Annotation Error from Human Label Variation.*
   arXiv:2403.01931
 - Krippendorff, K. (2004). *Content Analysis: An Introduction to Its Methodology.* The α thresholds
-  in Requirement 24 are his decision criterion.
+  under *what is not shown* are his decision criterion.
 - Gebru, T. et al. (2021). *Datasheets for Datasets.* Communications of the ACM 64(12), 86–92.
   DOI 10.1145/3458723 — what a published corpus states about itself, which Điều 17's disclosure
   list already resembles.
 
-Vietnamese callbot business functions in Requirement 14 are drawn from what the local market
+The Vietnamese callbot business functions under `domain` are drawn from what the local market
 actually deploys — telesale, thu hồi nợ, nhắc cước và nhắc thanh toán, xác nhận đơn hàng, chăm sóc
 khách hàng, khảo sát — rather than from a standard; there is no taxonomy to cite, and the list is
 the profile's to keep.
