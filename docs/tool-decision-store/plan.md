@@ -536,8 +536,9 @@ merge-or-delete, and one commit.
 The cost of replacing is the spec's and is stated there: the review the row used to hold is gone.
 This task does not add a history table to soften it.
 
-**Approach.** `edge/store/records.py`, tagged `adapter`. One function taking the document and the
-door's answer, doing both writes in one `session.begin()`, and returning what landed where.
+**Approach.** `edge/store/corpus_rows.py`, tagged `adapter` — not `records.py`, because `record`
+already names a table and `R-2` refuses the reuse. One function taking the document and the door's
+answer, doing both writes in one `session.begin()`, and returning what landed where.
 `Session.merge` for both, so no dialect-specific upsert is reached for. It takes the door's answer
 rather than calling the door: that is `C-6`, and it is what lets T6 be tested without a database.
 
