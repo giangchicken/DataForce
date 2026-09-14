@@ -212,18 +212,54 @@ result and is the only table anything is ever exported from.
     page says *not measured*, and § *What else to add* says what would change that.
 24. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
 
-**The page.**
+**The page — a deck, not a scroll.**
 
-25. The figures are a band under the header of `ui/`, above step 1 — not a ninth rectangle. The
-    eight rectangles are one sample's journey; this is the corpus.
-26. Asked for on load and again after a record is written. Not on a timer.
-27. Where no database is attached the band says so in the service's own words and all eight steps
-    work exactly as they do today. The store is a place to put the result, never a dependency of
-    the review.
-28. Step 7 grows the ticks for the declared facets, because that is where the
-    human already is and a second form at the end would be a second place to describe one sample.
-    **approve** posts the record, and step 8 says which tables took it — or, for a `withheld`
-    record, that `record` has it and `dataset` does not, and why.
+25. The labelling page shows **one card at a time**: the guide first, then the eight steps. One bar
+    under the card holds all of the navigation — `<`, the rail, `>` — so moving is one place and
+    not three. `←` and `→` move a card as well, but only while the focus is outside a field: inside
+    a textarea an arrow key moves the caret, and a page that steals it is a page nobody can type
+    in.
+26. **The deck is not a wizard.** Every card is reachable from every other, in any order, whatever
+    has answered so far. The steps are independent — the pipeline spec's *every step is reachable on
+    its own* — and a deck that gated one card behind another would put a rule on the screen that
+    the service does not have.
+27. **The rail gives back what the scroll was giving away for free.** Eight markings in flow order,
+    one per step, each carrying that step's state — answered, waiting, edited, refused, not asked —
+    and each a jump to its card. A page as tall as eight rectangles shows all eight states for
+    nothing; a deck has to hand that back deliberately, or it is the same page with flipping added.
+    The rail is also where the fan is drawn: 2, 3 and 4 are grouped, because they are handed the
+    same sample and none of them feeds another.
+28. **A jump is not a *back to*, and both stay.** The rail moves the reviewer and means nothing
+    else. **back to** says *the answer this card was built on is wrong*: it drops the record, marks
+    the card it lands on with *make the correction here*, and re-opens **assemble** and
+    **approve**. Two different acts, so two different controls — one moves, one changes what will
+    ship.
+29. **The first card is the labelling guide**, written for the person labelling. What a
+    `tool_decision` sample is; what makes a label right, the empty label included — *no tool call
+    is needed* is an answer and not a skipped row; what to tick at the two human steps and what
+    each declared facet means; what gets a sample refused. No route name, no file path, no sentence
+    about how the page is wired.
+30. **The guide says what to do; the drawing says why the flow is shaped this way.** That split is
+    already the pipeline spec's — `edge/static/index.html` explains the flow, `ui/` labels with it
+    — and every card's own note obeys it too: the note in a card is what to do *here*. A sentence
+    that would have to be rewritten because a route was renamed is a sentence on the wrong page.
+31. **The figures sit on the guide card, under the guide.** A coverage matrix read in a report is a
+    report; read on the card a labeller opens before they start, it is an instruction — *this is
+    what the corpus is short of*. That is why they are not a ninth card and not a panel somebody
+    has to go looking for.
+32. **A strip stays on every card**: sellable out of reviewed, rows written in the last 7 days, and
+    **how many cells of the coverage matrix are still empty**. Three items, because the strip is
+    read sideways while the reviewer is working on something else. The third is the one that
+    changes what they do next, and *which* cells those are is the guide card's to show.
+33. The figures are asked for on load and again after a record is written. Not on a timer, and not
+    on every flip.
+34. Where no database is attached the strip says so in the service's own words, the guide card
+    shows the guide and no figures, and all eight steps work exactly as they do today. The store is
+    a place to put the result, never a dependency of the review.
+35. Step 7 grows the ticks for the declared facets, because that is where the human already is and
+    a second form at the end would be a second place to describe one sample. **approve** posts the
+    record, and the last card says which tables took it — or, for a `withheld` record, that
+    `record` has it and `dataset` does not, and why.
 
 ## Design
 
@@ -260,6 +296,34 @@ are a stored `sha256` of the input canonicalised under one key ordering — fast
 more column — or a scan hashed in Python, which is correct and instant at the size this corpus
 starts from. This takes the scan and names the digest as the change to make when it stops being
 instant, because the figure is identical either way.
+
+**Why a deck.** Eight rectangles stacked is a page as tall as all eight, and a labeller works in
+one at a time — the other seven are scenery on the way back to the one they are in. A card is
+the unit the work is actually done in. The cost is stated, and it is the whole of the risk: a long
+page hands over every step's state for free and a deck does not. The rail is that cost paid back,
+and the day a state cannot be read off the rail, the deck is the wrong shape for this page rather
+than the rail being one badge short.
+
+**The frame's height.** Step 2 is a table of spans and step 3 is one word. A frame that resizes on
+every flip reads as broken, so it has a floor and no ceiling: it does not collapse under a short
+card, and a tall card scrolls inside it rather than pushing the navigation off the bottom of the
+screen. Wherever the reviewer is in the deck, the arrows are in the same place.
+
+**Motion.** The flip is the only thing on this page that moves by itself, and it is answering a
+keypress: one slide, in the direction of travel, and nothing else. None of it under
+`prefers-reduced-motion`, where the card simply changes.
+
+**Why the header is a title and the strip.** Architecture prose — one call per rectangle, what
+`config/model/` holds, where the record goes — is true and is not for the person labelling, who
+needs to know what a good label is. It belongs on the page whose job is explaining the flow. Above
+the deck there is a title and three numbers; the reading a labeller has to do is on the first
+card.
+
+**Why the figures are on a card and not in a dashboard.** A dashboard is a thing somebody opens on
+purpose, which means on the day they remember to. These figures exist to change what gets labelled
+next, so they are put where the labelling starts. The same argument is why the strip carries a
+count of empty cells rather than a total: a total is a number to feel good about, and an empty cell
+is a job.
 
 ## What else to add
 
@@ -336,6 +400,10 @@ Proposals, not decisions:
   `panel_disagreement` as a disagreement that did not happen. Either the corpus
   writes one spelling or `normalize_prediction` folds them. A task rule, and one with a consumer on
   either side of it: the panel's agreement, and this store's figures.
+- **Which language the guide card is written in.** The repository is written in English and the
+  labellers work in Vietnamese. The guide is the first page here whose reader is not a developer,
+  so nothing before it has had to decide this, and the eight cards' own notes go the same way the
+  guide does.
 
 ## Sources
 
