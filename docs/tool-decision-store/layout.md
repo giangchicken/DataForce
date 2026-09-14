@@ -20,7 +20,7 @@ src/dataforce/
 │       ├── __init__.py            facade
 │       ├── schema.py              shape
 │       ├── sample_projection.py   logic  · one document -> one row, or a refusal
-│       └── row_aggregation.py     logic  · many rows -> the statistics
+│       └── sample_statistics.py   logic  · many samples -> the numbers
 ├── profile/tool_decision/
 │   └── corpus.py                  NEW    logic · answers the three sockets
 ├── services/tool_decision/
@@ -42,7 +42,7 @@ tests/
 ├── modalities/                    NEW — the suite's fourth directory
 │   ├── __init__.py
 │   ├── test_sample_projection.py
-│   └── test_row_aggregation.py
+│   └── test_sample_statistics.py
 ├── profile/test_corpus.py         NEW
 ├── store/                         NEW
 │   ├── __init__.py, conftest.py
@@ -62,8 +62,8 @@ into three groups, and knowing which group a name is in is most of knowing what 
 
 | Name | What it is |
 |---|---|
-| `DerivedFacets` | `NewType` over `Mapping[str, Any]` — what is computed from the sample, so nobody may type it |
-| `DeclaredFacets` | `NewType` over `Mapping[str, Any]` — what a reviewer ticks, so nothing may compute it |
+| `DerivedSampleFacets` | `NewType` over `Mapping[str, Any]` — what is computed from the sample, so nobody may type it |
+| `DeclaredSampleFacets` | `NewType` over `Mapping[str, Any]` — what a reviewer ticks, so nothing may compute it |
 | `SellableSample` | `input`, `label`, `facets` — a sample the door let through, in the shape `dataset` stores |
 | `WithheldSample` | `reason`, `outcome` — a sample it did not, and which of the three conditions stopped it |
 | `ProjectedSample` | `SellableSample \| WithheldSample` — what the door returns, before anyone knows which |
@@ -72,23 +72,23 @@ into three groups, and knowing which group a name is in is most of knowing what 
 
 | Name | What it is |
 |---|---|
-| `RowRatio` | `count`, `out_of` — 12 rows out of 40, kept as two numbers so the denominator cannot go missing |
-| `RowAverage` | `mean`, `over` — a mean and how many rows it is a mean of |
-| `NotMeasured` | `statistic`, `reason` — the slot a number would sit in, saying in words why there is none |
-| `NOT_MEASURED` | the one that exists today: agreement, because Krippendorff's α needs two people on one sample |
+| `SampleRatio` | `count`, `out_of` — 12 samples out of 40, kept as two numbers so the denominator cannot go missing |
+| `SampleAverage` | `mean`, `over` — a mean, and how many samples it is a mean of |
+| `UnmeasuredStatistic` | `statistic`, `reason` — the slot a number would sit in, saying in words why there is none |
+| `UNMEASURED_AGREEMENT` | the one that exists today: agreement, because Krippendorff's α needs two people on one sample |
 
-**The whole corpus.** Every one of these is many rows reduced to something a person can read.
+**The whole corpus.** Every one of these is many samples reduced to something a person can read.
 
 | Name | What it is |
 |---|---|
-| `StoredTotals` | how many rows in `record`, how many in `dataset`, and the gap split by why |
-| `FreshnessStats` | how much arrived in the last 7 and 30 days, and the newest and oldest `modified_time` |
-| `FacetCounts` | `Mapping[facet name, Mapping[value, rows]]` — how many samples carry each value of each facet |
-| `PairedCount` | `row`, `column`, `count` — how many samples carry two given values at once |
-| `CoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` — every pair of two facets' values, the pairs nothing carries included |
-| `EvidenceStats` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` — the three that show a person was here |
-| `DuplicateStats` | the two groups, under the names `DuplicateGroups` already uses |
-| `CorpusStats` | the six above, composed — what one `GET .../records/stats` answers |
+| `SampleTotals` | how many rows in `record`, how many in `dataset`, and the gap split by why |
+| `SampleFreshness` | how much arrived in the last 7 and 30 days, and the newest and oldest `modified_time` |
+| `FacetSampleCounts` | `Mapping[facet name, Mapping[value, samples]]` — how many samples carry each value of each facet |
+| `PairedSampleCount` | `row`, `column`, `count` — how many samples carry two given values at once |
+| `FacetCoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` — every pair of two facets' values, the pairs nothing carries included |
+| `HumanEvidence` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` — the three that show a person was here |
+| `DuplicateSamples` | the two groups, under the names `DuplicateGroups` already uses |
+| `CorpusStatistics` | the six above, composed — what one `GET .../records/stats` answers |
 
 ## `modalities/text2text/corpus/sample_projection.py` — `logic`
 
@@ -106,19 +106,19 @@ into three groups, and knowing which group a name is in is most of knowing what 
 | `shipped_label(document)` | `new_label` — a `new_` key is text2text's, so reading it is this layer's |
 | `merged_facets(derived, declared)` | the two halves as one map, **raising on an overlapping key** — the one place *no facet is in both halves* is held |
 
-## `modalities/text2text/corpus/row_aggregation.py` — `logic`
+## `modalities/text2text/corpus/sample_statistics.py` — `logic`
 
-Takes rows, returns statistics. No function here names a facet.
+Takes the rows of the two tables, returns the numbers. No function here names a facet.
 
 | Function | What it does |
 |---|---|
-| `stored_totals(record_rows, dataset_rows)` | how much, and the gap split by `withheld` against never scanned |
-| `freshness_stats(dataset_rows)` | the 7- and 30-day counts, newest and oldest |
-| `facet_counts(dataset_rows)` | a count per value of **every key** `class` holds — it reads the keys of a JSON column, so no facet's name is written here |
-| `coverage_matrix(dataset_rows, row_facet, column_facet)` | the product of the two axes' values, **every empty cell present and zero** |
-| `evidence_stats(record_rows)` | the three that read `document`, in Python, never a path expression |
-| `duplicate_stats(dataset_rows)` | grouped by the same input, hashed in Python; the digest is the change to make when that stops being instant |
-| `aggregated_stats(record_rows, dataset_rows, axes)` | the above, composed into `CorpusStats` |
+| `sample_totals(record_rows, dataset_rows)` | how much, and the gap split by `withheld` against never scanned |
+| `sample_freshness(dataset_rows)` | the 7- and 30-day counts, newest and oldest |
+| `facet_sample_counts(dataset_rows)` | a count per value of **every key** `class` holds — it reads the keys of a JSON column, so no facet's name is written here |
+| `facet_coverage_matrix(dataset_rows, row_facet, column_facet)` | the product of the two axes' values, **every empty cell present and zero** |
+| `human_evidence(record_rows)` | the three that read `document`, in Python, never a path expression |
+| `duplicate_samples(dataset_rows)` | grouped by the same input, hashed in Python; the digest is the change to make when that stops being instant |
+| `aggregated_statistics(record_rows, dataset_rows, axes)` | the above, composed into `CorpusStatistics` |
 
 ## `profile/tool_decision/corpus.py` — `logic`
 
@@ -145,7 +145,7 @@ Two functions, and **neither may call the store**: `services/` is `logic`, `edge
 | Function | What it does |
 |---|---|
 | `sellable_projection(document)` | builds `ToolDecisionCorpus`, asks the door, answers a `ProjectedSample`. Pure |
-| `described_corpus(record_rows, dataset_rows)` | `aggregated_stats(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
+| `described_corpus(record_rows, dataset_rows)` | `aggregated_statistics(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
 
 ## `edge/store/session.py` — `adapter`
 
