@@ -309,7 +309,7 @@ answer in it is recomputed in its own script over a sample written into the file
 but every answer in it came from a route, and every rectangle carries the buttons that make the
 next call. How those rectangles are laid out — one card at a time rather than one long page, and a
 labelling guide on the first card — is `docs/tool-decision-store/spec.md` § *Requirements*, because
-the corpus figures the page shows are that spec's and they are what reshaped it.
+the corpus statistics the page shows are that spec's and they are what reshaped it.
 
 44. `ui/` is the UI: `index.html`, `app.js`, `style.css`, mounted as static files at `/ui` by
     `create_app()`. Three files, no build step, no npm, nothing from a CDN — the rule the drawing

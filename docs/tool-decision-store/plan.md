@@ -30,8 +30,8 @@ The flow above the store is finished. `ui/` walks a sample through eight steps a
 record, and **approve** posts it nowhere.
 
 **Scope.** The corpus package under the modality, the profile's answers to its sockets, the two
-tables, the migration under them, the route that takes a record, the figures endpoint, and the page
-reshaped into a deck with a guide on its first card.
+tables, the migration under them, the route that takes a record, the statistics endpoint, and the
+page reshaped into a deck with a guide on its first card.
 
 **Assumption.** No corpus is loaded and none is imported. Every fixture is hand-written, and the
 first rows in either table are the ones a labeller approves.
@@ -76,17 +76,17 @@ Five shapes span several tasks. They are settled here so no task settles them di
 **Three sockets, and everything else is an argument.** The modality's class declares
 `shipped_input`, `derived_facets` and `declared_facets`, and `profile/tool_decision/corpus.py`
 answers them. Nothing else becomes a socket. Which pair of facets the coverage matrix crosses, and
-the figures that read inside `input` and `label`, are wanted once at one call, so
+the statistics that read inside `input` and `label`, are wanted once at one call, so
 `services/tool_decision/corpus.py` supplies them as arguments — a method every future task has to
 implement is a wider interface than a parameter one caller fills (`H-4`). When a fourth socket
 looks necessary, the question to ask first is whether the service can pass it instead.
 
 **Logic is never handed a session, because it never needs one.** Which table a document belongs in,
-what `class` holds and what each figure is are pure functions of that document. The writing and the
-reading are the adapter's, and the router — an adapter, which `H-8` permits to import logic — is
-where they meet. The cost, stated: the three evidence figures read every `record` row's document in
-Python, so the adapter hands rows up rather than aggregating them down, and that is the one figure
-path where row count matters.
+what `class` holds and what each statistic is are pure functions of that document. The writing and
+the reading are the adapter's, and the router — an adapter, which `H-8` permits to import logic — is
+where they meet. The cost, stated: the three evidence statistics read every `record` row's document
+in Python, so the adapter hands rows up rather than aggregating them down, and that is the one
+statistic path where row count matters.
 
 **No default database.** A fallback to `sqlite+pysqlite:///dataforce.sqlite3` makes the state
 § *The page* requires — no database attached, the strip says so, all eight steps still work —
@@ -115,14 +115,14 @@ writes are two functions, which is why the door returns a value rather than a ro
 | 0 | A database can be reached, and its schema is a migration | `alembic upgrade head` creates both tables on an empty SQLite file and on Postgres, and `make check` exercises the adapter with no server running |
 | 1 | The corpus knows what a sellable sample is, and what describes it | A document goes in and a `dataset` row's contents or a refusal comes out, decided by pure functions, with no word of `tool_decision` anywhere in `modalities/` |
 | 2 | A reviewed sample lands | **approve** posts the record, `record` takes every one of them, `dataset` takes only those through the door, and both writes are one transaction |
-| 3 | The figures answer | `GET .../records/stats` answers every figure in § *The figures*, each with its denominator, none of them stored |
-| 4 | The page is a deck | `ui/` shows one card at a time, the first card is the labelling guide, and the figures are under it |
+| 3 | The statistics answer | `GET .../records/stats` answers every statistic in § *The statistics*, each with its denominator, none of them stored |
+| 4 | The page is a deck | `ui/` shows one card at a time, the first card is the labelling guide, and the statistics are under it |
 
 Phase 0 is groundwork and is not a vertical slice: nothing above it can be tested without a
 database to open. Phase 1 is the other half of the groundwork and needs no database at all — it is
 pure functions over documents, which is what makes it testable before anything is stored. Phases 2
 and 3 are each a slice that ends in something a person can see. Phase 4 needs Phase 3, because a
-deck whose first card holds figures needs figures; the deck's own navigation does not, and T18
+deck whose first card holds statistics needs statistics; the deck's own navigation does not, and T18
 could move earlier if the page becomes unpleasant to work in before then.
 
 ---
@@ -154,7 +154,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T17 | Tool coverage, and the route that answers all of it | 3 | T16 | M |
 | T18 | One card at a time, and a bar that moves between them | 4 | T12 | L |
 | T19 | The first card is the guide, and the header is a title | 4 | T18 | M |
-| T20 | The strip, and the figures under the guide | 4 | T17, T19 | M |
+| T20 | The strip, and the statistics under the guide | 4 | T17, T19 | M |
 
 ---
 
@@ -215,9 +215,9 @@ only module in the tree that names SQLAlchemy's ORM.
 free. SQLite has no timezone type: `DateTime(timezone=True)` is accepted and hands back a naive
 `datetime`, so a comparison against `datetime.now(UTC)` raises. Postgres hands back an offset, but
 its own — the connection's `TimeZone`, so a server set to `Asia/Ho_Chi_Minh` renders `17:00+07:00`
-where the file renders `10:00+00:00`. Same instant, different rendering, and § *The figures* ships
-a timestamp. One `TypeDecorator` that stores the instant and returns it in UTC settles both; say so
-in the module docstring.
+where the file renders `10:00+00:00`. Same instant, different rendering, and § *The statistics*
+ships a timestamp. One `TypeDecorator` that stores the instant and returns it in UTC settles both;
+say so in the module docstring.
 
 The primary key is `(task, id)` — composite, on both tables, and § *Open* records that `id` alone
 was considered. 64 characters is long enough for a digest-shaped id and short enough that a dialect
@@ -337,7 +337,7 @@ doing before Phase 2 rather than inside it.
 ### T5 · What a sellable text2text sample is
 
 **Goal.** `modalities/text2text/corpus/schema.py` declares what the door produces, what `class`
-holds, and what the figures answer.
+holds, and what the statistics answer.
 
 **Context.** This package is new and is the modality's fourth. The three beside it are the pattern:
 `schema.py` holds the shapes, a second module holds the logic and the abstract sockets, and
@@ -349,14 +349,15 @@ layer — and the two are one declaration each, not two of one.
 
 **Approach.** Frozen pydantic models on the terms the sibling packages use. What the door produces
 (`input`, `label`, `class`), what it refuses and why, the derived and declared halves of `class` as
-two types so nothing can put a value in both, and the figure shapes: every figure is a count with
-its denominator, so the pair is a type rather than a convention each figure repeats.
+two types so nothing can put a value in both, and the statistic shapes: every statistic is a count
+with its denominator, so the pair is a type rather than a convention each statistic repeats.
 
 **Acceptance criteria.** No name in the module is one task's — `H-10`'s scan reads names under
 `modalities/` against the directory names under `profile/`, so `tool`, `tools` and `decision` fail
-it. A figure cannot be constructed without its denominator. A facet cannot be in both halves.
+it. A statistic cannot be constructed without its denominator. A facet cannot be in both halves.
 
-**Source.** § *`dataset`*; § *`class`*; § *The figures* — every figure carries its denominator.
+**Source.** § *`dataset`*; § *`class`*; § *The statistics* — every statistic carries its
+denominator.
 
 **Verify.** `make check`.
 
@@ -685,18 +686,18 @@ the old one.
 
 ---
 
-## Phase 3 · The figures answer
+## Phase 3 · The statistics answer
 
-**Goal.** `GET /text2text/tool-decision/records/stats` answers every figure in § *The figures*, each
-with the denominator it came out of, and none of them stored.
+**Goal.** `GET /text2text/tool-decision/records/stats` answers every statistic in § *The
+statistics*, each with the denominator it came out of, and none of them stored.
 
 ### T15 · The counts, taken without naming a facet
 
 **Goal.** The corpus answers the totals, the freshness, the sellable gap and the coverage matrix,
 and no facet's name appears in the code that counts it.
 
-**Context.** § *The figures* is explicit that every figure carries its denominator: a share over
-nine rows and a share over nine thousand are different claims, so the answer carries pairs.
+**Context.** § *The statistics* is explicit that every statistic carries its denominator: a share
+over nine rows and a share over nine thousand are different claims, so the answer carries pairs.
 
 The matrix is the point of `class`, and **the finding is the zeros** — a cell with no rows has to
 appear in the answer, which means it is built from the product of the declared values and not from
@@ -711,30 +712,30 @@ inconvenient.
 
 **Approach.** The counts are Core queries over `dataset`; the JSON facets are read in Python,
 because a JSON path expression is where the two dialects stop being one adapter. The duplicate
-figures group rows by the same input: § *Design* takes the Python scan over a stored digest, because
-the figure is identical either way and the digest is the change to make when the scan stops being
-instant. Name that where the next person will look for it.
+statistics group rows by the same input: § *Design* takes the Python scan over a stored digest,
+because the statistic is identical either way and the digest is the change to make when the scan
+stops being instant. Name that where the next person will look for it.
 
 **Acceptance criteria.** Over a fixture of known rows: totals, the sellable gap split by why, the 7-
 and 30-day counts, the newest and oldest `modified_time`, a count per value of every key `class`
 holds, the cross of the pair it is given with every empty cell present and zero, and the two
-duplicate groups under the names `DuplicateGroups` already uses. Every figure is a pair. It answers
-with no rows in either table. Nothing is written by the request. `H-10`'s scan passes over the
-module.
+duplicate groups under the names `DuplicateGroups` already uses. Every statistic is a pair. It
+answers with no rows in either table. Nothing is written by the request. `H-10`'s scan passes over
+the module.
 
-**Source.** § *The figures* — how much, how fresh, how much is sellable; the coverage matrix; the
+**Source.** § *The statistics* — how much, how fresh, how much is sellable; the coverage matrix; the
 same input twice.
 
 **Verify.** `uv run pytest tests/modalities tests/store -q`; `make check`.
 
-**Out of scope.** The three figures that read `record` (T16). The figures that read inside a sample
-(T17). Any caching — no figure is stored.
+**Out of scope.** The three statistics that read `record` (T16). The statistics that read inside a
+sample (T17). Any caching — no statistic is stored.
 
 **Blocked by.** T14.
 
 ### T16 · What the evidence buys, and what is not measured
 
-**Goal.** The three figures only `record` can answer, and the one the answer says it does not
+**Goal.** The three statistics only `record` can answer, and the one the answer says it does not
 measure.
 
 **Context.** `human_edit_rate`, `panel_disagreement` and `redaction_outcomes` read three named keys
@@ -745,18 +746,19 @@ wanted, that is the argument for a fourth column in `dataset` rather than for a 
 
 `panel_disagreement` is the mean `llm.label_agreement` plus the share with `consensus: null`. It is
 also where § *Open*'s `null`-versus-`[]` mismatch shows up as a number: a panel that agreed on *no
-tool call* can read 0.0 and land here as a disagreement that did not happen. The figure is computed
-as specified; the mismatch is named in the answer's own words rather than silently absorbed.
+tool call* can read 0.0 and land here as a disagreement that did not happen. The statistic is
+computed as specified; the mismatch is named in the answer's own words rather than silently
+absorbed.
 
 Inter-annotator agreement is **not measured** and the answer says so. Krippendorff's α needs two
 people on one sample and this flow puts one human in front of each record; the panel proxies are not
 it and must not be drawn as it.
 
-**Acceptance criteria.** The three figures are right over a fixture with known edits, votes and
+**Acceptance criteria.** The three statistics are right over a fixture with known edits, votes and
 outcomes. The answer carries an explicit *not measured* for agreement, with the reason. A corpus of
 one row does not divide by zero anywhere. `H-10`'s scan passes over the module.
 
-**Source.** § *The figures* — what the evidence buys, what is not shown.
+**Source.** § *The statistics* — what the evidence buys, what is not shown.
 
 **Verify.** `uv run pytest tests/modalities -q`; `make check`.
 
@@ -767,31 +769,32 @@ undeclared — § *Out of Scope*.
 
 ### T17 · Tool coverage, and the route that answers all of it
 
-**Goal.** `GET /text2text/tool-decision/records/stats` answers every figure § *The figures* names.
+**Goal.** `GET /text2text/tool-decision/records/stats` answers every statistic § *The statistics*
+names.
 
-**Context.** Tool coverage reads `input.tools` and `label` rather than a facet, and § *The figures*
-says so explicitly — a figure that silently needs a facet nobody keeps is a figure that breaks in a
-year. That makes it the profile's, and it reaches the answer as an argument the service passes, not
-as a fourth socket: it is wanted once, at one call.
+**Context.** Tool coverage reads `input.tools` and `label` rather than a facet, and § *The
+statistics* says so explicitly — a statistic that silently needs a facet nobody keeps is a statistic
+that breaks in a year. That makes it the profile's, and it reaches the answer as an argument the
+service passes, not as a fourth socket: it is wanted once, at one call.
 
 The no-call share and the schema-validity share both fall out of T15's per-facet counts and are
 named on their own because of what they mean, not because they are computed separately.
 
 **Approach.** `services/tool_decision/corpus.py` composes the modality's counts, the profile's
-coverage figures, and the pair the matrix crosses. This is the task that shows whether *everything
-else is an argument* was the right call: if the service reads awkwardly, the answer is a fourth
-socket and this plan's decision was wrong.
+coverage statistics, and the pair the matrix crosses. This is the task that shows whether
+*everything else is an argument* was the right call: if the service reads awkwardly, the answer is a
+fourth socket and this plan's decision was wrong.
 
 **Acceptance criteria.** Distinct tools offered, distinct tools ever called, and a count per called
 tool, each with its denominator. The named no-call share and the named schema-validity share. The
-route answers the whole of § *The figures* over a fixture of known rows, and with no rows in either
-table.
+route answers the whole of § *The statistics* over a fixture of known rows, and with no rows in
+either table.
 
-**Source.** § *The figures* — tool coverage, schema validity, the no-call share.
+**Source.** § *The statistics* — tool coverage, schema validity, the no-call share.
 
 **Verify.** `uv run pytest tests/edge tests/profile -q`; `make check`.
 
-**Out of scope.** Any figure the spec does not name.
+**Out of scope.** Any statistic the spec does not name.
 
 **Blocked by.** T16.
 
@@ -799,8 +802,8 @@ table.
 
 ## Phase 4 · The page is a deck
 
-**Goal.** `ui/` shows one card at a time, the first card is the labelling guide, and the figures are
-under it.
+**Goal.** `ui/` shows one card at a time, the first card is the labelling guide, and the statistics
+are under it.
 
 **What this phase is not.** It is not the drawing. `edge/static/index.html` stays what it is — the
 flow explained, for whoever is building it — and nothing in it is generated from `ui/` or the other
@@ -843,7 +846,7 @@ refusal shown on a card the reviewer has flipped away from is still there when t
 with each of the three controls, type an arrow key inside every textarea, and confirm the bar does
 not move.
 
-**Out of scope.** The guide card (T19) and the figures (T20).
+**Out of scope.** The guide card (T19) and the statistics (T20).
 
 **Blocked by.** T12.
 
@@ -882,10 +885,10 @@ copy. Settle it before writing the prose rather than translating afterwards.
 
 **Blocked by.** T18.
 
-### T20 · The strip, and the figures under the guide
+### T20 · The strip, and the statistics under the guide
 
-**Goal.** Three numbers follow the reviewer from card to card, and the whole of § *The figures* is
-under the guide.
+**Goal.** Three numbers follow the reviewer from card to card, and the whole of § *The statistics*
+is under the guide.
 
 **Context.** The strip is read sideways while the reviewer is working on something else, which is
 why it is three items and why the third is the one that changes what they do next: sellable out of
@@ -895,23 +898,23 @@ reviewed, rows in the last 7 days, and how many cells of the coverage matrix are
 The page must work with no database attached — that is not an error state, it is a deployment
 without a store — so the strip says so in the service's own words and the eight steps are untouched.
 
-**Approach.** The strip in the header beside the title. The figures under the guide on the first
+**Approach.** The strip in the header beside the title. The statistics under the guide on the first
 card, with the coverage matrix drawn so an empty cell is visible as an empty cell rather than as an
 absent row. Asked for on load and again after a record is written — not on a timer, and not on every
 flip.
 
 **Acceptance criteria.** The strip is on every card and never moves. With no database attached it
-says so and all eight steps work. After **approve**, the figures change without a reload. The matrix
-shows every cell, including the zeros. Agreement is shown as *not measured*, with the reason, rather
-than left out.
+says so and all eight steps work. After **approve**, the statistics change without a reload. The
+matrix shows every cell, including the zeros. Agreement is shown as *not measured*, with the reason,
+rather than left out.
 
-**Source.** § *The page* — the figures sit on the guide card; a strip stays on every card; asked for
-on load and after a write; § *The figures* — what is not shown, and is said so on the page.
+**Source.** § *The page* — the statistics sit on the guide card; a strip stays on every card; asked
+for on load and after a write; § *The statistics* — what is not shown, and is said so on the page.
 
 **Verify.** `make check`; serve the app with and without a DSN, approve a record and watch the
 numbers move.
 
-**Out of scope.** Any figure the store does not already answer.
+**Out of scope.** Any statistic the store does not already answer.
 
 **Blocked by.** T17, T19.
 
@@ -924,7 +927,7 @@ numbers move.
 | `(task, id)` or `id` alone as the key | T2, T10 | Composite, as § *`record`* states. Changing it later is a migration and a rewrite of both writes |
 | The `domain` list, closed or open | T8, T13 | `declared_facets` names the facet; the profile offers the four values; the store validates no string |
 | `industry` as a second axis | T8, T15 | Not built. It is a facet or a column or neither, and building it now would be guessing which |
-| What a `null` label means | T8, T16 | Counted as zero calls either way; not folded. The panel's agreement figure carries the mismatch rather than hiding it |
+| What a `null` label means | T8, T16 | Counted as zero calls either way; not folded. The panel's agreement statistic carries the mismatch rather than hiding it |
 | The language of the guide card | T19 | Blocks T19's copy, not its structure. Settle it before writing the prose |
 | Whether this directory keeps its name | none | The plan and the spec stay where they are. It is a `git mv` and one cross-reference the day it is taken |
 

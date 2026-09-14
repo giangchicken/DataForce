@@ -1,4 +1,4 @@
-# The text2text corpus: two tables, one projection, and the figures that show what is missing
+# The text2text corpus: two tables, one projection, and the statistics that show what is missing
 
 ## What
 
@@ -16,16 +16,16 @@ records the redaction actually finished. That split is the whole design: the tab
 protected and the table that is sold are different tables, rather than one table and a promise
 about which columns anyone reads.
 
-**The tables are the modality's; the words in them are the task's.** What a stored sample is made
-of — an input, a label, and one `class` column describing it — follows from the data being text in
-and text out, so it is declared once in `modalities/text2text/corpus/` and holds for every
-text2text task. What `input` *contains*, which facets a person ticks, and which figures read inside
-a sample are `tool_decision`'s, and they arrive through three sockets the modality declares and the
+**The tables are the modality's; the words in them are the task's.** What a stored sample is made of
+— an input, a label, and one `class` column describing it — follows from the data being text in and
+text out, so it is declared once in `modalities/text2text/corpus/` and holds for every text2text
+task. What `input` *contains*, which facets a person ticks, and which statistics read inside a
+sample are `tool_decision`'s, and they arrive through three sockets the modality declares and the
 profile answers. `edge/store/` writes the rows and knows nothing else.
 
 The `class` column is why this is worth more than a place to put rows. A corpus is scaled by
 knowing which kinds of sample it is short of, and a label alone cannot say. `class` is what turns
-the figures from *how much data do we have* into *which cells are empty*.
+the statistics from *how much data do we have* into *which cells are empty*.
 
 This answers `docs/tool-decision-pipeline/spec.md` § *Out of Scope*: the tables, the route that
 takes a record, which records are refused, and the schema management under all of it.
@@ -83,7 +83,7 @@ result and is the only table anything is ever exported from.
 
 1. **`modalities/text2text/corpus/` declares the corpus.** What a stored sample is made of, the two
    tables it lands in, the door between them, the facets every text2text task has, and the
-   arithmetic of the figures that count over them — plus three sockets for what it cannot know.
+   arithmetic of the statistics that count over them — plus three sockets for what it cannot know.
    No name in it is one task's: `H-10`'s check reads this layer's own names against the words of
    the directories under `profile/`, so `tool` and `decision` are among the words it refuses.
 2. **`profile/tool_decision/corpus.py` answers the three sockets**, subclassing the modality's class
@@ -96,13 +96,13 @@ result and is the only table anything is ever exported from.
      than carrying a second copy of the list.
 3. **`services/tool_decision/corpus.py` is one function per endpoint**, and it is where the
    modality's arithmetic and the profile's answers meet. Which pair of facets the coverage matrix
-   crosses, and the figures that read inside a sample rather than off a facet, are arguments this
+   crosses, and the statistics that read inside a sample rather than off a facet, are arguments this
    layer supplies rather than sockets on the class: they are wanted once, at the call, and a socket
    for them buys a wider interface for nothing.
 4. **`edge/store/` maps those shapes onto two tables** — the declarative classes, the session, the
    transaction, the DSN — and is the only place SQLAlchemy is named. Nothing below it is handed a
    session, because nothing below it needs one: which table a document belongs in, what `class`
-   holds and what each figure is are pure functions of that document.
+   holds and what each statistic is are pure functions of that document.
 
 **`record` — what the review answered.**
 
@@ -213,10 +213,10 @@ result and is the only table anything is ever exported from.
     called here from a tool that is called every time. It is ticked by the person who knows the
     flow, and `conversation_id` under § *What else to add* is what would let it be checked.
 
-**The figures.**
+**The statistics.**
 
-23. `GET /text2text/tool-decision/records/stats` answers the figures, per task, reading and keeping
-    nothing. Every figure is a count with the denominator it came out of — never a bare
+23. `GET /text2text/tool-decision/records/stats` answers the statistics, per task, reading and
+    keeping nothing. Every statistic is a count with the denominator it came out of — never a bare
     percentage, because a share over nine rows and a share over nine thousand are different claims.
 24. **How much, how fresh, and how much of it is sellable.** `record` rows; `dataset` rows; the
     difference, split by why — `withheld`, never scanned. Rows created in the last 7 and 30 days;
@@ -258,15 +258,15 @@ result and is the only table anything is ever exported from.
     is a broken row.
 29. **Tool coverage** — distinct tools offered, distinct tools ever called, and the count per called
     tool. This one reads inside `input` and `label` rather than off a facet, so it is the profile's
-    and the service asks for it by name; a figure that silently needs a facet nobody keeps is a
-    figure that breaks in a year. The tail is the finding: a corpus where two tools carry 90% of the
-    calls trains a model that knows two tools.
+    and the service asks for it by name; a statistic that silently needs a facet nobody keeps is a
+    statistic that breaks in a year. The tail is the finding: a corpus where two tools carry 90% of
+    the calls trains a model that knows two tools.
 30. **What is not shown, and is said so on the page.** **Inter-annotator agreement.**
     Krippendorff's α — ≥ 0.800 for a firm conclusion, ≥ 0.667 for a tentative one (Krippendorff,
     2004) — needs at least two people labelling one sample, and this flow puts one human in front
     of each record. The panel proxies above are not it and must not be drawn as it. The
     page says *not measured*, and § *What else to add* says what would change that.
-31. No figure is stored. Each is a query when it is asked, so a panel cannot be stale.
+31. No statistic is stored. Each is a query when it is asked, so a panel cannot be stale.
 
 **The page — a deck, not a scroll.**
 
@@ -299,19 +299,19 @@ result and is the only table anything is ever exported from.
     already the pipeline spec's — `edge/static/index.html` explains the flow, `ui/` labels with it
     — and every card's own note obeys it too: the note in a card is what to do *here*. A sentence
     that would have to be rewritten because a route was renamed is a sentence on the wrong page.
-38. **The figures sit on the guide card, under the guide.** A coverage matrix read in a report is a
-    report; read on the card a labeller opens before they start, it is an instruction — *this is
-    what the corpus is short of*. That is why they are not a ninth card and not a panel somebody
-    has to go looking for.
+38. **The statistics sit on the guide card, under the guide.** A coverage matrix read in a report is
+    a report; read on the card a labeller opens before they start, it is an instruction — *this is
+    what the corpus is short of*. That is why they are not a ninth card and not a panel somebody has
+    to go looking for.
 39. **A strip stays on every card**: sellable out of reviewed, rows written in the last 7 days, and
     **how many cells of the coverage matrix are still empty**. Three items, because the strip is
     read sideways while the reviewer is working on something else. The third is the one that
     changes what they do next, and *which* cells those are is the guide card's to show.
-40. The figures are asked for on load and again after a record is written. Not on a timer, and not
-    on every flip.
-41. Where no database is attached the strip says so in the service's own words, the guide card
-    shows the guide and no figures, and all eight steps work exactly as they do today. The store is
-    a place to put the result, never a dependency of the review.
+40. The statistics are asked for on load and again after a record is written. Not on a timer, and
+    not on every flip.
+41. Where no database is attached the strip says so in the service's own words, the guide card shows
+    the guide and no statistics, and all eight steps work exactly as they do today. The store is a
+    place to put the result, never a dependency of the review.
 42. Step 7 grows the ticks for **every facet `declared_facets` names** — the page asks the profile
     which ticks to draw rather than holding its own list, because a facet added in the profile and
     not on the page is a column that is always `null`. That is where the human already is, and a
@@ -343,17 +343,17 @@ the declared half is small, ticked once, and visibly a claim.
 
 **One adapter, two DSNs.** `Session.merge` for both writes, inside one transaction — a read by
 primary key then an insert or an update, so no dialect-specific upsert is reached for and a
-developer's SQLite file and a deployment's Postgres are one code path. The figures are Core
-queries over `dataset`, except the three evidence figures, which read `record.document` in Python over
-the rows rather than in JSON path expressions — that is the part where the two dialects stop being
-one adapter.
+developer's SQLite file and a deployment's Postgres are one code path. The statistics are Core
+queries over `dataset`, except the three evidence statistics, which read `record.document` in Python
+over the rows rather than in JSON path expressions — that is the part where the two dialects stop
+being one adapter.
 
-**Grouping by input.** The duplicate figures group rows by *the same input*. Two JSON columns are not
-comparable for equality across dialects and no index can be built on that comparison. The options
-are a stored `sha256` of the input canonicalised under one key ordering — fast, indexable, one
-more column — or a scan hashed in Python, which is correct and instant at the size this corpus
+**Grouping by input.** The duplicate statistics group rows by *the same input*. Two JSON columns are
+not comparable for equality across dialects and no index can be built on that comparison. The
+options are a stored `sha256` of the input canonicalised under one key ordering — fast, indexable,
+one more column — or a scan hashed in Python, which is correct and instant at the size this corpus
 starts from. This takes the scan and names the digest as the change to make when it stops being
-instant, because the figure is identical either way.
+instant, because the statistic is identical either way.
 
 **Why the corpus is the modality's and the store is the edge's.** The column list follows from the
 data's shape: a text2text sample ships as a document, so `input` and `label` are JSON and `class` is
@@ -363,7 +363,7 @@ beside the task that happens to be first is how the second task of this modality
 The translation to SQLAlchemy is the other half and is `H-5`'s: a transport belongs at the outermost
 layer, and the layer below hands it documents.
 
-**Why three sockets and not a table per task.** A table per task makes every figure a union and
+**Why three sockets and not a table per task.** A table per task makes every statistic a union and
 every export a join, and the first thing anyone writes afterwards is a view putting them back
 together. Three sockets is the smaller interface for the same freedom: what the input holds, what
 this task can derive, what it asks a person to tick. Everything else the corpus does — the door, the
@@ -394,11 +394,11 @@ needs to know what a good label is. It belongs on the page whose job is explaini
 the deck there is a title and three numbers; the reading a labeller has to do is on the first
 card.
 
-**Why the figures are on a card and not in a dashboard.** A dashboard is a thing somebody opens on
-purpose, which means on the day they remember to. These figures exist to change what gets labelled
-next, so they are put where the labelling starts. The same argument is why the strip carries a
-count of empty cells rather than a total: a total is a number to feel good about, and an empty cell
-is a job.
+**Why the statistics are on a card and not in a dashboard.** A dashboard is a thing somebody opens
+on purpose, which means on the day they remember to. These statistics exist to change what gets
+labelled next, so they are put where the labelling starts. The same argument is why the strip
+carries a count of empty cells rather than a total: a total is a number to feel good about, and an
+empty cell is a job.
 
 ## What else to add
 
@@ -420,10 +420,10 @@ Proposals, not decisions:
   possible to assemble instead of being written from memory. It is also what lets you pull one
   customer's data back out if their contract ends.
 - **`annotator`** — who reviewed the row. Cheap now, and the precondition for ever computing
-  the agreement figure: the day two people review one sample, the store either knows who they
+  the agreement statistic: the day two people review one sample, the store either knows who they
   were or the number cannot be computed retroactively.
 - **`reviewed_at`** distinct from `created_time` — when the human answered, as against when the row
-  landed. They differ when a backlog is posted, and any per-annotator quality figure needs the
+  landed. They differ when a backlog is posted, and any per-annotator quality statistic needs the
   former.
 - **A `consent` or lawful-basis marker** on `record`. 91/2025/QH15 gives the data subject rights
   over the personal data in that table; which basis each source was collected under is the thing
@@ -440,7 +440,7 @@ Proposals, not decisions:
   the one door rows come through (§ *The door*).
 - `dataset` is a function of `record`. Drop it, rebuild it, get the same table.
 - Every `dataset` row has a `record` row under the same key. The reverse does not hold, and the
-  difference is itself a figure.
+  difference is itself a statistic.
 - No derived facet was ever typed by a person; no declared facet is ever computed.
 - `created_time` never moves; `modified_time` never precedes it.
 - Nothing below `edge/` knows a table exists: `sqlalchemy` is named in one package, and nothing
@@ -477,7 +477,7 @@ Proposals, not decisions:
   `label_agreement` reads 0.0 for a sample the panel agreed with — which would then feed
   `panel_disagreement` as a disagreement that did not happen. Either the corpus
   writes one spelling or `normalize_prediction` folds them. A task rule, and one with a consumer on
-  either side of it: the panel's agreement, and this store's figures.
+  either side of it: the panel's agreement, and this store's statistics.
 - **Whether this spec's directory keeps its name.** It is `docs/tool-decision-store/`, and what it
   describes is now mostly `modalities/text2text/corpus/` with one task answering it. Renaming is a
   move plus one cross-reference in the pipeline spec; leaving it is a directory that names the

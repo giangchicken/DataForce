@@ -20,7 +20,7 @@ src/dataforce/
 │       ├── __init__.py            facade
 │       ├── schema.py              shape
 │       ├── sample_projection.py   logic  · one document -> one row, or a refusal
-│       └── row_counting.py        logic  · many rows -> the figures
+│       └── row_aggregation.py     logic  · many rows -> the statistics
 ├── profile/tool_decision/
 │   └── corpus.py                  NEW    logic · answers the three sockets
 ├── services/tool_decision/
@@ -42,7 +42,7 @@ tests/
 ├── modalities/                    NEW — the suite's fourth directory
 │   ├── __init__.py
 │   ├── test_sample_projection.py
-│   └── test_row_counting.py
+│   └── test_row_aggregation.py
 ├── profile/test_corpus.py         NEW
 ├── store/                         NEW
 │   ├── __init__.py, conftest.py
@@ -55,27 +55,40 @@ tests/
 
 ## `modalities/text2text/corpus/schema.py` — `shape`
 
-Imports nothing from this package. Nothing here decides anything; these are the nouns.
+Imports nothing from this package. Nothing here decides anything; these are the nouns. They fall
+into three groups, and knowing which group a name is in is most of knowing what it means.
+
+**One sample.** What the door is handed, and what it hands back.
 
 | Name | What it is |
 |---|---|
-| `DerivedFacets` | `NewType` over `Mapping[str, Any]` — the half nobody may type |
-| `DeclaredFacets` | `NewType` over `Mapping[str, Any]` — the half nothing may compute |
-| `SellableSample` | `input`, `label`, `facets` — what the door lets through |
-| `WithheldSample` | `reason`, `outcome` — what it does not, and why |
-| `ProjectedSample` | `SellableSample \| WithheldSample` |
-| `RowShare` | `count`, `out_of` — a figure cannot be built without its denominator |
-| `RowAverage` | `mean`, `over` — for the panel's mean agreement |
-| `PairedCount` | `row`, `column`, `count` — one pair of values and how many rows carry both, the pairs nothing carries included |
-| `CoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` |
-| `FacetCounts` | `Mapping[facet name, Mapping[value, rows]]` |
-| `StoredTotals` | `record` rows, `dataset` rows, the difference split by why |
-| `FreshnessFigures` | the 7- and 30-day counts, newest and oldest `modified_time` |
-| `EvidenceFigures` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` |
-| `DuplicateFigures` | the two groups, under the names `DuplicateGroups` already uses |
-| `NotMeasured` | `figure`, `reason` |
-| `CorpusFigures` | the above, composed |
-| `NOT_MEASURED` | the constant: agreement, with the reason Krippendorff's α needs two people |
+| `DerivedFacets` | `NewType` over `Mapping[str, Any]` — what is computed from the sample, so nobody may type it |
+| `DeclaredFacets` | `NewType` over `Mapping[str, Any]` — what a reviewer ticks, so nothing may compute it |
+| `SellableSample` | `input`, `label`, `facets` — a sample the door let through, in the shape `dataset` stores |
+| `WithheldSample` | `reason`, `outcome` — a sample it did not, and which of the three conditions stopped it |
+| `ProjectedSample` | `SellableSample \| WithheldSample` — what the door returns, before anyone knows which |
+
+**One number.** Every number the page shows is one of these, never a bare percentage.
+
+| Name | What it is |
+|---|---|
+| `RowRatio` | `count`, `out_of` — 12 rows out of 40, kept as two numbers so the denominator cannot go missing |
+| `RowAverage` | `mean`, `over` — a mean and how many rows it is a mean of |
+| `NotMeasured` | `statistic`, `reason` — the slot a number would sit in, saying in words why there is none |
+| `NOT_MEASURED` | the one that exists today: agreement, because Krippendorff's α needs two people on one sample |
+
+**The whole corpus.** Every one of these is many rows reduced to something a person can read.
+
+| Name | What it is |
+|---|---|
+| `StoredTotals` | how many rows in `record`, how many in `dataset`, and the gap split by why |
+| `FreshnessStats` | how much arrived in the last 7 and 30 days, and the newest and oldest `modified_time` |
+| `FacetCounts` | `Mapping[facet name, Mapping[value, rows]]` — how many samples carry each value of each facet |
+| `PairedCount` | `row`, `column`, `count` — how many samples carry two given values at once |
+| `CoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` — every pair of two facets' values, the pairs nothing carries included |
+| `EvidenceStats` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` — the three that show a person was here |
+| `DuplicateStats` | the two groups, under the names `DuplicateGroups` already uses |
+| `CorpusStats` | the six above, composed — what one `GET .../records/stats` answers |
 
 ## `modalities/text2text/corpus/sample_projection.py` — `logic`
 
@@ -93,19 +106,19 @@ Imports nothing from this package. Nothing here decides anything; these are the 
 | `shipped_label(document)` | `new_label` — a `new_` key is text2text's, so reading it is this layer's |
 | `merged_facets(derived, declared)` | the two halves as one map, **raising on an overlapping key** — the one place *no facet is in both halves* is held |
 
-## `modalities/text2text/corpus/row_counting.py` — `logic`
+## `modalities/text2text/corpus/row_aggregation.py` — `logic`
 
-Takes rows, returns figures. No function here names a facet.
+Takes rows, returns statistics. No function here names a facet.
 
 | Function | What it does |
 |---|---|
 | `stored_totals(record_rows, dataset_rows)` | how much, and the gap split by `withheld` against never scanned |
-| `freshness_figures(dataset_rows)` | the 7- and 30-day counts, newest and oldest |
+| `freshness_stats(dataset_rows)` | the 7- and 30-day counts, newest and oldest |
 | `facet_counts(dataset_rows)` | a count per value of **every key** `class` holds — it reads the keys of a JSON column, so no facet's name is written here |
 | `coverage_matrix(dataset_rows, row_facet, column_facet)` | the product of the two axes' values, **every empty cell present and zero** |
-| `evidence_figures(record_rows)` | the three that read `document`, in Python, never a path expression |
-| `duplicate_figures(dataset_rows)` | grouped by the same input, hashed in Python; the digest is the change to make when that stops being instant |
-| `counted_figures(record_rows, dataset_rows, axes)` | the above, composed into `CorpusFigures` |
+| `evidence_stats(record_rows)` | the three that read `document`, in Python, never a path expression |
+| `duplicate_stats(dataset_rows)` | grouped by the same input, hashed in Python; the digest is the change to make when that stops being instant |
+| `aggregated_stats(record_rows, dataset_rows, axes)` | the above, composed into `CorpusStats` |
 
 ## `profile/tool_decision/corpus.py` — `logic`
 
@@ -120,7 +133,7 @@ Takes rows, returns figures. No function here names a facet.
 | `called_tools(label)` | the tool names the label calls |
 | `required_parameters(tool)` | `function.parameters.required` |
 | `schema_valid_label(label, catalog)` | BFCL's AST check: every call names a tool in the catalog and supplies its required parameters |
-| `tool_coverage(dataset_rows)` | the figure that reads inside `input` and `label`. The service passes it; it is not a fourth socket |
+| `tool_coverage(dataset_rows)` | the statistic that reads inside `input` and `label`. The service passes it; it is not a fourth socket |
 | `MATRIX_AXES` | `("domain", "call_shape")` |
 | `DOMAINS`, `CALL_SHAPES` | the values the page offers. The store validates no string — § *Open* |
 
@@ -132,7 +145,7 @@ Two functions, and **neither may call the store**: `services/` is `logic`, `edge
 | Function | What it does |
 |---|---|
 | `sellable_projection(document)` | builds `ToolDecisionCorpus`, asks the door, answers a `ProjectedSample`. Pure |
-| `described_corpus(record_rows, dataset_rows)` | `counted_figures(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
+| `described_corpus(record_rows, dataset_rows)` | `aggregated_stats(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
 
 ## `edge/store/session.py` — `adapter`
 
@@ -156,7 +169,7 @@ Two functions, and **neither may call the store**: `services/` is `logic`, `edge
 |---|---|
 | `stored_rows(session, task, document, projection)` | `merge` into `record`, `merge`-or-`delete` on `dataset`, one `session.begin()`. It takes the door's answer rather than calling the door (`C-6`) |
 | `carried_created_time(session, task, id)` | read before merging — `merge` replaces the whole row, so the column that never changes has to be carried forward |
-| `record_documents(session, task)` | the rows the three evidence figures read |
+| `record_documents(session, task)` | the rows the three evidence statistics read |
 | `dataset_rows(session, task)` | the rows the counts read |
 | `rebuilt_dataset(session, task, project)` | delete every row and recompute from `record`; takes the projection as an argument |
 
