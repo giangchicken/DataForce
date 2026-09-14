@@ -25,11 +25,8 @@ src/dataforce/
 │   └── corpus.py                  NEW    logic · answers the three sockets
 ├── services/tool_decision/
 │   └── corpus.py                  NEW    logic · one function per endpoint
-├── edge/store/                    NEW
-│   ├── __init__.py                facade
-│   ├── session.py                 adapter · the DSN, the engine, the session
-│   ├── schema.py                  shape   · the two declarative classes
-│   └── corpus_rows.py             adapter · two writes in one transaction, and the reads
+├── edge/store.py                  NEW    adapter · one file: the DSN, the engine, the
+│                                         tables, and the two writes in one transaction
 ├── edge/routers/text2text/tool_decision.py   CHANGED
 └── ui/{index.html,app.js,style.css}          CHANGED
 
@@ -46,8 +43,7 @@ tests/
 ├── profile/test_corpus.py         NEW
 ├── store/                         NEW
 │   ├── __init__.py, conftest.py
-│   ├── test_session.py, test_schema.py, test_migration.py
-│   └── test_corpus_rows.py
+│   └── test_store.py, test_migration.py
 └── edge/test_endpoints.py         CHANGED
 ```
 
@@ -64,38 +60,33 @@ into three groups, and knowing which group a name is in is most of knowing what 
 |---|---|
 | `DerivedSampleFacets` | `NewType` over `Mapping[str, Any]` — what is computed from the sample, so nobody may type it |
 | `DeclaredSampleFacets` | `NewType` over `Mapping[str, Any]` — what a reviewer ticks, so nothing may compute it |
-| `SellableSample` | `input`, `label`, `facets` — a sample the door let through, in the shape `dataset` stores |
+| `ReleasedSample` | `input`, `label`, `facets` — a sample the door let through, in the shape `dataset` stores |
 | `WithheldSample` | `reason`, `outcome` — a sample it did not, and which of the three conditions stopped it |
-| `ProjectedSample` | `SellableSample \| WithheldSample` — what the door returns, before anyone knows which |
+| `ProjectedSample` | `ReleasedSample \| WithheldSample` — what the door returns, before anyone knows which |
 
 **One number.** Every number the page shows is one of these, never a bare percentage.
 
 | Name | What it is |
 |---|---|
-| `SampleRatio` | `count`, `out_of` — 12 samples out of 40, kept as two numbers so the denominator cannot go missing |
-| `SampleAverage` | `mean`, `over` — a mean, and how many samples it is a mean of |
-| `UnmeasuredStatistic` | `statistic`, `reason` — the slot a number would sit in, saying in words why there is none |
-| `UNMEASURED_AGREEMENT` | the one that exists today: agreement, because Krippendorff's α needs two people on one sample |
+| `CountWithTotal` | `count`, `out_of` — 12 out of 40. It says nothing about what was counted; the field holding it does |
 
 **The whole corpus.** Every one of these is many samples reduced to something a person can read.
 
 | Name | What it is |
 |---|---|
 | `SampleTotals` | how many rows in `record`, how many in `dataset`, and the gap split by why |
-| `SampleFreshness` | how much arrived in the last 7 and 30 days, and the newest and oldest `modified_time` |
 | `FacetSampleCounts` | `Mapping[facet name, Mapping[value, samples]]` — how many samples carry each value of each facet |
 | `PairedSampleCount` | `row`, `column`, `count` — how many samples carry two given values at once |
 | `FacetCoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` — every pair of two facets' values, the pairs nothing carries included |
-| `HumanEvidence` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` — the three that show a person was here |
 | `DuplicateSamples` | the two groups, under the names `DuplicateGroups` already uses |
-| `CorpusStatistics` | the six above, composed — what one `GET .../records/stats` answers |
+| `CorpusStatistics` | the four above, composed — what one `GET .../records/stats` answers |
 
 ## `modalities/text2text/corpus/sample_projection.py` — `logic`
 
 | Function | What it does |
 |---|---|
 | `class SampleProjection(ABC)` | what the task subclasses |
-| ├ `projected_sample(document)` | **concrete, not abstract.** The door: asks `withheld_reason`, and builds a `SellableSample` where there is none. No task writes its own |
+| ├ `projected_sample(document)` | **concrete, not abstract.** The door: asks `withheld_reason`, and builds a `ReleasedSample` where there is none. No task writes its own |
 | ├ `shipped_input(document)` | **abstract** · what `dataset.input` holds |
 | ├ `derived_facets(document)` | **abstract** · the task's half of the derived facets |
 | └ `declared_facets()` | **abstract** · which ticks the page must draw |
@@ -112,13 +103,11 @@ Takes the rows of the two tables, returns the numbers. No function here names a 
 
 | Function | What it does |
 |---|---|
-| `sample_totals(record_rows, dataset_rows)` | how much, and the gap split by `withheld` against never scanned |
-| `sample_freshness(dataset_rows)` | the 7- and 30-day counts, newest and oldest |
+| `sample_totals(record_count, dataset_rows)` | how much, and the gap split by `withheld` against never scanned |
 | `facet_sample_counts(dataset_rows)` | a count per value of **every key** `class` holds — it reads the keys of a JSON column, so no facet's name is written here |
 | `facet_coverage_matrix(dataset_rows, row_facet, column_facet)` | the product of the two axes' values, **every empty cell present and zero** |
-| `human_evidence(record_rows)` | the three that read `document`, in Python, never a path expression |
 | `duplicate_samples(dataset_rows)` | grouped by the same input, hashed in Python; the digest is the change to make when that stops being instant |
-| `aggregated_statistics(record_rows, dataset_rows, axes)` | the above, composed into `CorpusStatistics` |
+| `aggregated_statistics(dataset_rows, axes)` | the above, composed into `CorpusStatistics`. **`record` is not read**: with the evidence numbers gone, every statistic comes off `dataset` |
 
 ## `profile/tool_decision/corpus.py` — `logic`
 
@@ -139,38 +128,31 @@ Takes the rows of the two tables, returns the numbers. No function here names a 
 
 ## `services/tool_decision/corpus.py` — `logic`
 
-Two functions, and **neither may call the store**: `services/` is `logic`, `edge/store/` is
+Two functions, and **neither may call the store**: `services/` is `logic`, `edge/store.py` is
 `adapter`, and `H-8` sends that import the other way. The router is where the two meet.
 
 | Function | What it does |
 |---|---|
-| `sellable_projection(document)` | builds `ToolDecisionCorpus`, asks the door, answers a `ProjectedSample`. Pure |
-| `described_corpus(record_rows, dataset_rows)` | `aggregated_statistics(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
+| `checked_sample(document)` | builds `ToolDecisionCorpus`, asks the door, answers a `ProjectedSample`. Pure |
+| `described_corpus(record_count, dataset_rows)` | `aggregated_statistics(...)` plus `tool_coverage(...)` plus `MATRIX_AXES`. Pure |
 
-## `edge/store/session.py` — `adapter`
+## `edge/store.py` — `adapter`
 
-| Function | What it does |
-|---|---|
-| `database_url()` | `str \| None` — unset or empty is *no store*, never a default file |
-| `database_engine()` | one engine for the process, **under a lock**; a changed DSN releases the old pool |
-| `open_session()` | `Session \| None` — `None` is an answer every caller has to handle, not a failure |
-
-## `edge/store/schema.py` — `shape`
+One file. The DSN, the engine, the two declarative classes and the writes are one job — talking to
+a database — and splitting them made three modules that only ever call each other.
 
 | Name | What it is |
 |---|---|
 | `KEY_LENGTH = 64` | long enough for a digest-shaped id, short enough for a dialect with an index-length limit |
 | `Utc` | `TypeDecorator` — SQLite hands back naive, Postgres hands back the connection's offset; both come out UTC |
 | `Base`, `Record`, `Dataset` | the two tables, keyed `(task, id)`, with the `class` column name pinned and the attribute named `facets` |
-
-## `edge/store/corpus_rows.py` — `adapter`
-
-| Function | What it does |
-|---|---|
+| `database_url()` | `str \| None` — unset or empty is *no store*, never a default file |
+| `database_engine()` | one engine for the process, **under a lock**; a changed DSN releases the old pool |
+| `open_session()` | `Session \| None` — `None` is an answer every caller has to handle, not a failure |
 | `stored_rows(session, task, document, projection)` | `merge` into `record`, `merge`-or-`delete` on `dataset`, one `session.begin()`. It takes the door's answer rather than calling the door (`C-6`) |
 | `carried_created_time(session, task, id)` | read before merging — `merge` replaces the whole row, so the column that never changes has to be carried forward |
-| `record_documents(session, task)` | the rows the three evidence statistics read |
-| `dataset_rows(session, task)` | the rows the counts read |
+| `record_count(session, task)` | how many rows `record` holds. Only the count, now that nothing reads the documents |
+| `dataset_rows(session, task)` | the rows every statistic is taken over |
 | `rebuilt_dataset(session, task, project)` | delete every row and recompute from `record`; takes the projection as an argument |
 
 ## `edge/routers/text2text/tool_decision.py` — `adapter` (changed)
@@ -179,13 +161,13 @@ Two functions, and **neither may call the store**: `services/` is `logic`, `edge
 |---|---|
 | `class ReviewedSample(Sample)` | the thirteen-key envelope, `extra="allow"`. Not `Record`: `R-2` refuses a name that already names a table |
 | `class StoredWhere` | which table took the row, and why the other did not |
-| `POST /records` → `stored_record(request)` | body → `sellable_projection` → `stored_rows`. 503 naming the variable where no database is attached |
-| `GET /records/stats` → `corpus_stats()` | `dataset_rows` and `record_documents` → `described_corpus` |
+| `POST /records` → `stored_record(request)` | body → `checked_sample` → `stored_rows`. 503 naming the variable where no database is attached |
+| `GET /records/stats` → `corpus_stats()` | `dataset_rows` and `record_count` → `described_corpus` |
 | `GET /records/declared-facets` → `declared_facets()` | the page asks the profile which ticks to draw instead of holding a second copy of the list |
 
 ---
 
-## Three things to read closely
+## Four things to read closely
 
 **`language` has no route in yet.** § *`class`* says it is declared at step 1 and carried rather
 than asked twice — but the record's thirteen keys do not include it, so it has to arrive inside the
@@ -201,3 +183,11 @@ what the input holds, and cannot override the `khử nhận dạng` condition. T
 it reads badly — the service having to know too much about the profile — the answer is a fourth
 socket and the plan's decision was wrong. `plan.md` T17 says so, so whoever writes it knows what
 they are checking.
+
+**Where `Record` and `Dataset` are declared is not settled.** They sit in `edge/store.py` here
+because there are two tables for every task and a new task adds none: `task` is a key column, and
+what differs between tasks lives inside two JSON columns, which is what the three sockets fill. The
+open question is whether a task should instead declare its own tables in `profile/<task>/`. It
+would put SQLAlchemy in `profile/`, which `H-8` reaches through its import table — `logic` may
+import `shape` and nothing else — and it would make `migrations/env.py` import every profile in
+order to see what to migrate. That is a decision, not an oversight, and it is the user's.
