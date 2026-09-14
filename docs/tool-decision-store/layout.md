@@ -20,7 +20,7 @@ src/dataforce/
 │       ├── __init__.py            facade
 │       ├── schema.py              shape
 │       ├── sample_projection.py   logic  · one document -> one row, or a refusal
-│       └── figure_counting.py     logic  · many rows -> the figures
+│       └── row_counting.py        logic  · many rows -> the figures
 ├── profile/tool_decision/
 │   └── corpus.py                  NEW    logic · answers the three sockets
 ├── services/tool_decision/
@@ -42,7 +42,7 @@ tests/
 ├── modalities/                    NEW — the suite's fourth directory
 │   ├── __init__.py
 │   ├── test_sample_projection.py
-│   └── test_figure_counting.py
+│   └── test_row_counting.py
 ├── profile/test_corpus.py         NEW
 ├── store/                         NEW
 │   ├── __init__.py, conftest.py
@@ -64,13 +64,13 @@ Imports nothing from this package. Nothing here decides anything; these are the 
 | `SellableSample` | `input`, `label`, `facets` — what the door lets through |
 | `WithheldSample` | `reason`, `outcome` — what it does not, and why |
 | `ProjectedSample` | `SellableSample \| WithheldSample` |
-| `Share` | `count`, `out_of` — a figure cannot be built without its denominator |
-| `Average` | `mean`, `over` — for the panel's mean agreement |
-| `MatrixCell` | `row`, `column`, `count` — one cell, the empty ones included |
+| `RowShare` | `count`, `out_of` — a figure cannot be built without its denominator |
+| `RowAverage` | `mean`, `over` — for the panel's mean agreement |
+| `PairedCount` | `row`, `column`, `count` — one pair of values and how many rows carry both, the pairs nothing carries included |
 | `CoverageMatrix` | `rows`, `columns`, `cells`, `empty_cells` |
 | `FacetCounts` | `Mapping[facet name, Mapping[value, rows]]` |
 | `StoredTotals` | `record` rows, `dataset` rows, the difference split by why |
-| `Freshness` | the 7- and 30-day counts, newest and oldest `modified_time` |
+| `FreshnessFigures` | the 7- and 30-day counts, newest and oldest `modified_time` |
 | `EvidenceFigures` | `human_edit_rate`, `panel_disagreement`, `redaction_outcomes` |
 | `DuplicateFigures` | the two groups, under the names `DuplicateGroups` already uses |
 | `NotMeasured` | `figure`, `reason` |
@@ -93,7 +93,7 @@ Imports nothing from this package. Nothing here decides anything; these are the 
 | `shipped_label(document)` | `new_label` — a `new_` key is text2text's, so reading it is this layer's |
 | `merged_facets(derived, declared)` | the two halves as one map, **raising on an overlapping key** — the one place *no facet is in both halves* is held |
 
-## `modalities/text2text/corpus/figure_counting.py` — `logic`
+## `modalities/text2text/corpus/row_counting.py` — `logic`
 
 Takes rows, returns figures. No function here names a facet.
 
