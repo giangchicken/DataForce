@@ -3,7 +3,8 @@
 Tasks for building what `spec.md` specifies. Read that first; this document schedules it and does
 not restate it. Where the two disagree, the spec wins and this file is wrong.
 
-**Source:** [`spec.md`](spec.md). `AGENTS.md` for `H-4`, `H-5`, `H-8`, `H-10`, `R-6`, `E-1`, `R-2`,
+**Source:** [`spec.md`](spec.md), and [`layout.md`](layout.md) for which module each task's
+change lands in. `AGENTS.md` for `H-4`, `H-5`, `H-8`, `H-10`, `R-6`, `E-1`, `R-2`,
 `T-1` and `T-5`. `docs/tool-decision-pipeline/spec.md` for the flow this sits under, and that
 feature's `plan.md` T14 — *The record's round trip*, withdrawn with the store because the decision
 this spec takes had not been taken. This plan is what picks it back up.
