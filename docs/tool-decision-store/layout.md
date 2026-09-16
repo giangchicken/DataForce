@@ -78,14 +78,13 @@ declares something the profile's `sample_building.py` has nothing to override.
 
 ## `modalities/text2text/dataset_management/label_statistics.py` — `logic`
 
-**Thin on purpose.** What every text2text label has in common is that it may be absent and that it
-has a size; anything past that says `tool`, and `H-10` refuses that word above the profile.
+**One function.** The only thing every text2text label has in common is that it may be absent;
+anything past that says `tool`, and `H-10` refuses that word above the profile. If this one moves
+down too, the file has no reason to exist and label statistics are entirely the profile's.
 
 | Function | What it does |
 |---|---|
 | `labelled_share(labels)` | how many stored samples carry a label at all, out of how many. The empty label is a real answer, not a gap |
-| `label_sizes(labels)` | the size of each label as the modality can see it — a list's length, a string's characters |
-| `measured_labels(labels, measuring)` | the two above plus whatever the caller passes as `measuring`. The task's own measurements arrive as an argument, not as a socket (`H-4`) |
 
 ## `profile/tool_decision/dataset_management/schema.py` — `adapter`
 
@@ -97,7 +96,9 @@ allows it, both are `adapter`. There is no `task` column: the table name is the 
 | Name | What it is |
 |---|---|
 | `ToolDecisionRecord(Base)` | `id`, the thirteen keys of the review, the two times. The raw side: may hold personal data, never exported |
-| `ToolDecisionDataset(Base)` | `id`, `input`, `label`, then **each facet as its own column** — `language`, `ambiguous`, `personal_data`, `number_turns`, `number_label_tools`, `number_provided_tools`, `schema_valid`, `direction`, `domain`, `have_conversation_flow`, `call_shape` — and the two times |
+| `ToolDecisionDataset(Base)` | `id`, `input`, `label`, the two times, **the columns below**, and `notes` |
+| — its columns | `language`, `personal_data`, `ambiguous`, `domain`, `call_shape`, `number_turns`, `number_label_tools`, `number_provided_tools`, `schema_valid` — each one true of every sample in the table, and expected to stay true |
+| — its `notes` | JSON. `have_conversation_flow` and `direction` start here, because each is true of a *group* of label sets rather than of the table. **A facet added later starts here too**, always, and becomes a column only when someone is grouping by it often enough for the scan to hurt |
 | `created_tables(engine)` | `Base.metadata.create_all`. With no migration folder, this is the only thing that makes a table |
 | `stored_rows(session, document, sample)` | one `session.begin()`, a `merge` into each table. **Both always**: the tables differ by what they hold, not by which rows reach them |
 | `carried_created_time(session, id)` | read before merging — `merge` replaces the whole row, so the column that never changes has to be carried forward |
@@ -186,6 +187,28 @@ below the edge has a use for them.
 | § *Invariants*, the `sqlalchemy` line | the profile's `schema.py` names it |
 | § *Open*, `(task, id)` or `id` alone | answered |
 | `plan.md` T3, T6 | were *the migration* and *the door* |
+
+---
+
+## Adding a facet later
+
+The question a column has to survive is *what happens to the rows that are already there*, and the
+answer splits on who fills the facet — which is why the derived/declared line outlives the two
+types that held it.
+
+| | A **derived** facet — `number_turns`, `schema_valid`, `personal_data` | A **declared** facet — `domain`, `ambiguous`, `have_conversation_flow` |
+|---|---|---|
+| Where it comes from | computed from `record`, which keeps the whole review | a person ticked it, once, on a page that has since moved on |
+| Old rows after it is added | `rebuilt_dataset` recomputes every one of them. Nothing is lost | **nothing can fill them.** They are unknown, and stay unknown unless somebody re-reviews every old sample by hand |
+| So it may be | a column, added when wanted — the cost is one rebuild | `notes`, until you are sure. A declared column added late is a column that is `NULL` for the whole corpus that existed before it |
+
+That is the whole reason `have_conversation_flow` belongs in `notes` and not in a column: it is
+declared, so the day it is added every sample already in the table is permanently blank on it, and a
+statistic over it would be measuring when the facet was introduced rather than what the corpus holds.
+
+With no migration folder, adding a column is also an `ALTER TABLE` somebody writes by hand against a
+live database. Adding a key to `notes` is nothing at all — old rows simply do not have the key, which
+is the same *unknown* as a `NULL` but without a schema change to perform.
 
 ---
 
