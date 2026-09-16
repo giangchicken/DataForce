@@ -5,9 +5,6 @@ module each sentence lands in. No function bodies.
 
 **This document is true until the tree is.** Once a module exists, the module is the answer.
 
-**`spec.md` has not been swept to this yet** — § *What now contradicts `spec.md`* lists what has to
-go.
-
 ---
 
 ## What each new package is for
@@ -35,9 +32,10 @@ src/dataforce/
 ├── modalities/text2text/
 │   └── dataset_management/        NEW — the modality's fourth package
 │       ├── __init__.py            facade
-│       ├── schema.py              shape · StoredSample
+│       ├── schema.py              shape · StoredSample, DuplicateGroups
 │       ├── sample_building.py     logic · left open, to be written against a real sample
-│       └── label_statistics.py    logic · what any text2text label can be measured by
+│       ├── label_statistics.py    logic · what any text2text label can be measured by
+│       └── duplicate_grouping.py  logic · the same input twice, over the whole corpus
 ├── profile/tool_decision/
 │   └── dataset_management/        NEW
 │       ├── __init__.py            facade
@@ -66,6 +64,7 @@ tests/
 | Name | What it is |
 |---|---|
 | `StoredSample` | `input`, `label`, `facets` — the row that is kept. The profile's tables turn it into columns |
+| `DuplicateGroups` | `duplicate_content_same_label`, `duplicate_content_diff_label` |
 
 ## `modalities/text2text/dataset_management/sample_building.py` — `logic`
 
@@ -75,6 +74,17 @@ observed. The module exists so the placement is fixed; what it declares is yours
 
 Everything downstream waits on this file: the profile answers whatever it declares, and until it
 declares something the profile's `sample_building.py` has nothing to override.
+
+## `modalities/text2text/dataset_management/duplicate_grouping.py` — `logic`
+
+A duplicate is a fact about a *dataset*, so it is grouped here and not by the data-quality check of
+the same word. That one compares a **posted batch** pairwise with an embedding call, its own note
+says an index rather than a smaller batch is what a corpus of twenty thousand needs, and it returns
+`None` with no shape declared. Sharing code between the two would be sharing a word.
+
+| Function | What it does |
+|---|---|
+| `duplicate_groups(inputs, labels)` | the two groups: the same input under the same label, and the same input under a different one. Hashed in Python; the digest column is the change to make when that stops being instant |
 
 ## `modalities/text2text/dataset_management/label_statistics.py` — `logic`
 
@@ -89,13 +99,13 @@ down too, the file has no reason to exist and label statistics are entirely the 
 ## `profile/tool_decision/dataset_management/schema.py` — `adapter`
 
 The same thing `schema.py` means everywhere else in this repo — what the stored data looks like —
-except that here it is SQLAlchemy, so the tag is `adapter` and not `shape`. It imports `Base`,
-`Utc` and `KEY_LENGTH` from `edge/database.py` so one `MetaData` holds every task's tables; `H-8`
-allows it, both are `adapter`. There is no `task` column: the table name is the task.
+except that here it is SQLAlchemy, so the tag is `adapter` and not `shape`. It imports `Base` and
+`Utc` from `edge/database.py`, so one `MetaData` holds every task's tables; `H-8` allows it, both
+are `adapter`. There is no `task` column: the table name is the task.
 
 | Name | What it is |
 |---|---|
-| `ToolDecisionRecord(Base)` | `id`, the thirteen keys of the review, the two times. The raw side: may hold personal data, never exported |
+| `ToolDecisionRecord(Base)` | `id` as `Uuid` — native on Postgres, 32 characters on SQLite, and nothing to pick a length for — the thirteen keys of the review, the two times. The raw side: may hold personal data, never exported |
 | `ToolDecisionDataset(Base)` | `id`, `input`, `label`, the two times, **the columns below**, and `notes` |
 | — its columns | `language`, `personal_data`, `ambiguous`, `domain`, `call_shape`, `number_turns`, `number_label_tools`, `number_provided_tools`, `schema_valid` — each one true of every sample in the table, and expected to stay true |
 | — its `notes` | JSON. `have_conversation_flow` and `direction` start here, because each is true of a *group* of label sets rather than of the table. **A facet added later starts here too**, always, and becomes a column only when someone is grouping by it often enough for the scan to hurt |
@@ -106,7 +116,7 @@ allows it, both are `adapter`. There is no `task` column: the table name is the 
 | `counted_by_facet(session)` | one `GROUP BY` per facet column. The column names are this task's, and this is the layer allowed to say them |
 | `counted_by_pair(session, row_facet, column_facet)` | `GROUP BY` two columns — only the pairs that exist |
 | `stored_labels(session)` | the `label` column alone, for `label_statistics` |
-| `shipped_inputs(session)` | the `input` column alone, for the duplicate scan |
+| `shipped_inputs(session)` | the `input` and `label` columns, for the duplicate grouping — the two groups differ by whether the labels agree |
 | `rebuilt_dataset(session, building)` | delete every row and recompute from the record table |
 
 ## `profile/tool_decision/dataset_management/sample_building.py` — `logic`
@@ -141,8 +151,7 @@ may.
 | Function | What it does |
 |---|---|
 | `covered_pairs(pair_counts)` | SQL returns only the pairs that exist; **the empty ones are the finding**, so they are put back here from `DOMAINS × CALL_SHAPES`. Pure |
-| `described_labels(labels, catalogs)` | `measured_labels(...)` with this task's `call_counts` and `tool_coverage` passed in. Pure |
-| `duplicate_groups(inputs)` | calls `data_quality/duplicate_data_checking.py`, which already does this. Nothing new is written |
+| `described_labels(labels, catalogs)` | `labelled_share(...)` with this task's `call_counts` and `tool_coverage` beside it. Pure |
 
 The function that turns one posted document into a `StoredSample` belongs here too, and is not
 named yet, because it composes whatever `sample_building.py` ends up declaring.
@@ -151,7 +160,6 @@ named yet, because it composes whatever `sample_building.py` ends up declaring.
 
 | Name | What it is |
 |---|---|
-| `KEY_LENGTH = 64` | long enough for a digest-shaped id, short enough for a dialect with an index-length limit |
 | `Utc` | `TypeDecorator` — SQLite hands back naive, Postgres hands back the connection's offset; both come out UTC |
 | `Base` | the one declarative base every task's tables hang off |
 | `database_url()` | `str \| None` — unset or empty is *no store*, never a default file |
@@ -173,23 +181,6 @@ below the edge has a use for them.
 
 ---
 
-## What now contradicts `spec.md`
-
-| Passage | Why it has to go |
-|---|---|
-| § *The door* | there is no door. A finished sample is kept |
-| § *`dataset`* — *the difference, split by why* | the two tables hold the same rows, so there is no difference to split |
-| § *What* — *the table that is protected and the table that is sold* | still two tables, but they differ by **what they hold**, not by which rows reach them |
-| § *`class`*, reqs 17 and 25 | the two halves are no longer separate types, and *the modality counts without naming a facet* was true of a JSON column, not of eleven columns |
-| § *Where each piece is declared*, reqs 1 and 4 | the modality no longer declares the tables, and SQLAlchemy is named in two places |
-| § *`record`*, § *`dataset`*, the `(task, id)` key | the table name is the task, so the key is `id` |
-| § *Context* — *the first schema is a migration* | there is no migration |
-| § *Invariants*, the `sqlalchemy` line | the profile's `schema.py` names it |
-| § *Open*, `(task, id)` or `id` alone | answered |
-| `plan.md` T3, T6 | were *the migration* and *the door* |
-
----
-
 ## Adding a facet later
 
 The question a column has to survive is *what happens to the rows that are already there*, and the
@@ -202,20 +193,19 @@ types that held it.
 | Old rows after it is added | `rebuilt_dataset` recomputes every one of them. Nothing is lost | **nothing can fill them.** They are unknown, and stay unknown unless somebody re-reviews every old sample by hand |
 | So it may be | a column, added when wanted — the cost is one rebuild | `notes`, until you are sure. A declared column added late is a column that is `NULL` for the whole corpus that existed before it |
 
-That is the whole reason `have_conversation_flow` belongs in `notes` and not in a column: it is
-declared, so the day it is added every sample already in the table is permanently blank on it, and a
-statistic over it would be measuring when the facet was introduced rather than what the corpus holds.
+That is why `have_conversation_flow` belongs in `notes`: it is declared, so the day it becomes a
+column every sample already in the table is permanently blank on it, and a statistic over it would
+measure when the facet was introduced rather than what the corpus holds.
 
-With no migration folder, adding a column is also an `ALTER TABLE` somebody writes by hand against a
-live database. Adding a key to `notes` is nothing at all — old rows simply do not have the key, which
-is the same *unknown* as a `NULL` but without a schema change to perform.
+With no migrations, a column is also an `ALTER TABLE` somebody writes by hand against a live
+database. A key in `notes` is nothing at all — old rows simply do not have it, which is the same
+*unknown* as a `NULL` without a schema change to perform.
 
 ---
 
 ## One thing to read closely
 
-**The two halves of `class` are no longer two types.** `DerivedSampleFacets` and
-`DeclaredSampleFacets` were what stopped a computed facet and a ticked one from being handed to
-each other by mistake. They are gone, and eleven real columns do not bring that back — a column
-does not say who filled it. What keeps the rule now is that the two sets of names are written in
-two different places in `sample_building.py`, and nothing checks that they stay apart.
+**Nothing checks that a computed facet and a ticked one stay apart.** The rule is real — a derived
+facet is never typed, a declared one is never computed — and the only thing holding it is that the
+two sets of names are written in two different places in `sample_building.py`. A column does not
+say who filled it, so the table cannot tell the difference and no test reads for it either.
