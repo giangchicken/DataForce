@@ -40,12 +40,18 @@ import ast
 
 import pytest
 
-from .tree import Module, imports, module_from_source, modules_in, not_exempt
+from .tree import (
+    Module,
+    drop_exempt_findings,
+    list_imports,
+    parse_module_source,
+    parse_package_modules,
+)
 
 RULE = "H-8"
 
 # `H-8`'s fourth column, one row per tag. The values hold no `facade`: a facade is never a
-# destination, because `exposed_tags` resolves it to what stands behind it.
+# destination, because `resolve_exposed_tags` resolves it to what stands behind it.
 MAY_IMPORT = {
     "shape": frozenset({"shape"}),
     "logic": frozenset({"shape", "logic"}),
@@ -56,30 +62,32 @@ MAY_IMPORT = {
 TAGS = frozenset(MAY_IMPORT)
 
 
-def tag_of(module: Module) -> str:
+def read_tag(module: Module) -> str:
     """The first word of the module docstring, or `""` where there is no docstring to read."""
     docstring = ast.get_docstring(module.tree) or ""
     return docstring.split(maxsplit=1)[0] if docstring.split() else ""
 
 
-TREE = {module.name: module for module in modules_in()}
-TAG = {name: tag_of(module) for name, module in TREE.items()}
+TREE = {module.name: module for module in parse_package_modules()}
+TAG = {name: read_tag(module) for name, module in TREE.items()}
 
 
-def reached_modules(module: Module) -> list[tuple[int, str]]:
+def list_reached_modules(module: Module) -> list[tuple[int, str]]:
     """Every module of this package that one reaches, and the line reaching it.
 
-    `imports` yields a name per statement and a name per alias, so a symbol and the module holding
+    `list_imports` yields a name per statement and a name per alias, so a symbol and the module holding
     it both come back; only the names that are modules here are the import graph.
     """
     return [
         (found.line, found.module)
-        for found in imports(module)
+        for found in list_imports(module)
         if found.module in TREE and found.module != module.name
     ]
 
 
-def exposed_tags(name: str, seen: frozenset[str] = frozenset()) -> frozenset[str]:
+def resolve_exposed_tags(
+    name: str, seen: frozenset[str] = frozenset()
+) -> frozenset[str]:
     """What importing that module actually reaches: its own tag, or what stands behind a door.
 
     Behind a facade is what it re-exports and what its subtree holds -- the two ways a door leaks,
@@ -90,50 +98,53 @@ def exposed_tags(name: str, seen: frozenset[str] = frozenset()) -> frozenset[str
         return frozenset({tag})
     if name in seen:
         return frozenset()
-    behind = {reached for _, reached in reached_modules(TREE[name])}
+    behind = {reached for _, reached in list_reached_modules(TREE[name])}
     behind |= {under for under in TREE if under.startswith(f"{name}.")}
     return frozenset().union(
-        *(exposed_tags(one, seen | {name}) for one in behind), frozenset()
+        *(resolve_exposed_tags(one, seen | {name}) for one in behind), frozenset()
     )
 
 
-def tag_findings(module: Module) -> list[str]:
+def find_tag_violations(module: Module) -> list[str]:
     """The module whose docstring opens with a word `H-8` does not name.
 
     No hatch: there is no sixth tag to excuse, and the finding is the docstring's own first line, so
     an exemption could only be written inside the text being rejected.
     """
-    tag = tag_of(module)
+    tag = read_tag(module)
     if tag in TAGS:
         return []
     said = f"the tag {tag!r}" if tag else "no docstring"
     return [f"{module.name}:1 opens with {said}, not one of {sorted(TAGS)}"]
 
 
-def direction_findings(module: Module) -> list[str]:
+def find_direction_violations(module: Module) -> list[str]:
     """Every import this module makes that `H-8`'s table sends the other way."""
-    permitted = MAY_IMPORT.get(tag_of(module), frozenset())
-    return not_exempt(
+    permitted = MAY_IMPORT.get(read_tag(module), frozenset())
+    return drop_exempt_findings(
         module,
         RULE,
         [
-            (line, f"{tag_of(module)} imports {reached}, which is {sorted(against)}")
-            for line, reached in reached_modules(module)
-            if (against := exposed_tags(reached) - permitted)
+            (
+                line,
+                f"{read_tag(module)} imports {reached}, which is {sorted(against)}",
+            )
+            for line, reached in list_reached_modules(module)
+            if (against := resolve_exposed_tags(reached) - permitted)
         ],
     )
 
 
-@pytest.mark.parametrize("module", modules_in(), ids=lambda m: m.name)
+@pytest.mark.parametrize("module", parse_package_modules(), ids=lambda m: m.name)
 def test_every_module_opens_with_one_of_the_five_tags(module: Module) -> None:
     """H-8's first half. Two answers means the file holds two jobs; a sixth word means neither."""
-    assert tag_findings(module) == []
+    assert find_tag_violations(module) == []
 
 
-@pytest.mark.parametrize("module", modules_in(), ids=lambda m: m.name)
+@pytest.mark.parametrize("module", parse_package_modules(), ids=lambda m: m.name)
 def test_no_import_goes_against_the_declared_direction(module: Module) -> None:
     """H-8's fourth column, which is what `E-1` asks to be enforced rather than remembered."""
-    assert direction_findings(module) == []
+    assert find_direction_violations(module) == []
 
 
 @pytest.mark.parametrize(
@@ -147,18 +158,18 @@ def test_no_import_goes_against_the_declared_direction(module: Module) -> None:
 )
 def test_the_scan_rejects_a_sixth_tag(sixth: str) -> None:
     """Proved red. The cedilla is a finding because the tag is read by a machine, this one."""
-    assert tag_findings(module_from_source(sixth)) != []
+    assert find_tag_violations(parse_module_source(sixth)) != []
 
 
 def test_the_scan_rejects_a_module_with_no_docstring() -> None:
     """A module with nothing to read declares no job, which is the same gap as a sixth word."""
-    assert tag_findings(module_from_source("import os")) != []
+    assert find_tag_violations(parse_module_source("import os")) != []
 
 
 @pytest.mark.parametrize(
     "wrong_way",
     [
-        '"""logic · a decision."""\n\nfrom dataforce.edge.served_models import served_models',
+        '"""logic · a decision."""\n\nfrom dataforce.edge.served_models import list_served_models',
         '"""logic · a decision."""\n\nfrom dataforce.edge.routers import tool_decision_router',
         '"""shape · a noun."""\n\nfrom dataforce.profile.tool_decision.utils import x',
         '"""adapter · a translation."""\n\nfrom dataforce.edge.main import create_app',
@@ -182,7 +193,7 @@ def test_the_scan_rejects_an_import_against_the_direction(wrong_way: str) -> Non
     the same bypass one level higher again -- `dataforce/edge/__init__.py` re-exports nothing, so
     only its subtree says that `edge.main` is `wiring`.
     """
-    assert direction_findings(module_from_source(wrong_way)) != []
+    assert find_direction_violations(parse_module_source(wrong_way)) != []
 
 
 def test_an_unknown_tag_permits_no_import_at_all() -> None:
@@ -198,7 +209,7 @@ def test_an_unknown_tag_permits_no_import_at_all() -> None:
         "\n\nfrom dataforce.edge.main import create_app"
     )
 
-    assert direction_findings(module_from_source(unknown)) != []
+    assert find_direction_violations(parse_module_source(unknown)) != []
 
 
 def test_a_facade_importing_across_the_package_is_permitted_by_the_table_itself() -> (
@@ -212,7 +223,7 @@ def test_a_facade_importing_across_the_package_is_permitted_by_the_table_itself(
     door = '"""facade · a door."""\n\nfrom dataforce.edge.main import create_app'
 
     assert MAY_IMPORT["facade"] >= frozenset({"wiring"})
-    assert direction_findings(module_from_source(door)) == []
+    assert find_direction_violations(parse_module_source(door)) == []
 
 
 @pytest.mark.parametrize(
@@ -222,7 +233,7 @@ def test_a_facade_importing_across_the_package_is_permitted_by_the_table_itself(
         '"""logic · a decision."""\n\nfrom dataforce.profile.tool_decision.utils import x',
         '"""adapter · a translation."""\n\nfrom dataforce.services.tool_decision import x',
         '"""wiring · the root."""\n\nfrom dataforce.edge.routers import router',
-        '"""facade · a door."""\n\nfrom dataforce.edge.served_models import served_models',
+        '"""facade · a door."""\n\nfrom dataforce.edge.served_models import list_served_models',
         '"""logic · a decision."""\n\nfrom agent_toolkit.llm import complete',
     ],
     ids=[
@@ -240,15 +251,15 @@ def test_the_scan_permits_the_direction_the_table_declares(permitted: str) -> No
     The last case is the rule's edge: `H-8`'s table is about this package, so a library import is
     not an edge in the graph it declares.
     """
-    assert direction_findings(module_from_source(permitted)) == []
+    assert find_direction_violations(parse_module_source(permitted)) == []
 
 
 def test_an_annotated_exemption_covers_one_import() -> None:
     """The hatch, on the line -- so an excused import is readable as one, with an owner and a date."""
     excused = (
         '"""logic · a decision."""\n\n'
-        "from dataforce.edge.served_models import served_models"
+        "from dataforce.edge.served_models import list_served_models"
         "  # guard-exempt: H-8 · the reason · the owner · 2026-09-07"
     )
 
-    assert direction_findings(module_from_source(excused)) == []
+    assert find_direction_violations(parse_module_source(excused)) == []

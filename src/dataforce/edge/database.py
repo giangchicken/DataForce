@@ -43,7 +43,7 @@ class Database:
         self.lock = Lock()
         self.engines: dict[str, Engine] = {}
 
-    def cached_engine(self) -> Engine | None:
+    def open_engine(self) -> Engine | None:
         """One engine for the process, built on first use. `None` where no DSN is declared.
 
         Whitespace is nothing declared: a variable set to a blank line in a compose file is the
@@ -69,10 +69,10 @@ class Database:
         `None` is an answer every caller handles and not a failure: the store is a place to put
         the result of a review, never a dependency of one.
         """
-        engine = self.cached_engine()
+        engine = self.open_engine()
         if engine is None:
             return None
         return Session(engine)
 
 
-store = Database(DSN_VARIABLE)
+db = Database(DSN_VARIABLE)

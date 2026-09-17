@@ -3,7 +3,7 @@
 Personal data is the one with a body to write, and it is two calls. `detect` is the frame of
 reference every offset indexes, two detectors unioned, and the modality's confirmation over the
 spans they earn. `replace_spans_with_placeholders` is the second, over the spans a human handed
-back, and `decide_replacement_outcome` says how far it got. `replaced_node` is the third: the same
+back, and `decide_replacement_outcome` says how far it got. `replace_node` is the third: the same
 replacement over the record's own fields rather than over the review text, which is where the
 record's `new_` keys come from. What this task reads is the turns
 *and* the catalog, because an argument value in a tool call is where a phone number sits.
@@ -37,7 +37,7 @@ from dataforce.modalities.text2text.data_quality.schema import (
     VerifierModelConfig,
 )
 
-from .utils import conversation_turns, openai_tool_format_to_text
+from .utils import convert_tools_to_text, list_conversation_turns
 
 # The deployment's, on the same terms as `config/model/`: read from the working directory and named
 # for the method that sends it.
@@ -100,7 +100,7 @@ def find_and_number_spans(
     )
 
 
-def span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, str]:
+def read_span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, str]:
     """What stands in for each value, keyed by the value. The one place a span is read.
 
     Keyed by value and not by placeholder, because one value gets one placeholder throughout a
@@ -120,7 +120,7 @@ def span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, st
     }
 
 
-def replaced_text(text: str, placeholders: Mapping[str, str]) -> str:
+def replace_text(text: str, placeholders: Mapping[str, str]) -> str:
     """`text` copied with every value `placeholders` has one for replaced by it, longest first.
 
     Longest first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is
@@ -134,8 +134,8 @@ def replaced_text(text: str, placeholders: Mapping[str, str]) -> str:
     return replaced
 
 
-def replaced_node(node: Any, placeholders: Mapping[str, str]) -> Any:
-    """`node` copied with every string under it replaced the same way `replaced_text` does.
+def replace_node(node: Any, placeholders: Mapping[str, str]) -> Any:
+    """`node` copied with every string under it replaced the same way `replace_text` does.
 
     By value and not by offset, which is what makes the rule runnable here at all: the offsets
     index `review_text`, and `messages`, `tools` and `label` are other strings.
@@ -146,11 +146,11 @@ def replaced_node(node: Any, placeholders: Mapping[str, str]) -> Any:
     boolean and a `null` carry no value to trade back.
     """
     if isinstance(node, str):
-        return replaced_text(node, placeholders)
+        return replace_text(node, placeholders)
     if isinstance(node, Mapping):
-        return {key: replaced_node(value, placeholders) for key, value in node.items()}
+        return {key: replace_node(value, placeholders) for key, value in node.items()}
     if isinstance(node, list | tuple):
-        return [replaced_node(item, placeholders) for item in node]
+        return [replace_node(item, placeholders) for item in node]
     return node
 
 
@@ -161,8 +161,8 @@ def replace_spans_with_placeholders(
 
     `None` where there is nothing to replace, which is what `reported` means.
     """
-    placeholders = span_values(text, spans)
-    return replaced_text(text, placeholders) if placeholders else None
+    placeholders = read_span_values(text, spans)
+    return replace_text(text, placeholders) if placeholders else None
 
 
 def order_claims_by_class(
@@ -210,7 +210,7 @@ def decide_replacement_outcome(
     undecided; that this is not those values redacted is not. A claim with no span at all is
     resolved by the longer value it sat inside.
 
-    The map is `span_values`' own, so a span nothing could be replaced through -- no value at
+    The map is `read_span_values`' own, so a span nothing could be replaced through -- no value at
     those offsets, or no placeholder to put there -- is not in it, and the value it named has to
     be gone from the copy on its own. It is not, because nothing replaced it: `withheld`.
     """
@@ -218,7 +218,7 @@ def decide_replacement_outcome(
         return "reported"
     if redacted is None:
         return "withheld"
-    placeholders = span_values(text, spans)
+    placeholders = read_span_values(text, spans)
     resolved = [
         value
         for _, value in claims
@@ -314,7 +314,7 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
             **self.pii_rule_detector.detect(text, language),
         }
         claims = order_claims_by_class(text, claimed, self.pii_rule_detector.classes)
-        spans = await self.pii_llm_confirm(
+        spans = await self.confirm_pii_by_llm(
             checking_input, text, find_and_number_spans(text, claims)
         )
         return PersonalDataDetected(review_text=text, claims=claims, spans=spans)
@@ -325,8 +325,8 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         The catalog is in it because an argument value in a tool call is where personal data sits,
         and the label because a label is a tool call.
         """
-        turns = conversation_turns(sample)
-        catalog = openai_tool_format_to_text(sample.get("tools") or ())
+        turns = list_conversation_turns(sample)
+        catalog = convert_tools_to_text(sample.get("tools") or ())
         label = json.dumps(sample.get("label"), ensure_ascii=False)
         return "\n".join([*turns, *([catalog] if catalog else []), f"label: {label}"])
 

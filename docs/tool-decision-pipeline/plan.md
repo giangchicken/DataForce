@@ -190,7 +190,7 @@ fewer errors. `uv run python -c "import dataforce.edge.main"` succeeds.
 - The abstract ones are already right and `mypy` never complained: an `@abstractmethod` with `pass`
   is a socket, not an empty body.
 
-`exact_match_consensus` and `llm_judge_consensus` also have `pass` bodies and produce no error,
+`find_exact_match_consensus` and `find_llm_judge_consensus` also have `pass` bodies and produce no error,
 because `None` satisfies `str | None`. They are pending all the same, and T10 writes them.
 
 **Approach.** Three answers, one per situation. `duplicate_groups` returns `DuplicateGroups | None`
@@ -198,7 +198,7 @@ and returns `None` — the pattern its own sibling already states in
 `common_abnormal_checking.py`: *"it returns None rather than an invented shape because a placeholder
 shape is the one thing a caller would start depending on."* Delete
 `ToolDecisionDuplicateChecking.embedding`, whose override adds nothing to the abstract method it
-covers, leaving the class abstract and uninstantiated, which it already is — `duplicate_report`
+covers, leaving the class abstract and uninstantiated, which it already is — `report_duplicates`
 answers `None` without it. Give each of the seven pending bodies `raise NotImplementedError`.
 
 The cost of the seven, stated: a route that reached a `pass` used to answer `null` and now answers
@@ -235,7 +235,7 @@ Nothing checks any of this, which is the actual finding. `E-1` exists because th
 import that breaks the direction, and this restructure proved the point twice: `services/` imported
 `edge/store` — logic reaching for an adapter — and was fixed by hand, and `edge/cli.py` has been
 importing a deleted module for four commits. `tests/guards/tree.py` already has every part such a
-guard needs: `modules_in`, `imports`, `not_exempt`, and the exemption grammar.
+guard needs: `parse_package_modules`, `list_imports`, `drop_exempt_findings`, and the exemption grammar.
 
 While the file is open: `errors.py` cites `Requirement 43`, which in *this* spec is the page's step 8
 and has nothing to do with it. The citation is left over from the deleted spec, and `8a00fdb` is the
@@ -257,7 +257,7 @@ importing an `adapter`. `make check` green.
 cedilla is the spec's, the other six tags and the guard are the rule's.
 
 **Verify.** `uv run pytest tests/guards -q`; then add
-`from dataforce.edge.served_models import served_models` to
+`from dataforce.edge.served_models import list_served_models` to
 `services/tool_decision/data_quality.py`, confirm the guard fails, and revert. (`edge/store` was
 the module this named; T13 deleted it, and the guard's own cases moved with it.)
 
@@ -284,7 +284,7 @@ ordering, pinned against its expected rendering as a literal string.
 renders inline as `Gồm các trường:`; one subfield gaining an enum moves them all to their own lines.
 Two tools render in the order given, not sorted.
 
-**Source.** § *Testing Strategy* — *"`openai_tool_format_to_text` pinned against its known
+**Source.** § *Testing Strategy* — *"`convert_tools_to_text` pinned against its known
 rendering"*; § *Invariants*, the property-order line; Decision 8.
 
 **Verify.** `uv run pytest tests/ -q -k catalog`.
@@ -438,15 +438,15 @@ indent=1))"`.
 **Goal.** A panel of N reaches one answer, or defensibly none.
 
 **Context.** § *Design* says exactly which bodies belong in `modalities/` and why: `verdict`,
-`exact_match_consensus` and `llm_judge_consensus`, *"because a strict majority is arithmetic and
+`find_exact_match_consensus` and `find_llm_judge_consensus`, *"because a strict majority is arithmetic and
 does not change with the question being asked."* `SFTPrediction.verdict` is the fourth, on the same
 grounds — comparing two labels is not a task's answer.
 
-Three rules that are easy to write slightly wrong. `exact_match_consensus` is a **strict majority,
+Three rules that are easy to write slightly wrong. `find_exact_match_consensus` is a **strict majority,
 never a mode** (Requirement 21): two of three is an answer, two of four is `None`. It compares
 answers as canonical text — one whitespace and one key ordering — so two answers that mean the same
 count as one, and `agent_toolkit.string_utils.normalize_text` is the library's, not this code's
-(`I6`). `llm_judge_consensus` runs *only* where the exact match returned `None`, reads the answers
+(`I6`). `find_llm_judge_consensus` runs *only* where the exact match returned `None`, reads the answers
 and not the conversation (Decision 9 — otherwise it is an N+1th juror whose single vote breaks every
 tie), and can only return a string some juror wrote (Requirement 22). `verdict` counts agreement
 over the votes that came back, never over the panel that was asked: a juror that failed is absent,
@@ -461,7 +461,7 @@ event naming the juror, on the same two keys, so a panel that quietly shrank is 
 output rather than only from `label_agreement`.
 
 **Acceptance criteria.** `verdict` calls `predict` once. `label_agreement` is over returned votes.
-`exact_match_consensus` returns only a strict majority. `llm_judge_consensus` is not called when the
+`find_exact_match_consensus` returns only a strict majority. `find_llm_judge_consensus` is not called when the
 exact match found one, and returns only an answer some juror gave. `SFTPrediction.verdict` compares
 two labels and asks no model.
 
@@ -479,7 +479,7 @@ two labels and asks no model.
 
 **Context.** Requirement 24 puts the prompt inside `predict`, in the profile, so the prompt and the
 shape it must return are read in one file. Four slots:
-`{{tool_descriptions}}` from `openai_tool_format_to_text(sample["tools"])` — T5 pins that rendering
+`{{tool_descriptions}}` from `convert_tools_to_text(sample["tools"])` — T5 pins that rendering
 — `{{conversation_history}}` with the turns before the last, `{{user_message}}` with the last one,
 and `{{language}}` from the language the request declared. **The sample's label is not among them**
 (Decision 12): a model shown the label answers about the label.
@@ -490,7 +490,7 @@ language a declaration about the request rather than a key of the record: `ScanR
 `language: Language = "vi"` — symmetric with the scan, and one more thing every caller may declare
 — or the slot goes and the prompt asks in one language. Whichever way, the signatures change:
 `predict(turns, label)` and `rendered_prompt(turns, tools)` carry no language today, and
-`tool_decision_llm_predict` passes the turns and the label and nothing else. `rendered_prompt` also
+`predict_tool_decision_by_llm` passes the turns and the label and nothing else. `rendered_prompt` also
 needs `tools`, which `verdict(turns, label)` never receives — the same threading settles both.
 
 The answer comes back as one JSON object, `{reason, label}`. `label` stays a **string** — the
@@ -530,7 +530,7 @@ answer against the calls in another. It answers a third socket beside `predict` 
 `judge_prediction` -- declared in the modality and left undefined there, because
 `modalities/text2text/` serves any text2text task and cannot know a tool call exists. Reading a
 juror's text back into those calls turned out to be the reverse of a rendering this profile already
-owns, so it landed beside it as `utils.text_to_openai_tool_format`: one definition of what a call
+owns, so it landed beside it as `utils.parse_text_to_tools`: one definition of what a call
 is, in the file that already holds the one definition of what a tool looks like (Decision 8). Most of what a judge was going to be paid to resolve was never a
 disagreement — two jurors spelling one answer differently — and what is left is two genuinely
 different calls, where Decision 9 already says a model would only be casting the deciding vote
@@ -678,7 +678,7 @@ decided on: the table was there because the page needed something to post to.
 `withheld`, or only `redacted` storing), where the redaction runs -- the service the client cannot
 skip, or the page that already computes it -- and what the record's `personal_data` key is, which
 no shape declares: the page merges the detect answer with the replace answer and nothing names that
-container. `span_values` and `replaced_node` read `review_text`, `spans` and the three `new_` keys,
+container. `read_span_values` and `replace_node` read `review_text`, `spans` and the three `new_` keys,
 and are in the history at `1ecd94f`.
 
 **Source.** Requirement 35 and § *Design* as they stood at `1ecd94f`; both now say the store is
@@ -835,7 +835,7 @@ changes when there is one.
 **What this task had to settle, and what was settled.** The three `new_` keys are the human's
 edits with every confirmed value replaced *wherever it occurs* — in `messages` and in `label`, not
 only in `review_text` (Requirements 12, 15, 16). The replace endpoint answers over `review_text`
-alone, and the function that did it across the record, `replaced_node`, was deleted with the store
+alone, and the function that did it across the record, `replace_node`, was deleted with the store
 in T13. Two ways out, and the choice was the user's:
 
 - **The UI replaces by value.** Consistent with Requirement 3 — the page composes the record and
@@ -845,7 +845,7 @@ in T13. Two ways out, and the choice was the user's:
 - **A route answers the redacted record.** ← **chosen** (Decision 24). `POST
   .../data-quality/personal-data/redact` takes the sample as the human left it with the spans they
   handed back under `detected`, and answers the sample copied. The rule is the service's and the
-  UI stays a renderer, so Requirement 45 holds as written; `replaced_node` is back, in
+  UI stays a renderer, so Requirement 45 holds as written; `replace_node` is back, in
   `profile/tool_decision/data_quality.py` beside `replace_spans_with_placeholders`, which is where
   its own docstring had been pointing all along — *"by value and not by offset, because the same
   rule runs again over the record's other fields."* The cost, stated in Decision 24: a route
@@ -901,7 +901,7 @@ surprise. Each is now the behaviour the spec states:
 - **Step 1's check discarded step 7's edits.** Re-checking the same sample refilled the label
   editors from what arrived. It only refills where the sample actually changed.
 
-**Left alone, and why.** A body nested ~1000 deep answers 500 rather than 422 — both `replaced_node`
+**Left alone, and why.** A body nested ~1000 deep answers 500 rather than 422 — both `replace_node`
 and pydantic's serializer give out, and what depth is too deep is a number nobody has decided. A
 placeholder a reviewer types that happens to *be* another span's value chains, making two values
 co-referent; it is the same class as the two redaction conflicts § *Design* already records as

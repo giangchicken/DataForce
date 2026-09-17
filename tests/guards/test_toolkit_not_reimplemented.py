@@ -50,7 +50,13 @@ import pkgutil
 
 import pytest
 
-from .tree import Module, imports, module_from_source, modules_in, not_exempt
+from .tree import (
+    Module,
+    drop_exempt_findings,
+    list_imports,
+    parse_module_source,
+    parse_package_modules,
+)
 
 LIBRARY = "agent_toolkit"
 OWNED_ROOTS = ("jsonschema", "openai", "tiktoken", "yaml")
@@ -61,7 +67,7 @@ RE_IMPLEMENTATION_ROOTS = ("hashlib",)
 NOT_FUNCTIONS = {"agent-toolkit", "remove_tone_marks", "__all__"}
 
 
-def owned_functions() -> frozenset[str]:
+def list_owned_functions() -> frozenset[str]:
     """Every function the installed `agent-toolkit` exports from a front door."""
     package = importlib.import_module(LIBRARY)
     facades = [package] + [
@@ -76,10 +82,10 @@ def owned_functions() -> frozenset[str]:
     )
 
 
-OWNED_FUNCTIONS = owned_functions()
+OWNED_FUNCTIONS = list_owned_functions()
 
 
-def toolkit_findings(module: Module) -> list[str]:
+def find_toolkit_violations(module: Module) -> list[str]:
     """Every function this module defines that the library already owns, and every root it skips to."""
     found = [
         (node.lineno, f"re-implements agent-toolkit's {node.name}()")
@@ -89,21 +95,24 @@ def toolkit_findings(module: Module) -> list[str]:
     ]
     found += [
         (reached.line, f"imports {reached.module}, which agent-toolkit owns")
-        for reached in imports(module)
+        for reached in list_imports(module)
         if reached.module.split(".")[0] in OWNED_ROOTS
     ]
     found += [
-        (reached.line, f"imports {reached.module}: a second compute_hash starts here")
-        for reached in imports(module)
+        (
+            reached.line,
+            f"imports {reached.module}: a second compute_hash starts here",
+        )
+        for reached in list_imports(module)
         if reached.module.split(".")[0] in RE_IMPLEMENTATION_ROOTS
     ]
-    return not_exempt(module, "T-6", found)
+    return drop_exempt_findings(module, "T-6", found)
 
 
-@pytest.mark.parametrize("module", modules_in(), ids=lambda m: m.name)
+@pytest.mark.parametrize("module", parse_package_modules(), ids=lambda m: m.name)
 def test_no_module_re_implements_the_library(module: Module) -> None:
     """T-6, over the whole package. The edge reads files too, and reads them through the library."""
-    assert toolkit_findings(module) == []
+    assert find_toolkit_violations(module) == []
 
 
 @pytest.mark.parametrize(
@@ -147,7 +156,7 @@ def test_the_scan_rejects_a_module_that_does_the_library_s_job(violation: str) -
     `split_thinking` and `read_json` are the two the hand-written tuple let through, kept here as
     the standing proof that the derivation is what makes them findings.
     """
-    assert toolkit_findings(module_from_source(violation)) != []
+    assert find_toolkit_violations(parse_module_source(violation)) != []
 
 
 @pytest.mark.parametrize(
@@ -167,7 +176,7 @@ def test_the_scan_permits_using_the_library(permitted: str) -> None:
     business and not a name this package is forbidden. The rule stops where the library's public
     surface does.
     """
-    assert toolkit_findings(module_from_source(permitted)) == []
+    assert find_toolkit_violations(parse_module_source(permitted)) == []
 
 
 def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
@@ -177,4 +186,4 @@ def test_an_annotated_exemption_covers_a_digest_over_bytes() -> None:
         "  # guard-exempt: T-6 · a media digest is over bytes · the modality · 2026-08-24"
     )
 
-    assert toolkit_findings(module_from_source(excused)) == []
+    assert find_toolkit_violations(parse_module_source(excused)) == []

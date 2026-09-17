@@ -35,7 +35,7 @@ from dataforce.profile.tool_decision.ai_review import (
     ToolDecisionLLMPrediction,
     ToolDecisionSFTPrediction,
 )
-from dataforce.profile.tool_decision.utils import openai_tool_format_to_text
+from dataforce.profile.tool_decision.utils import convert_tools_to_text
 
 OPEN_TICKET = '[{"name": "OpenTicket", "arguments": {"ma_khach": "KH-1"}}]'
 # The same call, spelled the way a second model happens to write it: no spaces, keys the other way
@@ -72,7 +72,7 @@ TOOLS: tuple[Mapping[str, Any], ...] = (
 )
 
 # The record as a corpus carries it, built from the turns above so the two cannot disagree:
-# `conversation_turns(SAMPLE)` is `TURNS`, which is what the prompt assertions read.
+# `list_conversation_turns(SAMPLE)` is `TURNS`, which is what the prompt assertions read.
 SAMPLE: Mapping[str, Any] = {
     "messages": tuple(
         {"role": role, "content": content}
@@ -102,7 +102,7 @@ def resolvable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_review, "resolve_config", resolving)
 
 
-def panel(*jurors: str) -> ToolDecisionLLMPrediction:
+def build_panel(*jurors: str) -> ToolDecisionLLMPrediction:
     """A real panel over the models named."""
     return ToolDecisionLLMPrediction([LLMModelConfig(model=name) for name in jurors])
 
@@ -143,7 +143,7 @@ class StubbedPanel(ToolDecisionLLMPrediction):
         return self.judged
 
 
-def answering(
+def install_model_answers(
     monkeypatch: pytest.MonkeyPatch,
     *,
     voted: Mapping[str, Any],
@@ -166,12 +166,12 @@ def answering(
     monkeypatch.setattr(ai_review, "complete", answered)
 
 
-def voting(label: Any, reason: str = "stubbed") -> Mapping[str, Any]:
+def build_vote(label: Any, reason: str = "stubbed") -> Mapping[str, Any]:
     """What `tool_prediction.txt` asks a juror for, as the shape it asks for it in."""
     return {"reason": reason, "label": label}
 
 
-def section(prompt: str, heading: str) -> list[str]:
+def read_section(prompt: str, heading: str) -> list[str]:
     """The lines under one `## heading`, up to the next blank line.
 
     Read positionally on purpose: a prompt with the language where the turns should be contains
@@ -182,7 +182,7 @@ def section(prompt: str, heading: str) -> list[str]:
     return list(takewhile(lambda line: line.strip(), after))
 
 
-def events_on(captured: pytest.CaptureFixture[str]) -> list[Mapping[str, Any]]:
+def read_events(captured: pytest.CaptureFixture[str]) -> list[Mapping[str, Any]]:
     """The events one call wrote, read back as the objects a deployment reads (`H-6`)."""
     return [json.loads(line) for line in captured.readouterr().out.splitlines()]
 
@@ -192,14 +192,16 @@ def events_on(captured: pytest.CaptureFixture[str]) -> list[Mapping[str, Any]]:
 
 async def test_two_of_three_matching_is_the_panel_s_answer() -> None:
     """A strict majority, in the one case it and a mode agree about."""
-    said = StubbedPanel().exact_match_consensus([OPEN_TICKET, OPEN_TICKET, NO_TOOL])
+    said = StubbedPanel().find_exact_match_consensus(
+        [OPEN_TICKET, OPEN_TICKET, NO_TOOL]
+    )
 
     assert said == OPEN_TICKET
 
 
 async def test_two_and_two_is_no_answer() -> None:
     """A strict majority and never a mode: two of four is half, and half is not more than half."""
-    said = StubbedPanel().exact_match_consensus(
+    said = StubbedPanel().find_exact_match_consensus(
         [OPEN_TICKET, OPEN_TICKET, NO_TOOL, NO_TOOL]
     )
 
@@ -211,7 +213,7 @@ async def test_a_mode_that_is_not_a_strict_majority_is_no_answer() -> None:
 
     Two of five is the most-given answer and is not the panel's: three jurors said something else.
     """
-    said = StubbedPanel().exact_match_consensus(
+    said = StubbedPanel().find_exact_match_consensus(
         [OPEN_TICKET, OPEN_TICKET, NO_TOOL, CLOSE_TICKET, "[{}]"]
     )
 
@@ -224,7 +226,7 @@ async def test_two_answers_that_mean_the_same_count_as_one() -> None:
     Compared as written, these are three different strings and the panel has no answer. What comes
     back is the answer as the juror wrote it, not the canonical form nothing was written in.
     """
-    said = StubbedPanel().exact_match_consensus(
+    said = StubbedPanel().find_exact_match_consensus(
         [OPEN_TICKET, OPEN_TICKET_TIGHT, NO_TOOL]
     )
 
@@ -233,12 +235,12 @@ async def test_two_answers_that_mean_the_same_count_as_one() -> None:
 
 async def test_a_panel_of_one_is_its_own_majority() -> None:
     """One config is a panel of one, and one answer is more than half of one."""
-    assert StubbedPanel().exact_match_consensus([NO_TOOL]) == NO_TOOL
+    assert StubbedPanel().find_exact_match_consensus([NO_TOOL]) == NO_TOOL
 
 
 async def test_nothing_answered_is_no_answer() -> None:
     """Every juror failing, seen from the arithmetic: no votes to count a majority over."""
-    assert StubbedPanel().exact_match_consensus([]) is None
+    assert StubbedPanel().find_exact_match_consensus([]) is None
 
 
 # ----------------------------------------------------------------- what the panel said
@@ -253,7 +255,7 @@ async def test_agreement_is_counted_over_the_votes_that_came_back() -> None:
     """
     panel_of_three = StubbedPanel(OPEN_TICKET, NO_TOOL, silent=1)
 
-    said = await panel_of_three.verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await panel_of_three.reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert len(panel_of_three.jurors) == 3
     assert [vote.label for vote in said.votes] == [OPEN_TICKET, NO_TOOL]
@@ -262,7 +264,9 @@ async def test_agreement_is_counted_over_the_votes_that_came_back() -> None:
 
 async def test_agreement_reads_the_label_the_way_the_answers_are_read() -> None:
     """The label arrives as JSON and a juror answers in JSON, so one spelling is not a disagreement."""
-    said = await StubbedPanel(OPEN_TICKET_TIGHT).verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await StubbedPanel(OPEN_TICKET_TIGHT).reach_verdict(
+        SAMPLE, OPEN_TICKET, "vi"
+    )
 
     assert said.label_agreement == 1.0
 
@@ -271,7 +275,7 @@ async def test_every_juror_failing_is_a_verdict_and_not_an_exception(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """§ *Error Behavior*, the second bullet: no votes, `0.0`, `None`, and one event per juror."""
-    answering(
+    install_model_answers(
         monkeypatch,
         voted={
             JUROR: RuntimeError("the endpoint hung up"),
@@ -279,12 +283,12 @@ async def test_every_juror_failing_is_a_verdict_and_not_an_exception(
         },
     )
 
-    said = await panel(JUROR, SECOND).verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await build_panel(JUROR, SECOND).reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.votes == ()
     assert said.label_agreement == 0.0
     assert said.consensus is None
-    events = events_on(capsys)
+    events = read_events(capsys)
     assert [event["event"] for event in events] == ["tool_prediction_failed"] * 2
     assert {event["model"] for event in events} == {JUROR, SECOND}
     assert all("RuntimeError" in event["error"] for event in events)
@@ -297,7 +301,7 @@ async def test_the_judge_is_not_asked_where_the_exact_match_answered() -> None:
     """§ *Design*: only where that is `None` does `verdict` ask the judge."""
     agreeing = StubbedPanel(OPEN_TICKET, OPEN_TICKET, judged=NO_TOOL)
 
-    said = await agreeing.verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await agreeing.reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus == OPEN_TICKET
     assert agreeing.asked == []
@@ -311,7 +315,7 @@ async def test_the_judge_breaks_a_tie_with_the_answer_the_juror_wrote() -> None:
     """
     tied = StubbedPanel(OPEN_TICKET, CLOSE_TICKET, judged=OPEN_TICKET_TIGHT)
 
-    said = await tied.verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await tied.reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert tied.asked == [(OPEN_TICKET, CLOSE_TICKET)]
     assert said.consensus == OPEN_TICKET
@@ -325,7 +329,7 @@ async def test_a_judge_answer_no_juror_wrote_is_refused() -> None:
     """
     tied = StubbedPanel(OPEN_TICKET, CLOSE_TICKET, judged='[{"name": "Escalate"}]')
 
-    said = await tied.verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await tied.reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus is None
 
@@ -340,14 +344,14 @@ async def test_this_task_asks_no_judge_and_pays_for_no_call_to_say_so(
     conversation; what the record carries instead is a panel that disagreed.
     """
     prompts: list[str] = []
-    answering(
+    install_model_answers(
         monkeypatch,
-        voted={JUROR: voting([{"name": "OpenTicket"}]), SECOND: voting([])},
+        voted={JUROR: build_vote([{"name": "OpenTicket"}]), SECOND: build_vote([])},
         prompts=prompts,
     )
-    asked = panel(JUROR, SECOND)
+    asked = build_panel(JUROR, SECOND)
 
-    said = await asked.verdict(SAMPLE, OPEN_TICKET, "vi")
+    said = await asked.reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
     assert said.consensus is None
     assert await asked.judge_prediction([OPEN_TICKET, NO_TOOL]) is None
@@ -366,15 +370,15 @@ async def test_one_vote_per_juror_that_answered_names_the_juror_asked(
     the calls in it are the same calls, and the field is text.
     """
     calls = [{"name": "OpenTicket", "arguments": {"ma_khach": "KH-1"}}]
-    answering(
+    install_model_answers(
         monkeypatch,
         voted={
-            JUROR: voting(calls, reason="Khách đã cho mã."),
-            SECOND: voting([], reason="Chưa đủ thông tin."),
+            JUROR: build_vote(calls, reason="Khách đã cho mã."),
+            SECOND: build_vote([], reason="Chưa đủ thông tin."),
         },
     )
 
-    votes = await panel(JUROR, SECOND).predict(SAMPLE, "vi")
+    votes = await build_panel(JUROR, SECOND).predict(SAMPLE, "vi")
 
     assert [vote.model_name for vote in votes] == [JUROR, SECOND]
     assert [vote.reason for vote in votes] == ["Khách đã cho mã.", "Chưa đủ thông tin."]
@@ -400,12 +404,12 @@ async def test_a_juror_that_did_not_answer_the_shape_is_absent(
     An empty-label vote is the cheapest wrong implementation: it agrees with nothing, so it drags
     `label_agreement` down and reads as a juror that disagreed rather than one that failed.
     """
-    answering(monkeypatch, voted={JUROR: resp, SECOND: voting([])})
+    install_model_answers(monkeypatch, voted={JUROR: resp, SECOND: build_vote([])})
 
-    votes = await panel(JUROR, SECOND).predict(SAMPLE, "vi")
+    votes = await build_panel(JUROR, SECOND).predict(SAMPLE, "vi")
 
     assert [vote.model_name for vote in votes] == [SECOND]
-    events = events_on(capsys)
+    events = read_events(capsys)
     assert [event["event"] for event in events] == ["tool_prediction_failed"]
     assert events[0]["model"] == JUROR
 
@@ -418,7 +422,7 @@ async def test_the_settings_a_request_declared_reach_the_call(
 
     async def answered(prompt: str, **kwargs: Any) -> str:
         asked.update(kwargs)
-        return json.dumps(voting([]))
+        return json.dumps(build_vote([]))
 
     monkeypatch.setattr(ai_review, "complete", answered)
     declared = LLMModelConfig(model=JUROR, settings={"temperature": 0.0})
@@ -441,13 +445,13 @@ async def test_the_prediction_prompt_carries_the_catalog_the_turns_and_the_langu
     prompt that reads as nonsense and passes a containment check. The last turn is the question
     and the ones before it are the history, so a juror is not asked about the turn it cannot see.
     """
-    prompt = panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
+    prompt = build_panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
 
     assert "{{" not in prompt
-    assert section(prompt, "## Conversation History") == list(TURNS[:-1])
-    assert section(prompt, "## Customer's Latest Message") == [TURNS[-1]]
-    assert section(prompt, "## Conversation Language") == ["vi"]
-    assert openai_tool_format_to_text(TOOLS) in prompt
+    assert read_section(prompt, "## Conversation History") == list(TURNS[:-1])
+    assert read_section(prompt, "## Customer's Latest Message") == [TURNS[-1]]
+    assert read_section(prompt, "## Conversation Language") == ["vi"]
+    assert convert_tools_to_text(TOOLS) in prompt
     assert "OpenTicket" in prompt
     assert "ma_khach" in prompt
 
@@ -458,7 +462,7 @@ async def test_the_prediction_prompt_is_the_sample_s_and_holds_no_label() -> Non
     A model shown the label answers about the label, and the signal this service runs on is a
     model answering the sample's own question -- so the label reaches no slot, by any spelling.
     """
-    prompt = panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
+    prompt = build_panel(JUROR).build_tool_prediction_prompt(SAMPLE, "vi")
 
     assert OPEN_TICKET not in prompt
     assert "KH-1" in prompt  # the customer said it; that is the turn, not the label
@@ -473,11 +477,11 @@ async def test_a_missing_prompt_is_not_a_failed_call(
     The prompt is built outside the `try` for exactly this: a deployment with no prompt file would
     otherwise ask every juror nothing and report itself as a provider having a bad day.
     """
-    answering(monkeypatch, voted={JUROR: voting([])})
+    install_model_answers(monkeypatch, voted={JUROR: build_vote([])})
     monkeypatch.setattr(ai_review, "TOOL_PREDICTION_PROMPT", Path("nowhere.txt"))
 
     with pytest.raises(ConfigError, match="nowhere.txt"):
-        await panel(JUROR).verdict(SAMPLE, OPEN_TICKET, "vi")
+        await build_panel(JUROR).reach_verdict(SAMPLE, OPEN_TICKET, "vi")
 
 
 # ----------------------------------------------------------------- the calls, matched
@@ -536,7 +540,7 @@ def test_two_answers_are_one_when_the_calls_in_them_are_the_same_calls(
 
     Read off the panel, which is the class that holds the rule.
     """
-    matching = panel(JUROR)
+    matching = build_panel(JUROR)
 
     assert (
         matching.normalize_prediction(one) == matching.normalize_prediction(other)
@@ -553,7 +557,7 @@ async def test_the_same_calls_in_two_orders_are_a_majority_and_ask_no_judge() ->
         BOTH_CALLS, BOTH_CALLS_REVERSED, CLOSE_TICKET, judged=CLOSE_TICKET
     )
 
-    said = await panel_of_three.verdict(SAMPLE, BOTH_CALLS, "vi")
+    said = await panel_of_three.reach_verdict(SAMPLE, BOTH_CALLS, "vi")
 
     assert said.consensus == BOTH_CALLS
     assert said.label_agreement == pytest.approx(2 / 3)

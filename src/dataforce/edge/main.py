@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .events import structured_events
+from .events import install_structured_events
 from .routers import tool_decision_router
 from .served_models import register_resolver
 
@@ -27,7 +27,7 @@ def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
     # The library's own records to stderr, as it formats them; this codebase's to stdout as
     # events (`H-6`).
     configure_logging(level=logging.INFO)
-    structured_events(level=logging.INFO)
+    install_structured_events(level=logging.INFO)
     register_resolver()
     app = FastAPI(
         title="DataForce",
@@ -41,7 +41,7 @@ def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
     )
 
     @app.get("/health", summary="is the process up")
-    def health() -> dict[str, str]:
+    def get_health() -> dict[str, str]:
         return {"status": "ok"}
 
     app.include_router(tool_decision_router)

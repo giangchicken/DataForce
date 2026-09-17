@@ -17,11 +17,11 @@ from threading import Barrier
 import pytest
 from sqlalchemy import Engine
 
-from dataforce.edge.database import Base, store
-from dataforce.profile.tool_decision.dataset_management import (
+from dataforce.edge.database import Base, db
+from dataforce.profile.tool_decision.schema import (
     ToolDecisionDataset,
     ToolDecisionRecord,
-    created_tables,
+    create_tables,
 )
 
 WROTE_AT = datetime(2026, 9, 16, 15, 30, 45)
@@ -45,15 +45,15 @@ def test_an_undeclared_dsn_is_a_state_and_nothing_raises(
     else:
         monkeypatch.setenv("DATAFORCE_DATABASE_URL", declared)
 
-    assert store.cached_engine() is None
-    assert store.open_session() is None
+    assert db.open_engine() is None
+    assert db.open_session() is None
 
 
 def test_a_time_comes_back_the_way_it_was_written(store_engine: Engine) -> None:
     """Same value on either dialect, because nothing between here and the column converts it."""
-    created_tables(store_engine)
+    create_tables(store_engine)
     key = uuid.uuid4()
-    writing = store.open_session()
+    writing = db.open_session()
     assert writing is not None
     with writing, writing.begin():
         writing.add(
@@ -62,7 +62,7 @@ def test_a_time_comes_back_the_way_it_was_written(store_engine: Engine) -> None:
             )
         )
 
-    reading = store.open_session()
+    reading = db.open_session()
     assert reading is not None
     with reading:
         stored = reading.get(ToolDecisionRecord, key)
@@ -89,7 +89,7 @@ def test_eight_threads_through_a_cold_cache_get_one_engine(
 
     def one_engine(_: int) -> Engine | None:
         together.wait()
-        return store.cached_engine()
+        return db.open_engine()
 
     with ThreadPoolExecutor(max_workers=THREADS) as threads:
         built = list(threads.map(one_engine, range(THREADS)))
@@ -104,12 +104,12 @@ def test_a_changed_dsn_releases_the_pool_the_old_one_held(
     first_path = tmp_path_factory.mktemp("first") / "store.sqlite3"
     second_path = tmp_path_factory.mktemp("second") / "store.sqlite3"
     monkeypatch.setenv("DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{first_path}")
-    first = store.cached_engine()
+    first = db.open_engine()
     assert first is not None
     held = first.pool
 
     monkeypatch.setenv("DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{second_path}")
-    second = store.cached_engine()
+    second = db.open_engine()
 
     assert second is not first
     assert first.pool is not held

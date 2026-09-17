@@ -10,7 +10,12 @@ The ID is `AGENTS.md`'s, which is the only scheme anything defines: `E-4` is wha
 carry. An exemption excuses the rule it names and no other.
 """
 
-from .tree import exemptions, malformed_exemptions, module_from_source, modules_in
+from .tree import (
+    find_malformed_exemptions,
+    list_exemptions,
+    parse_module_source,
+    parse_package_modules,
+)
 
 WELL_FORMED = "import os  # guard-exempt: T-6 · the reason · the owner · 2026-08-23"
 BY_RULE = "import os  # guard-exempt: H-8 · the reason · the owner · 2026-09-07"
@@ -19,26 +24,26 @@ CEILING = 5
 
 def test_no_exemption_is_missing_its_reason_its_owner_or_its_date() -> None:
     """A hatch without an owner is a hatch nobody can close."""
-    assert malformed_exemptions(modules_in()) == []
+    assert find_malformed_exemptions(parse_package_modules()) == []
 
 
 def test_the_list_is_short() -> None:
     """The exemption list: short, dated and shrinking. Raising this number is a decision, not a fix."""
-    standing = exemptions(modules_in())
+    standing = list_exemptions(parse_package_modules())
 
     assert len(standing) <= CEILING, f"{len(standing)} exemptions: {standing}"
 
 
 def test_a_well_formed_exemption_is_read_as_one() -> None:
     """Proved red, for the mechanism itself."""
-    assert exemptions([module_from_source(WELL_FORMED)]) != []
-    assert malformed_exemptions([module_from_source(WELL_FORMED)]) == []
+    assert list_exemptions([parse_module_source(WELL_FORMED)]) != []
+    assert find_malformed_exemptions([parse_module_source(WELL_FORMED)]) == []
 
 
 def test_an_exemption_may_name_a_rule_of_agents_md_rather_than_an_invariant() -> None:
     """`test_import_direction.py` enforces `H-8`, so `H-8` is what a line there has to name."""
-    assert exemptions([module_from_source(BY_RULE)]) != []
-    assert malformed_exemptions([module_from_source(BY_RULE)]) == []
+    assert list_exemptions([parse_module_source(BY_RULE)]) != []
+    assert find_malformed_exemptions([parse_module_source(BY_RULE)]) == []
 
 
 def test_an_exemption_missing_a_field_is_caught_rather_than_ignored() -> None:
@@ -54,7 +59,7 @@ def test_an_exemption_missing_a_field_is_caught_rather_than_ignored() -> None:
         "import os  # guard-exempt: I6 · the reason · the owner · 2026-09-07",
         "import os  # guard-exempt: X-9 · the reason · the owner · 2026-09-07",
     ):
-        module = module_from_source(missing)
+        module = parse_module_source(missing)
 
-        assert malformed_exemptions([module]) != [], missing
-        assert exemptions([module]) == [], missing
+        assert find_malformed_exemptions([module]) != [], missing
+        assert list_exemptions([module]) == [], missing

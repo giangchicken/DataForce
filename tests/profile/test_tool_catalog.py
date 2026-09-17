@@ -1,4 +1,4 @@
-"""`openai_tool_format_to_text` pinned against its known rendering.
+"""`convert_tools_to_text` pinned against its known rendering.
 
 One renderer stands behind both halves of the flow, so a reviewer and a juror cannot
 disagree about the catalog they read. That makes this text a contract with two parties and no
@@ -21,7 +21,7 @@ whole-catalog pin documents a rule without holding it.
 
 import pytest
 
-from dataforce.profile.tool_decision.utils import openai_tool_format_to_text
+from dataforce.profile.tool_decision.utils import convert_tools_to_text
 
 # `add_bag` is given second, so the pinned order is not also the alphabetical one.
 TOOLS = [
@@ -106,7 +106,9 @@ params:
 {}"""
 
 
-def one_tool(properties: dict[str, object], required: list[str]) -> dict[str, object]:
+def build_one_tool(
+    properties: dict[str, object], required: list[str]
+) -> dict[str, object]:
     """One tool holding nothing but the params a case is about."""
     return {
         "name": "f",
@@ -118,9 +120,9 @@ def one_tool(properties: dict[str, object], required: list[str]) -> dict[str, ob
     }
 
 
-def passenger_tool(phone: dict[str, object]) -> dict[str, object]:
+def build_passenger_tool(phone: dict[str, object]) -> dict[str, object]:
     """One object param whose `phone` subfield is what a deepening case changes."""
-    return one_tool(
+    return build_one_tool(
         {
             "passenger": {
                 "type": "object",
@@ -135,7 +137,7 @@ def passenger_tool(phone: dict[str, object]) -> dict[str, object]:
 
 def test_the_catalog_renders_character_for_character() -> None:
     """The whole contract, pinned. A change to any character of it is a change to this literal."""
-    assert openai_tool_format_to_text(TOOLS) == RENDERED
+    assert convert_tools_to_text(TOOLS) == RENDERED
 
 
 def test_a_required_param_carrying_a_default_is_optional_and_unmarked() -> None:
@@ -144,12 +146,12 @@ def test_a_required_param_carrying_a_default_is_optional_and_unmarked() -> None:
     Its own fixture, where `where` is the only required param declared -- so a rendering that
     marked it has nothing else to hide behind.
     """
-    tool = one_tool(
+    tool = build_one_tool(
         {"where": {"type": "string", "description": "Ở đâu.", "default": "Hà Nội"}},
         ["where"],
     )
 
-    assert openai_tool_format_to_text([tool]) == (
+    assert convert_tools_to_text([tool]) == (
         "[f]\n"
         "require: \n"
         "params:\n"
@@ -159,14 +161,14 @@ def test_a_required_param_carrying_a_default_is_optional_and_unmarked() -> None:
 
 def test_a_required_subfield_carrying_a_default_is_optional_too() -> None:
     """The same rule one level down, where a second `required` list applies it."""
-    assert openai_tool_format_to_text(
-        [passenger_tool({"type": "string", "default": "+84"})]
+    assert convert_tools_to_text(
+        [build_passenger_tool({"type": "string", "default": "+84"})]
     ) == DEEPENED.format("    phone (string): Nếu khách không đề cập, mặc định là +84.")
 
 
 def test_plain_string_subfields_render_inline() -> None:
     """`Gồm các trường` holds names and a `*`, which is all these subfields carry."""
-    assert openai_tool_format_to_text([passenger_tool({"type": "string"})]) == (
+    assert convert_tools_to_text([build_passenger_tool({"type": "string"})]) == (
         "[f]\n"
         "require: passenger\n"
         "params:\n"
@@ -208,7 +210,7 @@ def test_one_subfield_gaining_anything_moves_them_all_to_their_own_lines(
     Its deeper line then shows no enum -- the values are read from `items` only for a declared
     `array` -- so the trigger fires and prints nothing. Pinned as it behaves, and reported.
     """
-    assert openai_tool_format_to_text([passenger_tool(phone)]) == DEEPENED.format(line)
+    assert convert_tools_to_text([build_passenger_tool(phone)]) == DEEPENED.format(line)
 
 
 @pytest.mark.parametrize(
@@ -231,9 +233,9 @@ def test_a_default_is_written_the_way_a_reviewer_reads_it(
     Both reach a model in a prompt, so `str()` on either is a rendering a reviewer and a juror read
     differently from the schema they came from.
     """
-    tool = one_tool({"p": {"type": "string", "default": default}}, [])
+    tool = build_one_tool({"p": {"type": "string", "default": default}}, [])
 
-    assert openai_tool_format_to_text([tool]) == (
+    assert convert_tools_to_text([tool]) == (
         "[f]\n"
         "require: \n"
         "params:\n"
@@ -243,8 +245,8 @@ def test_a_default_is_written_the_way_a_reviewer_reads_it(
 
 def test_two_tools_render_in_the_order_given() -> None:
     """The blocks follow the array: a sort fails the first line, a reversal the second."""
-    assert openai_tool_format_to_text(TOOLS).startswith("[book_flight]")
-    assert openai_tool_format_to_text(list(reversed(TOOLS))).startswith("[add_bag]")
+    assert convert_tools_to_text(TOOLS).startswith("[book_flight]")
+    assert convert_tools_to_text(list(reversed(TOOLS))).startswith("[add_bag]")
 
 
 def test_property_order_is_the_order_declared() -> None:
@@ -254,7 +256,7 @@ def test_property_order_is_the_order_declared() -> None:
     the properties renders `second, first`. Both spellings re-render byte-identically, and only one
     of them is the catalog the tools declare.
     """
-    tool = one_tool(
+    tool = build_one_tool(
         {
             "first": {"type": "string", "description": "Một."},
             "second": {"type": "string", "description": "Hai."},
@@ -262,7 +264,7 @@ def test_property_order_is_the_order_declared() -> None:
         ["second", "first"],
     )
 
-    assert openai_tool_format_to_text([tool]) == (
+    assert convert_tools_to_text([tool]) == (
         "[f]\n"
         "require: first, second\n"
         "params:\n"
@@ -280,4 +282,4 @@ def test_an_entry_without_a_name_is_left_out_and_the_rest_still_render() -> None
         {"name": "b"},
     ]
 
-    assert openai_tool_format_to_text(entries) == "[a]\n\n[b]"
+    assert convert_tools_to_text(entries) == "[a]\n\n[b]"

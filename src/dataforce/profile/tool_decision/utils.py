@@ -2,8 +2,8 @@
 
 The two renderings live here for the same reason: two definitions of what a turn is,
 or of what a tool looks like, would let a juror and a reviewer disagree about the text they were
-shown, and nothing would say so. `conversation_turns` is the turns; the catalog is the rest of the
-file below it, and `text_to_openai_tool_format` at the end reads the other way -- text a model
+shown, and nothing would say so. `list_conversation_turns` is the turns; the catalog is the rest of the
+file below it, and `parse_text_to_tools` at the end reads the other way -- text a model
 wrote, back into the format -- so that what a call *is* is also defined once.
 
     [tool_name]
@@ -27,7 +27,7 @@ from agent_toolkit.string_utils import extract_json_from_text
 SPACES_PER_LEVEL = 2
 
 
-def conversation_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
+def list_conversation_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
     """The conversation as the flat turns every part reads, `role: content` per message."""
     return tuple(
         f"{turn.get('role', '')}: {turn.get('content', '')}"
@@ -35,7 +35,7 @@ def conversation_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def default_values_line(value: Any) -> str:
+def build_default_values_line(value: Any) -> str:
     """One default as a reviewer reads it: a boolean stays `true`/`false`, an empty list `[]`."""
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -44,7 +44,7 @@ def default_values_line(value: Any) -> str:
     return str(value)
 
 
-def subfields_lines(spec: Mapping[str, Any]) -> bool:
+def needs_subfield_lines(spec: Mapping[str, Any]) -> bool:
     """True where a subfield carries what `Gồm các trường` cannot hold.
 
     That inline form holds names and a `*`, nothing else, so a type other than string -- a nested
@@ -61,7 +61,7 @@ def subfields_lines(spec: Mapping[str, Any]) -> bool:
     return False
 
 
-def named_function(entry: Any) -> Mapping[str, Any] | None:
+def read_named_function(entry: Any) -> Mapping[str, Any] | None:
     """The function one entry holds, wrapped in `{"type", "function"}` or on its own.
 
     `None` where the entry names none, because an unreadable tool or call is one entry left out
@@ -75,7 +75,7 @@ def named_function(entry: Any) -> Mapping[str, Any] | None:
     return None
 
 
-def required_parameters(spec: Mapping[str, Any]) -> set[str]:
+def list_required_parameters(spec: Mapping[str, Any]) -> set[str]:
     """The params a call must supply: `required`, less any that declares a `default`.
 
     A required param carrying a default is the contradiction the docstring above names: the default
@@ -89,7 +89,7 @@ def required_parameters(spec: Mapping[str, Any]) -> set[str]:
     }
 
 
-def param_lines(
+def build_param_lines(
     name: str,
     spec: Mapping[str, Any],
     required: set[str],
@@ -100,7 +100,7 @@ def param_lines(
     described = (spec.get("description") or "").strip()
     fields = spec.get("properties") or {}
     is_object = typed == "object" and bool(fields)
-    deeper = is_object and subfields_lines(spec)
+    deeper = is_object and needs_subfield_lines(spec)
 
     if is_object and not deeper:
         sub = set(spec.get("required") or [])
@@ -115,23 +115,23 @@ def param_lines(
     if values:
         line += f" Giá trị khả dụng: {', '.join(map(str, values))}."
     if "default" in spec:
-        line += f" Nếu khách không đề cập, mặc định là {default_values_line(spec['default'])}."
+        line += f" Nếu khách không đề cập, mặc định là {build_default_values_line(spec['default'])}."
 
     lines = [line]
     if deeper:
-        sub_required = required_parameters(spec)
+        sub_required = list_required_parameters(spec)
         for field, field_spec in fields.items():
-            lines += param_lines(
+            lines += build_param_lines(
                 field, field_spec or {}, sub_required, indent + SPACES_PER_LEVEL
             )
     return lines
 
 
-def tool_block(function: Mapping[str, Any]) -> str:
+def build_tool_block(function: Mapping[str, Any]) -> str:
     """One tool written out: its name, its description verbatim, and its params."""
     parameters = function.get("parameters") or {}
     properties = parameters.get("properties") or {}
-    required = required_parameters(parameters)
+    required = list_required_parameters(parameters)
     block = [f"[{function['name']}]"]
     described = (function.get("description") or "").strip()
     if described:
@@ -141,28 +141,28 @@ def tool_block(function: Mapping[str, Any]) -> str:
         block.append("require: " + ", ".join(n for n in properties if n in required))
         block.append("params:")
         for name, spec in properties.items():
-            block += param_lines(name, spec or {}, required)
+            block += build_param_lines(name, spec or {}, required)
     return "\n".join(block)
 
 
-def openai_tool_format_to_text(tools: Sequence[Any]) -> str:
+def convert_tools_to_text(tools: Sequence[Any]) -> str:
     """Every tool written out, one block each, blank line between them.
 
     An entry is `{"type": "function", "function": {...}}` or the function on its own. One without a
     name is left out -- an unreadable tool is one entry, not a reason to render none of them.
     """
     blocks = [
-        tool_block(function)
+        build_tool_block(function)
         for entry in tools
-        if (function := named_function(entry)) is not None
+        if (function := read_named_function(entry)) is not None
     ]
     return "\n\n".join(blocks)
 
 
-def text_to_openai_tool_format(text: str) -> tuple[dict[str, Any], ...]:
+def parse_text_to_tools(text: str) -> tuple[dict[str, Any], ...]:
     """The calls in what a model wrote, as OpenAI tool-call entries. `()` where it wrote none.
 
-    The other direction of `openai_tool_format_to_text`, and lenient in the same way: an entry may
+    The other direction of `convert_tools_to_text`, and lenient in the same way: an entry may
     be `{"type": "function", "function": {...}}` or the call on its own, and one without a name is
     left out rather than costing the rest. `extract_json_from_text`, so an array with prose around
     it is still those calls.
@@ -176,7 +176,7 @@ def text_to_openai_tool_format(text: str) -> tuple[dict[str, Any], ...]:
     parsed_json = extract_json_from_text(text)
     calls: list[dict[str, Any]] = []
     for one in parsed_json if isinstance(parsed_json, list) else [parsed_json]:
-        function = named_function(one)
+        function = read_named_function(one)
         if function is None:
             continue
         # Read the text a provider writes, then write every call's arguments back as that text:

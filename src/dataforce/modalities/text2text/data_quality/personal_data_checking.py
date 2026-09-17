@@ -2,7 +2,7 @@
 
 `detect` is the socket, and it is given `PersonalDataCheckingInput`. What has a body here is what
 every task this modality serves shares: `PiiRuleDetector`, and the confirmation -- `PiiLlmConfirmer`
-with `pii_llm_confirm` and the prompt they send. Which model confirms is the task's, and arrives as
+with `confirm_pii_by_llm` and the prompt they send. Which model confirms is the task's, and arrives as
 the declaration a request carried.
 """
 
@@ -145,7 +145,7 @@ class PersonalDataChecking(ABC):
                 " the same terms as config/model/"
             )
 
-        def span_lines(text: str, spans: Sequence[PersonalDataSpan]) -> str:
+        def build_span_lines(text: str, spans: Sequence[PersonalDataSpan]) -> str:
             """The spans as a prompt carries them: one `id | CLASS | value` per line."""
             return "\n".join(
                 f"{span.id} | {span.personal_data_class} | {text[span.start : span.end]}"
@@ -157,11 +157,11 @@ class PersonalDataChecking(ABC):
             {
                 "language": checking_input.language,
                 "review_text": text,
-                "spans": span_lines(text, spans),
+                "spans": build_span_lines(text, spans),
             },
         )
 
-    async def pii_llm_confirm(
+    async def confirm_pii_by_llm(
         self,
         checking_input: PersonalDataCheckingInput,
         text: str,

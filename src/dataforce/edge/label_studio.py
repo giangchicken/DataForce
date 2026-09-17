@@ -30,7 +30,7 @@ class SyncCounts(BaseModel):
     )
 
 
-def client() -> Any:
+def build_client() -> Any:
     """The Label Studio client this deployment declared.
 
     The import is here rather than at the top: `label-studio-sdk` is an extra, and importing it at
@@ -52,7 +52,7 @@ def client() -> Any:
     return LabelStudio(base_url=url, api_key=key)  # type: ignore[no-untyped-call]
 
 
-def held_by(tool: Any, project_id: str) -> dict[str, str]:
+def list_held_tasks(tool: Any, project_id: str) -> dict[str, str]:
     """The task id the project already holds, by `sample_id`. What makes a re-push a no-op."""
     held: dict[str, str] = {}
     for task in tool.tasks.list(project=int(project_id)):
@@ -63,10 +63,12 @@ def held_by(tool: Any, project_id: str) -> dict[str, str]:
     return held
 
 
-def published(project_id: str, samples: Sequence[Mapping[str, Any]]) -> SyncCounts:
+def publish_samples(
+    project_id: str, samples: Sequence[Mapping[str, Any]]
+) -> SyncCounts:
     """Post every sample the project does not already hold, and report both counts."""
-    tool = client()
-    held = held_by(tool, project_id)
+    tool = build_client()
+    held = list_held_tasks(tool, project_id)
     posted = 0
     for sample in samples:
         sample_id = str(sample[SAMPLE_ID])
@@ -78,7 +80,7 @@ def published(project_id: str, samples: Sequence[Mapping[str, Any]]) -> SyncCoun
     return SyncCounts(posted=posted, already_held=len(samples) - posted, task_ids=held)
 
 
-def returned(tool: Any, task_id: str) -> list[ReturnedAnnotation]:
+def list_task_annotations(tool: Any, task_id: str) -> list[ReturnedAnnotation]:
     """Every annotation the tool holds on one task, as this package's own small value."""
     return [
         ReturnedAnnotation(
@@ -93,7 +95,7 @@ def returned(tool: Any, task_id: str) -> list[ReturnedAnnotation]:
     ]
 
 
-def submitted(stamp: str) -> datetime:
+def read_submitted_time(stamp: str) -> datetime:
     """The tool's clock, or now where it reported none. No part of this service holds one."""
     try:
         return datetime.fromisoformat(stamp)
@@ -101,7 +103,7 @@ def submitted(stamp: str) -> datetime:
         return datetime.now(UTC)
 
 
-def as_annotation(returned_one: ReturnedAnnotation) -> Annotation | None:
+def convert_annotation(returned_one: ReturnedAnnotation) -> Annotation | None:
     """One returned annotation as a verdict, a correction and a note.
 
     **The only place the annotation tool's control shape is read.** A skipped annotation is not a
@@ -123,15 +125,17 @@ def as_annotation(returned_one: ReturnedAnnotation) -> Annotation | None:
         verdict=values.get("verdict"),
         corrected_label=tuple(correction) if isinstance(correction, list) else None,
         note=values.get("note"),
-        submitted_at=submitted(returned_one.submitted_at),
+        submitted_at=read_submitted_time(returned_one.submitted_at),
     )
 
 
-def annotations_for(project_id: str) -> dict[str, list[Annotation]]:
+def list_project_annotations(project_id: str) -> dict[str, list[Annotation]]:
     """Every annotation the project holds, by `sample_id`."""
-    tool = client()
+    tool = build_client()
     answers: dict[str, list[Annotation]] = {}
-    for sample_id, task_id in held_by(tool, project_id).items():
-        annotations = [as_annotation(one) for one in returned(tool, task_id)]
+    for sample_id, task_id in list_held_tasks(tool, project_id).items():
+        annotations = [
+            convert_annotation(one) for one in list_task_annotations(tool, task_id)
+        ]
         answers[sample_id] = [one for one in annotations if one is not None]
     return answers

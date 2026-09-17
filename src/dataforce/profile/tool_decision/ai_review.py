@@ -7,9 +7,9 @@ nothing else -- not the sample's label, because a model shown a label answers ab
 What an answer here *is* also belongs to the task, and it is a tool call -- so every rule about
 reading one lives in this package and not in `modalities/`, which serves any text2text task and
 can know nothing about tools. `normalize_prediction` answers the modality's socket: it matches the
-calls `text_to_openai_tool_format` read out of what a juror wrote, rather than comparing two
+calls `parse_text_to_tools` read out of what a juror wrote, rather than comparing two
 strings and hoping they were spelled alike. That is also why this task asks no judge -- two calls are the same call or they are
-not, and no model is needed to say which. `llm_judge_consensus` is for a task whose answers can
+not, and no model is needed to say which. `find_llm_judge_consensus` is for a task whose answers can
 only be compared as meaning.
 """
 
@@ -40,9 +40,9 @@ from dataforce.modalities.text2text.ai_review import (
 from dataforce.modalities.text2text.ai_review.schema import LLMModelConfig
 
 from .utils import (
-    conversation_turns,
-    openai_tool_format_to_text,
-    text_to_openai_tool_format,
+    convert_tools_to_text,
+    list_conversation_turns,
+    parse_text_to_tools,
 )
 
 # The deployment's, on the same terms as `config/model/`: read from the working directory and named
@@ -152,7 +152,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         """The calls in one answer, as the text two answers are matched by.
 
         An answer to this task is an array of tool calls, so sameness is structural rather than a
-        judgement, and this is why the panel needs no judge: `text_to_openai_tool_format` reads the
+        judgement, and this is why the panel needs no judge: `parse_text_to_tools` reads the
         calls out of whatever the model wrote, and two answers are one where those are the same
         calls. They are written back sorted, so two jurors that called the same tools with the same
         arguments in a different order gave one answer. A corpus whose calls must run in the order
@@ -165,7 +165,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
         """
         norm_tools = sorted(
             json.dumps(call, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            for call in text_to_openai_tool_format(pred_text)
+            for call in parse_text_to_tools(pred_text)
         )
         if norm_tools:
             return f"[{','.join(norm_tools)}]"
@@ -195,11 +195,11 @@ class ToolDecisionLLMPrediction(LLMPrediction):
 
         The catalog, the turns before the last, the last turn, and the language the request
         declared, read off the record here rather than handed in already unpacked: `messages` and
-        `tools` are this task's keys, and the layer that calls this knows no task (`H-10`). The
+        `tools` are this task's keys, and the layer that calls this knows no task. The
         sample's label is in none of the slots. `ConfigError` where the file is missing, so a
         deployment with no prompt is not a model having a bad day.
         """
-        turns = conversation_turns(sample)
+        turns = list_conversation_turns(sample)
         template = read_txt(TOOL_PREDICTION_PROMPT)
         if not template.strip():
             raise ConfigError(
@@ -218,7 +218,7 @@ class ToolDecisionLLMPrediction(LLMPrediction):
 
     def build_tool_catalog(self, tools: Sequence[object]) -> str:
         """The tools this sample was offered, as the text the prompt's catalog slot takes."""
-        return openai_tool_format_to_text(tools)
+        return convert_tools_to_text(tools)
 
 
 class ToolDecisionSFTPrediction(SFTPrediction):
@@ -238,7 +238,7 @@ class ToolDecisionSFTPrediction(SFTPrediction):
         ticked rather than handed a 500 out of a step that was asked for an answer it has none of.
 
         The message says *unimplemented* and not *unserved*, because the name may well be served
-        -- `GET /models` lists it and `checked_names` passed it -- and two 422s that read alike are
+        -- `GET /models` lists it and `check_served_models` passed it -- and two 422s that read alike are
         two the caller cannot tell apart.
         """
         raise ConfigError(

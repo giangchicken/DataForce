@@ -17,7 +17,9 @@ what *before any model is called* means.
 """
 
 import json
+import uuid
 from collections.abc import Iterator, Mapping
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -26,6 +28,7 @@ import pytest
 from agent_toolkit.llm import set_config_resolver
 from fastapi.testclient import TestClient
 
+from dataforce.edge.database import Base, db
 from dataforce.edge.main import UI, create_app
 from dataforce.edge.routers.text2text import tool_decision as route
 from dataforce.modalities.text2text.data_quality import (
@@ -33,6 +36,11 @@ from dataforce.modalities.text2text.data_quality import (
     personal_data_checking,
 )
 from dataforce.profile.tool_decision import ai_review, data_quality
+from dataforce.profile.tool_decision.schema import (
+    ToolDecisionDataset,
+    ToolDecisionRecord,
+    create_tables,
+)
 
 BASE = "/text2text/tool-decision"
 
@@ -126,7 +134,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     set_config_resolver(None)
 
 
-def answering(monkeypatch: pytest.MonkeyPatch, **answers: Any) -> list[str]:
+def install_model_answers(monkeypatch: pytest.MonkeyPatch, **answers: Any) -> list[str]:
     """Install a `complete` in every module that calls one, answering per model asked.
 
     An entry may be the answer object or the text of one. The list that comes back holds the
@@ -144,7 +152,7 @@ def answering(monkeypatch: pytest.MonkeyPatch, **answers: Any) -> list[str]:
     return asked
 
 
-def no_model_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+def forbid_model_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install a `complete` that fails the test. What *before any model is called* asserts."""
 
     async def never(prompt: str, **kwargs: Any) -> str:
@@ -220,7 +228,7 @@ def test_the_scan_answers_over_the_sample_s_own_review_text(
     read back off the text rather than written down, which is the rule -- `review_text` is the
     frame of reference and nothing afterwards may reflow it.
     """
-    asked = answering(
+    asked = install_model_answers(
         monkeypatch,
         **{VERIFIER: json.dumps({"detected": []})},
     )
@@ -244,7 +252,7 @@ def test_the_scan_confirms_what_the_verifier_confirms(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The same route with the confirmation answering: one span, and its offsets slice back."""
-    answering(
+    install_model_answers(
         monkeypatch,
         **{
             VERIFIER: json.dumps(
@@ -287,7 +295,7 @@ def test_the_scan_s_declarations_are_not_keys_of_the_record(
         handed.update({"sample": sample, "language": language})
         return PersonalDataDetected(review_text="")
 
-    monkeypatch.setattr(route, "personal_data_detect", detecting)
+    monkeypatch.setattr(route, "detect_personal_data", detecting)
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data",
@@ -307,7 +315,7 @@ def test_an_unserved_verifier_is_refused_before_any_model_is_called(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """422 naming the name and the served list, so the caller learns which."""
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data",
@@ -331,7 +339,7 @@ def test_the_replace_route_takes_the_detect_answer_back_and_asks_no_model(
     this deployment does not serve -- and why the spans it replaces are the reviewer's rather than
     the detectors'.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(f"{BASE}/data-quality/personal-data/replace", json=DETECTED)
 
@@ -353,7 +361,7 @@ def test_the_redact_route_replaces_a_handed_back_value_in_every_field(
     A span indexes `review_text`; the turns and the label are other strings, so this replaces by
     value across the record. Its body carries no model either, so there is no name here to refuse.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data/redact",
@@ -383,7 +391,7 @@ def test_the_spans_handed_back_are_not_a_key_of_the_record(
     So what comes back is the record's own keys and nothing about how it was redacted: the page
     composes the record, and this route answers one of its parts.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data/redact",
@@ -401,7 +409,7 @@ def test_no_span_handed_back_is_nothing_replaced(
     Which is also what the last rectangle sends where the scan was never run: the record comes
     back as it arrived rather than refused, because nothing was confirmed to replace.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data/redact",
@@ -422,7 +430,7 @@ def test_duplicate_answers_null_at_two_hundred(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Nothing failed, and there is nothing to report."""
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(f"{BASE}/data-quality/duplicate", json=dict(SAMPLE))
 
@@ -434,7 +442,7 @@ def test_abnormal_answers_null_at_two_hundred(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The other check with nothing to report. Neither declares a shape to return."""
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(f"{BASE}/data-quality/abnormal", json=dict(SAMPLE))
 
@@ -454,7 +462,7 @@ def test_ai_review_answers_the_panel_and_no_finetuned_reviewer(
     consensus is the answer as a juror wrote it. `sft: null` is a reviewer the request declared
     none of, which is not a reviewer that disagreed.
     """
-    asked = answering(
+    asked = install_model_answers(
         monkeypatch,
         **{
             JUROR: {"reason": "Khách đã cho mã.", "label": OPEN_TICKET},
@@ -480,7 +488,7 @@ def test_a_panel_of_none_asks_nothing_and_answers_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An empty tick is no panel, not an empty panel: `llm` is `None` and no model is called."""
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(f"{BASE}/ai-review", json=dict(SAMPLE))
 
@@ -498,7 +506,7 @@ def test_the_review_s_declarations_are_not_keys_of_the_record(
         handed.update({"sample": sample, "language": language})
         return None
 
-    monkeypatch.setattr(route, "tool_decision_llm_predict", predicting)
+    monkeypatch.setattr(route, "predict_tool_decision_by_llm", predicting)
 
     resp = client.post(
         f"{BASE}/ai-review",
@@ -514,7 +522,7 @@ def test_an_unserved_juror_is_refused_before_any_model_is_called(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An unserved name on the other route, and the first of two refusals that read alike."""
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/ai-review", json={**SAMPLE, "jury_models": [JUROR, UNSERVED]}
@@ -530,11 +538,11 @@ def test_a_served_juror_whose_file_names_no_endpoint_is_refused_for_its_own_reas
 ) -> None:
     """A name with no file and no explicit URL, and the reason the two 422s are pinned apart.
 
-    This name *is* served -- the directory holds its file -- so `checked_names` passes it. The
+    This name *is* served -- the directory holds its file -- so `check_served_models` passes it. The
     refusal comes from the juror being built, before any record: a config naming no endpoint is a
     call to somewhere nobody declared, never a provider's default.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(
         f"{BASE}/ai-review", json={**SAMPLE, "jury_models": [NO_ENDPOINT]}
@@ -556,7 +564,7 @@ def test_a_ticked_finetuned_reviewer_is_refused_as_one_this_deployment_cannot_ru
     answer to give -- and ticking a reviewer this deployment cannot run is a declaration it cannot
     act on, which is what every other 422 on this route says too.
     """
-    no_model_answers(monkeypatch)
+    forbid_model_calls(monkeypatch)
 
     resp = client.post(f"{BASE}/ai-review", json={**SAMPLE, "sft_model": JUROR})
 
@@ -578,7 +586,7 @@ def test_the_finetuned_reviewer_is_refused_before_the_panel_is_paid_for(
     it needs the panel's answer -- and every other refusal on this route happens before a model is
     called, which is the vocabulary this one has to keep.
     """
-    asked = answering(
+    asked = install_model_answers(
         monkeypatch, **{JUROR: {"reason": "stubbed", "label": OPEN_TICKET}}
     )
 
@@ -589,3 +597,217 @@ def test_the_finetuned_reviewer_is_refused_before_the_panel_is_paid_for(
 
     assert resp.status_code == 422
     assert asked == []
+
+
+# ----------------------------------------------------------- what the corpus holds, counted
+
+WROTE_AT = datetime(2026, 9, 16, 15, 30, 45)
+
+LOOKUP_CATALOG = [
+    {
+        "type": "function",
+        "function": {
+            "name": "Lookup",
+            "parameters": {"type": "object", "required": ["id"], "properties": {}},
+        },
+    }
+]
+ASKED: Mapping[str, Any] = {
+    "messages": [{"role": "user", "content": "nợ bao nhiêu"}],
+    "tools": LOOKUP_CATALOG,
+}
+THANKED: Mapping[str, Any] = {
+    "messages": [{"role": "user", "content": "cảm ơn em"}],
+    "tools": LOOKUP_CATALOG,
+}
+LOOKED_UP = [{"name": "Lookup", "arguments": {"id": "KH-1"}}]
+
+
+@pytest.fixture
+def attached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_endpoints: None
+) -> Iterator[None]:
+    """A database of this test's own, attached the way a deployment attaches one.
+
+    `no_endpoints` is named rather than left to run on its own: it clears
+    `DATAFORCE_DATABASE_URL`, and it has to do that before this sets it.
+    """
+    monkeypatch.setenv(
+        "DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}"
+    )
+    engine = db.open_engine()
+    assert engine is not None
+    create_tables(engine)
+
+    yield
+
+    Base.metadata.drop_all(engine)
+
+
+def store_one_sample(**overridden: Any) -> None:
+    """One row in each table under one key, which is what the two tables holding the same rows is.
+
+    Written straight in rather than posted: no route writes one yet (T16), and § *What is not
+    schedulable yet* is why the counting is built before the writing.
+    """
+    columns: dict[str, Any] = {
+        "input": ASKED,
+        "label": LOOKED_UP,
+        "language": "vi",
+        "personal_data": [],
+        "ambiguous": False,
+        "domain": "debt_collection",
+        "call_trigger": ["condition_met"],
+        "number_turns": 1,
+        "number_label_tools": 1,
+        "number_provided_tools": 1,
+        "schema_valid": True,
+    }
+    key = uuid.uuid4()
+    times = {"created_time": WROTE_AT, "modified_time": WROTE_AT}
+    session = db.open_session()
+    assert session is not None
+    with session, session.begin():
+        session.add(ToolDecisionRecord(id=key, document={}, **times))
+        session.add(ToolDecisionDataset(id=key, **times, **(columns | overridden)))
+
+
+def store_a_corpus() -> None:
+    """Three rows: two that are one another's duplicate, and one that answered nothing."""
+    store_one_sample()
+    store_one_sample()
+    store_one_sample(
+        input=THANKED,
+        label=None,
+        domain="telesale",
+        call_trigger=["user_utterance"],
+        number_label_tools=0,
+    )
+
+
+def test_the_statistics_say_what_to_set_where_no_database_is_attached(
+    client: TestClient,
+) -> None:
+    """503 rather than zeros: *a corpus with nothing in it* and *nothing was asked* are different
+    claims, and the detail names the variable so the message says what to set."""
+    resp = client.get(f"{BASE}/records/stats")
+
+    assert resp.status_code == 503
+    assert "DATAFORCE_DATABASE_URL" in resp.json()["detail"]
+
+
+def test_no_other_route_is_affected_by_there_being_no_database(
+    client: TestClient,
+) -> None:
+    """The store is a place to put the result, never a dependency of the review."""
+    assert client.get(f"{BASE}/models").status_code == 200
+    assert client.get(f"{BASE}/").status_code == 200
+
+
+def test_every_statistic_is_in_the_answer_over_rows_a_test_wrote(
+    client: TestClient, attached: None
+) -> None:
+    """§ *The statistics* in full, each figure beside the total it came out of."""
+    store_a_corpus()
+
+    answered = client.get(f"{BASE}/records/stats").json()
+
+    assert answered["sample_totals"] == {
+        "tool_decision_record": 3,
+        "tool_decision_dataset": 3,
+    }
+    assert answered["counted_distribution_by_facet"]["domain"] == {
+        "debt_collection": 2,
+        "telesale": 1,
+    }
+    assert answered["counted_distribution_by_facet"]["schema_valid"] == {"true": 3}
+    # How many rows make each number of calls: a facet column, so the per-facet distribution
+    # is where it is read -- `label_summary` holds no second count of the same thing.
+    assert answered["counted_distribution_by_facet"]["number_label_tools"] == {
+        "0": 1,
+        "1": 2,
+    }
+    assert (
+        answered["counted_distribution_by_domain_and_call_trigger"]["debt_collection"][
+            "condition_met"
+        ]
+        == 2
+    )
+    assert (
+        answered["counted_distribution_by_domain_and_call_trigger"]["telesale"][
+            "user_utterance"
+        ]
+        == 1
+    )
+    assert answered["label_summary"] == {
+        "total": 3,
+        "number_not_null_label": 2,
+        "number_diff_label": 2,
+    }
+    assert answered["number_tools_offered"] == 1
+    assert answered["tool_call_counts"] == {"Lookup": 2}
+    assert len(answered["duplicate_groups"]["duplicate_content_same_label"][0]) == 2
+    assert answered["duplicate_groups"]["duplicate_content_diff_label"] == []
+
+
+def test_a_value_nobody_declared_still_gets_an_axis_of_its_own(
+    client: TestClient, attached: None
+) -> None:
+    """The grid is what the corpus carries, so a domain or a trigger somebody typed is in it the
+    moment one sample carries it -- and the route is where that has to still be true, because the
+    crossing happens two layers down."""
+    store_a_corpus()
+    store_one_sample(domain="upsell", call_trigger=["escalation"])
+
+    matrix = client.get(f"{BASE}/records/stats").json()[
+        "counted_distribution_by_domain_and_call_trigger"
+    ]
+
+    assert sum(len(columns) for columns in matrix.values()) == 3 * 3
+    assert matrix["upsell"]["escalation"] == 1
+    assert matrix["debt_collection"]["escalation"] == 0
+
+
+def test_the_same_input_under_two_labels_is_the_queue_the_route_hands_back(
+    client: TestClient, attached: None
+) -> None:
+    """The group that is the point of grouping: one of the two labels is wrong, or the task is
+    arguable where the guideline said it was not. A count would not open; row keys do."""
+    store_one_sample()
+    store_one_sample(label=[{"name": "Lookup", "arguments": {"id": "KH-2"}}])
+
+    duplicates = client.get(f"{BASE}/records/stats").json()["duplicate_groups"]
+
+    assert len(duplicates["duplicate_content_diff_label"][0]) == 2
+    assert duplicates["duplicate_content_same_label"] == []
+
+
+def test_an_empty_corpus_answers_zeros_rather_than_failing(
+    client: TestClient, attached: None
+) -> None:
+    """A database attached and nothing in it is the state a deployment starts in."""
+    answered = client.get(f"{BASE}/records/stats").json()
+
+    assert answered["sample_totals"] == {
+        "tool_decision_record": 0,
+        "tool_decision_dataset": 0,
+    }
+    assert answered["counted_distribution_by_domain_and_call_trigger"] == {}
+    assert set(answered["counted_distribution_by_facet"]) and all(
+        counted == {} for counted in answered["counted_distribution_by_facet"].values()
+    )
+    assert answered["label_summary"]["total"] == 0
+    assert answered["duplicate_groups"]["duplicate_content_same_label"] == []
+
+
+def test_nothing_is_cached_so_a_write_between_two_calls_shows(
+    client: TestClient, attached: None
+) -> None:
+    """Each figure is a query when it is asked, which is what keeps a panel from going stale."""
+    first = client.get(f"{BASE}/records/stats").json()
+
+    store_one_sample()
+    second = client.get(f"{BASE}/records/stats").json()
+
+    assert first["sample_totals"]["tool_decision_dataset"] == 0
+    assert second["sample_totals"]["tool_decision_dataset"] == 1

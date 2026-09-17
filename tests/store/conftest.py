@@ -14,7 +14,7 @@ variable may not name a database anybody wants to keep.
 A Postgres DSN has to name the driver: `postgresql+psycopg://...`, because the bare
 `postgresql://` spelling resolves to psycopg2, which this repository does not install.
 
-`store_engine` creates no table. Phase 0's tests are about what `created_tables` does, so each calls
+`store_engine` creates no table. Phase 0's tests are about what `create_tables` does, so each calls
 it itself and the fixture does not answer that question on their behalf.
 """
 
@@ -24,7 +24,7 @@ from collections.abc import Iterator
 import pytest
 from sqlalchemy import Engine, inspect
 
-from dataforce.edge.database import Base, store
+from dataforce.edge.database import Base, db
 
 TEST_DSN_VARIABLE = "DATAFORCE_TEST_DATABASE_URL"
 
@@ -61,7 +61,7 @@ def store_engine(
     `DATAFORCE_DATABASE_URL`, and it has to do that before this sets it.
     """
     monkeypatch.setenv("DATAFORCE_DATABASE_URL", store_url)
-    engine = store.cached_engine()
+    engine = db.open_engine()
     assert engine is not None
     found = set(inspect(engine).get_table_names())
 

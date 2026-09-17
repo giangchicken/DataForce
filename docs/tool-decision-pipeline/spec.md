@@ -67,7 +67,7 @@ sample is scanned as, and how, is the task's. Each file is named for the method 
 every class here that asks a model calls both itself — it resolves the name when it is built, then
 makes the call and reads one declared shape back. `profile/tool_decision/utils.py` renders an
 OpenAI `tools` array as the catalog text a reviewer and a juror both read, and reads the other
-way too: `text_to_openai_tool_format` turns what a juror wrote back into OpenAI tool calls, the
+way too: `parse_text_to_tools` turns what a juror wrote back into OpenAI tool calls, the
 format's own shape, arguments as JSON text under one key ordering.
 
 ## Requirements
@@ -180,11 +180,11 @@ format's own shape, arguments as JSON text under one key ordering.
     `label_agreement` is the share of returned votes whose label equals the sample's — compared
     here as canonical text, never asked of a model — and whose `consensus` is the panel's one
     answer or `None`.
-21. `exact_match_consensus(pred_texts)` returns the answer strictly more than half of them gave,
+21. `find_exact_match_consensus(pred_texts)` returns the answer strictly more than half of them gave,
     else `None`. A strict majority, never a mode. Answers are compared by `normalize_prediction`, which
     is a **socket**: the arithmetic counts over it and the modality never says what it is, because
     nothing at that layer knows what an answer is made of. `ToolDecisionLLMPrediction` answers it
-    over `text_to_openai_tool_format`, which reads the calls out of what a juror wrote — so the
+    over `parse_text_to_tools`, which reads the calls out of what a juror wrote — so the
     order the calls were written in, prose around them, arguments written as JSON text rather than
     as an object, the wrapper the wire format puts a call in and the `id` it hangs on one are all
     one answer, while a different tool, a different argument value, or one call where another
@@ -192,7 +192,7 @@ format's own shape, arguments as JSON text under one key ordering.
     Where it can read no call it canonicalises whatever JSON it did read — so `[]` with prose
     around it is the same answer as `[]`, on the same terms as a call with prose around it —
     and compares text that reads as no JSON as text.
-22. `llm_judge_consensus(pred_texts)` runs only where `exact_match_consensus` returned `None`, and
+22. `find_llm_judge_consensus(pred_texts)` runs only where `find_exact_match_consensus` returned `None`, and
     returns one of the answers given or `None`. It never returns a string no juror wrote: it asks
     `judge_prediction(pred_texts)` — the socket — and narrows what comes back to an answer given,
     matched the same way the answers were matched to each other. Nothing answered is nobody asked.
@@ -209,7 +209,7 @@ format's own shape, arguments as JSON text under one key ordering.
     task's, so it lands in the profile with the rest of this reviewer's half. Where its
     `confidence` comes from is open (§ *Open*), so nothing of it has a body yet.
 24. The prompt is built inside `predict`, in the profile. It renders `tool_prediction.txt`, filling
-    `{{tool_descriptions}}` with `openai_tool_format_to_text(sample["tools"])`,
+    `{{tool_descriptions}}` with `convert_tools_to_text(sample["tools"])`,
     `{{conversation_history}}` with the turns before the last, `{{user_message}}` with the last one,
     and `{{language}}` with the language declared for the request. The sample's label is not among
     them, and the language is never guessed from the turns. `ReviewRequest` declares it, defaulting
@@ -397,12 +397,12 @@ the corpus statistics the page shows are that spec's and they are what reshaped 
 
 **Where a body lands.** The modality declares; the profile answers; the service composes. Every
 socket gets its body in `profile/tool_decision/<part>.py`, and a method with a body in `modalities/`
-is a rule shared across every task that modality serves. `verdict`, `exact_match_consensus` and
-`llm_judge_consensus` are three of them, because a strict majority is arithmetic and does not change
+is a rule shared across every task that modality serves. `verdict`, `find_exact_match_consensus` and
+`find_llm_judge_consensus` are three of them, because a strict majority is arithmetic and does not change
 with the question being asked. `PersonalDataChecking` holds two more. `PiiRuleDetector` is the
 rule scans as one thing that detects — where two of them claim one value the first keeps it, so the
 order and the rule are one object — and which scans, in what order, is the input's; the four are
-its default. And `pii_llm_confirm`, with
+its default. And `confirm_pii_by_llm`, with
 `PiiLlmConfirmer` and the prompt it sends, is **the confirmation**: whether a detected value really
 is personal data is a question about personal data and about nothing else, so every task asks it
 the same way and gets the same narrowing — a value that was not detected is discarded, and an
@@ -410,14 +410,14 @@ answer that did not come back, or came back the wrong shape, confirms none. Neit
 task. Which model confirms does, so a checker is *constructed* with the declaration its
 request carried, and the confirmation resolves it in `__init__`.
 
-`services/tool_decision/` is what an endpoint calls: `personal_data_detect`,
-`personal_data_replace` and `personal_data_redact` in `data_quality.py`,
-`tool_decision_llm_predict` and `tool_decision_sft_predict` in `ai_review.py`. Each takes a config and one sample and constructs
+`services/tool_decision/` is what an endpoint calls: `detect_personal_data`,
+`replace_personal_data` and `redact_personal_data` in `data_quality.py`,
+`predict_tool_decision_by_llm` and `predict_tool_decision_by_sft` in `ai_review.py`. Each takes a config and one sample and constructs
 the profile class it needs — a config, not a built object, because the config is the only thing
 that varies and a bag of pre-built reviewers passed between layers is one more thing to keep in
 step. A `None` config is a
-reviewer the deployment did not declare and answers `None`. `duplicate_report` and
-`abnormal_report` take a sample and nothing else: neither declares a shape to return, so neither
+reviewer the deployment did not declare and answers `None`. `report_duplicates` and
+`report_abnormalities` take a sample and nothing else: neither declares a shape to return, so neither
 has a model to ask. A handler is then three lines: read the body, call one function, map
 `ConfigError` to 422.
 
@@ -425,11 +425,11 @@ has a model to ask. A handler is then three lines: read the body, call one funct
 profile writes the whole of it; replacing is not a socket, because a copy with placeholders in it
 is one rule rather than a question two tasks answer differently. It sits in the profile beside
 `detect` and not in the modality, and the reason is only that it has one caller: none of the three
-names anything a task knows — `replaced_node(node, pairs)` walks strings, mappings and lists — so
+names anything a task knows — `replace_node(node, pairs)` walks strings, mappings and lists — so
 the day a second task replaces anything they move up a layer unchanged. A shared body with one
-user is a body nobody has held against a second question. It is written once and reached twice: `span_values` reads what each placeholder stands for off `review_text` — the only thing a
-span's offsets are good for — `replaced_text` puts the placeholders into one string longest value
-first, and `replaced_node` walks a record doing the same to every string under it. The second
+user is a body nobody has held against a second question. It is written once and reached twice: `read_span_values` reads what each placeholder stands for off `review_text` — the only thing a
+span's offsets are good for — `replace_text` puts the placeholders into one string longest value
+first, and `replace_node` walks a record doing the same to every string under it. The second
 reach is the one the offsets cannot have: a span indexes `review_text`, and `messages`, `tools` and
 `label` are other strings, so the rule that carries a confirmed value into them is replacement *by
 value* (Requirement 12). What a
@@ -458,7 +458,7 @@ not a rule. `PiiLlmDetector.detect` takes the prompt and the review text, and dr
 not in that text verbatim — the check belongs where the answer is read, since the whole of what is
 read is a claim about that text. `pii_detect` takes the text and the language and unions the two
 into what a reviewer is shown as detected, `find_and_number_spans` turns
-that into numbered spans, and `pii_llm_confirm` — the modality's — narrows those to the ones that
+that into numbered spans, and `confirm_pii_by_llm` — the modality's — narrows those to the ones that
 ship, each carrying the reason it was confirmed for. Each prompt is built by a `build_..._prompt` method named for the step that sends it, and
 outside the `try` that swallows a failed call, so a missing prompt file is a `ConfigError` rather
 than a record quietly answering nothing. Which endpoint a step reaches, and the call
@@ -469,7 +469,7 @@ therefore written once per asking class rather than once for the codebase, which
 each class holding the whole of its own asking.
 
 **AI review.** `verdict` calls `predict` once, counts agreement over the returned votes, then asks
-`exact_match_consensus`; only where that is `None` does it ask `llm_judge_consensus`. The judge reads
+`find_exact_match_consensus`; only where that is `None` does it ask `find_llm_judge_consensus`. The judge reads
 the answers, not the conversation. `predict` builds the prompt and makes the call, both in the
 profile, so the prompt and the shape it must return are read in one file.
 
@@ -579,14 +579,14 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 
 | file | change |
 |---|---|
-| `modalities/text2text/ai_review/llm_prediction.py` | bodies for `verdict`, `exact_match_consensus`, `llm_judge_consensus`; the `judge_prediction` and `normalize_prediction` sockets |
+| `modalities/text2text/ai_review/llm_prediction.py` | bodies for `verdict`, `find_exact_match_consensus`, `find_llm_judge_consensus`; the `judge_prediction` and `normalize_prediction` sockets |
 | `modalities/text2text/data_quality/personal_data_checking.py` | `PiiRuleDetector`, and `PiiLlmConfirmer` — which resolves its own model and makes its own call |
 | `modalities/text2text/data_quality/schema.py` | `PersonalDataCheckingConfig`, `PersonalDataCheckingInput`, `Language`, `RuleScan`, `SCAN_FUNCTIONS` and the `SCANS` a config defaults to |
 | `services/tool_decision/data_quality.py` | builds the scan's input, turns a record it cannot read into a `ConfigError`, and runs the replacement over the record the reviewer left |
 | `modalities/text2text/ai_review/SFTmodel_prediction.py` | the `predict` socket, and nothing else: comparing two answers needs what a task knows |
 | `profile/tool_decision/ai_review.py` | `ToolPredictor`, `predict`, `build_tool_prediction_prompt`, and `normalize_prediction` — the rule for matching two answers as calls |
-| `profile/tool_decision/data_quality.py` | `detect`, `build_review_text`, the two detectors, and `order_claims_by_class`, `find_and_number_spans`, `span_values`, `replaced_text`, `replaced_node`, `replace_spans_with_placeholders`, `decide_replacement_outcome` |
-| `profile/tool_decision/utils.py` | `conversation_turns`, which both parts read, and the two directions of the OpenAI tool format: the catalog as text, and text as calls |
+| `profile/tool_decision/data_quality.py` | `detect`, `build_review_text`, the two detectors, and `order_claims_by_class`, `find_and_number_spans`, `read_span_values`, `replace_text`, `replace_node`, `replace_spans_with_placeholders`, `decide_replacement_outcome` |
+| `profile/tool_decision/utils.py` | `list_conversation_turns`, which both parts read, and the two directions of the OpenAI tool format: the catalog as text, and text as calls |
 | `config/prompts/profiles/tool_decision/pii_llm_detect.txt` | what the second detector is asked |
 | `config/prompts/modalities/text2text/data_quality/pii_llm_confirm.txt` | the spans the confirmation is shown, and the `{id, reason, confirmed}` it answers |
 | `ui/index.html` | the eight rectangles, their buttons and their editable boxes |
@@ -622,7 +622,7 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 7. **`duplicate` and `abnormal` answer `null` at HTTP 200.** Alternative: 501. Nothing failed — the
    shape is undecided, which is a different fact, and the page should draw it as `None` rather than
    as an error.
-8. **The catalog is rendered by `openai_tool_format_to_text` for both parts.** Two renderers would be
+8. **The catalog is rendered by `convert_tools_to_text` for both parts.** Two renderers would be
    two definitions of what a tool looks like, and a reviewer and a juror disagreeing about the
    catalog they read would be invisible (C-3).
 9. **The judge fallback reads only the answers.** Giving it the conversation makes it an N+1th juror
@@ -728,7 +728,7 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
     the whole of why it was not chosen — a redaction rule living in the client, where a caller who
     skips it gets a record that says it was redacted and was not, and a second definition of
     replacement to keep in step with the service's. The rule was the service's before the store was
-    deleted, in `replaced_node`; this puts it back in the service rather than in the page. The
+    deleted, in `replace_node`; this puts it back in the service rather than in the page. The
     cost, stated: a route nothing but this UI asks for yet, and the store's decision may well
     absorb it — at which point this is the endpoint that changes, not the page.
 
@@ -750,7 +750,7 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
 - No span survives inside a longer span. Check: no pair where one range contains the other.
 - No juror sees another juror's answer. Check: `predict` builds each juror's prompt from the sample
   alone.
-- `llm_judge_consensus` returns only a string some juror wrote, or `None`.
+- `find_llm_judge_consensus` returns only a string some juror wrote, or `None`.
 - Two answers with the same calls are one answer. Check: `normalize_prediction` is insensitive to
   the order of the calls, to prose around them, and to whether arguments arrived as an object or as
   JSON text; it reads nothing off a call but its name and its arguments.
@@ -762,11 +762,11 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
 - The UI holds no rule the service holds. Check: `ui/app.js` computes no span, no consensus, no
   copy, no outcome and no redacted record — each of those is a field it read off a response. The
   record it composes is the one thing nothing else composes, and it composes it out of answers.
-- One rule turns a value into a placeholder. Check: `replaced_text` is the only place a value is
-  swapped for one, `replaced_node` is that rule over a record's strings, and both are handed the
-  same `{value: placeholder}` pairs `span_values` read off `review_text` — which is also the map
+- One rule turns a value into a placeholder. Check: `replace_text` is the only place a value is
+  swapped for one, `replace_node` is that rule over a record's strings, and both are handed the
+  same `{value: placeholder}` pairs `read_span_values` read off `review_text` — which is also the map
   the outcome is measured against, so what was replaced and what counts as replaced cannot drift.
-- Property order is preserved through `openai_tool_format_to_text`, so text re-rendered from the same
+- Property order is preserved through `convert_tools_to_text`, so text re-rendered from the same
   tools is byte-identical.
 
 ## Error Behavior
@@ -815,17 +815,17 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
 - `detect` over a hand-written sample: overlap resolution picks the declared first scan; a value said
   twice gets one placeholder; a span inside a longer span is dropped; every returned offset slices
   back to its value; `redacted_text` replaces the longest value first.
-- `exact_match_consensus`: two of three matching gives that answer; two-two gives `None`; a mode that
+- `find_exact_match_consensus`: two of three matching gives that answer; two-two gives `None`; a mode that
   is not a strict majority gives `None`.
 - `verdict` with a stubbed `predict`: agreement counted over returned votes only, a failing juror not
   counted as agreement.
 - `normalize_prediction`: the same calls in a different order, with prose around them, with the
   wire format's extra keys, or with arguments as JSON text are one answer; another tool, another
   argument value, or one call where another answer made two are not.
-- `llm_judge_consensus`: not asked where the exact match answered, and an answer no juror wrote
+- `find_llm_judge_consensus`: not asked where the exact match answered, and an answer no juror wrote
   refused — the modality's rule, proved over a stubbed `judge_prediction`, since this task's own
   answers `None`. A juror that fails is read back as one event on stdout.
-- `openai_tool_format_to_text` pinned against its known rendering, and `text_to_openai_tool_format`
+- `convert_tools_to_text` pinned against its known rendering, and `parse_text_to_tools`
   against the shape it reads a call into — which spellings of a call are one call, and which are two.
 - Each endpoint through `TestClient` with the model calls stubbed, called with nothing but its own
   arguments — no fixture threads one payload through several of them. Which models may be ticked is

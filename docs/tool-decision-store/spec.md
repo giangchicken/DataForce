@@ -18,8 +18,8 @@ rather than one table and a promise about which columns anyone reads.
 
 **The tables are the task's; the condition over them is the modality's.** A sample arrives here
 having passed all eight steps, so nothing in this store decides whether it is worth keeping. What
-`tool_decision` stores, in which columns, is declared in `profile/tool_decision/dataset_management/`
-— its own two tables, and the SQL over them. What every text2text sample has in common, whatever the
+`tool_decision` stores, in which columns, is declared in `profile/tool_decision/schema.py` — its
+own two tables, and the SQL over them. What every text2text sample has in common, whatever the
 task, is declared once in `modalities/text2text/dataset_management/`.
 
 The facets are why this is worth more than a place to put rows. A corpus is scaled by knowing which
@@ -46,9 +46,9 @@ What the repository already decided, and what this spec therefore does not:
   `edge/database.py` for the DSN, the engine, the session and the one declarative base, and each
   profile's own `schema.py` for its tables. Nothing under `modalities/` or `services/` imports it.
 - What a facet value *means* is the task's. `inbound`, `debt_collection` and `condition_met` are
-  `tool_decision`'s nouns, and a layer that serves many cases may not be written in one case's
-  vocabulary (`H-10`) — a check that already reads every name under `modalities/` against the
-  directory names under `profile/`.
+  `tool_decision`'s nouns and are declared in `profile/tool_decision/`, which is what the split
+  between the two layers is for. Nothing checks it: the check that used to is gone, so a name in
+  `modalities/` written in one task's vocabulary is now a review finding and not a failing test.
 
 ### The law this is written against
 
@@ -81,28 +81,31 @@ result and is the only table anything is ever exported from.
 
 1. **`modalities/text2text/dataset_management/` declares what every text2text task has in common**:
    the shape of a stored sample, how a finished review becomes one, what any label can be measured
-   by, and how the same input appearing twice is grouped. No name in it is one task's — `H-10`'s
-   check reads this layer's own names against the words of the directories under `profile/`, so
-   `tool` and `decision` are among the words it refuses.
-2. **`profile/tool_decision/dataset_management/` declares this task's two tables** in its own
-   `schema.py`, and answers what the modality leaves open:
+   by, and how the same input appearing twice is grouped. No name in it is one task's: a label
+   there is a sequence that may be absent and nothing more, so what a corpus *offered* and what it
+   *called* are answered a layer down, where those words mean something. Nothing checks this any
+   more — it is a review finding, not a failing test.
+2. **`profile/tool_decision/` declares this task's two tables** in its own `schema.py`, and
+   answers what the modality leaves open:
    - what `input` holds. For `tool_decision` that is `{messages, tools}`: a tool call is a call
      *against a catalog*, and a label stored apart from the catalog it was written for is a label
      nothing can check.
    - the facets computed from a document that only this task can read.
-   - which facets the page must offer as ticks, so the page asks the profile rather than carrying a
-     second copy of the list.
+   - which facets a sample carries, as `FACETS` on the table whose columns they are. **Which
+     values a person may tick is not declared here and nowhere below the edge**: that list belongs
+     with the page that draws the tick boxes.
    - what this task's label can be measured by, which is every measurement that says `tool`.
-3. **`services/tool_decision/dataset_management.py` is one function per endpoint.** Which pair of
-   facets the coverage matrix crosses, and the measurements that read inside a sample rather than
-   off a facet, are arguments this layer supplies rather than sockets: they are wanted once, at the
-   call, and a socket for them buys a wider interface for nothing. It never holds a session — the
-   profile's `schema.py` is an `adapter` and `H-8` sends that import the other way.
+3. **`services/tool_decision/dataset_management.py` is one function per endpoint.** Its matrix is a
+   **joint distribution of two variables named by the caller**, so a second cross, over any two
+   facets, is another call rather than another function. Which pair *this* answer crosses is
+   declared in the router beside the field that reports it: it is wanted once, at the call, and a
+   socket for it buys a wider interface for nothing. It never holds a session — the profile's
+   `schema.py` is an `adapter` and `H-8` sends that import the other way.
 4. **`edge/database.py` is the plumbing and declares no table**: the DSN, the engine, the session,
    and the one declarative base every task's tables hang off, so one `MetaData` knows them all.
-5. **The response shapes live in the router.** The totals, the per-facet counts, the coverage
-   matrix and the duplicate groups are the shape of one HTTP answer, and nothing below the edge has
-   a use for them.
+5. **The response shapes live in the router.** The totals, the per-facet counts, the joint
+   distribution matrix and the duplicate groups are the shape of one HTTP answer, and nothing below
+   the edge has a use for them.
 
 **`record` — what the review answered.**
 
@@ -134,7 +137,7 @@ result and is the only table anything is ever exported from.
     exportable**: its columns are computed from the redacted copies, so there is no raw transcript
     in it to find.
 13. **A facet is a column only where it is true of every row in the table**: `language`,
-    `personal_data`, `ambiguous`, `domain`, `call_shape`, `number_turns`, `number_label_tools`,
+    `personal_data`, `ambiguous`, `domain`, `call_trigger`, `number_turns`, `number_label_tools`,
     `number_provided_tools`, `schema_valid`.
 14. **Everything else is a key in `notes`, one JSON column** — `have_conversation_flow` and
     `direction`, each true of a *group* of label sets rather than of the table. **A facet added
@@ -190,15 +193,17 @@ result and is the only table anything is ever exported from.
 23. **Declared, and the profile's**, named in this task's vocabulary:
     - `domain` — the **bot's business function**, not the customer's industry: `debt_collection`
       (đòi nợ), `telesale`, `bill_reminder` (nhắc cước), `customer_care` (tổng đài chăm sóc khách
-      hàng). The list is the profile's and grows there when a bot does a job that is not one of
-      these. An industry — banking, retail, insurance — is a different axis and is § *Open*.
-    - `call_shape` — **how the call is triggered**, which is the verb of the sample and the facet a
+      hàng). **The list lives with the page**, which is where a labeller ticks it, and grows
+      there when a bot does a job that is not one of these. Nothing below the edge holds a copy:
+      a read of the store answers what the rows carry, never what they were allowed to carry. An
+      industry — banking, retail, insurance — is a different axis and is § *Open*.
+    - `call_trigger` — **how the call is triggered**, which is the verb of the sample and the facet a
       buyer is really shopping for. One value per call, so a sample holds the set of them:
       - `condition_met` — the bot calls it the moment the arguments and preconditions are there,
         without being asked.
       - `user_utterance` — it fires only because the customer said a particular thing.
       - `every_turn` — the flow obliges it on every turn, whatever was said.
-      The list is the profile's and grows there, on the same terms as `domain`. Where the label
+      The list lives with the page and grows there, on the same terms as `domain`. Where the label
       calls nothing, there is no trigger to describe and the facet is empty — the no-call sample is
       `number_label_tools: 0`, and that is where it is counted.
     - `direction` — `inbound` (the customer called) or `outbound` (the bot called). In `notes`,
@@ -206,7 +211,7 @@ result and is the only table anything is ever exported from.
     - `have_conversation_flow` — true where the sample is a step in a scripted conversation, one
       the bot walks through in order and where reaching a given step is what obliges a call. In
       `notes`, because it is true of a group of label sets rather than of the table.
-24. **`call_shape` is declared because a flat sample cannot prove it.** Whether a tool fired
+24. **`call_trigger` is declared because a flat sample cannot prove it.** Whether a tool fired
     because its arguments were finally complete, because the customer said one particular thing, or
     because the flow obliges it every turn is a fact about *the bot's design*, and the evidence for
     it is not inside one sample. The record holds this sample's turns, its catalog and its label,
@@ -221,28 +226,47 @@ result and is the only table anything is ever exported from.
     share over nine rows and a share over nine thousand are different claims.
 26. **How much.** How many rows each table holds. They agree, and a run where they do not is a bug
     rather than a statistic.
-27. **The coverage matrix, which is the point of the facets.** A count per value of every facet
-    column, and the cross of two of them — `domain` × `call_shape`, named by the service at the
-    call. The counts are `GROUP BY` in the profile's own `schema.py`, which is the only layer
-    allowed to say a facet's name out loud.
+27. **The joint distribution matrix, which is the point of the facets.** A count per value of
+    every facet column, and the cross of two of them — `domain` × `call_trigger`, named in the
+    router at the call. The counts are `GROUP BY` in the profile's own `schema.py`, which is the
+    only layer allowed to say a facet's name out loud.
     **The finding is the zeros.** A corpus with 4,000 `customer_care` rows and no `every_turn` call
     anywhere in `debt_collection` is a corpus that will fail in production in a way its size hides
     completely, and the page's job is to show that cell, empty, next to the full ones. A `GROUP BY`
-    returns only the pairs that exist, so the empty ones are put back from the product of the
-    declared values before the answer is built.
-    **The no-call share** falls out of the same count and is worth naming on its own: how many rows
-    label nothing, out of the total. A corpus that is all tool calls cannot teach a bot to keep its
+    returns only the pairs that exist, so what the route answers is the **rectangle** those pairs
+    make: every value either axis carries crossed with every value the other does, and a pair no
+    sample makes reading `0`. A value one sample carries is in the grid the moment that sample
+    lands, because the axes are read off the rows.
+    **A value nobody has ticked yet has no cell, and that is the page's half.** The tickable list
+    lives with the page (§ *The facets*), so crossing this grid against it -- and counting how many
+    of those cells are still empty -- is arithmetic the page does with a list the store never sees.
+    **A cell says whether the corpus has such a sample, not how it divides.** `call_trigger` is a
+    set, so a sample triggered two ways is evidence for both cells and is counted in both — the
+    cells sum past the row count wherever that happens, and a sample that triggers nothing is in no
+    cell at all. Counting a set-valued facet *as a set* is the other reading and is what the
+    per-facet count answers: which combinations occur.
+    **The no-call share** is read off the `number_label_tools` column's own distribution, at `0`,
+    over the total. It is not counted a second time from the labels: a second count would be a
+    second definition of what a call is, free to disagree with the column the corpus is sold by. A
+    corpus that is all tool calls cannot teach a bot to keep its
     hands in its pockets and cannot measure whether it does — *irrelevance detection* is a
     first-class BFCL metric, and a corpus with no such rows scores it at zero by construction.
 28. **Schema validity** — the share of `dataset` rows whose `schema_valid` is true. BFCL's AST
     check turned on the corpus rather than on a model: a label calling a tool the sample was never
     offered is not a hard example, it is a broken row.
-29. **Tool coverage** — distinct tools offered, distinct tools ever called, and the count per called
-    tool. This reads inside `input` and `label` rather than off a facet, so it is the profile's and
-    the service asks for it by name; a statistic that silently needs a facet nobody keeps is a
-    statistic that breaks in a year. The tail is the finding: a corpus where two tools carry 90% of
-    the calls trains a model that knows two tools.
-30. **The same input twice**, grouped by `dataset_management` over the whole corpus rather than over
+29. **Label diversity** — how many rows answered at all, and how many **distinct** answers the
+    corpus holds between them, counted over the same canonical text the duplicate grouping compares
+    by. A thousand rows carrying nine answers between them is a corpus that teaches nine things,
+    and nothing about its size says so.
+30. **Tools offered and tools called** — how many distinct tools the catalogs offer, and the count
+    per tool, a tool never called included as `0`. Offered is counted off the catalogs and not off
+    the names the answer lists: a label may name a tool it was never offered, which is a broken row
+    rather than an offer, and letting it into the figure would inflate the number the zeros are
+    read against. This reads inside `input` and `label` rather than off a facet, so it is the
+    profile's and the router asks for it by name; a statistic that silently needs a facet nobody
+    keeps is a statistic that breaks in a year. The tail is the finding: a corpus where two tools
+    carry 90% of the calls trains a model that knows two tools.
+31. **The same input twice**, grouped by `dataset_management` over the whole corpus rather than over
     one posted batch:
     - `duplicate_content_same_label` — redundancy. Safe to drop one, and worth dropping:
       deduplicating training data measurably reduces memorisation and speeds convergence (Lee et
@@ -251,56 +275,58 @@ result and is the only table anything is ever exported from.
       is wrong, or the task is ambiguous where the guideline claimed it was not. A queue to
       inspect, not an error count (VariErr NLI, arXiv:2403.01931) — which is also why the declared
       `ambiguous` facet exists.
-31. No statistic is stored. Each is a query when it is asked, so a panel cannot be stale.
+32. No statistic is stored. Each is a query when it is asked, so a panel cannot be stale.
 
 **The page — a deck, not a scroll.**
 
-32. The labelling page shows **one card at a time**: the guide first, then the eight steps. One bar
+33. The labelling page shows **one card at a time**: the guide first, then the eight steps. One bar
     under the card holds all of the navigation — `<`, the rail, `>` — so moving is one place and
     not three. `←` and `→` move a card as well, but only while the focus is outside a field: inside
     a textarea an arrow key moves the caret, and a page that steals it is a page nobody can type
     in.
-33. **The deck is not a wizard.** Every card is reachable from every other, in any order, whatever
+34. **The deck is not a wizard.** Every card is reachable from every other, in any order, whatever
     has answered so far. The steps are independent — the pipeline spec's *every step is reachable on
     its own* — and a deck that gated one card behind another would put a rule on the screen that
     the service does not have.
-34. **The rail gives back what the scroll was giving away for free.** Eight markings in flow order,
+35. **The rail gives back what the scroll was giving away for free.** Eight markings in flow order,
     one per step, each carrying that step's state — answered, waiting, edited, refused, not asked —
     and each a jump to its card. A page as tall as eight rectangles shows all eight states for
     nothing; a deck has to hand that back deliberately, or it is the same page with flipping added.
     The rail is also where the fan is drawn: 2, 3 and 4 are grouped, because they are handed the
     same sample and none of them feeds another.
-35. **A jump is not a *back to*, and both stay.** The rail moves the reviewer and means nothing
+36. **A jump is not a *back to*, and both stay.** The rail moves the reviewer and means nothing
     else. **back to** says *the answer this card was built on is wrong*: it drops the record, marks
     the card it lands on with *make the correction here*, and re-opens **assemble** and
     **approve**. Two different acts, so two different controls — one moves, one changes what will
     ship.
-36. **The first card is the labelling guide**, written for the person labelling. What a
+37. **The first card is the labelling guide**, written for the person labelling. What a
     `tool_decision` sample is; what makes a label right, the empty label included — *no tool call
     is needed* is an answer and not a skipped row; what to tick at the two human steps and what
     each declared facet means; what gets a sample refused. No route name, no file path, no sentence
     about how the page is wired.
-37. **The guide says what to do; the drawing says why the flow is shaped this way.** That split is
+38. **The guide says what to do; the drawing says why the flow is shaped this way.** That split is
     already the pipeline spec's — `edge/static/index.html` explains the flow, `ui/` labels with it
     — and every card's own note obeys it too: the note in a card is what to do *here*. A sentence
     that would have to be rewritten because a route was renamed is a sentence on the wrong page.
-38. **The statistics sit on the guide card, under the guide.** A coverage matrix read in a report is
+39. **The statistics sit on the guide card, under the guide.** A distribution read in a report is
     a report; read on the card a labeller opens before they start, it is an instruction — *this is
     what the corpus is short of*. That is why they are not a ninth card and not a panel somebody has
     to go looking for.
-39. **A strip stays on every card**: how many rows are stored, and **how many cells of the coverage
-    matrix are still empty**. Two items, because the strip is read sideways while the reviewer is
-    working on something else. The second is the one that changes what they do next, and *which*
-    cells those are is the guide card's to show.
-40. The statistics are asked for on load and again after a record is written. Not on a timer, and
+40. **A strip stays on every card**: how many rows are stored, and **how many cells of the joint
+    distribution matrix are still empty**, which the page counts by crossing its own tick lists
+    against the grid the route answers. Two items, because the strip is read sideways while the
+    reviewer is working on something else. The second is the one that changes what they do next,
+    and *which* cells those are is the guide card's to show.
+41. The statistics are asked for on load and again after a record is written. Not on a timer, and
     not on every flip.
-41. Where no database is attached the strip says so in the service's own words, the guide card shows
+42. Where no database is attached the strip says so in the service's own words, the guide card shows
     the guide and no statistics, and all eight steps work exactly as they do today. The store is a
     place to put the result, never a dependency of the review.
-42. Step 7 grows the ticks for **every declared facet the profile names** — the page asks the
-    profile which ticks to draw rather than holding its own list, because a facet declared in the
-    profile and not on the page is a column that is always `null`. That is where the human already
-    is, and a second form at the end would be a second place to describe one sample. **approve**
+43. Step 7 grows a tick for **every declared facet**, and the values to tick are the page's own
+    list: a tickable value is a thing a person chooses, and the store has no use for one until a
+    sample carries it. The cost, stated: a facet the page never draws a tick for is a column that
+    is always `null`, and nothing but review catches that. That is where the human already is, and
+    a second form at the end would be a second place to describe one sample. **approve**
     posts the record, and the last card says it landed — or names the step that did not run.
 
 ## Design
@@ -399,11 +425,11 @@ Proposals, not decisions:
 - **Freshness.** Rows created in the last 7 and 30 days, and the newest and oldest `modified_time`.
   Điều 17 requires the seller to publish `mức độ cập nhật`, so this is the one item on this list
   that a sale needs rather than wants.
-- **`conversation_id` and `turn_index`.** The single highest-value addition. `call_shape` and
+- **`conversation_id` and `turn_index`.** The single highest-value addition. `call_trigger` and
   `have_conversation_flow` are both assertions today, and with a key joining a sample to the one
   before it they become checkable: `every_turn` is then a thing the corpus can be asked about
   rather than a thing someone ticked. No amount of extra samples fixes that — only this does.
-- **A facet for what the *right answer* is**, which `call_shape` does not cover: the right tool is
+- **A facet for what the *right answer* is**, which `call_trigger` does not cover: the right tool is
   clear but a required argument is missing and the bot must ask for it, or nothing offered can do
   what was asked. Parameter-value errors dominate complex tool-calling failures — up to 78.8% on
   ComplexFuncBench — so a corpus holding none of these teaches a bot to invent arguments rather
@@ -455,11 +481,12 @@ Proposals, not decisions:
 
 ## Open
 
-- **Who declares the `domain` list, and what happens to rows already written when it grows.** A
-  closed list catches typos and needs an edit to extend; an open one never blocks a labeller and
-  drifts into `cskh`, `CSKH` and `cham_soc_kh` being three domains. The list belongs in
-  `profile/tool_decision/`, but closed-versus-open is a decision about how the labelling team
-  works, not about the code.
+- **What happens to rows already written when the `domain` list grows.** A closed list catches
+  typos and needs an edit to extend; an open one never blocks a labeller and drifts into `cskh`,
+  `CSKH` and `cham_soc_kh` being three domains. The list lives with the page; closed-versus-open is
+  a decision about how the labelling team works, not about the code. Nothing refuses a value the
+  store has not seen before, so a typo becomes a row of the joint distribution matrix and is visible
+  there.
 - **`industry` as a second axis** — see above. It is a column or a key in `notes` or neither.
 - **What a `null` label means.** `[]` and `null` both read as *no tool call is needed*, and
   `number_label_tools` counts both as `0`. The pipeline does not treat them as one answer:
@@ -467,8 +494,9 @@ Proposals, not decisions:
   `label_agreement` reads 0.0 for a sample the panel agreed with. Either the corpus writes one
   spelling or `normalize_prediction` folds them.
 - **Whether this spec's directory keeps its name.** It is `docs/tool-decision-store/`, and what it
-  describes is two packages named `dataset_management`. Renaming is a move plus one cross-reference
-  in the pipeline spec; leaving it is a directory that names the reader's second guess.
+  describes is a modality package and a service module both named `dataset_management`. Renaming is
+  a move plus one cross-reference in the pipeline spec; leaving it is a directory that names the
+  reader's second guess.
 - **Which language the guide card is written in.** The repository is written in English and the
   labellers work in Vietnamese. The guide is the first page here whose reader is not a developer,
   so nothing before it has had to decide this, and the eight cards' own notes go the same way the

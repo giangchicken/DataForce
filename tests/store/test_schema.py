@@ -14,18 +14,34 @@ column added in code went through that sentence first.
 
 import re
 import uuid
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import JSON, Column, Engine, MetaData, Table, Uuid, inspect
+from sqlalchemy import (
+    JSON,
+    Column,
+    Engine,
+    MetaData,
+    Table,
+    Uuid,
+    inspect,
+    select,
+    text,
+)
+from sqlalchemy.orm import Session
 
-from dataforce.edge.database import Base, store
-from dataforce.profile.tool_decision.dataset_management import (
+from dataforce.edge.database import Base, db
+from dataforce.profile.tool_decision.schema import (
     ToolDecisionDataset,
     ToolDecisionRecord,
-    created_tables,
+    count_by_facet,
+    count_by_pair,
+    count_rows,
+    create_tables,
+    select_dataset_rows,
 )
 
 SPEC = Path(__file__).resolve().parents[2] / "docs" / "tool-decision-store" / "spec.md"
@@ -48,7 +64,7 @@ STRUCTURAL = frozenset(
 AT = datetime(2026, 9, 16, 8, 30, tzinfo=UTC)
 
 
-def columns_named_under(sentence: str) -> frozenset[str]:
+def read_columns_under(sentence: str) -> frozenset[str]:
     """Every column name in code font under the requirement that opens with that sentence.
 
     A requirement runs to the next numbered one or to a blank line, and the names in it are the
@@ -65,7 +81,7 @@ def columns_named_under(sentence: str) -> frozenset[str]:
     return frozenset(re.findall(r"`([a-z_]+)`", " ".join(requirement)))
 
 
-def a_dataset_row(**overridden: Any) -> ToolDecisionDataset:
+def build_dataset_row(**overridden: Any) -> ToolDecisionDataset:
     """One row with every `NOT NULL` column answered, so a test can leave out the one it is about."""
     columns: dict[str, Any] = {
         "id": uuid.uuid4(),
@@ -77,7 +93,7 @@ def a_dataset_row(**overridden: Any) -> ToolDecisionDataset:
         "personal_data": [],
         "ambiguous": False,
         "domain": "debt_collection",
-        "call_shape": [],
+        "call_trigger": [],
         "number_turns": 0,
         "number_label_tools": 0,
         "number_provided_tools": 0,
@@ -92,7 +108,7 @@ def test_created_tables_makes_this_task_s_two_and_no_others(
     """Measured as a difference, because a throwaway server may already hold somebody else's."""
     before = set(inspect(store_engine).get_table_names())
 
-    created_tables(store_engine)
+    create_tables(store_engine)
 
     assert set(inspect(store_engine).get_table_names()) - before == {
         ToolDecisionRecord.__tablename__,
@@ -109,7 +125,7 @@ def test_the_made_table_holds_exactly_the_declared_columns(
     model: type[Base], store_engine: Engine
 ) -> None:
     """What the dialect made, against what the model declared -- the same names on both."""
-    created_tables(store_engine)
+    create_tables(store_engine)
 
     made = {
         column["name"]
@@ -124,10 +140,10 @@ def test_running_it_twice_makes_nothing_and_raises_nothing(
 ) -> None:
     """Nothing wires this to a startup yet. Whatever does will call it against a database that
     already holds the tables, so the second call has to make nothing and raise nothing."""
-    created_tables(store_engine)
+    create_tables(store_engine)
     made = set(inspect(store_engine).get_table_names())
 
-    created_tables(store_engine)
+    create_tables(store_engine)
 
     assert set(inspect(store_engine).get_table_names()) == made
 
@@ -146,7 +162,7 @@ def test_a_table_missing_a_column_does_not_gain_one(store_engine: Engine) -> Non
         Column("input", JSON, nullable=False),
     ).create(store_engine)
 
-    created_tables(store_engine)
+    create_tables(store_engine)
 
     made = {
         column["name"]
@@ -161,15 +177,15 @@ def test_notes_is_an_empty_object_where_nothing_was_written_to_it(
     store_engine: Engine,
 ) -> None:
     """A missing key and an absent row are different readings, and `NULL` would make them one."""
-    created_tables(store_engine)
-    row = a_dataset_row()
-    session = store.open_session()
+    create_tables(store_engine)
+    row = build_dataset_row()
+    session = db.open_session()
     assert session is not None
     with session, session.begin():
         session.add(row)
         key = row.id
 
-    reading = store.open_session()
+    reading = db.open_session()
     assert reading is not None
     with reading:
         stored = reading.get(ToolDecisionDataset, key)
@@ -183,7 +199,7 @@ def test_the_facet_columns_are_the_ones_the_spec_names() -> None:
         Base.metadata.tables[ToolDecisionDataset.__tablename__].columns.keys()
     )
 
-    assert declared - STRUCTURAL == columns_named_under(FACET_REQUIREMENT)
+    assert declared - STRUCTURAL == read_columns_under(FACET_REQUIREMENT)
 
 
 def test_the_record_table_holds_the_four_columns_the_spec_names() -> None:
@@ -198,4 +214,217 @@ def test_the_record_table_holds_the_four_columns_the_spec_names() -> None:
         Base.metadata.tables[ToolDecisionRecord.__tablename__].columns.keys()
     )
 
-    assert declared == columns_named_under(RECORD_REQUIREMENT)
+    assert declared == read_columns_under(RECORD_REQUIREMENT)
+
+
+# --------------------------------------------------------------- what the corpus can be asked
+
+# Three rows chosen so every count below has something to be wrong about: two share a
+# `domain` × `call_trigger` pair and the third carries a set of two, which is the case a single
+# `GROUP BY` cannot split. Each also ships its own input and label, because the same rows are what
+# the duplicate grouping and the label measurements are read off.
+COUNTED: tuple[Mapping[str, Any], ...] = (
+    {
+        "input": {"messages": [{"role": "user", "content": "nợ bao nhiêu"}]},
+        "label": [{"name": "Lookup", "arguments": {"id": "KH-1"}}],
+        "domain": "debt_collection",
+        "call_trigger": ["condition_met"],
+        "personal_data": ["PHONE"],
+        "number_turns": 2,
+    },
+    {
+        "input": {"messages": [{"role": "user", "content": "nợ bao nhiêu"}]},
+        "label": [{"name": "Lookup", "arguments": {"id": "KH-1"}}],
+        "domain": "debt_collection",
+        "call_trigger": ["condition_met"],
+        "personal_data": ["PHONE"],
+        "number_turns": 2,
+    },
+    {
+        "input": {"messages": [{"role": "user", "content": "cảm ơn em"}]},
+        "label": None,
+        "domain": "telesale",
+        "call_trigger": ["user_utterance", "every_turn"],
+        "language": "en",
+        "ambiguous": True,
+        "schema_valid": False,
+        "number_turns": 4,
+    },
+)
+
+
+@pytest.fixture
+def corpus_session(store_engine: Engine) -> Iterator[Session]:
+    """A session open over `COUNTED`, written into tables this fixture made."""
+    create_tables(store_engine)
+    writing = db.open_session()
+    assert writing is not None
+    with writing, writing.begin():
+        for facets in COUNTED:
+            writing.add(build_dataset_row(**facets))
+
+    reading = db.open_session()
+    assert reading is not None
+    with reading:
+        yield reading
+
+
+def test_the_facets_counted_are_the_columns_the_table_declares() -> None:
+    """The list `count_by_facet` walks against the table it walks over.
+
+    The list hangs off the class whose facets they are, so it cannot drift to another table -- but
+    it is still the same nine names twice, and a column added without being counted is the failure
+    this catches. § *`dataset`*'s own check is the test above.
+    """
+    declared = frozenset(
+        Base.metadata.tables[ToolDecisionDataset.__tablename__].columns.keys()
+    )
+
+    assert set(ToolDecisionDataset.FACETS) == declared - STRUCTURAL
+
+
+def test_row_counts_answers_each_table_and_not_one_of_them_twice(
+    corpus_session: Session,
+) -> None:
+    """Deliberately lopsided: three rows in one table and one in the other, so a count that read
+    a single table and answered for both would have to be right about a number it never saw."""
+    corpus_session.add(
+        ToolDecisionRecord(
+            id=uuid.uuid4(), document={}, created_time=AT, modified_time=AT
+        )
+    )
+    corpus_session.commit()
+
+    assert count_rows(corpus_session) == {
+        ToolDecisionRecord.__tablename__: 1,
+        ToolDecisionDataset.__tablename__: 3,
+    }
+
+
+def test_counted_by_facet_answers_a_count_per_value_of_every_facet(
+    corpus_session: Session,
+) -> None:
+    """All nine, and every kind of column among them: text, boolean, integer and a JSON set."""
+    counted = count_by_facet(corpus_session)
+
+    assert set(counted) == set(ToolDecisionDataset.FACETS)
+    assert counted["domain"] == {"debt_collection": 2, "telesale": 1}
+    assert counted["language"] == {"en": 1, "vi": 2}
+    assert counted["ambiguous"] == {"false": 2, "true": 1}
+    assert counted["number_turns"] == {"2": 2, "4": 1}
+    assert counted["schema_valid"] == {"false": 1, "true": 2}
+
+
+def test_a_list_valued_facet_is_counted_by_the_whole_set(
+    corpus_session: Session,
+) -> None:
+    """The facet as the row carries it: *which combinations occur*, which is a different question
+    from how often each value inside one appears. The second is the joint distribution matrix's."""
+    counted = count_by_facet(corpus_session)
+
+    assert counted["call_trigger"] == {
+        '["condition_met"]': 2,
+        '["user_utterance", "every_turn"]': 1,
+    }
+    assert counted["personal_data"] == {"[]": 1, '["PHONE"]': 2}
+
+
+def test_counted_by_pair_answers_only_the_pairs_the_rows_carry(
+    corpus_session: Session,
+) -> None:
+    """Two of the twelve declared cells, because a `GROUP BY` cannot answer for a pair no row has.
+
+    The set comes back as a tuple rather than as text: the caller has to reach the values inside
+    it, and re-reading JSON this layer just wrote would be the same work twice.
+    """
+    assert count_by_pair(corpus_session, "domain", "call_trigger") == {
+        ("debt_collection", ("condition_met",)): 2,
+        ("telesale", ("user_utterance", "every_turn")): 1,
+    }
+
+
+def test_selecting_dataset_rows_answers_the_key_the_input_and_the_label(
+    corpus_session: Session,
+) -> None:
+    """All three columns in one read, because the duplicate grouping is given all three."""
+    rows = select_dataset_rows(corpus_session)
+
+    assert {key for key, _, _ in rows} == {
+        str(row.id) for row in corpus_session.scalars(select(ToolDecisionDataset))
+    }
+    assert sorted(
+        (one_input["messages"][0]["content"], label is None)
+        for _, one_input, label in rows
+    ) == [("cảm ơn em", True), ("nợ bao nhiêu", False), ("nợ bao nhiêu", False)]
+
+
+def test_a_numeric_facet_is_counted_in_number_order(corpus_session: Session) -> None:
+    """Ordered by the value, not by the text it renders as.
+
+    The keys are text because a JSON object has no other kind, and sorting *those* would put a
+    corpus's ten-turn conversations between its one-turn and its two-turn ones.
+    """
+    corpus_session.add(build_dataset_row(number_turns=10))
+    corpus_session.commit()
+
+    assert list(count_by_facet(corpus_session)["number_turns"]) == ["2", "4", "10"]
+
+
+def test_a_json_column_holding_a_null_is_counted_and_does_not_raise(
+    corpus_session: Session,
+) -> None:
+    """`nullable=False` does not refuse a JSON `null`: SQLAlchemy writes Python `None` into a JSON
+    column as the text `null`, and the column is not null, it holds one.
+
+    So the read has to be total over whatever a JSON column holds. Two of its values are not
+    always comparable in Python, which is why nothing here sorts them, and the JSON `null` is kept
+    apart from a row holding the *string* `null` because the column says how a value is written.
+    """
+    corpus_session.add(build_dataset_row(personal_data=None))
+    corpus_session.add(build_dataset_row(personal_data="null"))
+    corpus_session.commit()
+
+    counted = count_by_facet(corpus_session)["personal_data"]
+
+    assert counted["null"] == 1
+    assert counted['"null"'] == 1
+    assert counted['["PHONE"]'] == 2
+
+
+@pytest.mark.parametrize("facet", ToolDecisionDataset.FACETS)
+def test_every_facet_s_counts_add_up_to_the_number_of_rows(
+    facet: str, corpus_session: Session
+) -> None:
+    """The property a `GROUP BY` read has to keep: every row is counted once, under one value.
+
+    It is what breaks first if two groups are ever folded onto one key by assignment rather than
+    by adding -- a row disappears, and no figure in the answer says where it went.
+    """
+    counted = count_by_facet(corpus_session)[facet]
+
+    assert sum(counted.values()) == count_rows(corpus_session)["tool_decision_dataset"]
+
+
+def test_two_spellings_of_one_json_value_are_summed_and_not_overwritten(
+    corpus_session: Session,
+) -> None:
+    """T9's *both dialects answer the same* stated as a case, and the one place they differ.
+
+    SQLite groups a JSON column by its stored **text**, so a value another writer spelled with a
+    space is a second group that reads back as the same Python list; Postgres groups `jsonb` by
+    value and returns one. Adding the groups is what makes the two agree -- and is what keeps the
+    counts reaching the row count, which is the failure a reader would otherwise never see.
+    """
+    corpus_session.add(
+        build_dataset_row(domain="spelled", call_trigger=["condition_met"])
+    )
+    corpus_session.commit()
+    corpus_session.execute(
+        text(
+            "UPDATE tool_decision_dataset SET call_trigger = '[\"condition_met\" ]' "
+            "WHERE domain = 'spelled'"
+        )
+    )
+    corpus_session.commit()
+
+    assert count_by_facet(corpus_session)["call_trigger"]['["condition_met"]'] == 3

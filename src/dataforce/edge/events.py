@@ -38,7 +38,7 @@ class JsonLines(logging.Handler):
         )
 
 
-def structured_events(level: int = logging.INFO) -> logging.Logger:
+def install_structured_events(level: int = logging.INFO) -> logging.Logger:
     """Install one `JsonLines` on the `dataforce` tree, replacing one already there."""
     logger = logging.getLogger(TREE)
     for installed in [one for one in logger.handlers if isinstance(one, JsonLines)]:

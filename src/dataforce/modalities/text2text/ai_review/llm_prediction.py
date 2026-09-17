@@ -54,7 +54,7 @@ class LLMPrediction(ABC):
 
         The socket a task answers only where its answers cannot be matched: `None` is a task that
         needs no judge, and a tie then stands as no answer. Whether what comes back is an answer a
-        juror actually gave is settled by `llm_judge_consensus`, not here.
+        juror actually gave is settled by `find_llm_judge_consensus`, not here.
         """
         pass
 
@@ -68,7 +68,7 @@ class LLMPrediction(ABC):
         """
         pass
 
-    async def verdict(
+    async def reach_verdict(
         self, sample: Mapping[str, Any], label: str, language: str
     ) -> LLMReviewerVerdict:
         """What the panel said: the votes, how many agree with the label, and its one answer.
@@ -82,16 +82,16 @@ class LLMPrediction(ABC):
         pred_texts = [vote.label for vote in votes]
         wanted = self.normalize_prediction(label)
         agreed = [one for one in pred_texts if self.normalize_prediction(one) == wanted]
-        consensus = self.exact_match_consensus(pred_texts)
+        consensus = self.find_exact_match_consensus(pred_texts)
         if consensus is None:
-            consensus = await self.llm_judge_consensus(pred_texts)
+            consensus = await self.find_llm_judge_consensus(pred_texts)
         return LLMReviewerVerdict(
             votes=votes,
             label_agreement=len(agreed) / len(pred_texts) if pred_texts else 0.0,
             consensus=consensus,
         )
 
-    def exact_match_consensus(self, pred_texts: Sequence[str]) -> str | None:
+    def find_exact_match_consensus(self, pred_texts: Sequence[str]) -> str | None:
         """The answer strictly more than half of them gave, as the juror wrote it. Else `None`.
 
         A strict majority and never a mode: two of three is an answer, two of
@@ -110,7 +110,7 @@ class LLMPrediction(ABC):
             one for one in pred_texts if self.normalize_prediction(one) == written
         )
 
-    async def llm_judge_consensus(self, pred_texts: Sequence[str]) -> str | None:
+    async def find_llm_judge_consensus(self, pred_texts: Sequence[str]) -> str | None:
         """The answer a judge picked out of these, and only ever one a juror actually wrote.
 
         Asked only where the exact match found nothing, and nothing answered is nobody asked. What

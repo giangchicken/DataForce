@@ -1,20 +1,23 @@
 """facade · the full logic behind each tool_decision endpoint."""
 
-from .ai_review import tool_decision_llm_predict, tool_decision_sft_predict
+from .ai_review import predict_tool_decision_by_llm, predict_tool_decision_by_sft
 from .data_quality import (
-    abnormal_report,
-    duplicate_report,
-    personal_data_detect,
-    personal_data_redact,
-    personal_data_replace,
+    detect_personal_data,
+    redact_personal_data,
+    replace_personal_data,
+    report_abnormalities,
+    report_duplicates,
 )
+from .dataset_management import create_joint_distribution_matrix, describe_labels
 
 __all__ = [
-    "abnormal_report",
-    "duplicate_report",
-    "personal_data_detect",
-    "personal_data_redact",
-    "personal_data_replace",
-    "tool_decision_llm_predict",
-    "tool_decision_sft_predict",
+    "report_abnormalities",
+    "create_joint_distribution_matrix",
+    "describe_labels",
+    "report_duplicates",
+    "detect_personal_data",
+    "redact_personal_data",
+    "replace_personal_data",
+    "predict_tool_decision_by_llm",
+    "predict_tool_decision_by_sft",
 ]

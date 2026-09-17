@@ -2,7 +2,7 @@
 
 import pytest
 
-from dataforce.edge.events import structured_events
+from dataforce.edge.events import install_structured_events
 
 
 @pytest.fixture(autouse=True)
@@ -12,7 +12,7 @@ def events_on_stdout() -> None:
     `H-6` is about what a deployment sees, so the formatting is not stubbed: what these tests
     assert on stdout is the same handler `create_app` adds.
     """
-    structured_events()
+    install_structured_events()
 
 
 @pytest.fixture(autouse=True)

@@ -1,13 +1,13 @@
 """logic · the full logic behind each data-quality endpoint.
 
-Personal data is two calls a reviewer sits between, and a third over the record they left. `personal_data_detect` builds the
+Personal data is two calls a reviewer sits between, and a third over the record they left. `detect_personal_data` builds the
 checker from its config and the scan's input out of what arrived -- the record whole, and the
-language declared beside it -- and answers what a reviewer is shown. `personal_data_replace` takes
+language declared beside it -- and answers what a reviewer is shown. `replace_personal_data` takes
 that answer back with the spans as the reviewer left them, and replaces those and nothing else.
-`personal_data_redact` runs the same replacement over the record's own fields, which is the one
+`redact_personal_data` runs the same replacement over the record's own fields, which is the one
 place the review text's offsets cannot reach.
 
-`duplicate_report` and `abnormal_report` take a sample and nothing else: neither declares a shape
+`report_duplicates` and `report_abnormalities` take a sample and nothing else: neither declares a shape
 to return, so neither has a model to ask, and a config they ignore would be one a caller has to
 supply for nothing.
 """
@@ -28,13 +28,13 @@ from dataforce.modalities.text2text.data_quality.schema import Language
 from dataforce.profile.tool_decision.data_quality import (
     ToolDecisionPersonalChecking,
     decide_replacement_outcome,
+    read_span_values,
+    replace_node,
     replace_spans_with_placeholders,
-    replaced_node,
-    span_values,
 )
 
 
-async def personal_data_detect(
+async def detect_personal_data(
     config: PersonalDataCheckingConfig,
     sample: Mapping[str, Any],
     language: Language,
@@ -57,7 +57,7 @@ async def personal_data_detect(
     return await ToolDecisionPersonalChecking(config).detect(checking_input)
 
 
-def personal_data_replace(detected: PersonalDataDetected) -> PersonalDataReplaced:
+def replace_personal_data(detected: PersonalDataDetected) -> PersonalDataReplaced:
     """The review text copied with those spans replaced, and how far that got.
 
     Not async, because nothing here is asked: the spans arrive from the reviewer who ticked,
@@ -75,13 +75,13 @@ def personal_data_replace(detected: PersonalDataDetected) -> PersonalDataReplace
     )
 
 
-def personal_data_redact(
+def redact_personal_data(
     detected: PersonalDataDetected, sample: Mapping[str, Any]
 ) -> dict[str, Any]:
     """The sample as the human left it, with every handed-back span's value replaced.
 
     The third personal-data call, and the same rule as the second over a different reach:
-    `personal_data_replace` copies `review_text`, and this copies every field the record carries,
+    `replace_personal_data` copies `review_text`, and this copies every field the record carries,
     because an offset indexes the review text and `messages` and `label` are other strings.
     Which is why it is handed the detect answer whole rather than the spans
     alone -- the text they index is what says which value each placeholder stands for.
@@ -93,15 +93,15 @@ def personal_data_redact(
     Not async, and no model is asked: the spans arrive from the reviewer who ticked, edited or
     added them. Nothing is kept either -- the sample is read, copied and answered.
     """
-    placeholders = span_values(detected.review_text, detected.spans)
-    return {key: replaced_node(value, placeholders) for key, value in sample.items()}
+    placeholders = read_span_values(detected.review_text, detected.spans)
+    return {key: replace_node(value, placeholders) for key, value in sample.items()}
 
 
-async def duplicate_report(sample: Mapping[str, Any]) -> None:
+async def report_duplicates(sample: Mapping[str, Any]) -> None:
     """None, by declaration. Nothing says what a duplicate report is."""
     return None
 
 
-async def abnormal_report(sample: Mapping[str, Any]) -> None:
+async def report_abnormalities(sample: Mapping[str, Any]) -> None:
     """None, by declaration. Nothing says what a common check reports."""
     return None

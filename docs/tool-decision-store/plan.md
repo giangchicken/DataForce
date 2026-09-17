@@ -4,7 +4,7 @@ Tasks for building what `spec.md` specifies. Read that first; this document sche
 not restate it. Where the two disagree, the spec wins and this file is wrong.
 
 **Source:** [`spec.md`](spec.md), and [`layout.md`](layout.md) for which module each task's change
-lands in. `AGENTS.md` for `H-4`, `H-8`, `H-10`, `R-2`, `R-6`, `E-1`, `T-1` and `T-5`.
+lands in. `AGENTS.md` for `H-4`, `H-8`, `R-2`, `R-6`, `E-1`, `T-1` and `T-5`.
 `docs/tool-decision-pipeline/spec.md` for the flow this sits under.
 
 **State at the time of writing.** Nothing of the store exists, and two things already point at it:
@@ -104,11 +104,11 @@ decision with its own task, taken when something is measurably slow.
 creates and never alters, which is a property the tests state rather than a limitation they work
 around.
 
-**A function is named by `R-6`, and the check is reading it aloud.** A noun phrase of at least two
-words, never a bare noun — `cached_engine`, not `engine`; `open_session`, not `session`. One stem per
-step, inflected, so the grammatical form says which side of the call the name sits on: a verb
-phrase is the act, a past participle is the thing after the act. And `C-6`: the function that
-decides and the function that writes are two functions.
+**A function is named by `R-6`, and the check is reading it aloud.** A verb phrase, verb first —
+`open_engine`, not `engine`; `count_rows`, not `row_counts`. One stem per step, inflected, so the
+grammatical form says which side of the call the name sits on: the verb phrase is the act, the noun
+is what came back and belongs to the variable. And `C-6`: the function that decides and the function
+that writes are two functions.
 
 ---
 
@@ -116,7 +116,7 @@ decides and the function that writes are two functions.
 
 | # | Phase | Goal — the outcome that ends it |
 |---|---|---|
-| 0 | A database can be reached, and this task's tables exist | `created_tables` makes both tables on an empty SQLite file and on Postgres, and `make check` exercises the adapter with no server running |
+| 0 | A database can be reached, and this task's tables exist | `create_tables` makes both tables on an empty SQLite file and on Postgres, and `make check` exercises the adapter with no server running |
 | 1 | What every text2text sample has in common | The shapes, the duplicate check and this task's label measurements, all pure, with no word of `tool_decision` anywhere in `modalities/` |
 | 2 | The corpus can be counted | `GET .../records/stats` answers every statistic in § *The statistics* over rows a test put there, each with its denominator, none of them stored |
 | 3 | A reviewed sample lands | **approve** posts the record, both tables take it in one transaction, and a sample whose steps did not run is a `422` |
@@ -155,7 +155,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T15 | Two writes, one transaction | 3 | T13, T14 | M |
 | T16 | The route that takes a record, and the step that did not run | 3 | T15 | M |
 | T17 | **approve** posts the record | 3 | T16 | M |
-| T18 | Step 7 asks the profile which ticks to draw | 3 | T17 | M |
+| T18 | Step 7 draws a tick for every declared facet | 3 | T17 | M |
 | T19 | `dataset` can be dropped and rebuilt | 3 | T15 | S |
 | T20 | One card at a time, and a bar that moves between them | 4 | | L |
 | T21 | The first card is the guide, and the header is a title | 4 | T20 | M |
@@ -165,7 +165,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 
 ## Phase 0 · A database can be reached, and this task's tables exist
 
-**Phase goal.** `created_tables` makes both tables on an empty SQLite file and on Postgres, and
+**Phase goal.** `create_tables` makes both tables on an empty SQLite file and on Postgres, and
 `make check` exercises the adapter with no server running.
 
 ### T1 · The DSN is read once, and *no database* is a state
@@ -177,7 +177,7 @@ The state that matters most is the one where the variable is unset: § *The page
 flow to work with no store attached, so `None` is an answer and not a failure.
 
 **Approach.** `edge/database.py`, tagged `adapter`: one `Database` class holding the variable
-name, the lock and the engine cache, with `cached_engine()` and `open_session()` on it, plus `Base`
+name, the lock and the engine cache, with `open_engine()` and `open_session()` on it, plus `Base`
 beside it and one instance named `store`. The DSN read, the lock and the cache are one object's
 state; as three module globals and three functions they were three things a reader has to hold at
 once, and the read of the variable was a function whose whole body was a `return`.
@@ -207,8 +207,8 @@ attached is a supported state.
 
 ### T2 · This task's two tables, and what makes them
 
-**Goal.** `profile/tool_decision/dataset_management/schema.py` declares `ToolDecisionRecord` and
-`ToolDecisionDataset`, and `created_tables(engine)` makes both.
+**Goal.** `profile/tool_decision/schema.py` declares `ToolDecisionRecord` and
+`ToolDecisionDataset`, and `create_tables(engine)` makes both.
 
 **Context.** § *`record`* and § *`dataset`* fix the columns. The key is `id` alone, as a `Uuid`:
 the table name carries the task, so nothing needs qualifying, and a UUID column needs no length
@@ -217,14 +217,14 @@ chosen for it.
 **Approach.** `Uuid` for the key. `JSON` for `document`, `input`, `label` and `notes`. The nine
 facet columns § *`dataset`* names, each typed for what it holds — a string for `language` and
 `domain`, a boolean for `ambiguous` and `schema_valid`, an integer for the three counts, `JSON` for
-`personal_data` and `call_shape`, which are both sets. Plain `DateTime` for the two times.
+`personal_data` and `call_trigger`, which are both sets. Plain `DateTime` for the two times.
 
 The tag is `adapter`, not `shape`: the file holds SQLAlchemy, and `H-8`'s table is what lets the
 router import it while `services/` cannot. It imports `Base` from `edge/database.py`, so
 one `MetaData` holds every task's tables.
 
 **Acceptance criteria.**
-- `created_tables` on an empty database makes exactly two tables with exactly the declared columns.
+- `create_tables` on an empty database makes exactly two tables with exactly the declared columns.
 - Running it twice is a no-op and raises nothing.
 - Running it against a database whose table is missing a column **does not add the column** — the
   test states this, because it is the property that makes a new facet a `notes` key.
@@ -250,7 +250,7 @@ no Postgres service for it to reach.
 
 **Approach.** A fixture parameterised over the two, the server half marked `integration`. The file
 half makes a temporary path per test; the server half skips loudly where the variable is unset.
-Both call `created_tables` and drop everything afterwards — which is why the variable names a
+Both call `create_tables` and drop everything afterwards — which is why the variable names a
 throwaway server and the docstring says so.
 
 **Acceptance criteria.**
@@ -320,7 +320,7 @@ two groups § *The statistics* names.
 names the digest as the change to make when the scan stops being instant. `data_quality/` held a
 module of the same name: an abstract class over an embedding call whose `duplicate_groups` returned
 `None`, with a subclass that implemented no socket and could not be constructed. It is deleted, and
-this file takes its name and its two names — one duplicate check in the modality, not two.
+this file takes its name and its `DuplicateGroups` — one duplicate check in the modality, not two.
 
 **Approach.** Canonicalise each input under one key ordering, hash it, group by the hash, then split
 each group by whether the labels agree. Two JSON columns are not comparable for equality across
@@ -348,9 +348,9 @@ dialects, which is why the grouping is in Python and not in SQL.
 of rows carrying a label at all is one expression over the rows and their count, and a module whose
 whole content is a one-line function with no caller is what `C-4` — *"Otherwise a named variable is
 enough to put the rule on screen"* — `C-5` and `T-5` each refuse. It is computed where its one
-caller is: `described_labels` in `services/tool_decision/dataset_management.py`, T10.
+caller is: `describe_labels` in `services/tool_decision/dataset_management.py`, T10.
 
-**Cost, stated.** `H-10`'s argument stands — a second text2text task writes that line again rather
+**Cost, stated.** A second text2text task writes that line again rather
 than inheriting it. One line written twice is cheaper than a file nothing imports, and `layout.md`
 said as much before this was built: *"if this one moves down too, the file has no reason to exist
 and label statistics are entirely the profile's."*
@@ -365,13 +365,13 @@ zero rows divides nothing.
 
 ### T8 · What this task's label can be measured by
 
-**Goal.** `profile/tool_decision/dataset_management/label_statistics.py` answers everything about a
+**Goal.** `profile/tool_decision/label_statistics.py` answers everything about a
 label that says `tool`.
 
-**Context.** `called_tools`, `required_parameters`, `schema_valid_label` and `tool_coverage` all
+**Context.** `list_called_tools`, `list_required_parameters`, `validate_label_calls` and `count_tool_calls` all
 read inside a label and a catalog. This is the layer allowed to name them.
 
-**Approach.** `schema_valid_label` is BFCL's AST check against **this row's own catalog**: every
+**Approach.** `validate_label_calls` is BFCL's AST check against **this row's own catalog**: every
 call names a tool the sample was offered and supplies that tool's required parameters. A label
 calling a tool the sample never offered is a broken row, not a hard example.
 
@@ -379,11 +379,12 @@ calling a tool the sample never offered is a broken row, not a hard example.
 - A call naming a tool absent from the catalog is invalid.
 - A call missing a required parameter is invalid; a call missing an optional one is valid.
 - An empty label is valid and counts as `0` calls.
-- `tool_coverage` answers a count per offered tool, a tool never called included as `0`, and a
+- `count_tool_calls` answers a count per offered tool, a tool never called included as `0`, and a
   tool called without being offered counted rather than dropped.
 - Counting calls per label is **not** here — see T10.
 
-**Source.** § *The facets* — `schema_valid`; § *The statistics* — schema validity, tool coverage.
+**Source.** § *The facets* — `schema_valid`; § *The statistics* — schema validity, tools offered
+and tools called.
 
 **Verify.** `uv run pytest tests/profile/test_label_statistics.py -q`.
 
@@ -402,14 +403,24 @@ pair of two named ones.
 **Context.** The facets are columns, so these are `GROUP BY`. This is the only layer allowed to say
 `domain` out loud, which is why the grouping lives here and not in the modality.
 
+**Decided here.** The nine facet names hang off `ToolDecisionDataset` as a `ClassVar`, so the list
+cannot drift from the table it describes. **The values a person may tick are not here and nowhere
+below the edge**: a tickable list is a thing the page draws tick boxes from, and the store has no
+use for a value until a sample carries it. Nothing refuses a value the store has not seen.
+
+**Decided here.** A list-valued facet is grouped **as a set**. Splitting one in SQL is `json_each`
+on SQLite and `jsonb_array_elements` on Postgres — two statements for one question, against a store
+whose whole claim is *one code path, two DSNs*. So `count_by_pair` hands the set back as a tuple
+and the service splits it, which is also where the empty cells are put back.
+
 **Acceptance criteria.**
-- `counted_by_facet` returns a count per value for each of the nine facet columns, over rows a test
+- `count_by_facet` returns a count per value for each of the nine facet columns, over rows a test
   inserted directly.
-- `counted_by_pair` groups by two named columns and returns only the pairs that exist.
-- `row_counts` answers how many rows each table holds.
+- `count_by_pair` groups by two named columns and returns only the pairs that exist.
+- `count_rows` answers how many rows each table holds.
 - Both dialects return the same answers for the same fixture.
 
-**Source.** § *The statistics* — the coverage matrix.
+**Source.** § *The statistics* — the joint distribution matrix.
 
 **Verify.** `uv run pytest tests/store/test_schema.py -q`, then `make integration`.
 
@@ -422,22 +433,33 @@ declared values appears, the pairs with no rows included and zero.
 
 **Context.** **The finding is the zeros.** A `GROUP BY` returns only what exists, so the empty cells
 — the whole point of the matrix — are exactly what SQL cannot hand back. They are put back from the
-product of `DOMAINS` and `CALL_SHAPES`.
+product of `DOMAINS` and `CALL_TRIGGERS`.
 
 **Acceptance criteria.**
-- How many rows make each number of calls comes back, counting **entries** rather than tools that
-  could be read: an entry naming no tool is still an attempt at a call, and letting it fall to `0`
-  would pad the no-call share that irrelevance detection is measured from. `0`, `1` and more are
-  all readable off the answer.
+- How many rows make each number of calls is **not** counted here. `number_label_tools` is a facet
+  column, so the per-facet distribution already answers it at `0`, `1` and more — and a second
+  count off the labels would be a second definition of what a call is, free to disagree with the
+  column the corpus is sold by.
 - How many rows carry a label at all, out of how many — `[]` and `null` both count as *not
   labelled*, and the share over zero rows divides nothing.
-- Over a fixture whose rows cover three of twelve cells, the answer has twelve cells and nine zeros.
-- The count of empty cells is answered on its own, because the strip reads it.
-- A value present in the rows but absent from the declared list appears in the matrix rather than
-  being dropped silently.
+- Over a fixture whose rows make three pairs across three domains and three triggers, the answer
+  has nine cells and six zeros.
+- A value only one sample carries has an axis entry of its own the moment that sample lands.
+- A sample that triggers nothing names a row and no column, rather than vanishing.
 - The function is pure and takes no session.
 
-**Source.** § *The statistics* — the coverage matrix, the finding is the zeros.
+**Decided here.** The matrix is the **rectangle the rows make**: every value either axis carries
+crossed with every value the other does. A pair no sample makes still reads `0`, so the zeros are
+there for everything the corpus has seen — what is *not* there is a cell for a value nobody has
+ticked yet, because that list lives with the page. Crossing this grid against it, and counting what
+is still empty, is the page's arithmetic.
+
+**Decided here.** `empty_cells` is a field of the route's answer, counted off the matrix as it is
+built. It is one expression with one caller, so `C-4` — *"a named variable is enough to put the rule
+on screen"* — refuses a function for it, and the criterion *answered on its own* is met by its being
+its own figure in the answer rather than something the strip recomputes.
+
+**Source.** § *The statistics* — the joint distribution matrix, the finding is the zeros.
 
 **Verify.** `uv run pytest tests/services/test_dataset_management.py -q`.
 
@@ -453,6 +475,11 @@ shapes live here, because they are the shape of one HTTP answer.
 rows the duplicate grouping needs, passes them to the service, and answers `CorpusStats`. Where
 `store.open_session()` is `None` it answers `503` naming `DATAFORCE_DATABASE_URL` — the variable, so the
 message says what to set.
+
+**Decided here.** There is no `stored_labels`. `select_dataset_rows` already answers the key, the
+input and the label, which is every column the duplicate grouping and the label measurements read between
+them, so a second query would be the same rows fetched twice — `T-5` refuses the module nothing
+gets harder without.
 
 **Acceptance criteria.**
 - Over a fixture of known rows, every statistic § *The statistics* names is in the answer, each with
@@ -503,12 +530,14 @@ constraints, not the design.
 
 ### T13 · The profile answers it
 
-**Goal.** `profile/tool_decision/dataset_management/sample_building.py` says what a `tool_decision`
+**Goal.** `profile/tool_decision/sample_building.py` says what a `tool_decision`
 sample ships as and which facets it computes and declares.
 
 **Context.** `{messages, tools}` from the `new_` keys, or the originals where a `new_` key is
-`null`. `number_turns`, `number_label_tools`, `number_provided_tools` and `schema_valid` computed.
-`domain`, `call_shape`, `direction` and `have_conversation_flow` declared — the last two into
+`null`. **`number_label_tools` is now load-bearing**: the no-call share and the calls-per-row
+distribution are both read off that column, so a test here has to hold it to the label it was
+computed from — nothing downstream recounts it. `number_turns`, `number_label_tools`, `number_provided_tools` and `schema_valid` computed.
+`domain`, `call_trigger`, `direction` and `have_conversation_flow` declared — the last two into
 `notes`.
 
 **Acceptance criteria.**
@@ -588,9 +617,14 @@ where one did not run.
 
 **Source.** § *The page*.
 
-### T18 · Step 7 asks the profile which ticks to draw
+### T18 · Step 7 draws a tick for every declared facet
 
-**Goal.** `GET .../records/declared-facets` answers the list, and step 7 draws it.
+**Goal.** Step 7 draws a tick for every declared facet, from the page's own list of values.
+
+**Decided since.** There is no `declared-facets` route and the store holds no list of tickable
+values. What a person may choose is not a fact about a corpus, so it lives where the tick boxes are
+drawn. The cost, stated: a facet the page never draws a tick for is a column that is always `null`,
+and nothing but review catches it.
 
 **Context.** A facet declared in the profile and not on the page is a column that is always `null`.
 The page holding its own copy of the list is how that happens.
@@ -606,7 +640,7 @@ The page holding its own copy of the list is how that happens.
 
 ### T19 · `dataset` can be dropped and rebuilt
 
-**Goal.** `rebuilt_dataset` deletes every row and recomputes it from `record`.
+**Goal.** `rebuild_dataset` deletes every row and recomputes it from `record`.
 
 **Acceptance criteria.**
 - After a rebuild, every row is identical to what it was.
@@ -660,8 +694,10 @@ is a jump; `←` and `→` move a card only while focus is outside a field.
 **Goal.** Two numbers on every card, and the statistics under the guide.
 
 **Acceptance criteria.**
-- The strip shows how many rows are stored and how many matrix cells are still empty.
-- The guide card shows the coverage matrix, with the empty cells visible next to the full ones.
+- The strip shows how many rows are stored and how many matrix cells are still empty — the
+  second counted on the page, by crossing its own tick lists against the grid the route answers.
+- The guide card shows the joint distribution matrix, with the empty cells visible next to the
+  full ones.
 - The statistics are asked for on load and again after a record is written — not on a timer, not on
   every flip.
 - With no database attached the strip says so and the guide still renders.

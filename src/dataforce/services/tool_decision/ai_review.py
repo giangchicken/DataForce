@@ -30,7 +30,7 @@ from dataforce.profile.tool_decision.ai_review import (
 )
 
 
-async def tool_decision_llm_predict(
+async def predict_tool_decision_by_llm(
     config: LLMModelConfig | Sequence[LLMModelConfig] | None,
     sample: Mapping[str, Any],
     language: str,
@@ -47,12 +47,12 @@ async def tool_decision_llm_predict(
     """
     if config is None:
         return None
-    return await ToolDecisionLLMPrediction(config).verdict(
+    return await ToolDecisionLLMPrediction(config).reach_verdict(
         sample, json.dumps(sample.get("label"), ensure_ascii=False), language
     )
 
 
-async def tool_decision_sft_predict(
+async def predict_tool_decision_by_sft(
     config: SFTModelConfig | None, sample: Mapping[str, Any], language: str
 ) -> SFTReviewerVerdict | None:
     """What the finetuned reviewer said. None where no model was declared.

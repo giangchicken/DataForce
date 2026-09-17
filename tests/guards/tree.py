@@ -10,7 +10,7 @@ helper, or someone deletes the check -- so a line may carry::
     # guard-exempt: H-8 · why · who owns it · 2026-08-23
 
 and the guard that rule belongs to will pass over that line. Every guard filters through
-`not_exempt`, and `test_exemptions.py` keeps the list well-formed and short.
+`drop_exempt_findings`, and `test_exemptions.py` keeps the list well-formed and short.
 """
 
 import ast
@@ -52,7 +52,7 @@ class Import(NamedTuple):
     line: int  # the line of the statement, for the failure message and for an exemption
 
 
-def plain(text: str) -> str:
+def strip_markup(text: str) -> str:
     """One line with its markup gone, so a document and a docstring compare as words.
 
     The spec writes single backticks and an em dash, a docstring writes double backticks and `--`,
@@ -62,7 +62,7 @@ def plain(text: str) -> str:
     return re.sub(r"\s+", " ", bare).strip().rstrip(".")
 
 
-def module_from_source(
+def parse_module_source(
     source: str, name: str = "dataforce.synthetic", package: str | None = None
 ) -> Module:
     """The module that source holds. A guard's red-first proof passes a violation in here.
@@ -79,7 +79,7 @@ def module_from_source(
     )
 
 
-def module_at(path: Path) -> Module:
+def parse_module_file(path: Path) -> Module:
     """The module that file holds. `path` is absolute, and under `SRC`."""
     parts = path.relative_to(SRC.parent).with_suffix("").parts
     is_init = parts[-1] == "__init__"
@@ -91,13 +91,13 @@ def module_at(path: Path) -> Module:
     )
 
 
-def modules_in(package: str = "") -> list[Module]:
+def parse_package_modules(package: str = "") -> list[Module]:
     """Every module under `src/dataforce/<package>`, parsed. The default is the whole package."""
     root = SRC / package if package else SRC
-    return [module_at(p) for p in sorted(root.rglob("*.py"))]
+    return [parse_module_file(p) for p in sorted(root.rglob("*.py"))]
 
 
-def imports(module: Module) -> list[Import]:
+def list_imports(module: Module) -> list[Import]:
     """Every module name this one reaches, absolute.
 
     `from x import y` yields both `x` and `x.y`: either spelling is how a forbidden module gets
@@ -108,7 +108,7 @@ def imports(module: Module) -> list[Import]:
         if isinstance(node, ast.Import):
             found += [Import(alias.name, node.lineno) for alias in node.names]
         elif isinstance(node, ast.ImportFrom):
-            base = _absolute(module, node)
+            base = resolve_absolute_import(module, node)
             found.append(Import(base, node.lineno))
             found += [
                 Import(f"{base}.{alias.name}", node.lineno)
@@ -118,7 +118,7 @@ def imports(module: Module) -> list[Import]:
     return found
 
 
-def called_name(node: ast.Call) -> str:
+def read_called_name(node: ast.Call) -> str:
     """The dotted name a call names -- `open`, `datetime.now`, `a.b.c` -- or `""` if it names none."""
     parts: list[str] = []
     target: ast.expr = node.func
@@ -131,18 +131,18 @@ def called_name(node: ast.Call) -> str:
     return ".".join(reversed(parts))
 
 
-def not_exempt(
+def drop_exempt_findings(
     module: Module, rule: str, found: Iterable[tuple[int, str]]
 ) -> list[str]:
     """The findings whose line carries no annotated exemption for that rule."""
     return [
         f"{module.name}:{line} {message}"
         for line, message in found
-        if not _exemption_on(module, line, rule)
+        if not read_exemption(module, line, rule)
     ]
 
 
-def exemptions(modules: Iterable[Module]) -> list[str]:
+def list_exemptions(modules: Iterable[Module]) -> list[str]:
     """Every well-formed exemption in those modules -- the list that is meant to stay short."""
     return [
         f"{module.name}:{number} {match['rule']} · {match['reason']} ·"
@@ -153,7 +153,7 @@ def exemptions(modules: Iterable[Module]) -> list[str]:
     ]
 
 
-def malformed_exemptions(modules: Iterable[Module]) -> list[str]:
+def find_malformed_exemptions(modules: Iterable[Module]) -> list[str]:
     """Every line claiming an exemption without naming a rule, a reason, an owner, a date."""
     return [
         f"{module.name}:{number} {line.strip()}"
@@ -163,7 +163,7 @@ def malformed_exemptions(modules: Iterable[Module]) -> list[str]:
     ]
 
 
-def _absolute(module: Module, node: ast.ImportFrom) -> str:
+def resolve_absolute_import(module: Module, node: ast.ImportFrom) -> str:
     """One `from ... import` resolved against the package the module sits in."""
     if not node.level:
         return node.module or ""
@@ -172,7 +172,7 @@ def _absolute(module: Module, node: ast.ImportFrom) -> str:
     return ".".join([*base, node.module] if node.module else base)
 
 
-def _exemption_on(module: Module, line: int, rule: str) -> bool:
+def read_exemption(module: Module, line: int, rule: str) -> bool:
     if not 0 < line <= len(module.lines):
         return False
     match = EXEMPTION.search(module.lines[line - 1])

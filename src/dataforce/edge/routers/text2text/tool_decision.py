@@ -20,7 +20,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from dataforce.edge.served_models import served_models
+from dataforce.edge.database import db
+from dataforce.edge.served_models import check_served_models, list_served_models
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.ai_review import (
     LLMReviewerVerdict,
@@ -39,14 +40,31 @@ from dataforce.modalities.text2text.data_quality.schema import (
     Language,
     VerifierModelConfig,
 )
+from dataforce.modalities.text2text.dataset_management import (
+    DuplicateGroups,
+    LabelSummary,
+    calculate_duplicates,
+)
+from dataforce.profile.tool_decision.label_statistics import (
+    count_tool_calls,
+    list_offered_tools,
+)
+from dataforce.profile.tool_decision.schema import (
+    count_by_facet,
+    count_by_pair,
+    count_rows,
+    select_dataset_rows,
+)
 from dataforce.services.tool_decision import (
-    abnormal_report,
-    duplicate_report,
-    personal_data_detect,
-    personal_data_redact,
-    personal_data_replace,
-    tool_decision_llm_predict,
-    tool_decision_sft_predict,
+    create_joint_distribution_matrix,
+    describe_labels,
+    detect_personal_data,
+    predict_tool_decision_by_llm,
+    predict_tool_decision_by_sft,
+    redact_personal_data,
+    replace_personal_data,
+    report_abnormalities,
+    report_duplicates,
 )
 
 router = APIRouter(prefix="/text2text/tool-decision", tags=["tool_decision"])
@@ -55,12 +73,6 @@ PAGE = Path(__file__).resolve().parents[2] / "static" / "index.html"
 
 
 class Sample(BaseModel):
-    """One tool-calling sample, as it is posted.
-
-    `extra="allow"` because a corpus carries keys this service does not read, and dropping them
-    would make what is handed on a lossy copy of what arrived.
-    """
-
     model_config = ConfigDict(extra="allow")
 
     id: str = Field(..., description="What the sample is called.")
@@ -75,18 +87,7 @@ class Sample(BaseModel):
     )
 
 
-class ScanRequest(Sample):
-    """A sample, the language it is in, and the model ticked for layer two.
-
-    `verifier_model` and not `verifier`: a record's keys already say what each reviewer *said*, so
-    a request key naming which one to *ask* must not read like the answer.
-
-    `language` is declared here rather than on `Sample` because the scan is the one endpoint that
-    reads it today, and it is one of the two `agent_toolkit`'s scans know: a third value is a
-    `KeyError` from inside the library, so the choice belongs in the schema a caller reads (`H-5`)
-    rather than in a refusal they discover.
-    """
-
+class PersonalDataScanRequest(Sample):
     language: Language = Field(
         default="vi",
         description=(
@@ -100,29 +101,12 @@ class ScanRequest(Sample):
 
 
 class RedactRequest(Sample):
-    """A sample as the human left it, and the spans they handed back over it.
-
-    `detected` is named apart from the sample's own keys on the same terms as the scan's two
-    declarations: it is what a reviewer handed back about this request, not a key the corpus
-    carries. The detect answer whole rather than its spans alone, because `review_text` is what
-    the offsets index and therefore the only thing that says which value a placeholder stands for.
-    """
-
     detected: PersonalDataDetected = Field(
         ..., description="The spans as the reviewer left them, in the text they index."
     )
 
 
 class ReviewRequest(Sample):
-    """A sample, the language it is in, and the models ticked.
-
-    The model keys are named apart from `llm` and `sft`, which hold answers. `language` is
-    declared here on the same terms as on the scan: it fills the jurors' prompt
-    slot, and one of the two the scans know keeps the two requests asking in one vocabulary.
-    There is no judge to tick: a tie between two tool calls is two different calls, and this task
-    matches the calls rather than asking a model whether they mean the same.
-    """
-
     language: Language = Field(
         default="vi",
         description=(
@@ -149,46 +133,98 @@ class ReviewerVerdicts(BaseModel):
     sft: SFTReviewerVerdict | None = Field(default=None)
 
 
-def refused(error: ConfigError) -> HTTPException:
-    """A declaration this service cannot act on, as the status that says so."""
-    return HTTPException(status_code=422, detail=str(error))
+class CorpusStatistics(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-
-def checked_names(names: tuple[str, ...]) -> tuple[str, ...]:
-    """The names, once every one of them is a model this deployment serves.
-
-    Raises `ConfigError` naming the ones that are not, before any model is called, so a caller
-    learns which name was wrong rather than that something failed.
-    """
-    served = served_models()
-    unserved = tuple(name for name in names if name not in served)
-    if unserved:
-        raise ConfigError(
-            f"not served here: {', '.join(unserved)}. Served: {', '.join(served) or 'nothing'}"
+    sample_totals: Mapping[str, int] = Field(
+        ...,
+        description=(
+            "Table name, to how many samples it holds. The two agree -- both tables hold "
+            "the same samples and differ by what is in them -- and a run where they do "
+            "not is a bug rather than a figure."
+        ),
+    )
+    counted_distribution_by_facet: Mapping[str, Mapping[str, int]] = Field(
+        ...,
+        description=(
+            "One distribution per facet, over **every** row of `dataset`: a facet name, "
+            "then each value it holds, then how many samples carry that value -- "
+            '`["domain"]["telesale"]` is how many samples are telesale. Each '
+            "distribution adds up to `sample_totals`, and *counted* is in the name "
+            "because these are counts and never shares. The value is written as text, "
+            "because a JSON object has no other kind of key. A set-valued facet is keyed "
+            "by the whole set -- which combinations occur -- and "
+            "`counted_distribution_by_domain_and_call_trigger` is "
+            "where the values inside one are counted apart."
+        ),
+    )
+    counted_distribution_by_domain_and_call_trigger: Mapping[str, Mapping[str, int]] = (
+        Field(
+            ...,
+            description=(
+                "The pair distribution the per-facet one cannot give: rows keyed by `domain`, "
+                "columns by `call_trigger`, and how many samples are both. Every value one axis "
+                "carries crossed with every value the other does, so a pair no sample makes reads "
+                "`0` and the zeros are the finding. The axes are what the corpus **carries**: a "
+                "value nobody has ticked yet has no cell, because the tickable list lives with the "
+                "page, and crossing this against it is the page's arithmetic. A sample triggered "
+                "two ways is in two cells, so the cells may sum past the row count."
+            ),
         )
-    return names
+    )
+    label_summary: LabelSummary = Field(
+        ...,
+        description=(
+            "How many rows answered at all out of how many, and how many distinct answers "
+            "they hold between them. How many rows make each number of calls is "
+            "`counted_distribution_by_facet` at `number_label_tools`."
+        ),
+    )
+    number_tools_offered: int = Field(
+        ...,
+        description=(
+            "How many distinct tools the catalogs put in front of the model. Not "
+            "`len(tool_call_counts)`: a label may name a tool it was never offered, and "
+            "that is a broken row rather than an offer. Here and not in `label_summary`, "
+            "because that shape is one every text2text task shares and not every one of "
+            "them has tools at all."
+        ),
+    )
+    tool_call_counts: Mapping[str, int] = Field(
+        ...,
+        description=(
+            "Tool name, to how many calls the corpus's labels make to it. A tool offered "
+            "and never called stays here at `0` -- **the zeros are the finding**, a tool "
+            "the corpus cannot teach -- and the tail is the other half: two tools carrying "
+            "most of the calls trains a model that knows two tools."
+        ),
+    )
+    duplicate_groups: DuplicateGroups = Field(
+        ...,
+        description="The same input under more than one row key, split by whether the labels agree.",
+    )
 
 
 @router.get("/", summary="the flow, as a page", response_class=FileResponse)
-def page() -> FileResponse:
+def get_page() -> FileResponse:
     return FileResponse(PAGE, media_type="text/html")
 
 
 @router.get("/models", summary="which models this deployment serves")
-def models() -> tuple[str, ...]:
-    return served_models()
+def get_models() -> tuple[str, ...]:
+    return list_served_models()
 
 
 @router.post("/data-quality/personal-data", summary="personal data in one sample")
-async def personal_data(request: ScanRequest) -> PersonalDataDetected:
+async def post_personal_data(request: PersonalDataScanRequest) -> PersonalDataDetected:
     """What was found, or 422 where no model resolved or the language is not one it can scan.
 
     `language` and `verifier_model` are declarations about this request and not keys of the
     record, so the sample handed on is what the corpus carries.
     """
     try:
-        checked_names((request.verifier_model,))
-        return await personal_data_detect(
+        check_served_models((request.verifier_model,))
+        return await detect_personal_data(
             PersonalDataCheckingConfig(
                 verifier_model=VerifierModelConfig(model=request.verifier_model)
             ),
@@ -196,56 +232,48 @@ async def personal_data(request: ScanRequest) -> PersonalDataDetected:
             request.language,
         )
     except ConfigError as error:
-        raise refused(error) from error
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.post(
     "/data-quality/personal-data/replace", summary="replace the spans a reviewer left"
 )
-def personal_data_replacement(detected: PersonalDataDetected) -> PersonalDataReplaced:
+def post_personal_data_replacement(
+    detected: PersonalDataDetected,
+) -> PersonalDataReplaced:
     """The same shape back out of the reviewer's hands, and the copy that ships.
 
     A second call because a human ticks, edits and adds spans in between: what is replaced is
     what they handed back, not what the detectors claimed. No model is asked, so nothing here
     can be refused for a name this deployment does not serve.
     """
-    return personal_data_replace(detected)
+    return replace_personal_data(detected)
 
 
 @router.post(
     "/data-quality/personal-data/redact",
     summary="the sample with every handed-back span's value replaced",
 )
-def personal_data_redaction(request: RedactRequest) -> dict[str, Any]:
-    """The sample back with its placeholders in it, wherever a confirmed value occurred.
-
-    The record's three `new_` keys come from here: the page holds what the
-    human edited, this replaces over all of it, and the page composes the record out of the
-    answer. Replacement is by value, so it reaches `messages` and `label`, which the review
-    text's offsets cannot index.
-
-    No model is asked, so nothing here can be refused for a name this deployment does not serve,
-    and nothing is kept: the sample is read, copied and answered.
-    """
-    return personal_data_redact(
+def post_personal_data_redaction(request: RedactRequest) -> dict[str, Any]:
+    return redact_personal_data(
         request.detected, request.model_dump(exclude={"detected"})
     )
 
 
 @router.post("/data-quality/duplicate", summary="which samples this one repeats")
-async def duplicate(sample: Sample) -> None:
-    return await duplicate_report(sample.model_dump())
+async def post_duplicate(sample: Sample) -> None:
+    return await report_duplicates(sample.model_dump())
 
 
 @router.post(
     "/data-quality/abnormal", summary="what the checks needing no opinion found"
 )
-async def abnormal(sample: Sample) -> None:
-    return await abnormal_report(sample.model_dump())
+async def post_abnormal(sample: Sample) -> None:
+    return await report_abnormalities(sample.model_dump())
 
 
 @router.post("/ai-review", summary="what the reviewers say the label should be")
-async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
+async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
     """Both verdicts, or 422 for a declaration this deployment cannot act on.
 
     Two of those: a name it does not serve, and a finetuned reviewer at all while § *Open* stands.
@@ -254,19 +282,19 @@ async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
     """
     sample = request.model_dump(exclude={"language", "jury_models", "sft_model"})
     try:
-        checked_names(
+        check_served_models(
             request.jury_models + ((request.sft_model,) if request.sft_model else ())
         )
         # The finetuned reviewer is asked first, and the order is the point: while § *Open*
         # stands, a ticked one is a refusal, and a refusal raised after the panel has answered is
         # N model calls paid for and thrown away.
-        sft = await tool_decision_sft_predict(
+        sft = await predict_tool_decision_by_sft(
             SFTModelConfig(model=request.sft_model) if request.sft_model else None,
             sample,
             request.language,
         )
         return ReviewerVerdicts(
-            llm=await tool_decision_llm_predict(
+            llm=await predict_tool_decision_by_llm(
                 [LLMModelConfig(model=name) for name in request.jury_models] or None,
                 sample,
                 request.language,
@@ -274,4 +302,35 @@ async def ai_review(request: ReviewRequest) -> ReviewerVerdicts:
             sft=sft,
         )
     except ConfigError as error:
-        raise refused(error) from error
+        # A declaration this service cannot act on, as the status that says so.
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/records/stats", summary="what the corpus holds, counted when it is asked")
+def get_corpus_stats() -> CorpusStatistics:
+    session = db.open_session()
+    if session is None:
+        raise HTTPException(
+            status_code=503, detail=f"no database attached: set {db.variable}"
+        )
+    with session:
+        rows = select_dataset_rows(session)
+        labels = [label for _, _, label in rows]
+        catalogs = [one_input.get("tools") or () for _, one_input, _ in rows]
+        return CorpusStatistics(
+            sample_totals=count_rows(session),
+            counted_distribution_by_facet=count_by_facet(session),
+            counted_distribution_by_domain_and_call_trigger=(
+                create_joint_distribution_matrix(
+                    count_by_pair(session, "domain", "call_trigger")
+                )
+            ),
+            label_summary=describe_labels(labels),
+            number_tools_offered=len(list_offered_tools(catalogs)),
+            tool_call_counts=count_tool_calls(labels, catalogs),
+            duplicate_groups=calculate_duplicates(
+                [key for key, _, _ in rows],
+                [one_input for _, one_input, _ in rows],
+                labels,
+            ),
+        )
