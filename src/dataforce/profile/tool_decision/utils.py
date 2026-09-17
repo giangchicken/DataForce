@@ -61,6 +61,34 @@ def subfields_lines(spec: Mapping[str, Any]) -> bool:
     return False
 
 
+def named_function(entry: Any) -> Mapping[str, Any] | None:
+    """The function one entry holds, wrapped in `{"type", "function"}` or on its own.
+
+    `None` where the entry names none, because an unreadable tool or call is one entry left out
+    rather than a reason to read none of them.
+    """
+    if not isinstance(entry, Mapping):
+        return None
+    function = entry.get("function") if "function" in entry else entry
+    if isinstance(function, Mapping) and isinstance(function.get("name"), str):
+        return function
+    return None
+
+
+def required_parameters(spec: Mapping[str, Any]) -> set[str]:
+    """The params a call must supply: `required`, less any that declares a `default`.
+
+    A required param carrying a default is the contradiction the docstring above names: the default
+    wins, so the catalog leaves it out of `require:` and a call omitting it is still a valid call.
+    """
+    properties = spec.get("properties") or {}
+    return {
+        name
+        for name in spec.get("required") or []
+        if "default" not in (properties.get(name) or {})
+    }
+
+
 def param_lines(
     name: str,
     spec: Mapping[str, Any],
@@ -91,11 +119,7 @@ def param_lines(
 
     lines = [line]
     if deeper:
-        sub_required = {
-            f
-            for f in spec.get("required") or []
-            if "default" not in (fields.get(f) or {})
-        }
+        sub_required = required_parameters(spec)
         for field, field_spec in fields.items():
             lines += param_lines(
                 field, field_spec or {}, sub_required, indent + SPACES_PER_LEVEL
@@ -107,11 +131,7 @@ def tool_block(function: Mapping[str, Any]) -> str:
     """One tool written out: its name, its description verbatim, and its params."""
     parameters = function.get("parameters") or {}
     properties = parameters.get("properties") or {}
-    required = {
-        name
-        for name in parameters.get("required") or []
-        if "default" not in (properties.get(name) or {})
-    }
+    required = required_parameters(parameters)
     block = [f"[{function['name']}]"]
     described = (function.get("description") or "").strip()
     if described:
@@ -131,13 +151,11 @@ def openai_tool_format_to_text(tools: Sequence[Any]) -> str:
     An entry is `{"type": "function", "function": {...}}` or the function on its own. One without a
     name is left out -- an unreadable tool is one entry, not a reason to render none of them.
     """
-    blocks = []
-    for entry in tools:
-        if not isinstance(entry, Mapping):
-            continue
-        function = entry.get("function") if "function" in entry else entry
-        if isinstance(function, Mapping) and isinstance(function.get("name"), str):
-            blocks.append(tool_block(function))
+    blocks = [
+        tool_block(function)
+        for entry in tools
+        if (function := named_function(entry)) is not None
+    ]
     return "\n\n".join(blocks)
 
 
@@ -158,12 +176,8 @@ def text_to_openai_tool_format(text: str) -> tuple[dict[str, Any], ...]:
     parsed_json = extract_json_from_text(text)
     calls: list[dict[str, Any]] = []
     for one in parsed_json if isinstance(parsed_json, list) else [parsed_json]:
-        if not isinstance(one, Mapping):
-            continue
-        function = one.get("function") if "function" in one else one
-        if not isinstance(function, Mapping) or not isinstance(
-            function.get("name"), str
-        ):
+        function = named_function(one)
+        if function is None:
             continue
         # Read the text a provider writes, then write every call's arguments back as that text:
         # the parse is what makes one key ordering possible, and the ordering is what makes two

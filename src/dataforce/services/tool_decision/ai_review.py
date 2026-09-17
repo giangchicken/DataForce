@@ -24,7 +24,7 @@ from dataforce.modalities.text2text.ai_review.schema import (
     LLMModelConfig,
     SFTModelConfig,
 )
-from dataforce.profile.tool_decision import (
+from dataforce.profile.tool_decision.ai_review import (
     ToolDecisionLLMPrediction,
     ToolDecisionSFTPrediction,
 )

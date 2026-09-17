@@ -228,10 +228,10 @@ const stepPersonal = () => `<section class="step">
 </section>`;
 
 const stepDuplicate = () => `<section class="step">
-  ${head(3, "duplicate", ["noshape", "no shape declared"], "DuplicateDataChecking.duplicate_groups(samples)")}
-  ${band("in", "in", "samples: Sequence[str]\n\n" + REVIEW_TEXT)}
+  ${head(3, "duplicate", ["noshape", "no shape declared"], "duplicate_report(sample)")}
+  ${band("in", "in", "sample: Mapping[str, Any]\n\n" + REVIEW_TEXT)}
   ${band("out", "out", "None", "None")}
-  ${why("No shape. `duplicate_groups` answers `None` by declaration and `embedding()` is abstract with nothing answering it, so nothing says what a duplicate report is. `DuplicateGroups` is in `schema.py` and this drawing points at nothing.")}
+  ${why("No shape. `duplicate_report` answers `None` by declaration, so nothing says what a duplicate report over one posted sample is. The class that used to stand here was an embedding call that answered `None` and could not be constructed; it is deleted. Duplicates over the *corpus* are counted in `modalities/text2text/dataset_management/duplicate_data_checking.py`, which is a different question: the same input twice across every stored row, not a near match inside one batch.")}
 </section>`;
 
 const stepAbnormal = () => `<section class="step">

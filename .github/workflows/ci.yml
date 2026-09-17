@@ -21,9 +21,12 @@ jobs:
 
   integration:
     # The slow half: the store against a real Postgres, the sync against a real Label Studio.
-    # The addresses are the environment's, the way `store/session.py` and `label_studio.py`
+    # The addresses are the environment's, the way `edge/database.py` and `label_studio.py`
     # read them, and the step is skipped where none is declared -- *not run* and *passed* are
     # different claims, and a job that runs a suite which skips itself makes them one.
+    # `DATAFORCE_TEST_DATABASE_URL` names a database the store suite drops tables in, once per
+    # test, and its DSN says `postgresql+psycopg://` -- the bare spelling asks for psycopg2,
+    # which nothing here installs.
     runs-on: ubuntu-latest
     env:
       DATAFORCE_TEST_DATABASE_URL: ${{ secrets.DATAFORCE_TEST_DATABASE_URL }}

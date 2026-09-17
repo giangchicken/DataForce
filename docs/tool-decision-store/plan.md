@@ -83,7 +83,7 @@ Six shapes span several tasks. They are settled here so no task settles them dif
 **No default database.** A fallback to `sqlite+pysqlite:///dataforce.sqlite3` makes the state
 § *The page* requires — no database attached, the strip says so, all eight steps still work —
 unreachable, and the first time anyone notices is when a corpus is in a file nobody meant to
-create. Unset or empty means no store, and `open_session()` answers `None`.
+create. Unset or empty means no store, and `store.open_session()` answers `None`.
 
 **Logic is never handed a session.** What a facet holds and what a statistic is are pure functions
 of a document or of a list of rows. The reading and the writing are the profile's `schema.py`,
@@ -105,7 +105,7 @@ creates and never alters, which is a property the tests state rather than a limi
 around.
 
 **A function is named by `R-6`, and the check is reading it aloud.** A noun phrase of at least two
-words, never a bare noun — `database_url`, not `url`; `database_engine`, not `engine`. One stem per
+words, never a bare noun — `cached_engine`, not `engine`; `open_session`, not `session`. One stem per
 step, inflected, so the grammatical form says which side of the call the name sits on: a verb
 phrase is the act, a past participle is the thing after the act. And `C-6`: the function that
 decides and the function that writes are two functions.
@@ -117,7 +117,7 @@ decides and the function that writes are two functions.
 | # | Phase | Goal — the outcome that ends it |
 |---|---|---|
 | 0 | A database can be reached, and this task's tables exist | `created_tables` makes both tables on an empty SQLite file and on Postgres, and `make check` exercises the adapter with no server running |
-| 1 | What every text2text sample has in common | The shapes, the duplicate grouping and the label measurements, all pure, with no word of `tool_decision` anywhere in `modalities/` |
+| 1 | What every text2text sample has in common | The shapes, the duplicate check and this task's label measurements, all pure, with no word of `tool_decision` anywhere in `modalities/` |
 | 2 | The corpus can be counted | `GET .../records/stats` answers every statistic in § *The statistics* over rows a test put there, each with its denominator, none of them stored |
 | 3 | A reviewed sample lands | **approve** posts the record, both tables take it in one transaction, and a sample whose steps did not run is a `422` |
 | 4 | The page is a deck | `ui/` shows one card at a time, the first card is the labelling guide, and the statistics are under it |
@@ -144,8 +144,8 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T4 | Alembic is removed from a repository that has no migrations | 0 | T2 | S |
 | T5 | What a stored text2text sample is | 1 | | S |
 | T6 | The same input twice, over a whole corpus | 1 | T5 | M |
-| T7 | What any text2text label can be measured by | 1 | T5 | S |
-| T8 | What this task's label can be measured by | 1 | T7 | M |
+| T7 | What any text2text label can be measured by | 1 | T5 | — not built |
+| T8 | What this task's label can be measured by | 1 | T5 | M |
 | T9 | Counts per facet, and per pair of facets | 2 | T2, T8 | M |
 | T10 | The empty cells, put back | 2 | T9 | M |
 | T11 | The statistics route, and what it says with no database | 2 | T6, T10 | M |
@@ -176,25 +176,25 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 The state that matters most is the one where the variable is unset: § *The page* requires the whole
 flow to work with no store attached, so `None` is an answer and not a failure.
 
-**Approach.** `edge/database.py`, tagged `adapter`: `database_url()` reading the variable and
-returning `None` where it is unset or empty, `database_engine()` building one engine lazily and
-keeping it for the process, `open_session()` over that, and `Base` and `Utc`. Both nouns are two
-words on purpose — `R-6`, and `url`/`engine` alone read as the variable holding the result.
+**Approach.** `edge/database.py`, tagged `adapter`: one `Database` class holding the variable
+name, the lock and the engine cache, with `cached_engine()` and `open_session()` on it, plus `Base`
+beside it and one instance named `store`. The DSN read, the lock and the cache are one object's
+state; as three module globals and three functions they were three things a reader has to hold at
+once, and the read of the variable was a function whose whole body was a `return`.
 
 The engine cache is shared: FastAPI runs a sync handler in the anyio worker threadpool, so two
 requests can enter a cold cache at once. A lock around the build, or two engines exist and one leaks
 its pool.
 
-`Utc` is a `TypeDecorator` over `DateTime(timezone=True)`, and it exists because the two dialects
-disagree. SQLite hands back a naive datetime, which then raises `TypeError` the moment it is
-compared with an aware one. Postgres hands back the *connection's* timezone, so a server set to
-`Asia/Ho_Chi_Minh` renders `+07:00` for an instant written as UTC. Binding rejects a naive value and
-loading converts unconditionally, so both come out UTC.
+**No `TypeDecorator`, and no UTC.** A time goes to the column as it was given and comes back the
+same, on either dialect. The cost is stated rather than designed around: a row's instant is only
+placeable by someone who knows where the deployment runs, and UTC is the change to make the day a
+second region reads the same corpus. Not before — this is a corpus with one writer in one place.
 
 **Acceptance criteria.**
-- With the variable unset, empty, or whitespace, `open_session()` is `None` and nothing raises.
-- With it set to a temporary SQLite file, a session opens and a round-tripped aware datetime comes
-  back aware, in UTC, and equal to what went in.
+- With the variable unset, empty, or whitespace, `store.open_session()` is `None` and nothing raises.
+- With it set to a temporary SQLite file, a session opens and a round-tripped datetime comes back
+  equal to what went in, on either dialect.
 - Eight threads entering a cold cache get one engine.
 - `Base` is declarative and importable by a profile.
 
@@ -217,10 +217,10 @@ chosen for it.
 **Approach.** `Uuid` for the key. `JSON` for `document`, `input`, `label` and `notes`. The nine
 facet columns § *`dataset`* names, each typed for what it holds — a string for `language` and
 `domain`, a boolean for `ambiguous` and `schema_valid`, an integer for the three counts, `JSON` for
-`personal_data` and `call_shape`, which are both sets. `Utc` for the two times.
+`personal_data` and `call_shape`, which are both sets. Plain `DateTime` for the two times.
 
 The tag is `adapter`, not `shape`: the file holds SQLAlchemy, and `H-8`'s table is what lets the
-router import it while `services/` cannot. It imports `Base` and `Utc` from `edge/database.py`, so
+router import it while `services/` cannot. It imports `Base` from `edge/database.py`, so
 one `MetaData` holds every task's tables.
 
 **Acceptance criteria.**
@@ -289,8 +289,8 @@ alembic with a comment saying the store is deferred. Both describe a design this
 
 ## Phase 1 · What every text2text sample has in common
 
-**Phase goal.** The shapes, the duplicate grouping and the label measurements, all pure, with no
-word of `tool_decision` anywhere in `modalities/`.
+**Phase goal.** The shapes, the duplicate check and this task's label measurements, all pure,
+with no word of `tool_decision` anywhere in `modalities/`.
 
 ### T5 · What a stored text2text sample is
 
@@ -313,12 +313,13 @@ two groups § *The statistics* names.
 
 ### T6 · The same input twice, over a whole corpus
 
-**Goal.** `duplicate_grouping.py` answers `DuplicateGroups` over every stored input.
+**Goal.** `duplicate_data_checking.py` answers `DuplicateGroups` over every stored input.
 
 **Context.** § *Design* — *grouping by input* — takes the Python scan over a stored digest, and
-names the digest as the change to make when the scan stops being instant. The data-quality check of
-the same word is not this: it compares one **posted batch** pairwise with an embedding call, its own
-note says an index is what twenty thousand rows need, and it returns `None`. Nothing is shared.
+names the digest as the change to make when the scan stops being instant. `data_quality/` held a
+module of the same name: an abstract class over an embedding call whose `duplicate_groups` returned
+`None`, with a subclass that implemented no socket and could not be constructed. It is deleted, and
+this file takes its name and its two names — one duplicate check in the modality, not two.
 
 **Approach.** Canonicalise each input under one key ordering, hash it, group by the hash, then split
 each group by whether the labels agree. Two JSON columns are not comparable for equality across
@@ -333,26 +334,30 @@ dialects, which is why the grouping is in Python and not in SQL.
 
 **Source.** § *The statistics* — the same input twice; § *Design* — grouping by input.
 
-**Verify.** `uv run pytest tests/modalities/test_duplicate_grouping.py -q`.
+**Verify.** `uv run pytest tests/modalities/test_duplicate_data_checking.py -q`.
 
 **Out of scope.** Reading the rows out of the table (T9).
 
-### T7 · What any text2text label can be measured by
+### T7 · What any text2text label can be measured by — not built
 
-**Goal.** `label_statistics.py` answers `labelled_share`.
+**Decision.** There is no `modalities/text2text/dataset_management/label_statistics.py`. The share
+of rows carrying a label at all is one expression over the rows and their count, and a module whose
+whole content is a one-line function with no caller is what `C-4` — *"Otherwise a named variable is
+enough to put the rule on screen"* — `C-5` and `T-5` each refuse. It is computed where its one
+caller is: `described_labels` in `services/tool_decision/dataset_management.py`, T10.
 
-**Context.** The only thing every text2text label has in common is that it may be absent. Anything
-past that says `tool`, and `H-10` refuses that word above the profile. `layout.md` says out loud
-that if this one measurement moves down to the profile, the file has no reason to exist.
+**Cost, stated.** `H-10`'s argument stands — a second text2text task writes that line again rather
+than inheriting it. One line written twice is cheaper than a file nothing imports, and `layout.md`
+said as much before this was built: *"if this one moves down too, the file has no reason to exist
+and label statistics are entirely the profile's."*
 
-**Acceptance criteria.**
-- The share comes back as a count and its denominator, never a float on its own.
-- An empty label counts as *not labelled* and is a real answer, not a gap — `[]` and `null` both.
-- The share over zero rows does not divide by zero.
+**`Share` went with it.** Every statistic is a count and the denominator it came out of
+(§ *The statistics*), and the shape carrying that belongs with the rest of the response in the
+router (T11), not in a modality with no user for it.
 
-**Source.** § *The statistics* — the no-call share.
-
-**Verify.** `uv run pytest tests/modalities/test_label_statistics.py -q`.
+**What T10 still has to answer**, since nothing here answers it any more: an empty label counts as
+*not labelled* and is a real answer rather than a gap — `[]` and `null` both — and the share over
+zero rows divides nothing.
 
 ### T8 · What this task's label can be measured by
 
@@ -435,7 +440,7 @@ shapes live here, because they are the shape of one HTTP answer.
 
 **Approach.** The handler opens a session, asks the profile's `schema.py` for the counts and the
 rows the duplicate grouping needs, passes them to the service, and answers `CorpusStats`. Where
-`open_session()` is `None` it answers `503` naming `DATAFORCE_DATABASE_URL` — the variable, so the
+`store.open_session()` is `None` it answers `503` naming `DATAFORCE_DATABASE_URL` — the variable, so the
 message says what to set.
 
 **Acceptance criteria.**

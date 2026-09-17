@@ -115,7 +115,10 @@ result and is the only table anything is ever exported from.
    arrive; the computed ones are derived at write time and are never posted. No query reads inside
    `document`, so no part of it becomes a column and the envelope stays declared where it is built.
 8. `created_time` is when the row was first written and never changes. `modified_time` changes on
-   every write. Both UTC, both timezone-aware. A second post under one `id` replaces the row,
+   every write. Both are this deployment's own clock, written and read without conversion, so a row's
+   instant is only placeable by someone who knows where it runs — the trade taken instead of a
+   timezone-aware column, and the one to revisit when a second region reads the same corpus. A
+   second post under one `id` replaces the row,
    because a record posted twice is one sample reviewed twice — and the review it used to hold is
    gone, which is the cost of replacing and is stated rather than designed around.
 
@@ -346,9 +349,10 @@ developer's SQLite file and a deployment's Postgres behave the same. The statist
 queries over `dataset` columns, which both dialects group by identically.
 
 **Grouping by input.** The duplicate statistics group rows by *the same input*, and they belong to
-`dataset_management` rather than to the data-quality check of the same name: that one compares one
-posted batch pairwise with an embedding call, and its own note says an index rather than a smaller
-batch is what a corpus of twenty thousand needs. Two JSON columns are not comparable for equality
+`dataset_management`: a duplicate is a fact about a corpus, not about the batch a sample arrived in.
+`data_quality/` used to hold a second duplicate check — an embedding call over one posted batch —
+that answered `None` and could not be constructed; it is deleted, and this is the only one.
+Two JSON columns are not comparable for equality
 across dialects and no index can be built on that comparison. The options are a stored `sha256` of
 the input canonicalised under one key ordering — fast, indexable, one more column — or a scan hashed
 in Python, which is correct and instant at the size this corpus starts from. This takes the scan and

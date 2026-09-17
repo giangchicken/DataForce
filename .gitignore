@@ -25,10 +25,10 @@ data/cache/
 # their place -- README names the shape one of these files takes.
 config/model/*.json
 
-# The default question store, for a developer who attached no database (§ *The question
-# store*). It holds
-# questions about real records, which makes a committed one a corpus in the repository. A
-# deployment names its own through `DATAFORCE_DATABASE_URL` and never lands here.
+# A developer's own SQLite file, where they pointed `DATAFORCE_DATABASE_URL` at one. Nothing
+# defaults to it -- an unset DSN means *no store*, and a fallback file is the mistake nobody
+# notices until a corpus is somewhere nobody chose. Ignored because a committed one would be
+# real records in a public repository.
 dataforce.sqlite3
 
 .env

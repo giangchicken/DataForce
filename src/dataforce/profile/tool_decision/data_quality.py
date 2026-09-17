@@ -24,7 +24,6 @@ from agent_toolkit.string_utils import extract_json_from_text, slot_filling
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.data_quality import (
     CommonAbnormalChecking,
-    DuplicateDataChecking,
     PersonalDataChecking,
     PersonalDataCheckingConfig,
     PersonalDataCheckingInput,
@@ -344,10 +343,6 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
                 " the same terms as config/model/"
             )
         return slot_filling(template, {"language": language, "review_text": text})
-
-
-class ToolDecisionDuplicateChecking(DuplicateDataChecking):
-    """Two samples that offer the same tools and say the same thing."""
 
 
 class ToolDecisionAbnormalChecking(CommonAbnormalChecking):

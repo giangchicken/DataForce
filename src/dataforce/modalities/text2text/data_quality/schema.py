@@ -207,33 +207,3 @@ class PersonalDataReplaced(Frozen):
             "something did not resolve."
         ),
     )
-
-
-class DuplicateGroups(Frozen):
-    duplicate_content_same_label: tuple[str, ...] = Field(
-        default=(), description="Same content, same label: safe to drop one of them."
-    )
-    duplicate_content_diff_label: tuple[str, ...] = Field(
-        default=(), description="Same content, different label: one of them is wrong."
-    )
-
-
-class EmbedderModelConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow", populate_by_name=True)
-
-    model_name: str = Field(..., alias="model", description="Which model answers.")
-    base_url: str | None = Field(
-        default=None,
-        description=(
-            "Where it answers. None leaves it to `config/model/<model name>.json`, or to "
-            "the environment where that file names neither."
-        ),
-    )
-    api_key: str | None = Field(
-        default=None,
-        description="What authenticates the call, on the same terms as `base_url`.",
-    )
-    settings: Mapping[str, Any] = Field(
-        default_factory=dict,
-        description="What the provider is handed on top of the three, forwarded untouched.",
-    )

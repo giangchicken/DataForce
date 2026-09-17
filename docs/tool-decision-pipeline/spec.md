@@ -42,7 +42,6 @@ What each part declares, and who answers it:
 | `LLMPrediction` | `predict(turns, label)`, config one model or several | `ToolDecisionLLMPrediction` |
 | `SFTPrediction` | `predict(turns, label)` | `ToolDecisionSFTPrediction` |
 | `PersonalDataChecking` | `scan(sample)` | `ToolDecisionPersonalChecking` |
-| `DuplicateDataChecking` | `embedding(texts)` | `ToolDecisionDuplicateChecking` — answers nothing, so the class stays abstract |
 | `CommonAbnormalChecking` | none — `check_verdict` returns `None` | `ToolDecisionAbnormalChecking` |
 
 `human_review/` declares `Annotation` and `ReturnedAnnotation`, which `edge/label_studio.py` builds
@@ -736,9 +735,9 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 ## Versions
 
 No new dependency. FastAPI `>=0.141.1` serves the page through Starlette's `StaticFiles`.
-`sqlalchemy >=2.0.52,<2.1` and `alembic >=1.19.1` stay declared in `pyproject.toml` and nothing
-here imports either: they are the wider pipeline's, and they are what a store would be built on
-when one is written.
+`sqlalchemy >=2.0.52,<2.1` stays declared in `pyproject.toml` and nothing here imports it: it is
+the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Nothing declares
+`alembic` beside it, because that store has no migrations.
 
 ## Invariants
 
@@ -852,8 +851,10 @@ when one is written.
 
 ## Out of Scope
 
-- `DuplicateDataChecking.duplicate_groups` and `CommonAbnormalChecking.check_verdict` bodies. Neither
-  declares a shape and this spec invents none.
+- `CommonAbnormalChecking.check_verdict`'s body. It declares no shape and this spec invents none.
+  `DuplicateDataChecking` stood beside it and is gone: duplicates are a fact about a corpus, so the
+  one implementation lives in `modalities/text2text/dataset_management/`. The `duplicate` step
+  still answers `null`.
 - Auth, rate limiting, batching, and running any of this over a corpus rather than one sample —
   the UI labels the one sample pasted into it, and walking a file of them, tracking which are done
   and where the labelled ones go is a corpus by another name.

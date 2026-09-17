@@ -18,16 +18,14 @@ dependencies = [
     # Not imported by `src/`. It arrives transitively through `agent-toolkit[llm]`;
     # declared for the floor, on the same terms as `openai` above.
     "jsonschema>=4.26",
-    # The store's engine, for the store that is deferred: nothing in `src/` imports it yet.
-    # Pinned inside 2.0 because the models are written in its declarative style and 2.1
-    # is where that changes; SQLite and Postgres are one adapter with two DSNs, not two
-    # adapters, which is the whole of why one dependency covers both.
+    # The store's engine. Named by `edge/database.py` for the DSN, the engine, the session
+    # and the one declarative base, and by each profile's own `schema.py` for its tables;
+    # nowhere else. Pinned inside 2.0 because the models are written in its declarative
+    # style and 2.1 is where that changes; SQLite and Postgres are one adapter with two
+    # DSNs, not two adapters, which is the whole of why one dependency covers both. No
+    # migration tool stands beside it: `create_all` is the only thing that makes a table
+    # here, and a column on a live database is a statement somebody writes by hand.
     "sqlalchemy>=2.0.52,<2.1",
-    # Migrations. A store whose schema is applied by `create_all` has no way to change
-    # one, and the pilot changes one: `alembic upgrade head` against an empty database
-    # is the shape intended, so the first schema is a migration rather than a side effect
-    # of importing the models.
-    "alembic>=1.19.1",
     # The HTTP shell. How every service is driven, and
     # the style reference's `create_app()` factory is written against its `APIRouter`.
     "fastapi>=0.141.1",
@@ -72,6 +70,13 @@ dev = [
     # pass or fail depending on which install ran it, which is the one thing the
     # commit gate may not do.
     "label-studio-sdk>=2.1.1",
+    # What `make integration` reaches a server through. The store suite runs the same tests
+    # against `DATAFORCE_TEST_DATABASE_URL`, and a DSN with no driver behind it is a
+    # `ModuleNotFoundError` rather than a run. **That DSN says `postgresql+psycopg://`**: the
+    # bare `postgresql://` spelling resolves to psycopg2, which is a different library and is
+    # not installed. A test dependency because nothing in `src/` names a driver: a deployment
+    # declares the one its own DSN asks for.
+    "psycopg[binary]>=3.2",
     "pytest>=8.0.0",
     # Every stage is a coroutine since the pipeline went async, so a test that runs one
     # needs a loop. `auto` rather than a decorator per test: there is no sync stage left.

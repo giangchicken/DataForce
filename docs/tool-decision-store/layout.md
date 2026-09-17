@@ -34,8 +34,7 @@ src/dataforce/
 │       ├── __init__.py            facade
 │       ├── schema.py              shape · StoredSample, DuplicateGroups
 │       ├── sample_building.py     logic · left open, to be written against a real sample
-│       ├── label_statistics.py    logic · what any text2text label can be measured by
-│       └── duplicate_grouping.py  logic · the same input twice, over the whole corpus
+│       └── duplicate_data_checking.py  logic · the same input twice, over the whole corpus
 ├── profile/tool_decision/
 │   └── dataset_management/        NEW
 │       ├── __init__.py            facade
@@ -49,8 +48,9 @@ src/dataforce/
 └── ui/{index.html,app.js,style.css}          CHANGED
 
 tests/
-├── modalities/test_label_statistics.py       NEW
-├── profile/test_dataset_management.py        NEW
+├── modalities/test_schema.py                 NEW
+├── modalities/test_duplicate_data_checking.py  NEW
+├── profile/test_label_statistics.py          NEW
 ├── store/                                    NEW
 │   ├── __init__.py, conftest.py
 │   └── test_schema.py, test_database.py
@@ -64,7 +64,7 @@ tests/
 | Name | What it is |
 |---|---|
 | `StoredSample` | `input`, `label`, `facets` — the row that is kept. The profile's tables turn it into columns |
-| `DuplicateGroups` | `duplicate_content_same_label`, `duplicate_content_diff_label` |
+| `DuplicateGroups` | `duplicate_content_same_label`, `duplicate_content_diff_label`. Each entry is one input's digest: the grouping is handed the `input` and `label` columns and no row identity, so a digest is the only handle there is |
 
 ## `modalities/text2text/dataset_management/sample_building.py` — `logic`
 
@@ -75,32 +75,32 @@ observed. The module exists so the placement is fixed; what it declares is yours
 Everything downstream waits on this file: the profile answers whatever it declares, and until it
 declares something the profile's `sample_building.py` has nothing to override.
 
-## `modalities/text2text/dataset_management/duplicate_grouping.py` — `logic`
+## `modalities/text2text/dataset_management/duplicate_data_checking.py` — `logic`
 
-A duplicate is a fact about a *dataset*, so it is grouped here and not by the data-quality check of
-the same word. That one compares a **posted batch** pairwise with an embedding call, its own note
-says an index rather than a smaller batch is what a corpus of twenty thousand needs, and it returns
-`None` with no shape declared. Sharing code between the two would be sharing a word.
+A duplicate is a fact about a *dataset*, so it is counted here and not against one posted batch.
+There was a second module of this name under `data_quality/`: an abstract class over an embedding
+call, whose `duplicate_groups` returned `None`, whose only subclass implemented no socket and so
+could not be constructed, behind a route that answers `null` without reaching it. It is deleted,
+and this file carries its name, its `DuplicateGroups` and its `duplicate_groups`. One duplicate
+check in the modality, not two.
 
 | Function | What it does |
 |---|---|
 | `duplicate_groups(inputs, labels)` | the two groups: the same input under the same label, and the same input under a different one. Hashed in Python; the digest column is the change to make when that stops being instant |
 
-## `modalities/text2text/dataset_management/label_statistics.py` — `logic`
+## `modalities/text2text/dataset_management/label_statistics.py` — does not exist
 
-**One function.** The only thing every text2text label has in common is that it may be absent;
-anything past that says `tool`, and `H-10` refuses that word above the profile. If this one moves
-down too, the file has no reason to exist and label statistics are entirely the profile's.
-
-| Function | What it does |
-|---|---|
-| `labelled_share(labels)` | how many stored samples carry a label at all, out of how many. The empty label is a real answer, not a gap |
+**One measurement, and it moved down.** The only thing every text2text label has in common is that
+it may be absent; anything past that says `tool`, and `H-10` refuses that word above the profile.
+That one measurement is a single expression with a single caller, so `C-4`, `C-5` and `T-5` all say
+the same thing: it belongs at the call site — `described_labels` below — and not in a module of its
+own. Label statistics are entirely the profile's.
 
 ## `profile/tool_decision/dataset_management/schema.py` — `adapter`
 
 The same thing `schema.py` means everywhere else in this repo — what the stored data looks like —
-except that here it is SQLAlchemy, so the tag is `adapter` and not `shape`. It imports `Base` and
-`Utc` from `edge/database.py`, so one `MetaData` holds every task's tables; `H-8` allows it, both
+except that here it is SQLAlchemy, so the tag is `adapter` and not `shape`. It imports `Base` from
+`edge/database.py`, so one `MetaData` holds every task's tables; `H-8` allows it, both
 are `adapter`. There is no `task` column: the table name is the task.
 
 | Name | What it is |
@@ -138,10 +138,17 @@ may.
 | Function | What it does |
 |---|---|
 | `called_tools(label)` | the tool names the label calls |
-| `required_parameters(tool)` | `function.parameters.required` |
 | `schema_valid_label(label, catalog)` | BFCL's AST check: every call names a tool in the catalog and supplies its required parameters |
 | `call_counts(labels)` | how many labels make 0, 1, or more calls — `0` is the no-call sample, counted rather than treated as missing |
-| `tool_coverage(labels, catalogs)` | which offered tools are ever called, and the tail: a corpus where two tools carry 90% of the calls |
+| `tool_coverage(labels, catalogs)` | a count per tool the corpus offers, a tool never called included as `0` — **the zeros are the finding**, as in the coverage matrix. One mapping rather than a shape: offered is the keys, ever called is the non-zero keys, and the tail is the values |
+
+**`required_parameters` is not here.** It reads `parameters.required` less any param declaring a
+`default`, and `utils.py` already wrote that rule twice — for the `require:` line of the rendered
+catalog and for a nested object's subfields. A third copy is two definitions of what a call must
+supply, so the check and the catalog a model was shown could disagree with nothing to say so. It
+lives in `profile/tool_decision/utils.py` beside them, and takes the `parameters` object rather
+than the tool. `named_function`, the read of an entry that may be wrapped or bare, moved there on
+the same terms.
 
 ## `services/tool_decision/dataset_management.py` — `logic`
 
@@ -151,7 +158,7 @@ may.
 | Function | What it does |
 |---|---|
 | `covered_pairs(pair_counts)` | SQL returns only the pairs that exist; **the empty ones are the finding**, so they are put back here from `DOMAINS × CALL_SHAPES`. Pure |
-| `described_labels(labels, catalogs)` | `labelled_share(...)` with this task's `call_counts` and `tool_coverage` beside it. Pure |
+| `described_labels(labels, catalogs)` | how many rows carry a label at all out of how many — `[]` and `null` are both *no answer was needed* — with this task's `call_counts` and `tool_coverage` beside it. Pure |
 
 The function that turns one posted document into a `StoredSample` belongs here too, and is not
 named yet, because it composes whatever `sample_building.py` ends up declaring.
@@ -160,11 +167,16 @@ named yet, because it composes whatever `sample_building.py` ends up declaring.
 
 | Name | What it is |
 |---|---|
-| `Utc` | `TypeDecorator` — SQLite hands back naive, Postgres hands back the connection's offset; both come out UTC |
 | `Base` | the one declarative base every task's tables hang off |
-| `database_url()` | `str \| None` — unset or empty is *no store*, never a default file |
-| `database_engine()` | one engine for the process, **under a lock**; a changed DSN releases the old pool |
-| `open_session()` | `Session \| None` — `None` is an answer every caller has to handle, not a failure |
+| `Database` | the DSN, the lock and the engine cache are one object's state, not three module globals |
+| `Database.cached_engine()` | `Engine \| None` — one engine for the process, **under a lock**; unset, empty or whitespace is *no store* and never a default file; a changed DSN releases the old pool |
+| `Database.open_session()` | `Session \| None` — `None` is an answer every caller has to handle, not a failure |
+| `store` | the one instance, built from `DSN_VARIABLE`. Callers write `store.open_session()` |
+
+**No `TypeDecorator`, and no UTC.** A time is written and read exactly as it was given, so both
+dialects hand back the same value and nothing converts. The cost, stated: a row's instant is only
+placeable by someone who knows where the deployment runs. UTC is the change to make the day a
+second region reads the same corpus, and not before.
 
 ## `edge/routers/text2text/tool_decision.py` — `adapter` (changed)
 

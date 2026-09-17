@@ -1,7 +1,6 @@
-"""facade · the three checks that need no opinion."""
+"""facade · the two checks that need no opinion, and the one that does."""
 
 from .common_abnormal_checking import CommonAbnormalChecking
-from .duplicate_data_checking import DuplicateDataChecking
 from .personal_data_checking import (
     PersonalDataChecking,
     PiiLlmConfirmer,
@@ -9,7 +8,6 @@ from .personal_data_checking import (
 )
 from .schema import (
     SCANS,
-    DuplicateGroups,
     PersonalDataCheckingConfig,
     PersonalDataCheckingInput,
     PersonalDataDetected,
@@ -24,8 +22,6 @@ from .schema import (
 __all__ = [
     "SCANS",
     "CommonAbnormalChecking",
-    "DuplicateDataChecking",
-    "DuplicateGroups",
     "PersonalDataChecking",
     "PersonalDataCheckingConfig",
     "PersonalDataCheckingInput",

@@ -25,8 +25,8 @@ from dataforce.modalities.text2text.data_quality import (
     PersonalDataReplaced,
 )
 from dataforce.modalities.text2text.data_quality.schema import Language
-from dataforce.profile.tool_decision import ToolDecisionPersonalChecking
 from dataforce.profile.tool_decision.data_quality import (
+    ToolDecisionPersonalChecking,
     decide_replacement_outcome,
     replace_spans_with_placeholders,
     replaced_node,
