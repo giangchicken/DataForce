@@ -545,7 +545,8 @@ computed from — nothing downstream recounts it. `number_turns`, `number_label_
   not of what arrived.
 - A document with every `new_` key `null` ships the originals.
 - `schema_valid` is computed from this row's own catalog by T8's check.
-- The declared facets are answered as a list the page can ask for, not held twice.
+- A facet the profile declares is a column, and the value a person ticked lands in it.
+  **Which values may be ticked is not answered here**: that list lives with the page (T18).
 
 **Blocked by.** T12, T8.
 
@@ -630,9 +631,11 @@ and nothing but review catches it.
 The page holding its own copy of the list is how that happens.
 
 **Acceptance criteria.**
-- The route answers the profile's declared facets and their values.
-- Step 7 draws a tick for each, and `language` arrives with the record without being asked twice.
-- Adding a declared facet in the profile puts a tick on the page with no change to `ui/`.
+- The page holds its own value list per facet, and step 7 draws a tick for each.
+- `language` arrives with the record without being asked twice.
+- Adding a facet is a change in the profile **and** a change in `ui/`. The two lists are held
+  apart on purpose; a facet the page never draws a tick for is a column that is always `null`,
+  and review is what catches it.
 
 **Blocked by.** T17.
 
@@ -701,6 +704,10 @@ is a jump; `←` and `→` move a card only while focus is outside a field.
 - The statistics are asked for on load and again after a record is written — not on a timer, not on
   every flip.
 - With no database attached the strip says so and the guide still renders.
+
+**Decided since.** The grid arrives as `counted_distribution_by_domain_and_call_trigger` and there
+is no field naming the axes beside it: the field name is what says which two variables the grid is
+over, rows first. A page that wants a different pair asks for a different field.
 
 **Blocked by.** T11, T21.
 
