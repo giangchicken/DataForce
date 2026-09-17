@@ -16,12 +16,17 @@ canonical_json = partial(
 
 
 def duplicate_groups(
+    keys: Sequence[str],
     inputs: Sequence[Mapping[str, Any]],
     labels: Sequence[Sequence[Any] | None],
 ) -> DuplicateGroups:
-    """Every input more than one row carries, split by whether all of its labels agree.
+    """Every input more than one row carries, as row keys, split by whether all labels agree.
 
-    The input is hashed because its digest is what comes back; the label is only ever compared,
+    Keys rather than digests: `duplicate_content_diff_label` is a queue somebody opens, and a
+    digest of the input opens nothing. The digest stays as what groups the rows and is not part
+    of the answer.
+
+    The input is hashed because it is what rows are grouped by; the label is only ever compared,
     so its canonical text is enough. `None` and `()` are one reading -- both say no call was
     needed -- so two rows agreeing that way are redundancy rather than a disagreement to
     re-review, and a group holding two readings anywhere in it is a whole group to inspect.
@@ -29,20 +34,20 @@ def duplicate_groups(
     Hashed in Python rather than grouped in SQL: two JSON columns are not comparable for equality
     across dialects. A stored digest column is the change to make when this stops being instant.
     """
-    seen_labels: dict[str, list[str]] = {}
-    for one_input, label in zip(inputs, labels, strict=True):
+    grouped: dict[str, tuple[list[str], set[str]]] = {}
+    for key, one_input, label in zip(keys, inputs, labels, strict=True):
         digest = compute_hash(canonical_json(one_input))
-        seen_labels.setdefault(digest, []).append(canonical_json(label or ()))
-    repeated = {
-        digest: set(readings)
-        for digest, readings in seen_labels.items()
-        if len(readings) > 1
-    }
+        rows, readings = grouped.setdefault(digest, ([], set()))
+        rows.append(key)
+        readings.add(canonical_json(label or ()))
+    repeated = [
+        (tuple(rows), readings) for rows, readings in grouped.values() if len(rows) > 1
+    ]
     return DuplicateGroups(
         duplicate_content_same_label=tuple(
-            digest for digest, readings in repeated.items() if len(readings) == 1
+            rows for rows, readings in repeated if len(readings) == 1
         ),
         duplicate_content_diff_label=tuple(
-            digest for digest, readings in repeated.items() if len(readings) > 1
+            rows for rows, readings in repeated if len(readings) > 1
         ),
     )

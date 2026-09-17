@@ -86,7 +86,7 @@ check in the modality, not two.
 
 | Function | What it does |
 |---|---|
-| `duplicate_groups(inputs, labels)` | the two groups: the same input under the same label, and the same input under a different one. Hashed in Python; the digest column is the change to make when that stops being instant |
+| `duplicate_groups(keys, inputs, labels)` | the two groups, each as the **row keys** that share an input — a digest opens nothing, and `duplicate_content_diff_label` is a queue somebody opens. Hashed in Python to group; the digest column is the change to make when that stops being instant |
 
 ## `modalities/text2text/dataset_management/label_statistics.py` — does not exist
 
@@ -116,7 +116,7 @@ are `adapter`. There is no `task` column: the table name is the task.
 | `counted_by_facet(session)` | one `GROUP BY` per facet column. The column names are this task's, and this is the layer allowed to say them |
 | `counted_by_pair(session, row_facet, column_facet)` | `GROUP BY` two columns — only the pairs that exist |
 | `stored_labels(session)` | the `label` column alone, for `label_statistics` |
-| `shipped_inputs(session)` | the `input` and `label` columns, for the duplicate grouping — the two groups differ by whether the labels agree |
+| `shipped_inputs(session)` | the `id`, `input` and `label` columns, for the duplicate grouping — the key is what the groups are made of, and the labels are what splits them |
 | `rebuilt_dataset(session, building)` | delete every row and recompute from the record table |
 
 ## `profile/tool_decision/dataset_management/sample_building.py` — `logic`
@@ -135,11 +135,16 @@ Waits on the modality file. What it will have to say, whatever shape the interfa
 Where the real label measurements are, because every one of them says `tool` and only this layer
 may.
 
+**Counting the calls is not here.** How many rows make 0, 1 or more calls is one expression over
+the labels with one caller, so it lives in `described_labels` below — and it counts **entries**,
+not tools it could read: an entry naming no tool is still an attempt at a call, and letting it fall
+to `0` would pad the no-call share, which is the statistic irrelevance detection is measured from.
+`schema_valid` is what marks that row broken.
+
 | Function | What it does |
 |---|---|
 | `called_tools(label)` | the tool names the label calls |
 | `schema_valid_label(label, catalog)` | BFCL's AST check: every call names a tool in the catalog and supplies its required parameters |
-| `call_counts(labels)` | how many labels make 0, 1, or more calls — `0` is the no-call sample, counted rather than treated as missing |
 | `tool_coverage(labels, catalogs)` | a count per tool the corpus offers, a tool never called included as `0` — **the zeros are the finding**, as in the coverage matrix. One mapping rather than a shape: offered is the keys, ever called is the non-zero keys, and the tail is the values |
 
 **`required_parameters` is not here.** It reads `parameters.required` less any param declaring a
@@ -158,7 +163,7 @@ the same terms.
 | Function | What it does |
 |---|---|
 | `covered_pairs(pair_counts)` | SQL returns only the pairs that exist; **the empty ones are the finding**, so they are put back here from `DOMAINS × CALL_SHAPES`. Pure |
-| `described_labels(labels, catalogs)` | how many rows carry a label at all out of how many — `[]` and `null` are both *no answer was needed* — with this task's `call_counts` and `tool_coverage` beside it. Pure |
+| `described_labels(labels, catalogs)` | how many rows carry a label at all out of how many — `[]` and `null` are both *no answer was needed* — how many rows make each number of calls, and `tool_coverage` beside them. Pure |
 
 The function that turns one posted document into a `StoredSample` belongs here too, and is not
 named yet, because it composes whatever `sample_building.py` ends up declaring.

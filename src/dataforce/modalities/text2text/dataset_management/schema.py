@@ -29,12 +29,14 @@ class StoredSample(Frozen):
 class DuplicateGroups(Frozen):
     """The same input carried by more than one row, split by whether the labels agree.
 
-    Each entry is one input's digest, so a group of three rows is one entry.
+    Each entry is one group's row keys. Groups rather than a flat list of keys, because dropping
+    all but one of a group and opening a group to inspect both need to know which rows are one
+    another's duplicate.
     """
 
-    duplicate_content_same_label: tuple[str, ...] = Field(
+    duplicate_content_same_label: tuple[tuple[str, ...], ...] = Field(
         default=(), description="Same content, same label: safe to drop one of them."
     )
-    duplicate_content_diff_label: tuple[str, ...] = Field(
+    duplicate_content_diff_label: tuple[tuple[str, ...], ...] = Field(
         default=(), description="Same content, different label: one of them is wrong."
     )

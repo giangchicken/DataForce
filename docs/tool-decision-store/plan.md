@@ -313,7 +313,8 @@ two groups § *The statistics* names.
 
 ### T6 · The same input twice, over a whole corpus
 
-**Goal.** `duplicate_data_checking.py` answers `DuplicateGroups` over every stored input.
+**Goal.** `duplicate_data_checking.py` answers `DuplicateGroups` -- the row keys of each group
+-- over every stored input.
 
 **Context.** § *Design* — *grouping by input* — takes the Python scan over a stored digest, and
 names the digest as the change to make when the scan stops being instant. `data_quality/` held a
@@ -326,8 +327,11 @@ each group by whether the labels agree. Two JSON columns are not comparable for 
 dialects, which is why the grouping is in Python and not in SQL.
 
 **Acceptance criteria.**
-- Two rows with the same input and the same label land in `duplicate_content_same_label`.
-- Two rows with the same input and different labels land in `duplicate_content_diff_label`.
+- Two rows with the same input and the same label land in `duplicate_content_same_label`, as
+  their keys, so the caller can drop all but one of them.
+- Two rows with the same input and different labels land in `duplicate_content_diff_label`, as
+  their keys, so a person can open them.
+- Two separate groups stay two entries rather than one flat list of keys.
 - Key order inside a JSON input does not change the grouping.
 - A corpus with no repeats answers two empty groups, not `None`.
 - No name in the module carries `tool` or `decision`.
@@ -364,8 +368,8 @@ zero rows divides nothing.
 **Goal.** `profile/tool_decision/dataset_management/label_statistics.py` answers everything about a
 label that says `tool`.
 
-**Context.** `called_tools`, `required_parameters`, `schema_valid_label`, `call_counts` and
-`tool_coverage` all read inside a label and a catalog. This is the layer allowed to name them.
+**Context.** `called_tools`, `required_parameters`, `schema_valid_label` and `tool_coverage` all
+read inside a label and a catalog. This is the layer allowed to name them.
 
 **Approach.** `schema_valid_label` is BFCL's AST check against **this row's own catalog**: every
 call names a tool the sample was offered and supplies that tool's required parameters. A label
@@ -375,8 +379,9 @@ calling a tool the sample never offered is a broken row, not a hard example.
 - A call naming a tool absent from the catalog is invalid.
 - A call missing a required parameter is invalid; a call missing an optional one is valid.
 - An empty label is valid and counts as `0` calls.
-- `tool_coverage` answers tools offered, tools ever called, and the count per called tool.
-- `call_counts` distinguishes `0`, `1` and more.
+- `tool_coverage` answers a count per offered tool, a tool never called included as `0`, and a
+  tool called without being offered counted rather than dropped.
+- Counting calls per label is **not** here — see T10.
 
 **Source.** § *The facets* — `schema_valid`; § *The statistics* — schema validity, tool coverage.
 
@@ -420,6 +425,12 @@ declared values appears, the pairs with no rows included and zero.
 product of `DOMAINS` and `CALL_SHAPES`.
 
 **Acceptance criteria.**
+- How many rows make each number of calls comes back, counting **entries** rather than tools that
+  could be read: an entry naming no tool is still an attempt at a call, and letting it fall to `0`
+  would pad the no-call share that irrelevance detection is measured from. `0`, `1` and more are
+  all readable off the answer.
+- How many rows carry a label at all, out of how many — `[]` and `null` both count as *not
+  labelled*, and the share over zero rows divides nothing.
 - Over a fixture whose rows cover three of twelve cells, the answer has twelve cells and nine zeros.
 - The count of empty cells is answered on its own, because the strip reads it.
 - A value present in the rows but absent from the declared list appears in the matrix rather than

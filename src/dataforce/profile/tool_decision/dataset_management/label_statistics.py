@@ -55,16 +55,6 @@ def schema_valid_label(label: Sequence[Any] | None, catalog: Sequence[Any]) -> b
     return True
 
 
-def call_counts(labels: Sequence[Sequence[Any] | None]) -> Mapping[int, int]:
-    """How many labels make each number of calls.
-
-    `0` is the no-call sample, counted rather than read as a row missing its label, and `2` or
-    more is one turn answered by several calls at once.
-    """
-    counted = Counter(len(called_tools(label)) for label in labels)
-    return dict(sorted(counted.items()))
-
-
 def tool_coverage(
     labels: Sequence[Sequence[Any] | None], catalogs: Sequence[Sequence[Any]]
 ) -> Mapping[str, int]:

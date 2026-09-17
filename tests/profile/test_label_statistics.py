@@ -11,7 +11,6 @@ from typing import Any
 import pytest
 
 from dataforce.profile.tool_decision.dataset_management.label_statistics import (
-    call_counts,
     called_tools,
     schema_valid_label,
     tool_coverage,
@@ -101,17 +100,6 @@ def test_an_empty_label_is_valid_however_it_is_spelled() -> None:
     """A sample needing no call is an answer. Both spellings, because neither is settled."""
     assert schema_valid_label((), CATALOG) is True
     assert schema_valid_label(None, CATALOG) is True
-
-
-def test_call_counts_tell_no_call_from_one_call_from_several() -> None:
-    """`0` is counted rather than treated as missing; `2` is one turn answered at once."""
-    labels = [
-        None,
-        (),
-        (call("Lookup", {"ma_khach": "KH-1"}),),
-        (call("Lookup", {"ma_khach": "KH-1"}), call("OpenTicket", {})),
-    ]
-    assert call_counts(labels) == {0: 2, 1: 1, 2: 1}
 
 
 def test_tool_coverage_answers_what_is_offered_and_what_is_ever_called() -> None:
