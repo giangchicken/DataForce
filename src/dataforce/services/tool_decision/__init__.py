@@ -8,12 +8,17 @@ from .data_quality import (
     report_abnormalities,
     report_duplicates,
 )
-from .dataset_management import create_joint_distribution_matrix, describe_labels
+from .dataset_management import (
+    build_dataset_statistics,
+    create_joint_distribution_matrix,
+    summarise_labels,
+)
 
 __all__ = [
     "report_abnormalities",
     "create_joint_distribution_matrix",
-    "describe_labels",
+    "summarise_labels",
+    "build_dataset_statistics",
     "report_duplicates",
     "detect_personal_data",
     "redact_personal_data",

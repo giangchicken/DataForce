@@ -28,7 +28,7 @@ import pytest
 from agent_toolkit.llm import set_config_resolver
 from fastapi.testclient import TestClient
 
-from dataforce.edge.database import Base, db
+from dataforce.edge.database import db
 from dataforce.edge.main import UI, create_app
 from dataforce.edge.routers.text2text import tool_decision as route
 from dataforce.modalities.text2text.data_quality import (
@@ -36,11 +36,14 @@ from dataforce.modalities.text2text.data_quality import (
     personal_data_checking,
 )
 from dataforce.profile.tool_decision import ai_review, data_quality
-from dataforce.profile.tool_decision.schema import (
-    ToolDecisionDataset,
-    ToolDecisionRecord,
+from dataforce.profile.tool_decision.sample_building import (
     create_tables,
 )
+from dataforce.profile.tool_decision.schema import (
+    ToolDecisionRecord,
+    ToolDecisionSample,
+)
+from dataforce.tables import Base
 
 BASE = "/text2text/tool-decision"
 
@@ -669,7 +672,7 @@ def store_one_sample(**overridden: Any) -> None:
     assert session is not None
     with session, session.begin():
         session.add(ToolDecisionRecord(id=key, document={}, **times))
-        session.add(ToolDecisionDataset(id=key, **times, **(columns | overridden)))
+        session.add(ToolDecisionSample(id=key, **times, **(columns | overridden)))
 
 
 def store_a_corpus() -> None:
@@ -811,3 +814,257 @@ def test_nothing_is_cached_so_a_write_between_two_calls_shows(
 
     assert first["sample_totals"]["tool_decision_dataset"] == 0
     assert second["sample_totals"]["tool_decision_dataset"] == 1
+
+
+# ----------------------------------------------------------- one reviewed sample, into both tables
+
+POSTED_ID = "s4471"
+POSTED_PHONE = "0912345678"
+TICKET_CATALOG = [
+    {
+        "type": "function",
+        "function": {
+            "name": "OpenTicket",
+            "parameters": {"type": "object", "required": [], "properties": {}},
+        },
+    }
+]
+OPENED = [{"name": "OpenTicket", "arguments": {}}]
+POSTED_TURN = f"Chào anh {POSTED_PHONE}, mở phiếu"
+REDACTED_TURN = "Chào anh <PHONE_1>, mở phiếu"
+SCAN_TEXT = f"user: {POSTED_TURN}"
+POSTED_SCAN: Mapping[str, Any] = {
+    "review_text": SCAN_TEXT,
+    "claims": [["PHONE", POSTED_PHONE]],
+    "spans": [
+        {
+            "id": 1,
+            "start": SCAN_TEXT.index(POSTED_PHONE),
+            "end": SCAN_TEXT.index(POSTED_PHONE) + len(POSTED_PHONE),
+            "personal_data_class": "PHONE",
+            "placeholder": "<PHONE_1>",
+            "reason": None,
+        }
+    ],
+    "redacted_text": f"user: {REDACTED_TURN}",
+    "outcome": "redacted",
+}
+TICKED: Mapping[str, Any] = {
+    "language": "vi",
+    "ambiguous": False,
+    "domain": "customer_care",
+    "call_trigger": ["user_utterance"],
+    "direction": "inbound",
+    "have_conversation_flow": False,
+}
+
+
+def build_review(**overridden: Any) -> dict[str, Any]:
+    """The thirteen keys as `ui/` assembles them, with every step answered."""
+    review: dict[str, Any] = {
+        "id": POSTED_ID,
+        "messages": [{"role": "user", "content": POSTED_TURN}],
+        "tools": TICKET_CATALOG,
+        "label": OPENED,
+        "new_messages": [{"role": "user", "content": REDACTED_TURN}],
+        "new_tools": None,
+        "new_label": OPENED,
+        "personal_data": dict(POSTED_SCAN),
+        "duplicate": None,
+        "abnormal": None,
+        "llm": None,
+        "sft": None,
+        "class": dict(TICKED),
+    }
+    return review | overridden
+
+
+def test_a_record_says_where_to_attach_a_database_rather_than_dropping_it(
+    client: TestClient,
+) -> None:
+    """The store is a place to put the result, never a dependency of the review -- so the refusal
+    names the variable and the reviewer still has every answer on their screen."""
+    resp = client.post(f"{BASE}/records", json=build_review())
+
+    assert resp.status_code == 503
+    assert "DATAFORCE_DATABASE_URL" in resp.json()["detail"]
+
+
+def test_a_finished_record_lands_in_both_tables_and_the_answer_says_so(
+    client: TestClient, attached: None
+) -> None:
+    """The end of the flow: eight steps, then two rows and a key to say which sample they are."""
+    resp = client.post(f"{BASE}/records", json=build_review())
+
+    assert resp.status_code == 200
+    answered = resp.json()
+    assert answered["created_time"] == answered["modified_time"]
+    assert client.get(f"{BASE}/records/stats").json()["sample_totals"] == {
+        "tool_decision_record": 1,
+        "tool_decision_dataset": 1,
+    }
+
+
+def test_the_stored_row_carries_what_ships_and_the_facets_it_was_ticked_with(
+    client: TestClient, attached: None
+) -> None:
+    """Read back through the statistics, which is the only thing that reads the table: the
+    redacted turn is what the corpus holds, and the ticks are what it is counted by."""
+    client.post(f"{BASE}/records", json=build_review())
+
+    counted = client.get(f"{BASE}/records/stats").json()
+    assert counted["counted_distribution_by_facet"]["domain"] == {"customer_care": 1}
+    assert counted["counted_distribution_by_facet"]["personal_data"] == {'["PHONE"]': 1}
+    assert counted["counted_distribution_by_facet"]["number_turns"] == {"1": 1}
+    assert counted["tool_call_counts"] == {"OpenTicket": 1}
+
+
+def test_a_sample_nobody_scanned_names_the_step_and_writes_nothing(
+    client: TestClient, attached: None
+) -> None:
+    """§ *The precondition*: `khử nhận dạng` is something the `dataset` table has to be able to
+    prove about every row it holds, and the cheapest proof is that a row failing it never arrived."""
+    resp = client.post(f"{BASE}/records", json=build_review(personal_data=None))
+
+    assert resp.status_code == 422
+    assert "personal-data scan" in resp.json()["detail"]
+    assert "personal_data is null" in resp.json()["detail"]
+    assert client.get(f"{BASE}/records/stats").json()["sample_totals"] == {
+        "tool_decision_record": 0,
+        "tool_decision_dataset": 0,
+    }
+
+
+def test_a_confirmed_value_still_in_what_ships_names_the_redaction_and_writes_nothing(
+    client: TestClient, attached: None
+) -> None:
+    """The refusal a fine is attached to. The reviewer is told which card to go back to, not that
+    something went wrong."""
+    resp = client.post(
+        f"{BASE}/records",
+        json=build_review(new_messages=[{"role": "user", "content": POSTED_TURN}]),
+    )
+
+    assert resp.status_code == 422
+    assert "redaction" in resp.json()["detail"]
+    # The span, never the value. A refusal that echoed it would put personal data in a response
+    # body and in whatever logs one -- the corpus is not the only place it must not end up.
+    assert "span 1 (PHONE)" in resp.json()["detail"]
+    assert POSTED_PHONE not in resp.json()["detail"]
+    assert client.get(f"{BASE}/records/stats").json()["sample_totals"] == {
+        "tool_decision_record": 0,
+        "tool_decision_dataset": 0,
+    }
+
+
+def test_a_declared_facet_nobody_ticked_is_named_rather_than_becoming_a_null_column(
+    client: TestClient, attached: None
+) -> None:
+    """A facet the table has a column for and the review did not answer is a write that must
+    fail. Named here so the reviewer reads a facet and not a constraint."""
+    ticked = {name: TICKED[name] for name in TICKED if name != "domain"}
+
+    resp = client.post(f"{BASE}/records", json=build_review(**{"class": ticked}))
+
+    assert resp.status_code == 422
+    assert "domain" in resp.json()["detail"]
+
+
+def test_a_facet_posted_as_null_is_as_unanswered_as_one_left_out(
+    client: TestClient, attached: None
+) -> None:
+    """Both reach the same `NOT NULL` column, so both are the same refusal. Read with `is None`
+    and not by falsiness, which is the next test's half."""
+    ticked = dict(TICKED) | {"domain": None}
+
+    resp = client.post(f"{BASE}/records", json=build_review(**{"class": ticked}))
+
+    assert resp.status_code == 422
+    assert "domain" in resp.json()["detail"]
+
+
+def test_a_facet_answered_false_or_empty_is_answered(
+    client: TestClient, attached: None
+) -> None:
+    """`ambiguous: false` and `call_trigger: []` are claims a reviewer made -- *not arguable*, and
+    *this sample calls nothing*. A check that refused what is falsy would refuse the no-call
+    sample, which is the one § *The facets* is most careful to say is an answer."""
+    ticked = dict(TICKED) | {"ambiguous": False, "call_trigger": []}
+
+    resp = client.post(f"{BASE}/records", json=build_review(**{"class": ticked}))
+
+    assert resp.status_code == 200
+
+
+def test_a_label_that_never_parsed_is_refused_at_the_envelope(
+    client: TestClient, attached: None
+) -> None:
+    """The page carries an unparsed label as `{unparsed: ...}` rather than guessing at it, and
+    this is where that carrier stops: a column the corpus is counted by does not take one."""
+    resp = client.post(
+        f"{BASE}/records", json=build_review(new_label={"unparsed": "[{name: "})
+    )
+
+    assert resp.status_code == 422
+
+
+def test_a_record_missing_its_id_is_refused_and_an_unknown_key_is_kept(
+    client: TestClient, attached: None
+) -> None:
+    """Both halves of the envelope: `id` is what a row is, and a key the page added is news about
+    the page rather than a reason to refuse a review.
+
+    Kept means *in the row*, so it is read back out of `record.document` -- accepted and then
+    dropped on the way to the column would pass a check that only read the status."""
+    without = build_review()
+    del without["id"]
+    assert client.post(f"{BASE}/records", json=without).status_code == 422
+
+    resp = client.post(f"{BASE}/records", json=build_review(annotator="minh"))
+
+    assert resp.status_code == 200
+    session = db.open_session()
+    assert session is not None
+    with session:
+        stored = session.get(ToolDecisionRecord, uuid.UUID(resp.json()["id"]))
+        assert stored is not None
+        assert stored.document["annotator"] == "minh"
+        assert stored.document["class"] == dict(TICKED)
+
+
+def test_a_second_post_under_one_name_replaces_the_sample_rather_than_adding_one(
+    client: TestClient, attached: None
+) -> None:
+    """A record posted twice is one sample reviewed twice. `created_time` stays where it was, so
+    when the corpus first got this sample survives the second review of it."""
+    first = client.post(f"{BASE}/records", json=build_review()).json()
+
+    again = client.post(
+        f"{BASE}/records",
+        json=build_review(**{"class": dict(TICKED) | {"domain": "telesale"}}),
+    ).json()
+
+    assert again["id"] == first["id"]
+    assert again["created_time"] == first["created_time"]
+    assert again["modified_time"] > first["modified_time"]
+    counted = client.get(f"{BASE}/records/stats").json()
+    assert counted["sample_totals"]["tool_decision_dataset"] == 1
+    assert counted["counted_distribution_by_facet"]["domain"] == {"telesale": 1}
+
+
+def test_the_statistics_change_the_moment_a_record_lands(
+    client: TestClient, attached: None
+) -> None:
+    """Nothing is cached and nothing is stored: two calls with a write between them differ, which
+    is what lets the page ask again after **approve** rather than on a timer."""
+    before = client.get(f"{BASE}/records/stats").json()["sample_totals"]
+
+    client.post(f"{BASE}/records", json=build_review())
+
+    assert before["tool_decision_dataset"] == 0
+    assert (
+        client.get(f"{BASE}/records/stats").json()["sample_totals"][
+            "tool_decision_dataset"
+        ]
+        == 1
+    )

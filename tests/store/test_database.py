@@ -17,12 +17,15 @@ from threading import Barrier
 import pytest
 from sqlalchemy import Engine
 
-from dataforce.edge.database import Base, db
-from dataforce.profile.tool_decision.schema import (
-    ToolDecisionDataset,
-    ToolDecisionRecord,
+from dataforce.edge.database import db
+from dataforce.profile.tool_decision.sample_building import (
     create_tables,
 )
+from dataforce.profile.tool_decision.schema import (
+    ToolDecisionRecord,
+    ToolDecisionSample,
+)
+from dataforce.tables import Base
 
 WROTE_AT = datetime(2026, 9, 16, 15, 30, 45)
 
@@ -119,8 +122,8 @@ def test_one_metadata_holds_every_task_s_tables() -> None:
     """What `Base` being shared buys: a profile declares its own tables and one `MetaData` knows
     them, which is what lets `create_all` name a task's two rather than reach for a registry."""
     assert issubclass(ToolDecisionRecord, Base)
-    assert issubclass(ToolDecisionDataset, Base)
+    assert issubclass(ToolDecisionSample, Base)
     assert {
         ToolDecisionRecord.__tablename__,
-        ToolDecisionDataset.__tablename__,
+        ToolDecisionSample.__tablename__,
     } <= set(Base.metadata.tables)

@@ -1,7 +1,8 @@
-"""adapter · the DSN, the engine, the session, and the one base every task's tables hang off.
+"""adapter · the DSN, the engine, the session, and the one write every task makes.
 
-**No table is declared here.** Which tables exist is the profile's, and each profile's own
-`schema.py` hangs them off `Base`, so one `MetaData` knows them all. There are no migrations:
+**No table is declared here, and neither is the base.** Which tables exist is the profile's, and
+each profile's own `schema.py` hangs them off the `Base` in `dataforce/tables.py` -- a `shape`,
+which is what lets those files stay shapes too. There are no migrations:
 `create_all` only ever *creates*, so changing a column on a database that already holds rows is a
 statement somebody writes by hand.
 
@@ -19,14 +20,10 @@ import os
 from threading import Lock
 
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.orm import Session
 
 # The one variable a deployment names its database in. Read here and nowhere else.
 DSN_VARIABLE = "DATAFORCE_DATABASE_URL"
-
-
-class Base(DeclarativeBase):
-    """The one declarative base every task's tables hang off, so one `MetaData` knows them all."""
 
 
 class Database:
@@ -76,3 +73,24 @@ class Database:
 
 
 db = Database(DSN_VARIABLE)
+
+
+def merge_rows(session: Session, *rows: object) -> None:
+    """Every row merged and committed together, or none of them written at all.
+
+    Here and not in each profile because every task makes this same write and the rule it has to
+    obey is not the task's: rows that belong to one another go in one transaction, and a failure on
+    the last must leave none of the earlier ones behind. A task writing its own loop is a second
+    place that can forget the commit, or forget the rollback.
+
+    `merge` and never a dialect's upsert -- a read by primary key, then an insert or an update -- so
+    one statement is written for both DSNs and a developer's SQLite file behaves like a
+    deployment's Postgres. The whole row is replaced, so a caller carrying a column forward
+    (a `created_time` that must not move) reads it before calling this.
+
+    The transaction is the session's own: opened by the first statement and ended here, so anything
+    else left uncommitted on that session commits with these. Hand it a session of its own.
+    """
+    for row in rows:
+        session.merge(row)
+    session.commit()

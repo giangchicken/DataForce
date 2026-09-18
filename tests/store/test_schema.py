@@ -33,16 +33,19 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
-from dataforce.edge.database import Base, db
-from dataforce.profile.tool_decision.schema import (
-    ToolDecisionDataset,
-    ToolDecisionRecord,
+from dataforce.edge.database import db
+from dataforce.profile.tool_decision.sample_building import (
     count_by_facet,
     count_by_pair,
-    count_rows,
+    count_total_samples,
     create_tables,
-    select_dataset_rows,
+    select_sample_contents,
 )
+from dataforce.profile.tool_decision.schema import (
+    ToolDecisionRecord,
+    ToolDecisionSample,
+)
+from dataforce.tables import Base
 
 SPEC = Path(__file__).resolve().parents[2] / "docs" / "tool-decision-store" / "spec.md"
 FACET_REQUIREMENT = (
@@ -81,7 +84,7 @@ def read_columns_under(sentence: str) -> frozenset[str]:
     return frozenset(re.findall(r"`([a-z_]+)`", " ".join(requirement)))
 
 
-def build_dataset_row(**overridden: Any) -> ToolDecisionDataset:
+def build_sample(**overridden: Any) -> ToolDecisionSample:
     """One row with every `NOT NULL` column answered, so a test can leave out the one it is about."""
     columns: dict[str, Any] = {
         "id": uuid.uuid4(),
@@ -99,7 +102,7 @@ def build_dataset_row(**overridden: Any) -> ToolDecisionDataset:
         "number_provided_tools": 0,
         "schema_valid": True,
     }
-    return ToolDecisionDataset(**(columns | overridden))
+    return ToolDecisionSample(**(columns | overridden))
 
 
 def test_created_tables_makes_this_task_s_two_and_no_others(
@@ -112,13 +115,13 @@ def test_created_tables_makes_this_task_s_two_and_no_others(
 
     assert set(inspect(store_engine).get_table_names()) - before == {
         ToolDecisionRecord.__tablename__,
-        ToolDecisionDataset.__tablename__,
+        ToolDecisionSample.__tablename__,
     }
 
 
 @pytest.mark.parametrize(
     "model",
-    [ToolDecisionRecord, ToolDecisionDataset],
+    [ToolDecisionRecord, ToolDecisionSample],
     ids=["record", "dataset"],
 )
 def test_the_made_table_holds_exactly_the_declared_columns(
@@ -156,7 +159,7 @@ def test_a_table_missing_a_column_does_not_gain_one(store_engine: Engine) -> Non
     """
     stripped = MetaData()
     Table(
-        ToolDecisionDataset.__tablename__,
+        ToolDecisionSample.__tablename__,
         stripped,
         Column("id", Uuid, primary_key=True),
         Column("input", JSON, nullable=False),
@@ -167,7 +170,7 @@ def test_a_table_missing_a_column_does_not_gain_one(store_engine: Engine) -> Non
     made = {
         column["name"]
         for column in inspect(store_engine).get_columns(
-            ToolDecisionDataset.__tablename__
+            ToolDecisionSample.__tablename__
         )
     }
     assert made == {"id", "input"}
@@ -178,7 +181,7 @@ def test_notes_is_an_empty_object_where_nothing_was_written_to_it(
 ) -> None:
     """A missing key and an absent row are different readings, and `NULL` would make them one."""
     create_tables(store_engine)
-    row = build_dataset_row()
+    row = build_sample()
     session = db.open_session()
     assert session is not None
     with session, session.begin():
@@ -188,7 +191,7 @@ def test_notes_is_an_empty_object_where_nothing_was_written_to_it(
     reading = db.open_session()
     assert reading is not None
     with reading:
-        stored = reading.get(ToolDecisionDataset, key)
+        stored = reading.get(ToolDecisionSample, key)
         assert stored is not None
         assert stored.notes == {}
 
@@ -196,7 +199,7 @@ def test_notes_is_an_empty_object_where_nothing_was_written_to_it(
 def test_the_facet_columns_are_the_ones_the_spec_names() -> None:
     """A facet added in code and not in § *`dataset`* fails here, and so does the other way round."""
     declared = frozenset(
-        Base.metadata.tables[ToolDecisionDataset.__tablename__].columns.keys()
+        Base.metadata.tables[ToolDecisionSample.__tablename__].columns.keys()
     )
 
     assert declared - STRUCTURAL == read_columns_under(FACET_REQUIREMENT)
@@ -261,7 +264,7 @@ def corpus_session(store_engine: Engine) -> Iterator[Session]:
     assert writing is not None
     with writing, writing.begin():
         for facets in COUNTED:
-            writing.add(build_dataset_row(**facets))
+            writing.add(build_sample(**facets))
 
     reading = db.open_session()
     assert reading is not None
@@ -277,10 +280,10 @@ def test_the_facets_counted_are_the_columns_the_table_declares() -> None:
     this catches. § *`dataset`*'s own check is the test above.
     """
     declared = frozenset(
-        Base.metadata.tables[ToolDecisionDataset.__tablename__].columns.keys()
+        Base.metadata.tables[ToolDecisionSample.__tablename__].columns.keys()
     )
 
-    assert set(ToolDecisionDataset.FACETS) == declared - STRUCTURAL
+    assert set(ToolDecisionSample.FACETS) == declared - STRUCTURAL
 
 
 def test_row_counts_answers_each_table_and_not_one_of_them_twice(
@@ -295,9 +298,9 @@ def test_row_counts_answers_each_table_and_not_one_of_them_twice(
     )
     corpus_session.commit()
 
-    assert count_rows(corpus_session) == {
+    assert count_total_samples(corpus_session) == {
         ToolDecisionRecord.__tablename__: 1,
-        ToolDecisionDataset.__tablename__: 3,
+        ToolDecisionSample.__tablename__: 3,
     }
 
 
@@ -307,7 +310,7 @@ def test_counted_by_facet_answers_a_count_per_value_of_every_facet(
     """All nine, and every kind of column among them: text, boolean, integer and a JSON set."""
     counted = count_by_facet(corpus_session)
 
-    assert set(counted) == set(ToolDecisionDataset.FACETS)
+    assert set(counted) == set(ToolDecisionSample.FACETS)
     assert counted["domain"] == {"debt_collection": 2, "telesale": 1}
     assert counted["language"] == {"en": 1, "vi": 2}
     assert counted["ambiguous"] == {"false": 2, "true": 1}
@@ -347,10 +350,10 @@ def test_selecting_dataset_rows_answers_the_key_the_input_and_the_label(
     corpus_session: Session,
 ) -> None:
     """All three columns in one read, because the duplicate grouping is given all three."""
-    rows = select_dataset_rows(corpus_session)
+    rows = select_sample_contents(corpus_session)
 
     assert {key for key, _, _ in rows} == {
-        str(row.id) for row in corpus_session.scalars(select(ToolDecisionDataset))
+        str(row.id) for row in corpus_session.scalars(select(ToolDecisionSample))
     }
     assert sorted(
         (one_input["messages"][0]["content"], label is None)
@@ -364,7 +367,7 @@ def test_a_numeric_facet_is_counted_in_number_order(corpus_session: Session) -> 
     The keys are text because a JSON object has no other kind, and sorting *those* would put a
     corpus's ten-turn conversations between its one-turn and its two-turn ones.
     """
-    corpus_session.add(build_dataset_row(number_turns=10))
+    corpus_session.add(build_sample(number_turns=10))
     corpus_session.commit()
 
     assert list(count_by_facet(corpus_session)["number_turns"]) == ["2", "4", "10"]
@@ -380,8 +383,8 @@ def test_a_json_column_holding_a_null_is_counted_and_does_not_raise(
     always comparable in Python, which is why nothing here sorts them, and the JSON `null` is kept
     apart from a row holding the *string* `null` because the column says how a value is written.
     """
-    corpus_session.add(build_dataset_row(personal_data=None))
-    corpus_session.add(build_dataset_row(personal_data="null"))
+    corpus_session.add(build_sample(personal_data=None))
+    corpus_session.add(build_sample(personal_data="null"))
     corpus_session.commit()
 
     counted = count_by_facet(corpus_session)["personal_data"]
@@ -391,7 +394,7 @@ def test_a_json_column_holding_a_null_is_counted_and_does_not_raise(
     assert counted['["PHONE"]'] == 2
 
 
-@pytest.mark.parametrize("facet", ToolDecisionDataset.FACETS)
+@pytest.mark.parametrize("facet", ToolDecisionSample.FACETS)
 def test_every_facet_s_counts_add_up_to_the_number_of_rows(
     facet: str, corpus_session: Session
 ) -> None:
@@ -402,7 +405,10 @@ def test_every_facet_s_counts_add_up_to_the_number_of_rows(
     """
     counted = count_by_facet(corpus_session)[facet]
 
-    assert sum(counted.values()) == count_rows(corpus_session)["tool_decision_dataset"]
+    assert (
+        sum(counted.values())
+        == count_total_samples(corpus_session)["tool_decision_dataset"]
+    )
 
 
 def test_two_spellings_of_one_json_value_are_summed_and_not_overwritten(
@@ -415,9 +421,7 @@ def test_two_spellings_of_one_json_value_are_summed_and_not_overwritten(
     value and returns one. Adding the groups is what makes the two agree -- and is what keeps the
     counts reaching the row count, which is the failure a reader would otherwise never see.
     """
-    corpus_session.add(
-        build_dataset_row(domain="spelled", call_trigger=["condition_met"])
-    )
+    corpus_session.add(build_sample(domain="spelled", call_trigger=["condition_met"]))
     corpus_session.commit()
     corpus_session.execute(
         text(

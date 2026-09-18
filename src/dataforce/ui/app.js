@@ -541,6 +541,63 @@ function checkLabel() {
   forget(8);
 }
 
+// ------------------------------------------------------------------ 7 · the facets a person ticks
+
+// **This page's own list, and the only one there is.** A tickable value is a thing a person
+// chooses, and the store has no use for one until a sample carries it -- so a read of the store
+// answers what the rows hold, never what they were allowed to hold, and nothing below the edge
+// keeps a copy of this. The cost, stated: a facet the profile declares and this list never draws
+// is a column that is always null, and nothing but somebody reading both catches it.
+//
+// `language` is not in it. Step 1 declares it for the scan and the jury, and it rides to the row
+// from there -- asking again would be one sample described in two places.
+const DECLARED_FACETS = [
+  { name: "domain", pick: "one",
+    values: ["debt_collection", "telesale", "bill_reminder", "customer_care"],
+    said: "what the bot does, not the customer's industry. A column, so a sample without it is refused" },
+  { name: "call_trigger", pick: "any",
+    values: ["condition_met", "user_utterance", "every_turn"],
+    said: "one per call, so tick every way this sample fires. Nothing ticked is a sample that calls nothing" },
+  { name: "direction", pick: "one", values: ["inbound", "outbound"],
+    said: "who placed the call. Goes to notes, because not every corpus this table holds is a call bot" },
+  { name: "ambiguous", pick: "yes",
+    said: "genuinely arguable — two annotators differing here is signal, not a mistake by either" },
+  { name: "have_conversation_flow", pick: "yes",
+    said: "a step in a scripted flow, where reaching it is what obliges the call. Goes to notes" }
+];
+
+const tickInput = facet =>
+  facet.pick === "yes"
+    ? `<label class="mode"><input type="checkbox" name="f-${facet.name}"> yes</label>`
+    : facet.values.map(value =>
+        `<label class="mode"><input type="${facet.pick === "one" ? "radio" : "checkbox"}"`
+        + ` name="f-${facet.name}" value="${esc(value)}"> ${esc(value)}</label>`).join("");
+
+// Nothing is pre-ticked where a value would be a claim nobody made: a default on `domain` is a
+// facet filled in by the page, and a declared facet is exactly the kind nothing may fill in.
+function paintFacetTicks() {
+  $("facet-ticks").innerHTML = DECLARED_FACETS.map(facet =>
+    `<div class="lab">${esc(facet.name)}</div>`
+    + `<div class="bar">${tickInput(facet)}<span class="note">${esc(facet.said)}</span></div>`).join("");
+}
+
+// What the record carries under `class`: the declared facets and nothing else. A facet nobody
+// ticked is left out rather than sent as null -- the route names it by name, which reads as a
+// facet to go and tick rather than as a column that refused a value.
+function readDeclaredFacets() {
+  const ticked = { language: $("language").value };
+  for (const facet of DECLARED_FACETS) {
+    const boxes = [...document.querySelectorAll(`input[name="f-${facet.name}"]`)];
+    if (facet.pick === "yes") ticked[facet.name] = boxes[0].checked;
+    else if (facet.pick === "any") ticked[facet.name] = boxes.filter(box => box.checked).map(box => box.value);
+    else {
+      const one = boxes.find(box => box.checked);
+      if (one) ticked[facet.name] = one.value;
+    }
+  }
+  return ticked;
+}
+
 // --------------------------------------------------------------------------- 8 · the record
 
 // The record this page assembles, and the only thing it composes. What arrived is kept and what
@@ -577,7 +634,10 @@ async function assemble() {
     duplicate: null,
     abnormal: null,
     llm: held.review ? held.review.llm : null,
-    sft: held.review ? held.review.sft : null
+    sft: held.review ? held.review.sft : null,
+    // The declared facets, and the thirteenth key. Nothing computes one and nothing can fill one
+    // in afterwards, which is why they travel with the review rather than being asked for later.
+    class: readDeclaredFacets()
   };
   mark(8, "answered", "assembled");
   show("record", held.record);
@@ -589,13 +649,29 @@ async function assemble() {
     : "every step answered";
 }
 
-function approve() {
+// **approve** is the only thing on this page that keeps anything. A refusal leaves every answer
+// where it is and the reviewer on this card: the service names the step that did not run, and
+// **back to** is what goes there. Nothing is retried, because a second post is a person pressing
+// the button again.
+async function approve() {
   if (!held.record) return cannotAsk(8, "record", "assemble the record first: there is nothing to approve");
+  $("approve-note").className = "note";
+  $("approve-note").textContent = "posting…";
+  const answer = await call("/records", held.record);
+  if (!answer.ok) {
+    $("approve-note").className = "note bad";
+    $("approve-note").textContent = answer.detail;
+    return;
+  }
   for (const id of ["assemble", "approve"]) $(id).disabled = true;
   $("record").className = "big frozen";
   mark(8, "answered", "approved");
   $("approve-note").className = "note";
-  $("approve-note").textContent = "approved, and posted nowhere. This body is the record — take it off the screen.";
+  // The two times are equal on a first post and apart on every one after it, which is the one
+  // thing a reviewer wants to know: whether this sample had already been reviewed by somebody.
+  $("approve-note").textContent = answer.data.created_time === answer.data.modified_time
+    ? `stored as ${answer.data.id}`
+    : `stored as ${answer.data.id} — replacing the review this sample carried before`;
 }
 
 // --------------------------------------------------------------------------- back to a step
@@ -631,6 +707,7 @@ function paintReturn() {
 
 // --------------------------------------------------------------------------- wiring
 
+paintFacetTicks();
 $("sample-text").value = json(EXAMPLE);
 $("sample-check").onclick = checkSample;
 $("detect").onclick = detect;
@@ -662,6 +739,10 @@ for (const id of ["v-correct", "v-modify"]) {
   };
 }
 $("label-check").onclick = checkLabel;
+// A tick is part of the record, so changing one after it was assembled makes it a record about a
+// different claim. Same rule as every edit above, and the same answer: step 8 stops reading as
+// assembled until **assemble** is pressed again.
+$("facet-ticks").onchange = () => forget(8);
 $("assemble").onclick = assemble;
 $("approve").onclick = approve;
 for (const button of document.querySelectorAll("button.back")) {

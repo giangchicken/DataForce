@@ -4,7 +4,7 @@ Tasks for building what `spec.md` specifies. Read that first; this document sche
 not restate it. Where the two disagree, the spec wins and this file is wrong.
 
 **Source:** [`spec.md`](spec.md), and [`layout.md`](layout.md) for which module each task's change
-lands in. `AGENTS.md` for `H-4`, `H-8`, `R-2`, `R-6`, `E-1`, `T-1` and `T-5`.
+lands in. `AGENTS.md` for `H-4`, `H-8`, `R-6`, `R-8`, `E-1`, `T-1` and `T-5`.
 `docs/tool-decision-pipeline/spec.md` for the flow this sits under.
 
 **State at the time of writing.** Nothing of the store exists, and two things already point at it:
@@ -20,8 +20,8 @@ lands in. `AGENTS.md` for `H-4`, `H-8`, `R-2`, `R-6`, `E-1`, `T-1` and `T-5`.
 this plan adds the fourth. `profile/tool_decision/` holds one module per part and gains a package.
 `make check` is green: ruff, `mypy --strict`, one suite with no network in it.
 
-The flow above the store is finished. `ui/` walks a sample through eight steps and assembles a
-record, and **approve** posts it nowhere.
+The flow above the store was finished and ended nowhere: `ui/` walked a sample through eight steps,
+assembled a record, and **approve** posted it nowhere. Phase 3 is where that ends.
 
 **Scope.** The database plumbing, this task's two tables, the pure pieces every text2text task
 shares, the statistics over the corpus, the route that takes a record, and the page reshaped into a
@@ -32,17 +32,21 @@ first rows in either table are the ones a labeller approves.
 
 ---
 
-## What is not schedulable yet
+## What was not schedulable, and what unblocked it
 
-`modalities/text2text/dataset_management/sample_building.py` declares nothing. § *Design* says why:
-the steps a finished review goes through to become a stored row have not been watched happening to
-a real sample, and the shape that gets invented first is the one every task afterwards has to
-implement.
+`modalities/text2text/dataset_management/sample_building.py` declared nothing, and everything that
+turns a **posted document** into a row waited on it — Phase 3 in full. Everything that reads **rows
+already in the table** did not, because a test inserts those directly, which is why the order here
+is unusual: the counting was built before the writing, because the counting was the half that could
+proceed.
 
-Everything that turns a **posted document** into a row waits on it — Phase 3 in full. Everything
-that reads **rows already in the table** does not, because a test inserts those directly. So the
-order here is unusual on purpose: the counting is built before the writing, because the counting is
-the half that can proceed.
+**T12 has since been taken** and the block is gone. What the decision came to is written in T12
+itself; what matters here is what it did *not* decide, because that is what § *Design*'s warning
+was about. It declares the refusal and two abstract methods, and nothing else: how a task shapes
+its `input` and which facets it reads are the task's, and neither of them is a step in a sequence
+this file names. A shape invented too early is expensive because every task afterwards has to
+implement it — so what was invented is as small as the obligation allows, and the obligation is
+the law's rather than a flow's.
 
 ---
 
@@ -105,7 +109,7 @@ creates and never alters, which is a property the tests state rather than a limi
 around.
 
 **A function is named by `R-6`, and the check is reading it aloud.** A verb phrase, verb first —
-`open_engine`, not `engine`; `count_rows`, not `row_counts`. One stem per step, inflected, so the
+`open_engine`, not `engine`; `count_total_samples`, not `row_counts`. One stem per step, inflected, so the
 grammatical form says which side of the call the name sits on: the verb phrase is the act, the noun
 is what came back and belongs to the variable. And `C-6`: the function that decides and the function
 that writes are two functions.
@@ -124,8 +128,8 @@ that writes are two functions.
 
 Phase 0 is groundwork and is not a vertical slice: nothing above it can be tested without a database
 to open. Phase 1 needs no database at all. Phase 2 ends in something a person can see — a stats
-endpoint answering over hand-inserted rows. **Phase 3 is blocked** until `sample_building.py`
-declares an interface; everything else can be finished around it. Phase 4 needs Phase 2, because a
+endpoint answering over hand-inserted rows. Phase 3 was blocked until `sample_building.py` declared
+an interface, and everything else was finished around it first. Phase 4 needs Phase 2, because a
 deck whose first card holds statistics needs statistics.
 
 ---
@@ -208,7 +212,7 @@ attached is a supported state.
 ### T2 · This task's two tables, and what makes them
 
 **Goal.** `profile/tool_decision/schema.py` declares `ToolDecisionRecord` and
-`ToolDecisionDataset`, and `create_tables(engine)` makes both.
+`ToolDecisionSample`, and `create_tables(engine)` makes both.
 
 **Context.** § *`record`* and § *`dataset`* fix the columns. The key is `id` alone, as a `Uuid`:
 the table name carries the task, so nothing needs qualifying, and a UUID column needs no length
@@ -219,9 +223,16 @@ facet columns § *`dataset`* names, each typed for what it holds — a string fo
 `domain`, a boolean for `ambiguous` and `schema_valid`, an integer for the three counts, `JSON` for
 `personal_data` and `call_trigger`, which are both sets. Plain `DateTime` for the two times.
 
-The tag is `adapter`, not `shape`: the file holds SQLAlchemy, and `H-8`'s table is what lets the
-router import it while `services/` cannot. It imports `Base` from `edge/database.py`, so
-one `MetaData` holds every task's tables.
+The tag is `shape`, the same as every other `schema.py` in the repository: a table class names
+columns and their types and answers no question. It imports `Base` from `dataforce/tables.py`,
+which is a `shape` too, so one `MetaData` holds every task's tables and this file imports nothing
+that opens anything.
+
+**Decided since.** The tag was `adapter` while this file also held the SQL over the tables, and a
+lone `schema.py` that meant something different from the other four was a trap for a reader. The
+functions moved instead: reads to `label_statistics.py`, writes to `sample_building.py`, both
+`adapter` because both are handed a `Session`. `Base` moved out of `edge/database.py` for the same
+reason — a base is a noun, and a `shape` may not import an `adapter`.
 
 **Acceptance criteria.**
 - `create_tables` on an empty database makes exactly two tables with exactly the declared columns.
@@ -294,17 +305,17 @@ with no word of `tool_decision` anywhere in `modalities/`.
 
 ### T5 · What a stored text2text sample is
 
-**Goal.** `modalities/text2text/dataset_management/schema.py` declares `StoredSample` and
-`DuplicateGroups`.
+**Goal.** `modalities/text2text/dataset_management/schema.py` declares `DatasetSample` and
+`DatasetDuplicateGroups`.
 
-**Context.** Two names, and the package's whole `shape` file. `StoredSample` is `input`, `label`
-and the facets as a map — the row a profile's tables turn into columns. `DuplicateGroups` is the
+**Context.** Two names, and the package's whole `shape` file. `DatasetSample` is `input`, `label`
+and the facets as a map — the row a profile's tables turn into columns. `DatasetDuplicateGroups` is the
 two groups § *The statistics* names.
 
 **Acceptance criteria.**
 - Both are importable and neither imports anything from this package.
-- `tests/guards/test_modality_names_no_profile.py` passes over the new module with no exemption —
-  no name in it carries `tool` or `decision`.
+- No name in it carries `tool` or `decision`. **Review only**: the guard that checked this was
+  `H-10`'s and was deleted with the rule, so this is a finding in a diff and not a failing test.
 - The module docstring's first word is `shape`.
 
 **Source.** § *`dataset`*; § *The statistics* — the same input twice.
@@ -313,14 +324,14 @@ two groups § *The statistics* names.
 
 ### T6 · The same input twice, over a whole corpus
 
-**Goal.** `duplicate_data_checking.py` answers `DuplicateGroups` -- the row keys of each group
+**Goal.** `duplicate_data_checking.py` answers `DatasetDuplicateGroups` -- the row keys of each group
 -- over every stored input.
 
 **Context.** § *Design* — *grouping by input* — takes the Python scan over a stored digest, and
 names the digest as the change to make when the scan stops being instant. `data_quality/` held a
 module of the same name: an abstract class over an embedding call whose `duplicate_groups` returned
 `None`, with a subclass that implemented no socket and could not be constructed. It is deleted, and
-this file takes its name and its `DuplicateGroups` — one duplicate check in the modality, not two.
+this file takes its name and its `DatasetDuplicateGroups` — one duplicate check in the modality, not two.
 
 **Approach.** Canonicalise each input under one key ordering, hash it, group by the hash, then split
 each group by whether the labels agree. Two JSON columns are not comparable for equality across
@@ -348,7 +359,7 @@ dialects, which is why the grouping is in Python and not in SQL.
 of rows carrying a label at all is one expression over the rows and their count, and a module whose
 whole content is a one-line function with no caller is what `C-4` — *"Otherwise a named variable is
 enough to put the rule on screen"* — `C-5` and `T-5` each refuse. It is computed where its one
-caller is: `describe_labels` in `services/tool_decision/dataset_management.py`, T10.
+caller is: `summarise_labels` in `services/tool_decision/dataset_management.py`, T10.
 
 **Cost, stated.** A second text2text task writes that line again rather
 than inheriting it. One line written twice is cheaper than a file nothing imports, and `layout.md`
@@ -403,7 +414,7 @@ pair of two named ones.
 **Context.** The facets are columns, so these are `GROUP BY`. This is the only layer allowed to say
 `domain` out loud, which is why the grouping lives here and not in the modality.
 
-**Decided here.** The nine facet names hang off `ToolDecisionDataset` as a `ClassVar`, so the list
+**Decided here.** The nine facet names hang off `ToolDecisionSample` as a `ClassVar`, so the list
 cannot drift from the table it describes. **The values a person may tick are not here and nowhere
 below the edge**: a tickable list is a thing the page draws tick boxes from, and the store has no
 use for a value until a sample carries it. Nothing refuses a value the store has not seen.
@@ -417,7 +428,7 @@ and the service splits it, which is also where the empty cells are put back.
 - `count_by_facet` returns a count per value for each of the nine facet columns, over rows a test
   inserted directly.
 - `count_by_pair` groups by two named columns and returns only the pairs that exist.
-- `count_rows` answers how many rows each table holds.
+- `count_total_samples` answers how many rows each table holds.
 - Both dialects return the same answers for the same fixture.
 
 **Source.** § *The statistics* — the joint distribution matrix.
@@ -468,15 +479,21 @@ its own figure in the answer rather than something the strip recomputes.
 **Goal.** `GET /text2text/tool-decision/records/stats` answers § *The statistics* in full, and says
 so plainly where no database is attached.
 
-**Context.** The router is where the profile's SQL and the service's arithmetic meet. The response
-shapes live here, because they are the shape of one HTTP answer.
+**Context.** The router is where the profile's SQL and the service's arithmetic meet.
+
+**Decided since.** `ToolDecisionDatasetStatistics` is declared in the profile's `schema.py`, with
+this task's other nouns, and not in the router: a response shape is a noun, and `services/` is
+`logic`. The handler now reads the four things only a session can read and hands them to
+`build_dataset_statistics`. The handler named nine things outside the edge before
+that and one of them reached inside a stored `input` to find `tools`, which is the profile's
+declaration and not the edge's to know.
 
 **Approach.** The handler opens a session, asks the profile's `schema.py` for the counts and the
 rows the duplicate grouping needs, passes them to the service, and answers `CorpusStats`. Where
 `store.open_session()` is `None` it answers `503` naming `DATAFORCE_DATABASE_URL` — the variable, so the
 message says what to set.
 
-**Decided here.** There is no `stored_labels`. `select_dataset_rows` already answers the key, the
+**Decided here.** There is no `stored_labels`. `select_sample_contents` already answers the key, the
 input and the label, which is every column the duplicate grouping and the label measurements read between
 them, so a second query would be the same rows fetched twice — `T-5` refuses the module nothing
 gets harder without.
@@ -500,33 +517,56 @@ gets harder without.
 **Phase goal.** **approve** posts the record, both tables take it in one transaction, and a sample
 whose steps did not run is a `422`.
 
-**Blocked.** Every task here waits on T12, and T12 is a decision rather than an implementation.
-
 ### T12 · `sample_building.py` declares what a task must answer
 
 **Goal.** `modalities/text2text/dataset_management/sample_building.py` declares an interface, and
 the precondition § *The precondition* requires.
 
-**Context.** The module is empty by decision, not by oversight: § *Design* says the steps have not
+**Context.** The module was empty by decision, not by oversight: § *Design* says the steps had not
 been watched happening to a real sample, and the shape invented first is the one every task
-afterwards has to implement. **This task is where that decision gets taken**, and it should be taken
-by whoever has watched a sample go through — not derived from this plan.
+afterwards has to implement.
 
-What the rest of the design already commits it to, whatever shape it takes:
+**Decision taken.** The interface is the refusal plus **two abstract methods**, and the whole of
+what was invented is those two names.
 
-- it produces a `StoredSample` — `input`, `label`, facets — out of the thirteen-key document;
-- it refuses a document whose `personal_data` is `null`, or where a confirmed span's value survives
-  into `new_messages`, `new_tools` or `new_label`, and the refusal names the step;
-- what it refuses on is the modality's and no task overrides it (§ *The precondition*);
-- what a task's `input` holds, which facets that task computes, and which it asks a person to tick
-  are the task's, so they are whatever this file leaves open;
-- no name in it carries `tool` or `decision`.
+- `DatasetSampleBuilding.build_sample(document)` is concrete and is the only way to a `DatasetSample`. It
+  takes both refusals first, so a document that fails one produces no sample at all and there is
+  nothing for a caller to write by mistake.
+- `build_input(shipped)` and `compute_facets(shipped)` are what a task answers. Both are handed
+  what **ships** and never the document, so a task cannot reach past the redaction to compute a
+  facet off the raw transcript.
+- The refusal **raises**. A precondition returned as a value is one a caller can forget to read,
+  and the one that gets forgotten is the one whose cost is a fine. `StepNotRun` is the second
+  exception in this codebase and the reason `errors.py`'s rule does not cover it: this is not
+  something that went wrong *about* a record, it is a record that may not become one.
+- Three module functions carry the reading — `read_shipped_sample`, `read_scanned_personal_data`,
+  `find_surviving_values` — plus `read_redacted_classes`, the one facet the modality derives.
+- No sequence of steps is named. § *Design*'s warning was about inventing the steps a review goes
+  through; what is declared here is an obligation and a socket, and neither is a flowchart.
 
-**Acceptance criteria.** Set by whoever takes the decision. The five commitments above are the
-constraints, not the design.
+**Two readings this fixes, which the wording it was written against left open.** The survival check
+reads **what ships** and not the three `new_` keys literally, because a `new_` key that is `null`
+ships what arrived. And `personal_data` that will not *read* as a scan is the same refusal as
+`personal_data: null` — evidence nothing can check proves nothing. Both are now in the spec.
+
+**Acceptance criteria.**
+- A document whose `personal_data` is `null`, or which will not read as a scan, raises `StepNotRun`
+  naming the personal-data scan, and the message says which of the two it was.
+- A confirmed span's value readable in what ships raises `StepNotRun` naming the redaction — in the
+  turns, in the label, and in a field whose `new_` key is `null`. The refusal names the **span** and
+  not the value, and the value carries a quote and a backslash in one of the cases, because a search
+  over the sample serialised would escape both and let the record through.
+- A finished review is refused by neither and answers a `DatasetSample`.
+- A `new_` key that is `null` ships what arrived; `()` and `None` stay apart.
+- The declared facets arrive from `class` without this layer naming any of them, and a tick under
+  the name of a derived facet loses to the computed value.
+- No name in it carries `tool` or `decision`. **Review only** — the guard that used to check this
+  was `H-10`'s and went with the rule.
+
+**Verify.** `uv run pytest tests/modalities/test_sample_building.py -q`.
 
 **Source.** § *The precondition*; § *Where each piece is declared*; § *Design* — why
-`sample_building` is left open.
+`sample_building` was left open.
 
 ### T13 · The profile answers it
 
@@ -548,7 +588,18 @@ computed from — nothing downstream recounts it. `number_turns`, `number_label_
 - A facet the profile declares is a column, and the value a person ticked lands in it.
   **Which values may be ticked is not answered here**: that list lives with the page (T18).
 
-**Blocked by.** T12, T8.
+**Decided since.** `ToolDecisionSampleBuilding` answers the two abstract methods and **declares
+nothing**. `domain`, `call_trigger`, `direction` and `have_conversation_flow` arrive under the
+record's `class` key and the modality carries them through without naming one, so the only list of
+declared facet names below the edge is `FACETS` — the columns — and everything else lands in
+`notes`. A second list here would be one to keep in step with the page's for nothing.
+
+`number_provided_tools` counts what the catalog **shows**, through `list_offered_tools`: an entry
+nothing can read is not a tool the model was offered, the rendered catalog leaves it out, and
+`schema_valid` leaves it out, so counting raw entries would put a figure in the column that no
+other reading of the same row agrees with.
+
+**Verify.** `uv run pytest tests/profile/test_sample_building.py -q`.
 
 **Source.** § *Where each piece is declared*; § *The facets*.
 
@@ -563,9 +614,19 @@ reason to reject a record.
 **Acceptance criteria.**
 - A document with all thirteen keys validates; one missing `id` does not.
 - An unknown extra key is kept, not dropped and not rejected.
-- The model is not named `Record`: `R-2` refuses a name that already names a table.
+- The model is not named `Record`: `record` already names a table here, so a shape spelled that
+  way reads as the row it is not.
 
-**Blocked by.** T12.
+**Decided since.** It is `ReviewedSample(Sample)`, so the four keys that are the sample are
+inherited rather than restated. `class` arrives under an alias, because Python cannot spell it as a
+field name.
+
+**`label` and `new_label` are narrowed to a list here**, which is the one thing this envelope
+refuses that § *The precondition* does not: the page carries a label that will not parse as
+`{unparsed: …}` rather than guessing at it, and this is where that carrier stops — a column the
+corpus is counted by does not take one. Step 7 says so in red before anyone gets this far. The
+spec's *nothing else is refused* now says which two things are, and why neither is a claim about
+whether the sample was worth keeping.
 
 **Source.** § *`record`*.
 
@@ -584,7 +645,21 @@ replaces both rows. `created_time` never moves, which means it is read before th
 - A failure writing the second table leaves neither written.
 - Both dialects behave identically.
 
-**Blocked by.** T13, T14.
+**Decided here.** **The key is derived from the posted name, not minted.** A corpus names its
+samples `s4471` and the column is a `Uuid`, so `merge_tool_decision_db` hashes the name into a fixed
+namespace: *a second post under one `id` replaces both rows* is only true while one name answers to
+one key, and a minted key would make a re-reviewed sample a second row holding the same review. The
+cost, stated: a sold row joins back to its corpus through `record.document` rather than through its
+own key, and two corpora reusing one sample name collide here exactly as they already collide in
+the name. It is in the spec.
+
+**Decided here.** The transaction is the session's own — opened by the first statement, ended by
+the commit in `merge_tool_decision_db` — rather than an explicit `session.begin()`. The explicit form refuses a
+session anything has already read on, which `rebuild_tool_decision_dataset` legitimately hands it. The trade,
+stated in the docstring: anything else left uncommitted on that session commits with the write, so
+it is handed a session of its own.
+
+**Verify.** `uv run pytest tests/store/test_write.py -q`, then `make integration`.
 
 **Source.** § *What* — written in one transaction; § *`record`*; § *Invariants*.
 
@@ -596,11 +671,21 @@ where one did not run.
 **Acceptance criteria.**
 - A finished record is written and the response says so.
 - A document whose `personal_data` is `null` is a `422` naming the scan, and **nothing is written**.
-- A document where a confirmed span's value survives into a `new_` key is a `422` naming the
+- A document where a confirmed span's value survives into what ships is a `422` naming the
   redaction, and nothing is written.
 - With no database attached the route answers `503` naming `DATAFORCE_DATABASE_URL`.
 
-**Blocked by.** T15.
+**Decided here.** A **third** refusal, and it is not a claim about the corpus: a declared facet the
+table has a column for and the review left unanswered is a `422` **naming the facet**. The columns
+are `NOT NULL` and § *`dataset`* wants that write to fail — this is where it fails legibly, so a
+reviewer reads a facet to go and tick rather than a constraint violation. The route reads `FACETS`,
+which it can, being an adapter; the tickable *values* are still nowhere below the edge.
+
+The three refusals are ordered by what each costs to find out: no database is a fact about the
+deployment, a step that did not run is about the document, and an unanswered facet is about the
+row it would have made.
+
+**Verify.** `uv run pytest tests/edge/test_endpoints.py -q`.
 
 **Source.** § *The precondition*; § *The page* — no database attached.
 
@@ -614,7 +699,14 @@ where one did not run.
   card.
 - With no store attached, **approve** says so and the eight steps still work.
 
-**Blocked by.** T16.
+**Decided since.** The answer's two times are what the card reads: equal is a first post, apart is
+a replacement, and the note says which. Nothing is retried — a second post is a person pressing the
+button again, which is the rule every other call on this page already follows.
+
+**Not covered by a test.** There is no JavaScript harness in this repository and adding one is not
+this task. What the route does with the body the page sends is covered
+(`tests/edge/test_endpoints.py` posts the same thirteen keys); what the page sends is read, not
+run.
 
 **Source.** § *The page*.
 
@@ -637,20 +729,37 @@ The page holding its own copy of the list is how that happens.
   apart on purpose; a facet the page never draws a tick for is a column that is always `null`,
   and review is what catches it.
 
-**Blocked by.** T17.
+**Decided since.** The list is `DECLARED_FACETS` in `ui/app.js`, and each entry says how it is
+picked: one of, any of, or yes. **Nothing is pre-ticked**, because a default on `domain` is a facet
+filled in by the page and a declared facet is exactly the kind nothing may fill in — an unticked
+`domain` is the `422` T16 names. A tick changed after the record was assembled drops step 8, on the
+same terms as every other edit on the page.
+
+`language` is not in the list. Step 1 declares it for the scan and the jury and it rides to the row
+from there, which is what *without being asked twice* means.
+
+**Not covered by a test**, on the same terms as T17.
 
 **Source.** § *The page* — step 7 grows the ticks; § *The facets*.
 
 ### T19 · `dataset` can be dropped and rebuilt
 
-**Goal.** `rebuild_dataset` deletes every row and recomputes it from `record`.
+**Goal.** `rebuild_tool_decision_dataset` deletes every row and recomputes it from `record`.
 
 **Acceptance criteria.**
 - After a rebuild, every row is identical to what it was.
 - A `dataset` row edited by hand is corrected by a rebuild.
 - A rebuild over an empty `record` empties `dataset`.
 
-**Blocked by.** T15.
+**Decided here.** It takes the builder as an argument rather than importing one, so the module
+holding the SQL does not also decide whose samples it is holding. It answers how many rows it
+wrote. **Nothing calls it yet**: it is the invariant made runnable, and a route for it is a
+decision about who may drop a table, which is its own task.
+
+A record that no longer passes the precondition stops the rebuild rather than being skipped:
+finishing around it would leave a table nothing can call a function of the other.
+
+**Verify.** `uv run pytest tests/store/test_write.py -q`.
 
 **Source.** § *`dataset`* — computed from `record`; § *Invariants*.
 
@@ -722,4 +831,8 @@ over, rows first. A page that wants a different pair asks for a different field.
 | `503` where no database is attached, with the variable named | T11, T16 | The spec says the page must work without a store; which status says so is a wire detail |
 | `422` for a step that did not run, naming the step | T16 | § *The precondition* says refused, not which code |
 | CI runs the store against no Postgres | T3 | `ci.yml`'s integration job has no service container. Adding one is a workflow decision, and until it is taken the Postgres half runs locally |
-| The counting is built before the writing | Phases 2 and 3 | Only because `sample_building.py` is undeclared. The natural order is the other way |
+| The counting is built before the writing | Phases 2 and 3 | Only because `sample_building.py` was undeclared. The natural order is the other way |
+| The row key is derived from the posted name | T15 | The spec says the key is a UUID and a corpus's names are not. Where one comes from is a wire detail; that one name keeps one key is not, and is now in the spec |
+| A declared facet nobody ticked is a `422` naming it | T16 | The spec wants that write to fail. Which layer says so, and whether it reads as a facet or as a constraint, is the route's |
+| The write commits rather than opening its own transaction | T15 | Both give *two rows or neither*. The explicit form refuses a session that has already been read on, which `rebuild_tool_decision_dataset` legitimately has |
+| `rebuild_tool_decision_dataset` has no route | T19 | Who may drop a table is a decision, and nothing has asked for one |

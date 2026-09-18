@@ -1,18 +1,7 @@
-"""adapter · one APIRouter for tool_decision: a request body in, one part's answer out.
-
-A handler is thin. It reads the body, calls one function in `services/tool_decision/`, and maps the
-error; it names no stage sequence, and no response carries a part the handler does not own.
-
-There is no route that stores anything: the record the labelling UI assembles is posted nowhere
-until the store is written, which waits for the flow to be finished (spec § *Out of Scope*). The
-redaction route reads a sample and answers a copy of it; it keeps neither.
-
-Which models answer is the caller's choice, not a declaration: `GET /models` lists what this
-deployment serves, and each request names the ones it wants. A name with no config file is refused
-before any model is called.
-"""
+"""adapter · one APIRouter for tool_decision: a request body in, one part's answer out."""
 
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,24 +29,21 @@ from dataforce.modalities.text2text.data_quality.schema import (
     Language,
     VerifierModelConfig,
 )
-from dataforce.modalities.text2text.dataset_management import (
-    DuplicateGroups,
-    LabelSummary,
-    calculate_duplicates,
-)
-from dataforce.profile.tool_decision.label_statistics import (
-    count_tool_calls,
-    list_offered_tools,
-)
-from dataforce.profile.tool_decision.schema import (
+from dataforce.modalities.text2text.dataset_management import StepNotRun
+from dataforce.profile.tool_decision.sample_building import (
+    ToolDecisionSampleBuilding,
     count_by_facet,
     count_by_pair,
-    count_rows,
-    select_dataset_rows,
+    count_total_samples,
+    merge_tool_decision_db,
+    select_sample_contents,
+)
+from dataforce.profile.tool_decision.schema import (
+    ToolDecisionDatasetStatistics,
+    ToolDecisionSample,
 )
 from dataforce.services.tool_decision import (
-    create_joint_distribution_matrix,
-    describe_labels,
+    build_dataset_statistics,
     detect_personal_data,
     predict_tool_decision_by_llm,
     predict_tool_decision_by_sft,
@@ -124,6 +110,73 @@ class ReviewRequest(Sample):
     )
 
 
+class ReviewedSample(Sample):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    label: tuple[Any, ...] | None = Field(
+        default=None, description="The tool calls someone already assigned."
+    )
+    new_messages: tuple[Mapping[str, Any], ...] | None = Field(
+        default=None, description="The conversation as it ships, redaction included."
+    )
+    new_tools: tuple[Mapping[str, Any], ...] | None = Field(
+        default=None,
+        description="The catalog as it ships, where a new version was made.",
+    )
+    new_label: tuple[Any, ...] | None = Field(
+        default=None, description="The calls as they ship."
+    )
+    personal_data: Mapping[str, Any] | None = Field(
+        default=None,
+        description=(
+            "What step 2 found and step 5 replaced, as one object. `null` is nobody having "
+            "scanned it, which is the refusal § *The precondition* names first."
+        ),
+    )
+    duplicate: Any = Field(default=None, description="What step 3 answered.")
+    abnormal: Any = Field(default=None, description="What step 4 answered.")
+    llm: Mapping[str, Any] | None = Field(
+        default=None, description="What the jury said, where one was asked."
+    )
+    sft: Mapping[str, Any] | None = Field(
+        default=None,
+        description="What the finetuned reviewer said, where one was asked.",
+    )
+    declared_facets: Mapping[str, Any] = Field(
+        default_factory=dict,
+        alias="class",
+        description=(
+            "The **declared** facets only, as the reviewer ticked them: a person's claims are "
+            "part of what the review answered and there is nowhere else for them to arrive. "
+            "The derived ones are computed at write time and are never posted."
+        ),
+    )
+
+
+class RecordStored(BaseModel):
+    """What the route says once a record has landed in both tables."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str = Field(
+        ...,
+        description=(
+            "The key both tables took, derived from the posted `id` so that the same name "
+            "posted twice replaces one sample rather than making a second."
+        ),
+    )
+    created_time: datetime = Field(
+        ..., description="When this sample was first stored. It never moves."
+    )
+    modified_time: datetime = Field(
+        ...,
+        description=(
+            "When this write happened. Equal to `created_time` on a first post, later on "
+            "every repost -- which is how the page can say landed or replaced."
+        ),
+    )
+
+
 class ReviewerVerdicts(BaseModel):
     """What each reviewer said. None where the request ticked no such model."""
 
@@ -131,78 +184,6 @@ class ReviewerVerdicts(BaseModel):
 
     llm: LLMReviewerVerdict | None = Field(default=None)
     sft: SFTReviewerVerdict | None = Field(default=None)
-
-
-class CorpusStatistics(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    sample_totals: Mapping[str, int] = Field(
-        ...,
-        description=(
-            "Table name, to how many samples it holds. The two agree -- both tables hold "
-            "the same samples and differ by what is in them -- and a run where they do "
-            "not is a bug rather than a figure."
-        ),
-    )
-    counted_distribution_by_facet: Mapping[str, Mapping[str, int]] = Field(
-        ...,
-        description=(
-            "One distribution per facet, over **every** row of `dataset`: a facet name, "
-            "then each value it holds, then how many samples carry that value -- "
-            '`["domain"]["telesale"]` is how many samples are telesale. Each '
-            "distribution adds up to `sample_totals`, and *counted* is in the name "
-            "because these are counts and never shares. The value is written as text, "
-            "because a JSON object has no other kind of key. A set-valued facet is keyed "
-            "by the whole set -- which combinations occur -- and "
-            "`counted_distribution_by_domain_and_call_trigger` is "
-            "where the values inside one are counted apart."
-        ),
-    )
-    counted_distribution_by_domain_and_call_trigger: Mapping[str, Mapping[str, int]] = (
-        Field(
-            ...,
-            description=(
-                "The pair distribution the per-facet one cannot give: rows keyed by `domain`, "
-                "columns by `call_trigger`, and how many samples are both. Every value one axis "
-                "carries crossed with every value the other does, so a pair no sample makes reads "
-                "`0` and the zeros are the finding. The axes are what the corpus **carries**: a "
-                "value nobody has ticked yet has no cell, because the tickable list lives with the "
-                "page, and crossing this against it is the page's arithmetic. A sample triggered "
-                "two ways is in two cells, so the cells may sum past the row count."
-            ),
-        )
-    )
-    label_summary: LabelSummary = Field(
-        ...,
-        description=(
-            "How many rows answered at all out of how many, and how many distinct answers "
-            "they hold between them. How many rows make each number of calls is "
-            "`counted_distribution_by_facet` at `number_label_tools`."
-        ),
-    )
-    number_tools_offered: int = Field(
-        ...,
-        description=(
-            "How many distinct tools the catalogs put in front of the model. Not "
-            "`len(tool_call_counts)`: a label may name a tool it was never offered, and "
-            "that is a broken row rather than an offer. Here and not in `label_summary`, "
-            "because that shape is one every text2text task shares and not every one of "
-            "them has tools at all."
-        ),
-    )
-    tool_call_counts: Mapping[str, int] = Field(
-        ...,
-        description=(
-            "Tool name, to how many calls the corpus's labels make to it. A tool offered "
-            "and never called stays here at `0` -- **the zeros are the finding**, a tool "
-            "the corpus cannot teach -- and the tail is the other half: two tools carrying "
-            "most of the calls trains a model that knows two tools."
-        ),
-    )
-    duplicate_groups: DuplicateGroups = Field(
-        ...,
-        description="The same input under more than one row key, split by whether the labels agree.",
-    )
 
 
 @router.get("/", summary="the flow, as a page", response_class=FileResponse)
@@ -241,12 +222,6 @@ async def post_personal_data(request: PersonalDataScanRequest) -> PersonalDataDe
 def post_personal_data_replacement(
     detected: PersonalDataDetected,
 ) -> PersonalDataReplaced:
-    """The same shape back out of the reviewer's hands, and the copy that ships.
-
-    A second call because a human ticks, edits and adds spans in between: what is replaced is
-    what they handed back, not what the detectors claimed. No model is asked, so nothing here
-    can be refused for a name this deployment does not serve.
-    """
     return replace_personal_data(detected)
 
 
@@ -306,31 +281,54 @@ async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@router.get("/records/stats", summary="what the corpus holds, counted when it is asked")
-def get_corpus_stats() -> CorpusStatistics:
+@router.post("/records", summary="one reviewed sample, into both tables")
+def post_record(review: ReviewedSample) -> RecordStored:
+    session = db.open_session()
+    if session is None:
+        raise HTTPException(
+            status_code=503, detail=f"no database attached: set {db.variable}"
+        )
+    document = review.model_dump(by_alias=True)
+    try:
+        sample = ToolDecisionSampleBuilding().build_sample(document)
+    except StepNotRun as refusal:
+        raise HTTPException(status_code=422, detail=str(refusal)) from refusal
+    unanswered = [
+        facet for facet in ToolDecisionSample.FACETS if sample.facets.get(facet) is None
+    ]
+    if unanswered:
+        raise HTTPException(
+            status_code=422,
+            detail=f"tick every declared facet: {', '.join(unanswered)} went unanswered",
+        )
+    with session:
+        stored = merge_tool_decision_db(session, document, sample)
+    return RecordStored(
+        id=str(stored.key),
+        created_time=stored.created_time,
+        modified_time=stored.modified_time,
+    )
+
+
+@router.get(
+    "/records/stats",
+    summary="what the labelled dataset holds, counted when it is asked",
+)
+def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
     session = db.open_session()
     if session is None:
         raise HTTPException(
             status_code=503, detail=f"no database attached: set {db.variable}"
         )
     with session:
-        rows = select_dataset_rows(session)
-        labels = [label for _, _, label in rows]
-        catalogs = [one_input.get("tools") or () for _, one_input, _ in rows]
-        return CorpusStatistics(
-            sample_totals=count_rows(session),
+        return build_dataset_statistics(
+            sample_totals=count_total_samples(session),
             counted_distribution_by_facet=count_by_facet(session),
-            counted_distribution_by_domain_and_call_trigger=(
-                create_joint_distribution_matrix(
-                    count_by_pair(session, "domain", "call_trigger")
-                )
+            # The two variables the grid is taken over, named at the read. The field that reports
+            # it is named for this pair, and so is the parameter: cross a different two and the
+            # keyword stops matching, which is what makes the change impossible to make quietly.
+            counted_pairs_of_domain_and_call_trigger=count_by_pair(
+                session, "domain", "call_trigger"
             ),
-            label_summary=describe_labels(labels),
-            number_tools_offered=len(list_offered_tools(catalogs)),
-            tool_call_counts=count_tool_calls(labels, catalogs),
-            duplicate_groups=calculate_duplicates(
-                [key for key, _, _ in rows],
-                [one_input for _, one_input, _ in rows],
-                labels,
-            ),
+            sample_contents=select_sample_contents(session),
         )

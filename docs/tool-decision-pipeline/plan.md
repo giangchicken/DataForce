@@ -193,7 +193,7 @@ fewer errors. `uv run python -c "import dataforce.edge.main"` succeeds.
 `find_exact_match_consensus` and `find_llm_judge_consensus` also have `pass` bodies and produce no error,
 because `None` satisfies `str | None`. They are pending all the same, and T10 writes them.
 
-**Approach.** Three answers, one per situation. `duplicate_groups` returns `DuplicateGroups | None`
+**Approach.** Three answers, one per situation. `duplicate_groups` returns `DatasetDuplicateGroups | None`
 and returns `None` — the pattern its own sibling already states in
 `common_abnormal_checking.py`: *"it returns None rather than an invented shape because a placeholder
 shape is the one thing a caller would start depending on."* Delete

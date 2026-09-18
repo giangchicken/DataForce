@@ -317,7 +317,7 @@ const stepFinal = () => `<section class="step">
     <pre id="ships" class="big"></pre>
   </div></div>
   <div class="why" id="row-note"></div>
-  ${why("**Nothing stores this yet.** The store, the route that posts to it and which records it may refuse are all deferred until the flow is finished (spec § *Out of Scope*), so what step 8 shows is the record this page assembled and nowhere it went. The redaction below is this page's own, drawn so the two conflicts a reviewer can leave behind are readable; where it runs once a store exists — here, or in the service the client cannot skip — is undecided with it.")}
+  ${why("**This is what gets stored.** **approve** posts the whole record to `POST .../records`, which writes it to two tables in one transaction — the review whole, which holds personal data and is never exported, and the de-identified half a buyer gets, with the facets saying what kind of sample it is. Two things get it refused: nobody ran the personal-data scan, or a value the redaction confirmed is still readable in what ships. Either names the step and nothing is written, because *de-identified* is a condition the sold table has to be able to prove about every row it holds, and the cheapest proof is that a row failing it never arrived. The redaction below is this page's own, drawn so the two conflicts a reviewer can leave behind are readable.")}
 </section>`;
 
 // ---------------------------------------------------------------- the drawing
@@ -568,9 +568,8 @@ function paintAll() {
       new_messages: record.new_messages, new_tools: record.new_tools,
       new_label: record.new_label
     });
-    const notes = ["This record is the flow's last answer and is posted nowhere: the store waits"
-      + " for the flow to be finished. What it would hold is the whole record — what arrived and"
-      + " what ships."];
+    const notes = ["This record is the flow's last answer, and **approve** on the labelling page"
+      + " posts it: the whole of it into one table, and what ships plus the facets into the other."];
     if (found.left.length) {
       notes.push(`${found.left.length} flagged value(s) stay in this record, unticked by the `
         + `reviewer: ${found.left.map(value => JSON.stringify(value)).join(", ")}`

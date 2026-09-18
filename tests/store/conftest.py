@@ -24,7 +24,8 @@ from collections.abc import Iterator
 import pytest
 from sqlalchemy import Engine, inspect
 
-from dataforce.edge.database import Base, db
+from dataforce.edge.database import db
+from dataforce.tables import Base
 
 TEST_DSN_VARIABLE = "DATAFORCE_TEST_DATABASE_URL"
 

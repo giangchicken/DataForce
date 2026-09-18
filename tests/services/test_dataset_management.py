@@ -16,7 +16,7 @@ from typing import Any
 
 from dataforce.services.tool_decision.dataset_management import (
     create_joint_distribution_matrix,
-    describe_labels,
+    summarise_labels,
 )
 
 # Three pairs, as a `GROUP BY` over `domain` and `call_trigger` would hand them back: three domains
@@ -88,7 +88,7 @@ def test_an_empty_label_and_a_null_one_are_one_answer() -> None:
 
     So they count as one distinct answer between them, and neither counts as an answer given.
     """
-    summarised = describe_labels([[], None, LOOKED_UP])
+    summarised = summarise_labels([[], None, LOOKED_UP])
 
     assert summarised.total == 3
     assert summarised.number_not_null_label == 1
@@ -100,7 +100,7 @@ def test_how_many_distinct_answers_the_corpus_holds() -> None:
     label written with its keys in another order is the same answer to both, and a thousand rows
     carrying nine answers between them read as a corpus that teaches nine things."""
     reordered = [{"arguments": {"id": "KH-1"}, "name": "Lookup"}]
-    summarised = describe_labels([LOOKED_UP, reordered, []])
+    summarised = summarise_labels([LOOKED_UP, reordered, []])
 
     assert summarised.number_diff_label == 2
     assert summarised.number_not_null_label == 2
@@ -113,7 +113,7 @@ def test_an_answer_nothing_can_read_is_still_an_answer_given() -> None:
     measured from -- so a corpus of broken entries would read as a corpus rich in samples that
     correctly declined. `schema_valid` is what marks such a row broken.
     """
-    summarised = describe_labels([["nonsense"], [], None])
+    summarised = summarise_labels([["nonsense"], [], None])
 
     assert summarised.number_not_null_label == 1
     assert summarised.total == 3
@@ -121,7 +121,7 @@ def test_an_answer_nothing_can_read_is_still_an_answer_given() -> None:
 
 def test_a_corpus_of_no_rows_is_an_answer_and_not_a_division() -> None:
     """Every figure is a count beside its total, so nothing here has a denominator to be zero."""
-    summarised = describe_labels([])
+    summarised = summarise_labels([])
 
     assert (summarised.total, summarised.number_not_null_label) == (0, 0)
     assert summarised.number_diff_label == 0

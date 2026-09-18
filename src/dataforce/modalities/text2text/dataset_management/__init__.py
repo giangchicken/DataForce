@@ -1,11 +1,23 @@
 """facade · what a finished text2text review becomes once it is kept."""
 
 from .duplicate_data_checking import calculate_duplicates
-from .schema import DuplicateGroups, LabelSummary, StoredSample
+from .sample_building import DatasetSampleBuilding
+from .schema import (
+    DatasetDuplicateGroups,
+    DatasetLabelSummary,
+    DatasetSample,
+    ScannedPersonalData,
+    ShippedDatasetSample,
+    StepNotRun,
+)
 
 __all__ = [
-    "DuplicateGroups",
-    "LabelSummary",
-    "StoredSample",
+    "DatasetSample",
+    "DatasetDuplicateGroups",
+    "DatasetLabelSummary",
+    "DatasetSampleBuilding",
+    "ScannedPersonalData",
+    "ShippedDatasetSample",
+    "StepNotRun",
     "calculate_duplicates",
 ]

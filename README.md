@@ -2,7 +2,7 @@
 
 A collaborative data annotation platform for labeling, reviewing, and validating datasets for AI model training. Teams import raw data, label it against a declarative project schema, review each other's work, and export immutable, versioned snapshots in training-ready formats.
 
-What is built today is one task's flow, end to end: `tool_decision` — eight independent steps over a tool-calling sample, an endpoint per step, and a labelling UI that walks one sample through all of them. Nothing stores a record yet; the flow's last answer is the record the UI assembles, and the store is deferred.
+What is built today is one task's flow, end to end: `tool_decision` — eight independent steps over a tool-calling sample, an endpoint per step, and a labelling UI that walks one sample through all of them. A reviewed record lands in two tables — the whole review, and the de-identified half a buyer gets — and the corpus can be asked what it is short of.
 
 ## Running it
 

@@ -19,7 +19,7 @@ rather than one table and a promise about which columns anyone reads.
 **The tables are the task's; the condition over them is the modality's.** A sample arrives here
 having passed all eight steps, so nothing in this store decides whether it is worth keeping. What
 `tool_decision` stores, in which columns, is declared in `profile/tool_decision/schema.py` — its
-own two tables, and the SQL over them. What every text2text sample has in common, whatever the
+own two tables. The SQL over them sits beside it, in the two files that are handed a session. What every text2text sample has in common, whatever the
 task, is declared once in `modalities/text2text/dataset_management/`.
 
 The facets are why this is worth more than a place to put rows. A corpus is scaled by knowing which
@@ -43,8 +43,9 @@ What the repository already decided, and what this spec therefore does not:
 - A column is added when a query groups by one. The record's envelope is declared at the boundary
   that receives it, so `record.document` is one JSON column that no query reads inside.
 - Which tables exist is the profile's, and `sqlalchemy` is named in two places only:
-  `edge/database.py` for the DSN, the engine, the session and the one declarative base, and each
-  profile's own `schema.py` for its tables. Nothing under `modalities/` or `services/` imports it.
+  `edge/database.py` for the DSN, the engine and the session, `dataforce/tables.py` for the one
+  declarative base, and each profile's own files for its tables and the SQL over them. Nothing
+  under `modalities/` or `services/` imports it.
 - What a facet value *means* is the task's. `inbound`, `debt_collection` and `condition_met` are
   `tool_decision`'s nouns and are declared in `profile/tool_decision/`, which is what the split
   between the two layers is for. Nothing checks it: the check that used to is gone, so a name in
@@ -100,17 +101,30 @@ result and is the only table anything is ever exported from.
    facets, is another call rather than another function. Which pair *this* answer crosses is
    declared in the router beside the field that reports it: it is wanted once, at the call, and a
    socket for it buys a wider interface for nothing. It never holds a session — the profile's
-   `schema.py` is an `adapter` and `H-8` sends that import the other way.
-4. **`edge/database.py` is the plumbing and declares no table**: the DSN, the engine, the session,
-   and the one declarative base every task's tables hang off, so one `MetaData` knows them all.
-5. **The response shapes live in the router.** The totals, the per-facet counts, the joint
-   distribution matrix and the duplicate groups are the shape of one HTTP answer, and nothing below
-   the edge has a use for them.
+   `label_statistics.py` and `sample_building.py` are `adapter` and `H-8` sends those imports the
+   other way.
+4. **`edge/database.py` is the plumbing and declares no table**: the DSN, the engine and the
+   session. The one declarative base every task's tables hang off is `dataforce/tables.py`, so one
+   `MetaData` knows them all — a base is a noun, and keeping it out of the plumbing is what lets a
+   profile's `schema.py` stay a `shape` that imports nothing which opens anything.
+5. **A response shape is a noun, so it lives with this task's other nouns.**
+   `ToolDecisionDatasetStatistics` is declared in `profile/tool_decision/schema.py`, beside the two
+   tables: it says this task's words out loud, and nothing outside this endpoint has a use for it.
+   What *fills it in* is `services/tool_decision/dataset_management.py`, which is `logic` and holds
+   decisions rather than nouns, so it reads the shape from the profile the way the router does. The
+   envelope a record arrives in is the exception: it is declared at the boundary that receives it,
+   because the thirteen keys are the page's and no query reads inside them.
 
 **`record` — what the review answered.**
 
 6. One row per reviewed sample: `id`, `document`, `created_time`, `modified_time`. The key is `id`
    alone and it is a **UUID** — the table name is the task, so nothing has to be qualified by one.
+   A corpus names its samples `s4471`, not with a UUID, so the key is **derived from the posted
+   name** and never minted: one name answers to one key for as long as the corpus keeps calling it
+   that, which is what makes requirement 8's *a second post replaces the row* true of the names
+   samples actually have. The cost, stated: a row in the table that is sold joins back to the
+   corpus it came from through `record.document` rather than through its own key, and two corpora
+   reusing one sample name collide here exactly as they already collide in the name.
 7. `document` is the record the page assembles, whole and unaltered —
    `{id, messages, tools, label, new_messages, new_tools, new_label, personal_data, duplicate,
    abnormal, llm, sft, class}` — in one JSON column. The `class` key carries the **declared facets
@@ -150,18 +164,31 @@ result and is the only table anything is ever exported from.
 **The precondition.**
 
 16. **A sample whose steps did not run is refused, and nothing is written.** `personal_data` being
-    `null` means nobody scanned it. A confirmed span's value still present in `new_messages`,
-    `new_tools` or `new_label` means the redaction did not take. Either is a `422` naming the step,
-    and neither is a row in either table: `khử nhận dạng` is a condition the `dataset` table has to
-    be able to prove about every row it holds, and the cheapest proof is that a row failing it never
-    arrived.
+    `null`, or holding something nothing can read as a scan, means nobody scanned it — evidence that
+    cannot be checked proves nothing. A confirmed span's value still readable in **what ships** means
+    the redaction did not take: what ships, and not the three `new_` keys read literally, because a
+    `new_` key that is `null` ships what arrived and a value surviving there reaches the corpus just
+    the same. The reading is a plain substring over the whole shipped sample, which is exactly what
+    the replacement does — a check looser than the rewrite would clear a value the rewrite left, and
+    a stricter one would refuse records the rewrite had finished with. Either is a `422` naming the
+    step — **and the span, never the value**: a refusal that echoed it would put personal data in a
+    response body and in whatever logs one, and the span's number and class is what a reviewer needs
+    to go and tick it anyway. Neither is a row in either table: `khử nhận dạng` is a condition the `dataset` table
+    has to be able to prove about every row it holds, and the cheapest proof is that a row failing it
+    never arrived.
 17. **The precondition is the modality's and no task writes its own.** What it reads —
     `personal_data.outcome` and the redacted copies — is a text2text shape, and the obligation
     behind it is the law's rather than one task's. A second text2text task inherits it. A legal
     condition is the one rule here where a per-task copy must not exist, because a copy that drifts
     is a corpus sold in breach.
-18. Nothing else is refused. A reviewer who decides a sample should not be used does not post it,
-    and the page is where that is decided.
+18. Nothing else about the *corpus* is refused. A reviewer who decides a sample should not be used
+    does not post it, and the page is where that is decided. Two things are refused about the
+    *document*, and both are a row that cannot exist rather than a sample that should not be kept: a
+    label that never parsed, which the page carries as `{unparsed: …}` and the envelope will not
+    take, and a declared facet the table has a column for and the review left unanswered. The second
+    is named by name in the `422`, so a reviewer reads a facet to go and tick rather than a column
+    that refused a value — § *`dataset`* wants that write to fail, and this is where it fails
+    legibly.
 
 **The facets, and which layer owns each one.**
 
@@ -462,8 +489,9 @@ Proposals, not decisions:
 - Every `dataset` row has a `record` row under the same key, and the two counts agree.
 - No derived facet was ever typed by a person; no declared facet is ever computed.
 - `created_time` never moves; `modified_time` never precedes it.
-- `sqlalchemy` is named in `edge/database.py` and in each profile's `schema.py`, and nowhere under
-  `modalities/` or `services/`.
+- `sqlalchemy` is named in `edge/database.py`, in `dataforce/tables.py` and in each profile's own
+  files, and nowhere under `modalities/` or `services/`. A profile's `schema.py` names the column
+  types; the files handed a `Session` name the statements.
 - No name in `modalities/text2text/dataset_management/` is one task's.
 
 ## Out of Scope

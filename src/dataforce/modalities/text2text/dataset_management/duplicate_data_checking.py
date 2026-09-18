@@ -7,7 +7,7 @@ from typing import Any
 
 from agent_toolkit.string_utils import compute_hash
 
-from .schema import DuplicateGroups
+from .schema import DatasetDuplicateGroups
 
 # One key ordering and one spelling, so two writers of the same content write the same string.
 canonical_json = partial(
@@ -19,7 +19,7 @@ def calculate_duplicates(
     keys: Sequence[str],
     inputs: Sequence[Mapping[str, Any]],
     labels: Sequence[Sequence[Any] | None],
-) -> DuplicateGroups:
+) -> DatasetDuplicateGroups:
 
     grouped: dict[str, tuple[list[str], set[str]]] = {}
     for key, input, label in zip(keys, inputs, labels, strict=True):
@@ -30,7 +30,7 @@ def calculate_duplicates(
     repeated = [
         (tuple(rows), readings) for rows, readings in grouped.values() if len(rows) > 1
     ]
-    return DuplicateGroups(
+    return DatasetDuplicateGroups(
         duplicate_content_same_label=tuple(
             rows for rows, readings in repeated if len(readings) == 1
         ),

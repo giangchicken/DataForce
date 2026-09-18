@@ -267,12 +267,12 @@ format's own shape, arguments as JSON text under one key ordering.
     ticked, and returns an `LLMReviewerVerdict` and an `SFTReviewerVerdict` side by side. The
     language and the two model keys are declarations about the request rather than keys of the
     record, so the sample handed on is what the corpus carries.
-35. There is no route that stores a record. The redaction route reads one and keeps neither it
-    nor the copy it answers (Requirement 32). The page assembles one and posts it nowhere: the
-    store, the route that takes it and which records it refuses are one decision, and not this
-    spec's (§ *Out of Scope*). Nothing else here depends on
-    it — every step above answers its own call — so the record is the flow's last answer and the
-    number is kept rather than reused.
+35. One route stores a record, and it is not this spec's. The redaction route reads one and keeps
+    neither it nor the copy it answers (Requirement 32); the store, the route that takes it and
+    which records it refuses are one decision taken in `docs/tool-decision-store/spec.md`
+    (§ *Out of Scope*). Nothing else here depends on it — every step above answers its own call —
+    so the record is still the flow's last answer, and a refusal from that route sends the labeller
+    back to the step it names rather than into anything this spec describes.
 36. `GET /text2text/tool-decision/` serves the page.
 
 **The page that draws the flow.** Read by whoever is building it, and driven by nobody: every
@@ -385,9 +385,10 @@ the corpus statistics the page shows are that spec's and they are what reshaped 
     and here it reaches all five: the record is assembled out of every step, so the part to correct
     may have been produced anywhere. The rectangle also names which steps have not answered at all,
     so a record assembled early says so rather than reading as complete. **approve** freezes the record and shows the final body.
-53. **approve** posts nowhere. Nothing stores a record (Requirement 35), so the UI says so on its
-    face and the labeller takes the body from the screen. When there is a store, this is the body
-    it is posted, and this rectangle is the one place that changes.
+53. **approve** posts the record to the store's own route (Requirement 35) and says what happened
+    — that it landed, or which step did not run, or which variable to set where no database is
+    attached. It is the one rectangle that changed when the store was built, which is what
+    Requirement 35 had been holding open.
 54. The drawing and the UI are two files and neither is generated from the other. `index.html`
     explains the flow — its rectangles carry prose about why each step is shaped as it is — and
     `ui/` labels with it. The cost, stated: a change to the flow is drawn in one and driven in the
@@ -715,9 +716,9 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
     is three files and a mount.
 23. **Approve posts nowhere, and says so.** Alternative: have approve write the record somewhere —
     a file, a queue, the store that was just deferred. Every one of those is the store's decision
-    taken in the UI, and the UI is the last place that decision should be made. So approve freezes
-    the record and shows it, the labeller takes it from the screen, and the one rectangle that
-    changes when a store exists is that one.
+    taken in the UI, and the UI is the last place that decision should be made. So approve froze
+    the record and showed it until there was a store with a route of its own — and then that one
+    rectangle changed and nothing else did, which is what deferring it bought.
 
 24. **The redaction of the three `new_` keys is a route.** `POST .../personal-data/redact` takes
     the sample as the human left it and the spans they handed back, and answers the copy. The UI
@@ -862,10 +863,9 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
   nothing in this spec picks one.
 - **The store, and everything that answers for it.** Where a reviewed record is kept, the route
   that takes it, which records are refused, and the schema management under all of it — one
-  decision, and not this spec's. There is no table and no route that stores anything: a route
-  nothing may post to is worse than no route.
-  That decision is `docs/tool-decision-store/spec.md`. Until it is built, the page assembles a
-  record and posts it nowhere.
+  decision, and not this spec's: a route nothing may post to is worse than no route. That decision
+  is `docs/tool-decision-store/spec.md`, and it has been taken — two tables, `POST .../records`,
+  and a precondition that refuses a sample whose steps did not run.
 
 ## Open
 

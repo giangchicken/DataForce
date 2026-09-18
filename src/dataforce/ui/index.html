@@ -11,7 +11,8 @@
     and no other, so a step is re-runnable on its own and nothing waits for the rectangle beside
     it. The yellow cells are yours to edit — what you leave in them is what the next call is made
     with, and that edit plus the button after it <i>is</i> the human step. Step 8 is the record
-    this page assembles out of the eight answers. <b>Nothing here stores it.</b>
+    this page assembles out of the eight answers, and <b>approve</b> is what stores it — in two
+    tables, or in neither.
     The model lists are what <b>config/model/</b> holds, asked for again every time you come back
     to this tab — so a file you add while the service is up shows up without a reload, and your
     ticks survive it. Wrong answer in a rectangle above? <b>back to</b> sends you to the one that
@@ -226,6 +227,7 @@
         <span class="note" id="label-note"></span>
       </div>
     </div>
+    <div class="ticks" id="facet-ticks"></div>
     <div class="io out"><div class="lab">out</div><div class="val">
       <pre id="out-7" class="big"></pre>
     </div></div>
@@ -237,8 +239,13 @@
       <button class="back" data-back="6">6 · the reviewers</button>
     </div>
     <div class="why">A label that is not JSON is carried as <b>{unparsed: …}</b> rather than
-      dropped or guessed at. No route is called here — the edit is the step, and the call after it
-      is step 8's.</div>
+      dropped or guessed at — and a record carrying one is refused when you press <b>approve</b>,
+      so fix it here. No route is called at this step; the call after it is step 8's.
+      <b>The ticks are the other half of this step.</b> Nothing computes them and nothing can fill
+      one in later, so a sample stored without one is stored without it for good. The values you
+      may tick are this page's own list — the store answers what the corpus carries, never what it
+      was allowed to carry — and <b>language</b> is not among them because step 1 already declared
+      it.</div>
   </section>
 
   <div class="arrow">▼<span>the eight answers, as one record</span></div>
@@ -269,10 +276,13 @@
       <button id="approve">approve</button>
       <span class="note" id="approve-note"></span>
     </div>
-    <div class="why"><b>approve posts nowhere.</b> Nothing stores a record: the store, the route
-      that would take it and which records it refuses are one decision, deferred until this flow is
-      finished. Take the body off the screen. When there is a store, this rectangle is the one
-      place that changes.</div>
+    <div class="why"><b>approve posts this record</b> to <b>POST /records</b>, which writes one
+      row in each of the two tables or in neither. Two things get it refused, and only two: nobody
+      ran the personal-data scan, or a value the redaction confirmed is still in what ships. Either
+      names the step, nothing is written, and you stay on this card — <b>back to</b> is how you go
+      and fix it. A declared facet nobody ticked is refused here too, by name. With no database
+      attached the answer says which variable to set, and all eight steps work exactly as they
+      do now.</div>
   </section>
 
 </main>
