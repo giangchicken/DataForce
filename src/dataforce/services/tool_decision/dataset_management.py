@@ -1,5 +1,6 @@
-"""logic · the arithmetic over what the store counted, and the cells SQL cannot answer for."""
+"""logic · the arithmetic over what the store counted, and what a file of raw samples reads as."""
 
+import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -19,6 +20,39 @@ from dataforce.profile.tool_decision.schema import (
     ToolDecisionDatasetStatistics,
     ToolDecisionSampleContent,
 )
+
+
+def read_queued_samples(
+    text: str,
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[int, ...]]:
+    """One file of JSON-per-line, as the samples it holds and the numbers of the lines that are not.
+
+    A line is unreadable if it is not JSON, or is JSON that is not an object: a bare string or a
+    list is valid JSON and is not a sample, and letting one through would put a row in the queue
+    that every route downstream would refuse one at a time.
+
+    An unreadable line never stops the ones around it. A corpus assembled by hand has a bad line in
+    it more often than not, and an import that refuses the file wholesale makes the reviewer find
+    the line with no help at all -- so the readable ones land and the rest come back by number.
+
+    Blank lines are not counted at all. A trailing newline is how every file ends, and reporting it
+    as line 341 of 340 is a fault the reader would have to learn to ignore.
+    """
+    samples: list[Mapping[str, Any]] = []
+    unreadable: list[int] = []
+    for at, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            read = json.loads(line)
+        except ValueError:
+            unreadable.append(at)
+            continue
+        if isinstance(read, dict):
+            samples.append(read)
+        else:
+            unreadable.append(at)
+    return tuple(samples), tuple(unreadable)
 
 
 def list_categories(stored: Any) -> tuple[str, ...]:
@@ -60,26 +94,7 @@ def build_dataset_statistics(
     counted_pairs_of_domain_and_call_trigger: Mapping[tuple[Any, Any], int],
     sample_contents: Sequence[ToolDecisionSampleContent],
 ) -> ToolDecisionDatasetStatistics:
-    """§ *The statistics* in full, out of what one read of the labelled table came back with.
 
-    Handed the four reads rather than taking them, because `services/` is `logic` and may not open
-    a database: the router is the only layer that holds a session, so it reads and this composes.
-    Every figure below is either one of those reads or arithmetic over them, and none of it is
-    kept -- two calls with a write between them differ.
-
-    **A parameter handed straight to a field carries that field's name**, so `sample_totals` and
-    `counted_distribution_by_facet` are passed through under the name they will answer under, and a
-    caller reading the keyword knows where it lands without opening the shape.
-
-    The pair is the one that cannot: `counted_pairs_of_domain_and_call_trigger` is only the pairs
-    some row carries, and the field is the **rectangle** those pairs make, zeros included. Two
-    different things, so two names -- sharing the stem that says which two variables, which is what
-    makes a router crossing a different pair read as wrong against the field it fills.
-
-    A catalog is read out of `input` here and not at the edge, because what a stored `input` holds
-    -- `{messages, tools}` for this task -- is the profile's declaration, and a route that reached
-    inside one would be a second place that knows it.
-    """
     labels = [one.label for one in sample_contents]
     catalogs = [one.input.get("tools") or () for one in sample_contents]
     return ToolDecisionDatasetStatistics(

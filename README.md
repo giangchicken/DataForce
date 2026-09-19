@@ -2,7 +2,7 @@
 
 A collaborative data annotation platform for labeling, reviewing, and validating datasets for AI model training. Teams import raw data, label it against a declarative project schema, review each other's work, and export immutable, versioned snapshots in training-ready formats.
 
-What is built today is one task's flow, end to end: `tool_decision` — eight independent steps over a tool-calling sample, an endpoint per step, and a labelling UI that walks one sample through all of them. A reviewed record lands in two tables — the whole review, and the de-identified half a buyer gets — and the corpus can be asked what it is short of.
+What is built today is one task's flow, end to end: `tool_decision` — eight independent steps over a tool-calling sample, an endpoint per step, and a labelling UI that imports a corpus and walks it a sample at a time. A reviewed record lands in two tables — the whole review, and the de-identified half a buyer gets — and the corpus can be asked what it is short of.
 
 ## Running it
 
@@ -45,7 +45,32 @@ LLM_BASE_URL=https://your-endpoint/v1 LLM_API_KEY=... \
   uv run uvicorn dataforce.edge.main:app --reload --port 8000
 ```
 
-With no reachable model you can still drive the sample, the two checks that report nothing, the label editor and the record — the two model steps are the only ones that need an endpoint.
+With no reachable model you can still import a corpus, walk it, edit labels, tick facets and store records — the personal-data scan and the reviewers' vote are the only steps that need an endpoint.
+
+## Labelling a corpus
+
+There is nothing to configure. Start the service and open <http://localhost:8000/ui/>:
+
+1. **Two ways in.** **Import** (in the header) takes a `.jsonl` — one JSON object per line, `{messages, tools, label}` — and every line becomes a sample waiting to be labelled; importing the same file twice imports nothing the second time, and a line that is not a JSON object is reported by its number while the rest go in. Or **Paste a sample**, in the sample pane itself, for one that came from somewhere else — that path touches no queue at all, so it is the one that works with the store turned off.
+2. **Samples** lists the queue: every row with its state, in the order it arrived. Click a row to open it, or tick several and label just those.
+3. Each sample opens with the conversation on the left and two decisions on the right: which detected spans really are personal data, and whether the label is right. **Run all checks** does both machine checks in one click — the personal-data scan and the reviewers' vote — and the model each one spends sits on that check's own row. Every span you keep is replaced as you tick, so there is nothing to press for that.
+4. Tick what kind of sample it is. **domain** has a box beside it that adds one the list does not carry; an added domain stays offered once a sample is stored with it, because the page reads the values back off the corpus.
+5. **Submit** stores the record and opens the next sample. **Skip** passes one over and keeps the row, so a corpus can be asked what was passed over.
+
+The header names the database a record will land in, so you can see where you are writing before you write four hundred rows. It never shows the connection string — a page anyone can open is not a place to put a password — and nothing on the page can change it.
+
+## Where the rows go
+
+`DATAFORCE_DATABASE_URL` names the database. **Unset, it is a SQLite file in the working directory** — `dataforce.sqlite3`, made on startup, gitignored — so an install nobody configured still has somewhere to put a row:
+
+```bash
+DATAFORCE_DATABASE_URL=postgresql+psycopg://user:pass@host/db \
+  uv run uvicorn dataforce.edge.main:app --reload --port 8000
+```
+
+The default is resolved against the working directory, so started from two different directories it is two different corpora. Name the DSN if that matters.
+
+Set it to `off` to run with no store at all: the whole review works with nowhere to put the result, and the routes that keep something say which variable to set rather than failing.
 
 ## Checks
 

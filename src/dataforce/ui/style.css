@@ -1,107 +1,522 @@
-/* The flow's layout, and the four states a rectangle can be in. The drawing's palette, so the
-   two pages read as one thing: the tool and the description of it. */
+/* The visual language: system sans, sentence case, one accent, soft grey panel borders, and more
+   air than a form needs. A labeller is in here for hours, so nothing shouts and nothing is
+   rendered in a colour that has to be decoded — a state is a word first and a colour second. */
 
 :root {
-  --ink: #17181b; --dim: #6b7280; --line: #c9ccd2; --bg: #f6f6f4;
-  --box: #fff; --in: #f0f4f8; --out: #f3f0e8; --none: #eeeef0;
-  --mark: #b4551f; --ok: #2f6f4f; --edit: #fffdf5;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --line: #e3e6eb;
+  --line-soft: #eef0f4;
+  --ink: #16191f;
+  --dim: #667085;
+  --faint: #98a2b3;
+  --accent: #2f5fd8;
+  --accent-soft: #eef2fd;
+  --ok: #067647;
+  --ok-soft: #ecfdf3;
+  --warn: #b42318;
+  --warn-soft: #fef3f2;
+  --radius: 8px;
+  --top: 56px;
+  --bottom: 60px;
+  color-scheme: light;
 }
+
 * { box-sizing: border-box; }
-body {
-  margin: 0; padding: 28px 20px 80px; background: var(--bg); color: var(--ink);
-  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+        Arial, "Noto Sans", sans-serif;
 }
-header, main { max-width: 1080px; margin: 0 auto; }
-header { margin-bottom: 26px; }
-h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
-.sub { color: var(--dim); font-size: 12.5px; max-width: 76ch; }
-.sub b, .why b { color: var(--mark); font-weight: 600; }
-.legend { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 
-.row { display: grid; gap: 14px; }
-.row.fan { grid-template-columns: repeat(3, 1fr); align-items: start; }
-@media (max-width: 820px) { .row.fan { grid-template-columns: 1fr; } }
+code, pre, textarea, .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
 
-.arrow { color: var(--line); text-align: center; padding: 8px 0 6px; font-size: 15px; letter-spacing: .3em; }
-.arrow span { color: var(--dim); font-size: 11px; letter-spacing: 0; display: block; margin-top: 2px; }
+button {
+  font: inherit;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 7px 13px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--faint); background: #fbfbfc; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.accent:hover:not(:disabled) { background: #2850bd; border-color: #2850bd; }
+button.quiet { color: var(--dim); }
 
-.step { border: 1.5px solid var(--ink); background: var(--box); }
-.head { border-bottom: 1.5px solid var(--ink); padding: 7px 10px;
-        display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.n { font-weight: 700; }
-.title { font-weight: 600; }
-.src { color: var(--dim); font-size: 11.5px; margin-left: auto; }
+/* ---------------------------------------------------------------- the strip and the action bar */
 
-.io { display: grid; grid-template-columns: 46px 1fr; border-top: 1px dashed var(--line); }
-.io .lab { padding: 8px 0 8px 10px; font-size: 10.5px; color: var(--dim);
-           letter-spacing: .08em; text-transform: uppercase; }
-.io .val { padding: 8px 10px 8px 0; min-width: 0; }
-.io.in { background: var(--in); } .io.out { background: var(--out); }
-.io .bar { border-top: none; padding: 7px 0 4px; }
+.top, .actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--panel);
+  padding: 0 20px;
+}
+.top {
+  top: 0;
+  height: calc(var(--top) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  border-bottom: 1px solid var(--line);
+}
+.actions {
+  bottom: 0;
+  height: calc(var(--bottom) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--line);
+}
+.actions #submit { margin-left: auto; }
+.actions #submit-note { margin-left: auto; }
+.actions #submit-note + #submit { margin-left: 0; }
 
-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-pre.big { max-height: 300px; overflow: auto; background: #fff; border: 1px solid var(--line); padding: 7px 8px; }
-pre.big:empty::before { content: "not asked yet"; color: var(--dim); }
-pre.big.nul { color: var(--dim); background: var(--none); }
-pre.big.bad { color: var(--mark); border-color: var(--mark); }
-pre.big.frozen { border: 1.5px solid var(--ok); }
+.brand { font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.topacts { margin-left: auto; display: flex; gap: 8px; }
 
-.why { color: var(--dim); font-size: 11.5px; padding: 7px 10px; border-top: 1px dashed var(--line); }
-.ticks { border-top: 1px dashed var(--line); padding: 7px 10px; }
-.ticks .lab { font-size: 10.5px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
-.tickbox { display: flex; flex-wrap: wrap; gap: 4px 14px; padding-top: 4px; font-size: 12px; }
-.tickbox .none { color: var(--mark); }
+.strip { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 13px; min-width: 0; }
+.strip b { color: var(--ink); font-weight: 600; }
+.strip.none { color: var(--warn); }
+.strip:empty::before { content: "Asking what the corpus holds…"; color: var(--faint); }
+
+/* ------------------------------------------------------------------------------- the two panes */
+
+.work {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 20px;
+  padding-top: calc(var(--top) + env(safe-area-inset-top, 0px) + 16px);
+  padding-bottom: calc(var(--bottom) + env(safe-area-inset-bottom, 0px) + 16px);
+  height: 100%;
+}
+
+.pane {
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 16px 16px;
+}
+#pane-review { background: transparent; border: 0; padding: 0; }
+
+.panehead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 12px;
+}
+.panehead.sticky { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.panehead h2 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+.panehead .name { font-size: 12px; color: var(--faint); }
+.panehead .count { font-size: 12px; color: var(--dim); }
+.panehead .inline { margin-left: auto; }
+
+/* ------------------------------------------------------------------------- the sample, as turns */
+
+.turns { display: flex; flex-direction: column; gap: 10px; }
+
+.turn { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
+.turn .who {
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: lowercase;
+  padding-top: 7px;
+  overflow-wrap: anywhere;
+}
+.turn .said {
+  background: #fafbfc;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.turn.assistant .said { background: var(--accent-soft); border-color: #dde5fa; }
+.turn .said:empty::before { content: "(nothing said)"; color: var(--faint); }
+.turn .calls { margin-top: 8px; }
+
+.catalog { display: flex; flex-direction: column; gap: 8px; }
+.tool {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+}
+.tool b { font-weight: 600; }
+.tool .args { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
+.tool .note { color: var(--dim); font-size: 12.5px; margin-top: 3px; }
+
+.empty { color: var(--faint); padding: 10px 0; }
+
+/* ---------------------------------------------------------------------------------- the panels */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+}
+.panelhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.panelhead h2 { font-size: 13px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }
+.panelhead .step {
+  display: inline-grid;
+  place-items: center;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--panel);
+  font-size: 11px;
+}
+.panelbody { padding: 14px 16px; }
+
+.verdict { margin-left: auto; font-size: 12px; color: var(--dim); }
+.verdict.ok { color: var(--ok); }
+.verdict.bad { color: var(--warn); }
+.verdict.busy { color: var(--accent); }
+
+.lead { margin: 0 0 12px; color: var(--dim); }
+.lab { font-size: 12px; font-weight: 600; color: var(--dim); margin: 14px 0 6px; }
+.lab.tight { margin-top: 0; }
+.note { font-size: 12.5px; color: var(--dim); overflow-wrap: anywhere; }
+
+.runline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+
+.refusal {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fecdca;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* -------------------------------------------------------------------------------- the checks */
+
+/* Three columns: which check, which model answers it, and what it said. The model sits on the
+   row of the check that spends it -- a picker anywhere else is one nobody finds. */
+.checks { margin-top: 12px; table-layout: fixed; }
+.checks th[scope=row] {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: normal;
+  width: 27%;
+}
+.checks thead th { width: auto; }
+.checks td { vertical-align: top; }
+.checks .said { color: var(--dim); font-size: 13px; overflow-wrap: anywhere; width: 34%; }
+.checks .said.ok { color: var(--ok); }
+.checks .said.bad { color: var(--warn); }
+.checks .said.busy { color: var(--accent); }
+.checks .lab { margin: 0 0 4px; }
+.checks .lab + .tickbox + .lab { margin-top: 9px; }
+.checks .tickbox { gap: 5px 12px; }
+
+/* --------------------------------------------------------------------- tables, ticks, editors */
 
 .tablewrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 12px; background: var(--edit); }
-th { text-align: left; font-weight: 600; font-size: 10.5px; color: var(--dim);
-     text-transform: uppercase; letter-spacing: .06em; padding: 4px 6px; border-bottom: 1px solid var(--line); }
-td { padding: 3px 6px; border-bottom: 1px dashed var(--line); vertical-align: middle; }
-table:empty, tbody:empty { display: none; }
-input, textarea { font: inherit; font-size: 12px; border: 1px solid var(--line); background: #fff;
-                  padding: 2px 4px; width: 100%; min-width: 0; }
-textarea { min-height: 96px; resize: vertical; background: var(--edit); }
-input.num { width: 6em; }
-.value { font-weight: 600; }
-.value.bad { color: var(--mark); font-weight: 400; }
-.dropped { opacity: .45; text-decoration: line-through; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th { font-size: 11px; font-weight: 600; color: var(--dim); white-space: nowrap; }
+td input[type=text], td input:not([type]) {
+  font: inherit; width: 100%; min-width: 70px;
+  border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px;
+}
+tbody:empty { display: none; }
+table:has(tbody:empty) { display: none; }
 
-.editor { padding: 0 10px 4px 0; }
-.editor .lab { font-size: 10.5px; color: var(--dim); letter-spacing: .08em;
-               text-transform: uppercase; padding: 6px 0 2px 10px; }
-.editor textarea { margin-left: 10px; width: calc(100% - 10px); }
+.ticks { margin-top: 12px; }
+.tickbox { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.tickbox .none { color: var(--faint); font-size: 12.5px; }
 
-button { font: inherit; font-size: 11.5px; border: 1.5px solid var(--ink); background: #fff;
-         padding: 3px 12px; cursor: pointer; }
-button:hover { background: var(--ink); color: #fff; }
-button:disabled { border-color: var(--line); color: var(--dim); cursor: default; }
-button:disabled:hover { background: #fff; color: var(--dim); }
-.bar { padding: 7px 10px 9px; display: flex; align-items: center; gap: 12px;
-       flex-wrap: wrap; font-size: 11.5px; border-top: 1px dashed var(--line); }
-label.mode { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
-label.mode input { width: auto; }
-.note { color: var(--dim); }
-.note.bad { color: var(--mark); }
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.inline input { margin: 0; accent-color: var(--accent); }
+.choice { display: flex; flex-direction: column; gap: 7px; margin: 4px 0 2px; }
 
-/* The four states. `answered` is the unmarked one, so a page mid-flow reads as what is left to
-   do rather than as a wall of badges — and `untouched` says nothing at all, because a step nobody
-   has pressed yet is the page's resting state and not news.
+select { font: inherit; border: 1px solid var(--line); border-radius: 5px; padding: 2px 5px; background: var(--panel); }
 
-   `unasked` is the fifth sentence and is deliberately not the fourth's colour: a button pressed
-   before its rectangle has what it needs was never a request, so it must not read as a refusal. */
-.state { font-size: 10.5px; border: 1px solid var(--ok); color: var(--ok); padding: 0 5px; border-radius: 2px; }
-.state:empty, .state.untouched { display: none; }
-.state.wait { border-color: var(--dim); color: var(--dim); }
-.state.edited { border-color: var(--mark); color: var(--mark); }
-.state.bad { border-color: var(--mark); color: var(--mark); background: #fdf2ec; }
-.state.unasked { border-style: dashed; border-color: var(--dim); color: var(--dim); }
-pre.big.unasked { color: var(--dim); background: var(--none); border-style: dashed; }
-.hidden { display: none; }
+textarea {
+  width: 100%;
+  min-height: 84px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  resize: vertical;
+  background: #fcfcfd;
+}
+textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-/* The rectangle a **back to** sent the reviewer to, and the only marking that is an instruction
-   rather than a report: every other state says what happened, this one says where to type. One
-   at a time, and it goes as soon as this step answers again. */
-.step.returned { border-color: var(--mark); }
-.backnote { font-size: 10.5px; color: var(--mark); }
-.backnote:empty { display: none; }
-.bar.back { color: var(--dim); }
+.facetwrap { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--line-soft); }
+
+/* The box that adds a domain, beside the list it adds to. */
+.facetwrap .runline { margin: 8px 0 0; }
+#domain-new {
+  font: inherit;
+  font-size: 13px;
+  flex: 1 1 200px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 8px;
+  background: var(--panel);
+}
+#domain-new:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.calls { margin-bottom: 12px; }
+.call {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 11px;
+  margin-bottom: 7px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.call b { font-weight: 600; }
+.call .args { color: var(--dim); font-size: 12px; }
+.nocall { color: var(--dim); font-style: italic; }
+
+/* ------------------------------------------------------------------------------- disclosures */
+
+details.raw { margin-top: 14px; }
+details.raw.last { margin: 0 0 4px; }
+details.raw > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--dim);
+  padding: 5px 0;
+  list-style: revert;
+}
+details.raw > summary:hover { color: var(--ink); }
+details.raw[open] > summary { margin-bottom: 6px; }
+
+pre {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  background: #fbfbfc;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: 12px;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+pre:empty { display: none; }
+pre.bad { border-color: #fecdca; background: var(--warn-soft); color: var(--warn); }
+pre.ok { border-color: #abefc6; background: var(--ok-soft); }
+
+/* ------------------------------------------------------------------------------- the two sheets */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: rgba(16, 19, 25, .38);
+  display: grid;
+  place-items: start center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+.sheet[hidden] { display: none !important; }
+.sheetbox {
+  width: min(760px, 100%);
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(16, 19, 25, .18);
+}
+.sheethead {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sheethead h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.sheethead .close { margin-left: auto; }
+.sheetbody { padding: 18px 20px 22px; }
+
+.guide h3 { font-size: 13px; font-weight: 600; margin: 20px 0 6px; }
+.guide h3:first-child { margin-top: 0; }
+.guide p { margin: 0 0 9px; color: #3a4150; }
+
+.facet { padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.facet b { font-weight: 600; }
+.facet .pick { color: var(--accent); font-size: 12px; margin-left: 8px; }
+.facet .values { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+.facet .note { margin-top: 2px; }
+
+.drop {
+  display: grid;
+  place-items: center;
+  min-height: 128px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  background: #fbfbfc;
+  cursor: pointer;
+  text-align: center;
+  padding: 16px;
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop input { display: none; }
+.dropsaid { color: var(--dim); }
+
+/* ------------------------------------------------------------------- pasting into the sample pane */
+
+.pasting {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 14px;
+  background: #fbfbfc;
+}
+.pasting[hidden] { display: none !important; }
+.pasting textarea { min-height: 120px; background: var(--panel); }
+.pasting .runline { margin: 10px 0 0; }
+.pasting .note { margin: 8px 0 0; }
+.pasting .note:empty { display: none; }
+
+.panehead #paste-open { margin-left: auto; }
+.panehead #paste-open + .inline { margin-left: 0; }
+
+/* ------------------------------------------------------------ which database, and the sample list */
+
+.store {
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.store::before {
+  content: "\25cf";
+  color: var(--ok);
+  margin-right: 6px;
+}
+.store.none { color: var(--warn); border-color: #fecdca; background: var(--warn-soft); }
+.store.none::before { color: var(--warn); }
+.store:empty { display: none; }
+
+h3.way { font-size: 13px; font-weight: 600; margin: 24px 0 8px; }
+h3.way:first-child { margin-top: 0; }
+
+.rows { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
+.rows .row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rows .row:hover { background: #fafbfc; }
+.rows .row.here { background: var(--accent-soft); }
+.rows .tick { display: grid; place-items: center; padding: 0 4px 0 8px; cursor: pointer; }
+.rows .tick input { margin: 0; accent-color: var(--accent); }
+.rows .open {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  text-align: left;
+  padding: 9px 10px;
+}
+.rows .open:hover { background: none; border: 0; }
+.rows .at {
+  flex: 0 0 auto;
+  min-width: 2.5ch;
+  text-align: right;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rows .said {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rows .was { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
+.rows .row.done .said { color: var(--dim); }
+.rows .row.done .was { color: var(--ok); }
+.rows .row.skipped .said { color: var(--faint); }
+
+/* ------------------------------------------------------------------------------ the statistics */
+
+.stats { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.figs { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-bottom: 6px; }
+.figs div { font-size: 13px; color: var(--dim); }
+.figs b { color: var(--ink); font-weight: 600; }
+
+table.matrix th.axis { font-weight: 600; color: var(--ink); }
+table.matrix .cell { text-align: right; font-variant-numeric: tabular-nums; }
+table.matrix .cell.zero { color: var(--warn); background: var(--warn-soft); }
+table.matrix .axis.gone { text-decoration: line-through; color: var(--faint); }
+table.counts td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* -------------------------------------------------------------------------------------- narrow */
+
+@media (max-width: 900px) {
+  .work {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 100%;
+  }
+  .pane { overflow-y: visible; }
+  .strip { font-size: 12px; gap: 12px; }
+}
+
+@media (max-width: 560px) {
+  .top, .actions, .work { padding-left: 12px; padding-right: 12px; }
+  .brand { display: none; }
+  .turn { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .turn .who { padding-top: 0; }
+  /* Three columns of tick boxes do not fit a phone. The row becomes a stack, which keeps the
+     model next to the check it answers for -- the one thing the three columns are for. */
+  .checks, .checks tbody, .checks tr, .checks th, .checks td { display: block; width: auto; }
+  .checks thead { display: none; }
+  .checks tr { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+  .checks th, .checks td { border: 0; padding: 2px 0; }
+  .checks .said { width: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

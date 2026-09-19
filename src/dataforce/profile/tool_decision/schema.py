@@ -1,8 +1,9 @@
-"""shape · this task's nouns: its two tables, and the body its statistics answer with."""
+"""shape · this task's nouns: its three tables, and the bodies its routes answer with."""
 
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, ClassVar, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +18,41 @@ from dataforce.modalities.text2text.dataset_management.schema import (
     DatasetLabelSummary,
 )
 from dataforce.tables import Base
+
+
+class QueueState(StrEnum):
+    """Where one imported sample has got to. A closed set, because a fourth is a design decision.
+
+    `StrEnum` so the column stores the word and a reader of the table sees `waiting` rather than a
+    number nothing explains -- the row outlives every process that wrote it, and the meaning has to
+    travel with it.
+    """
+
+    WAITING = "waiting"
+    DONE = "done"
+    SKIPPED = "skipped"
+
+
+class ToolDecisionQueuedSample(Base):
+    """One raw sample, as the line it was imported from held it, and where it has got to.
+
+    Raw and never corrected: what the reviewer changed belongs to `record`, and a queue holding
+    corrected samples could not be walked a second time by anyone wanting to check the first walk.
+    """
+
+    __tablename__ = "tool_decision_queue"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    imported_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Where this row stands in the walk, counting on from whatever the table already held.
+    # `imported_time` cannot do it: every row of one file is written in the same breath and carries
+    # the same instant, so ordering by it leaves the tie to the key -- which is a hash of the
+    # content, and hands a curated file back in an order nobody chose.
+    arrived: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # Indexed because every walk of the queue is one `WHERE state = 'waiting' LIMIT 1`, and that is
+    # the one query a labeller waits on -- once per sample, all day.
+    state: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
 
 class ToolDecisionRecord(Base):
@@ -51,7 +87,10 @@ class ToolDecisionSample(Base):
     personal_data: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=False
     )
-    ambiguous: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # A level and not a yes: *arguable* is a matter of degree, and a reviewer forced to pick one
+    # of two puts everything half-arguable on whichever side they lean. What the levels are is the
+    # page's, like every other declared facet -- the column only says it is written as text.
+    ambiguous: Mapped[str] = mapped_column(String, nullable=False)
     domain: Mapped[str] = mapped_column(String, nullable=False)
     call_trigger: Mapped[list[str]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=False
@@ -146,6 +185,107 @@ class ToolDecisionDatasetStatistics(BaseModel):
         ...,
         description="The same input under more than one row key, split by whether the labels agree.",
     )
+
+
+class QueuedSampleImport(BaseModel):
+    """What one import came to.
+
+    `unreadable` names lines by their number rather than counting them, because the answer a person
+    needs from a failed import is *which line do I go and fix*, and a count is the one thing that
+    cannot be acted on.
+    """
+
+    read: int = Field(..., description="Lines the file held, blank ones not counted.")
+    imported: int = Field(
+        ..., description="Lines that became a row waiting to be labelled."
+    )
+    already_held: int = Field(
+        ..., description="Lines whose sample the queue already had, under the same key."
+    )
+    unreadable: tuple[int, ...] = Field(
+        default=(),
+        description="The 1-based numbers of the lines that were not JSON objects.",
+    )
+
+
+class SamplesNamed(BaseModel):
+    """The same lines back, each carrying the name an import would have given it.
+
+    **The one sample path that touches no database.** A sample pasted into the page is labelled
+    where it is, so nothing writes a queue row for it -- but it still needs a name, because the
+    key a record is stored under is its name and an anonymous sample cannot be stored at all.
+    The name is the content's, so pasting a sample the corpus already holds lands on that row
+    rather than beside it.
+
+    `unreadable` names lines by their number for the same reason the import does: the answer a
+    person needs is *which line do I go and fix*.
+    """
+
+    read: int = Field(..., description="Lines that were read, blank ones not counted.")
+    samples: tuple[Mapping[str, Any], ...] = Field(
+        default=(),
+        description="Each line as it arrived, carrying `id` — its own if it had one.",
+    )
+    unreadable: tuple[int, ...] = Field(
+        default=(),
+        description="The 1-based numbers of the lines that were not JSON objects.",
+    )
+
+
+class QueuedSampleRow(BaseModel):
+    """One line of the list a reviewer picks from.
+
+    Not the whole sample: a list of three hundred would carry three hundred conversations, and what
+    a person picks from is the first thing said and whether anybody has been here already.
+    """
+
+    key: str = Field(
+        ..., description="The queue row's key, which is also the sample's name."
+    )
+    state: str = Field(..., description="One of `waiting`, `done`, `skipped`.")
+    arrived: int = Field(
+        ..., description="Where it stands in the walk, counting from one."
+    )
+    said: str = Field(
+        default="",
+        description=(
+            "The opening turn, cut to a preview. Empty where the sample has no turns at all, "
+            "which is a sample worth seeing in the list rather than hiding."
+        ),
+    )
+
+
+class QueuedSampleList(BaseModel):
+    """A page of the queue, and what the whole of it comes to.
+
+    The counts are of the whole queue and not of the page, because they answer *how much is left*
+    and a page is an artefact of asking.
+    """
+
+    samples: tuple[QueuedSampleRow, ...] = Field(
+        default=(), description="This page of rows."
+    )
+    waiting: int = Field(..., description="Rows nobody has labelled or skipped.")
+    done: int = Field(..., description="Rows whose record was written.")
+    skipped: int = Field(..., description="Rows a reviewer passed over.")
+
+
+class QueuedSampleWaiting(BaseModel):
+    """The next sample to label, and how much of the queue is left.
+
+    The counts ship with the sample rather than from a route of their own: they are read in the
+    same breath the sample is, and a second call would let the two disagree on screen.
+    """
+
+    sample: Mapping[str, Any] | None = Field(
+        default=None, description="The raw sample, or `null` where nothing is waiting."
+    )
+    key: str | None = Field(
+        default=None, description="The queue row's key, posted back to say it is done."
+    )
+    waiting: int = Field(..., description="Rows nobody has labelled or skipped.")
+    done: int = Field(..., description="Rows whose record was written.")
+    skipped: int = Field(..., description="Rows a reviewer passed over.")
 
 
 class ToolDecisionDataStamp(NamedTuple):

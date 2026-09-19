@@ -304,11 +304,13 @@ answer in it is recomputed in its own script over a sample written into the file
     labelling UI asks the route for it (Requirement 32) — so the two conflicts a reviewer can
     leave behind stay readable in one file with no service running.
 
-**The labelling UI.** The other page, and the one a labeller works in: the same eight rectangles,
-but every answer in it came from a route, and every rectangle carries the buttons that make the
-next call. How those rectangles are laid out — one card at a time rather than one long page, and a
-labelling guide on the first card — is `docs/tool-decision-store/spec.md` § *Requirements*, because
-the corpus statistics the page shows are that spec's and they are what reshaped it.
+**The labelling UI.** The other page, and the one a labeller works in: the same eight steps, but
+every answer in it came from a route. **How they are laid out is not this spec's** — the screen,
+what is one button and what is a decision, and where a corpus comes from are
+`docs/tool-decision-store/spec.md` § *The page* and § *Raw data in*, because the corpus the page
+walks and the statistics it shows are that spec's and they are what reshaped it. What this spec
+still says about that page is what every one of its answers has to be true of, whatever shape it is
+drawn in.
 
 44. `ui/` is the UI: `index.html`, `app.js`, `style.css`, mounted as static files at `/ui` by
     `create_app()`. Three files, no build step, no npm, nothing from a CDN — the rule the drawing
@@ -318,21 +320,21 @@ the corpus statistics the page shows are that spec's and they are what reshaped 
     and the page that labels cannot disagree with the service about what a span or a vote is. The
     redaction behind the three `new_` keys is a route for that reason and not a walk over the
     record in the client (Requirement 32, Decision 24): a rule a caller can skip is not a rule.
-46. One rectangle per step, in flow order, each showing what it was handed and what it answered,
-    and each carrying its own buttons. What it was handed is the request body itself, written into
-    the rectangle before it is sent, so what the page shows as a step's input is what went over the
-    wire rather than the page's account of it. A button calls that step's route and no other: a step is
-    re-runnable on its own, and no rectangle waits for a rectangle beside it. That is
-    Requirement 1 on screen, which is why the UI is drawn as the flow rather than as one form with
-    a submit button.
-47. The sample is pasted, as JSON, into the first rectangle — `{id, messages, tools, label}`, with
-    an example already in the box. A **check** button parses it and says why not where it does not
-    parse. The language it is in is declared beside it, once, from the two the scans know: it is a
-    declaration about this sample and both model steps are handed it (Decision 17), so it is ticked
-    where the sample is rather than twice in the two rectangles that send it. One sample at a time:
-    what every endpoint takes is one sample, and a corpus is out of scope. Checking a sample into
-    the box that is not the one already read clears the other rectangles, because their answers are
-    answers about something else.
+46. **The drawing** is one rectangle per step, in flow order, each showing what it was handed and
+    what it answered. What it was handed is the request body itself, so what it shows as a step's
+    input is what went over the wire rather than the page's account of it. That is Requirement 1 on
+    screen, which is why the flow is drawn as a flow rather than as one form with a submit button.
+    **The labelling page is not obliged to be drawn that way**, and is not: a step the reviewer
+    cannot influence is a call, not a screen. What both pages owe is that no step's answer is
+    computed anywhere but its route, and that a step is re-runnable on its own — never that each
+    has a rectangle and a button of its own.
+47. **A sample arrives, and every endpoint still takes exactly one.** Where it comes from is the
+    store spec's — the labelling page walks an imported corpus — and what this spec requires is
+    unchanged by that: one sample per request, `{id, messages, tools, label}`. The language it is
+    in is declared once, beside the sample, from the two the scans know: it is a declaration about
+    this sample and both model steps are handed it (Decision 17), so it is declared where the
+    sample is rather than twice in the two rectangles that send it. A different sample on screen
+    clears every answer, because their answers are answers about something else.
 48. The user can edit. Every rectangle holding data the flow carries — the sample, the spans, the
     label — is editable in place, with a **check** button that re-reads what was typed, and what
     they edited is what the next call is made with. A human step *is* that edit plus the call after
@@ -343,52 +345,47 @@ the corpus statistics the page shows are that spec's and they are what reshaped 
     until **replace** is pressed again; changing the language drops both model steps' answers.
     Nothing is silently carried into a record it is not about, and nothing is re-called on the
     user's behalf.
-    Which rectangle the correction belongs in is not always the one the reviewer is standing in, so
-    every step names the ones above it that hold something to change — the sample, the spans, what
-    was kept, the reviewers, the label — and **back to** goes there. What it leaves is a marking
-    that says *make the correction here*: the one marking on the page that is an instruction rather
-    than a report, and the reason it is worth drawing is that the edit itself is the human step and
-    it has to happen somewhere. It drops the record and nothing else — step 8 was assembled out of
-    an answer the reviewer has just called wrong — and it re-opens **assemble** and **approve**
-    where **approve** had frozen them. Every other answer stands until the step it came from is
-    actually edited, which is this requirement's own rule and not a second one. One return is live
-    at a time, and it ends when the step returned to answers again.
-49. Which models answer is ticked, not typed: the lists are `GET /models`' answer, one tick for the
-    verifier, many for the jury, one for the finetuned reviewer, and the ticks become
-    `verifier_model`, `jury_models` and `sft_model` on the two requests. A UI that hard-codes the
-    names is a second declaration of what this deployment serves, which is exactly what
-    Requirement 27 refuses.
+    Where the correction is made is wherever that answer is shown, which on a screen holding every
+    answer at once is in front of the reviewer already. What a page may not do is carry an answer
+    into a record it is not about: an edit drops the record assembled from it, and the record is
+    built again from what the reviewer now says. Every other answer stands until the step it came
+    from is actually edited, which is this requirement's own rule and not a second one.
+49. Which models answer is ticked, not typed: the lists are `GET /models`' answer — **a bare array
+    of names**, which is the shape to read it in — one tick for the verifier, many for the jury,
+    one for the finetuned reviewer, and the ticks become `verifier_model`, `jury_models` and
+    `sft_model` on the two requests. A UI that hard-codes the names is a second declaration of what
+    this deployment serves, which is exactly what Requirement 27 refuses. A UI that reads the
+    answer in a shape the route does not send is worse than one that hard-codes them: every list
+    draws empty, every run stops asking to be told which model, and nothing on the screen says why.
+    The lists sit where the models are spent.
     The answer is asked for again whenever the window is focused, because `config/model/` is a
     directory a deployment edits while the service is up and the endpoint reads it per call — so a
-    model added to it appears in the lists without a reload. On focus and not on an interval: a
+    model added to it appears in the lists without a reload. A list that came back unchanged is not
+    drawn again, and a model still served keeps its tick, because alt-tabbing is not a reviewer
+    changing their mind. On focus and not on an interval: a
     poll picks a number nobody chose, and the person who edited the directory is the person coming
     back to the tab. A redraw keeps every tick whose name is still served; a ticked name that is
     gone is unticked, and the list says which one, because a name off the list cannot be asked for
     (Requirement 29).
-50. Personal data is two buttons in two rectangles, because it is two calls with a human between
-    them (Requirement 5): **detect** fills step 2 with the spans, the user ticks, edits or adds
-    them there and in step 5, and step 5's **replace** answers over what they handed back —
-    which is also what Requirement 40 asks of step 5, the rectangle the human sits in. Nothing is
-    replaced before they looked. A row can be added as well as edited, since a reviewer may add a
-    span: it is numbered after the last, because `id` is what the confirmation was asked about and
-    nothing asks it again about a span it never saw.
-51. A refusal is shown where it happened. A 422's `detail` goes in that rectangle, in the words the
-    service used, and every answer the page already holds stays: one part failing fails that one
-    call, and the step is re-runnable. The UI never retries on its own and never hides a refusal
-    behind a spinner that stops. A rectangle asked before it has what it needs says *not asked*
-    instead, and says it in its own marking: nothing was called, so nothing refused anything, and
-    the two must not look alike.
-52. The last rectangle is the record after every step, as the page assembled it, and it offers
-    **assemble**, **back to** and **approve**. **assemble** is its own call — the redaction route
-    (Requirement 32) — and the record is composed out of that answer and everything the page
-    already holds. **back to** is the same control every rectangle above carries (Requirement 48),
-    and here it reaches all five: the record is assembled out of every step, so the part to correct
-    may have been produced anywhere. The rectangle also names which steps have not answered at all,
-    so a record assembled early says so rather than reading as complete. **approve** freezes the record and shows the final body.
-53. **approve** posts the record to the store's own route (Requirement 35) and says what happened
-    — that it landed, or which step did not run, or which variable to set where no database is
-    attached. It is the one rectangle that changed when the store was built, which is what
-    Requirement 35 had been holding open.
+50. Personal data is **two calls with a human between them** (Requirement 5), and that is a fact
+    about the calls, not about how many buttons a page draws: the scan claims the spans, the
+    reviewer ticks, edits or adds them, and the replacement answers over what they handed back.
+    Nothing is replaced before they looked, and no page may collapse that into one call. A row can
+    be added as well as edited, since a reviewer may add a span: it is numbered after the last,
+    because `id` is what the confirmation was asked about and nothing asks it again about a span it
+    never saw.
+51. A refusal is shown where it happened. A 422's `detail` is shown in the words the service used,
+    and every answer the page already holds stays: one part failing fails that one call, and the
+    step is re-runnable. The UI never retries on its own and never hides a refusal behind a spinner
+    that stops. A step asked before it has what it needs says *not asked* instead, and says it
+    differently: nothing was called, so nothing refused anything, and the two must not look alike.
+52. The record is composed out of the redaction route's answer (Requirement 32) and everything the
+    page already holds, and it is composed at the moment it is submitted rather than kept as a
+    fourth thing the reviewer has to remember to rebuild. A record assembled before every step
+    answered says which of them did not, rather than reading as complete.
+53. Submitting posts the record to the store's own route (Requirement 35) and says what happened —
+    that it landed, or which step did not run, or which variable to set where no database is
+    attached. That route is what Requirement 35 had been holding open.
 54. The drawing and the UI are two files and neither is generated from the other. `index.html`
     explains the flow — its rectangles carry prose about why each step is shaped as it is — and
     `ui/` labels with it. The cost, stated: a change to the flow is drawn in one and driven in the
@@ -856,9 +853,10 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
   `DuplicateDataChecking` stood beside it and is gone: duplicates are a fact about a corpus, so the
   one implementation lives in `modalities/text2text/dataset_management/`. The `duplicate` step
   still answers `null`.
-- Auth, rate limiting, batching, and running any of this over a corpus rather than one sample —
-  the UI labels the one sample pasted into it, and walking a file of them, tracking which are done
-  and where the labelled ones go is a corpus by another name.
+- Auth, rate limiting, and batching. **Not the corpus**: importing a file of samples, walking it
+  one at a time and tracking which are done is `docs/tool-decision-store/spec.md` § *Raw data in*,
+  which is also where the labelled ones go. Every route here still takes exactly one sample, which
+  is what kept that decision separable from this spec.
 - Which models the panel asks, and how many. A composition is a deployment's declaration, and
   nothing in this spec picks one.
 - **The store, and everything that answers for it.** Where a reviewed record is kept, the route

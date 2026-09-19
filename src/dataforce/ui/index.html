@@ -1,290 +1,278 @@
 <!doctype html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>tool_decision · label one sample</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tool decision · labelling</title>
 <link rel="stylesheet" href="style.css">
 
-<header>
-  <h1>tool_decision — label one sample</h1>
-  <div class="sub">
-    One rectangle per step, and <b>every rectangle is one call</b>: its button calls its own route
-    and no other, so a step is re-runnable on its own and nothing waits for the rectangle beside
-    it. The yellow cells are yours to edit — what you leave in them is what the next call is made
-    with, and that edit plus the button after it <i>is</i> the human step. Step 8 is the record
-    this page assembles out of the eight answers, and <b>approve</b> is what stores it — in two
-    tables, or in neither.
-    The model lists are what <b>config/model/</b> holds, asked for again every time you come back
-    to this tab — so a file you add while the service is up shows up without a reload, and your
-    ticks survive it. Wrong answer in a rectangle above? <b>back to</b> sends you to the one that
-    produced it — a correction is made where the part was made, never at the end.
-  </div>
-  <div class="legend">
-    <span class="state">answered</span>
-    <span class="state wait">waiting</span>
-    <span class="state edited">edited</span>
-    <span class="state bad">refused</span>
-    <span class="state unasked">not asked</span>
-    <span class="note">a refusal is shown in the rectangle that asked, in the service's own words;
-      <b>not asked</b> is the other thing, and means nothing was called</span>
+<!-- The screen is three fixed things and two scrolling ones: the strip and the action bar never
+     move, and the two panes scroll on their own. Whatever the sample's length, submit is in the
+     same place — a reviewer doing this four hundred times reaches for it without looking. -->
+<header class="top">
+  <div class="brand">Tool decision</div>
+  <!-- Which database a record lands in. Read-only, and never the DSN: a connection string carries
+       a password, and this answers *am I writing where I think I am* without one. -->
+  <span class="store" id="store"></span>
+  <div class="strip" id="strip"></div>
+  <div class="topacts">
+    <button id="open-list" class="quiet">Samples</button>
+    <button id="open-import" class="quiet">Import</button>
+    <button id="open-guide" class="quiet">Guide</button>
   </div>
 </header>
 
-<main>
+<main class="work">
 
-  <section class="step" id="s1">
-    <div class="head"><span class="n">1</span><span class="title">input</span>
-      <span class="backnote" id="back-1"></span>
-      <span class="src">one sample, pasted as JSON <span class="state" data-state="1"></span></span>
+  <!-- The left pane is never replaced. Every decision on the right is a judgement about what is
+       in it, and a page that hides the conversation while asking whether its label is right is
+       asking the reviewer to answer from memory. -->
+  <section class="pane" id="pane-sample">
+    <div class="panehead">
+      <h2>The sample</h2>
+      <span class="name" id="sample-name"></span>
+      <button id="paste-open" class="quiet">Paste a sample</button>
+      <label class="inline">Language
+        <select id="language"><option value="vi">vi</option><option value="en">en</option></select>
+      </label>
     </div>
-    <div class="io in"><div class="lab">in</div><div class="val">
-      <textarea id="sample-text" spellcheck="false"></textarea>
-      <div class="bar">
-        <button id="sample-check">check</button>
-        <label class="mode">language
-          <select id="language"><option value="vi">vi</option><option value="en">en</option></select>
-        </label>
-        <span class="note" id="sample-note"></span>
+
+    <!-- In this pane and not behind a button somewhere else: this is the thing called *the
+         sample*, so it is where a person looks to put one in. Opens by itself when the queue has
+         nothing waiting, because an empty screen that only says so is a dead end. -->
+    <div class="pasting" id="pasting" hidden>
+      <textarea id="paste-text" spellcheck="false"
+        placeholder='{"messages": [{"role": "user", "content": "…"}], "tools": [], "label": []}'></textarea>
+      <div class="runline">
+        <button id="paste-now" class="accent">Use this sample</button>
+        <button id="paste-queue" class="quiet">Add to the queue instead</button>
+        <button id="paste-cancel" class="quiet">Cancel</button>
       </div>
-    </div></div>
-    <div class="io out"><div class="lab">out</div><div class="val">
-      <pre id="out-1" class="big"></pre>
-    </div></div>
-    <div class="why">One sample at a time: what every endpoint takes is one sample. No route is
-      called here — <b>check</b> only parses what you typed. The language is a declaration about
-      this sample, and both model steps are handed it.</div>
+      <p class="note" id="paste-note"></p>
+    </div>
+
+    <div class="turns" id="turns"></div>
+    <div class="panehead sticky">
+      <h2>Tools offered</h2>
+      <span class="count" id="tool-count"></span>
+    </div>
+    <div class="catalog" id="catalog"></div>
+    <details class="raw">
+      <summary>The sample as it arrived</summary>
+      <pre id="raw-sample"></pre>
+    </details>
   </section>
 
-  <div class="arrow">▼<span>the same sample to each of the three, and none of them to another</span></div>
+  <section class="pane" id="pane-review">
 
-  <div class="row fan">
-    <section class="step" id="s2">
-      <div class="head"><span class="n">2</span><span class="title">personal data</span>
-        <span class="backnote" id="back-2"></span>
-        <span class="state" data-state="2"></span>
+    <!-- Calls the reviewer cannot influence. Their being separate was a fact about the service's
+         routes leaking onto the screen.
+
+         Three columns, and the middle one is the point: **the model that answers a check sits on
+         that check's own row**. A picker somewhere further down the page is a picker nobody finds,
+         and a run that stops on `tick a verifier first` with no tick box in sight is a dead end. -->
+    <article class="panel" id="panel-checks">
+      <div class="panelhead">
+        <h2>Checks</h2>
+        <span class="verdict" id="checks-verdict">not run</span>
       </div>
-      <div class="ticks"><div class="lab">verifier — one model confirms each span</div>
-        <div id="verifier-ticks" class="tickbox"></div>
-      </div>
-      <div class="io in"><div class="lab">in</div><div class="val">
-        <pre id="in-2" class="big"></pre>
-      </div></div>
-      <div class="bar">
-        <button id="detect">detect</button>
-        <span class="note">POST /data-quality/personal-data</span>
-      </div>
-      <div class="io out"><div class="lab">out</div><div class="val">
-        <div class="tablewrap"><table id="span-table"><thead><tr>
-          <th>id</th><th>start</th><th>end</th><th>class</th><th>placeholder</th><th>value it reads</th>
-        </tr></thead><tbody></tbody></table></div>
-        <div class="bar">
-          <button id="span-check">check</button>
-          <button id="span-add">add a span</button>
-          <span class="note" id="span-note"></span>
+      <div class="panelbody">
+        <div class="runline">
+          <button id="run-checks" class="accent">Run all checks</button>
+          <span class="note" id="checks-note">Two calls: the personal-data scan, then the reviewers.</span>
         </div>
-        <pre id="out-2" class="big"></pre>
-      </div></div>
-      <div class="bar back">
-        <span class="note">back to</span>
-        <button class="back" data-back="1">1 · the sample</button>
+        <div class="tablewrap"><table class="checks"><thead><tr>
+          <th>Check</th><th>Model</th><th>What it said</th>
+        </tr></thead><tbody>
+          <tr>
+            <th scope="row">Personal data</th>
+            <td><div class="tickbox" id="verifier-ticks"></div></td>
+            <td class="said" id="said-2">not run</td>
+          </tr>
+          <tr>
+            <th scope="row">Label</th>
+            <td>
+              <div class="lab tight">Jury</div>
+              <div class="tickbox" id="jury-ticks"></div>
+              <div class="lab">Finetuned</div>
+              <div class="tickbox" id="sft-ticks"></div>
+            </td>
+            <td class="said" id="said-6">not run</td>
+          </tr>
+        </tbody></table></div>
       </div>
-      <div class="why">The spans are the service's answer, and the offsets index
-        <b>review_text</b>. <b>check</b> re-reads every row and re-slices it; an unreadable edit
-        says which rule it broke and calls nothing.</div>
-    </section>
+    </article>
 
-    <section class="step" id="s3">
-      <div class="head"><span class="n">3</span><span class="title">duplicate</span>
-        <span class="state" data-state="3"></span>
+    <article class="panel" id="panel-data">
+      <div class="panelhead">
+        <h2><span class="step">1</span> The data</h2>
+        <span class="verdict" id="data-verdict"></span>
       </div>
-      <div class="io in"><div class="lab">in</div><div class="val">
-        <pre id="in-3" class="big"></pre>
-      </div></div>
-      <div class="bar">
-        <button id="duplicate-run">check</button>
-        <span class="note">POST /data-quality/duplicate</span>
+      <div class="panelbody">
+        <p class="lead">Tick the spans that really are personal data. What you untick is left in
+          the text exactly as it arrived. <b>Every span you keep is replaced as you tick</b> — there
+          is no second button, and the copy on the Checks panel says what it did.</p>
+        <div class="tablewrap"><table id="keep-table"><thead><tr>
+          <th>Keep</th><th>Class</th><th>Placeholder</th><th>Value</th><th></th>
+        </tr></thead><tbody></tbody></table></div>
+        <label class="inline"><input type="checkbox" id="auto" checked> Drop any span inside a longer one</label>
+        <details class="raw" id="scan-raw">
+          <summary>What the scan answered</summary>
+          <div class="tablewrap"><table id="span-table"><thead><tr>
+            <th>id</th><th>start</th><th>end</th><th>class</th><th>placeholder</th><th>value it reads</th>
+          </tr></thead><tbody></tbody></table></div>
+          <div class="runline">
+            <button id="span-check" class="quiet">Re-read the rows</button>
+            <button id="span-add" class="quiet">Add a span</button>
+            <span class="note" id="span-note"></span>
+          </div>
+          <pre id="out-2"></pre>
+          <pre id="out-5"></pre>
+        </details>
+        <p class="refusal" id="data-refusal" hidden></p>
       </div>
-      <div class="io out"><div class="lab">out</div><div class="val">
-        <pre id="out-3" class="big"></pre>
-      </div></div>
-      <div class="bar back">
-        <span class="note">back to</span>
-        <button class="back" data-back="1">1 · the sample</button>
-      </div>
-      <div class="why">Answers <b>null</b> at 200. Nothing failed: nothing declares what a
-        duplicate report is, so there is nothing to report.</div>
-    </section>
+    </article>
 
-    <section class="step" id="s4">
-      <div class="head"><span class="n">4</span><span class="title">abnormal</span>
-        <span class="state" data-state="4"></span>
+    <article class="panel" id="panel-label">
+      <div class="panelhead">
+        <h2><span class="step">2</span> The label</h2>
+        <span class="verdict" id="label-verdict"></span>
       </div>
-      <div class="io in"><div class="lab">in</div><div class="val">
-        <pre id="in-4" class="big"></pre>
-      </div></div>
-      <div class="bar">
-        <button id="abnormal-run">check</button>
-        <span class="note">POST /data-quality/abnormal</span>
-      </div>
-      <div class="io out"><div class="lab">out</div><div class="val">
-        <pre id="out-4" class="big"></pre>
-      </div></div>
-      <div class="bar back">
-        <span class="note">back to</span>
-        <button class="back" data-back="1">1 · the sample</button>
-      </div>
-      <div class="why">The same: <b>null</b> at 200, and nothing to report.</div>
-    </section>
-  </div>
+      <div class="panelbody">
+        <div class="calls" id="calls"></div>
+        <div class="choice">
+          <label class="inline"><input type="radio" name="verdict" id="v-correct" checked> Correct — it ships as it arrived</label>
+          <label class="inline"><input type="radio" name="verdict" id="v-modify"> Modify — edit it below</label>
+        </div>
+        <div id="label-editor" class="editor" hidden>
+          <div class="lab">Messages</div>
+          <textarea id="messages-text" spellcheck="false"></textarea>
+          <div class="lab">Tools</div>
+          <textarea id="tools-text" spellcheck="false"></textarea>
+          <div class="lab">Label</div>
+          <textarea id="label-text" spellcheck="false"></textarea>
+          <div class="runline">
+            <button id="label-check" class="quiet">Check it is JSON</button>
+            <span class="note" id="label-note"></span>
+          </div>
+        </div>
+        <details class="raw">
+          <summary>What the reviewers said</summary>
+          <pre id="out-6"></pre>
+        </details>
 
-  <div class="arrow">▼<span>the spans, to the person who says which of them are real</span></div>
+        <div class="facetwrap">
+          <div class="lab">What kind of sample is this?</div>
 
-  <section class="step" id="s5">
-    <div class="head"><span class="n">5</span><span class="title">human check · data quality</span>
-      <span class="backnote" id="back-5"></span>
-      <span class="src">the spans as you leave them, then the copy made over them
-        <span class="state" data-state="5"></span></span>
-    </div>
-    <div class="io in"><div class="lab">in</div><div class="val">
-      <div class="tablewrap"><table id="keep-table"><thead><tr>
-        <th>keep</th><th>class</th><th>placeholder</th><th>value</th><th></th>
-      </tr></thead><tbody></tbody></table></div>
-      <div class="bar">
-        <label class="mode"><input type="checkbox" id="auto" checked> auto — drop any span inside a longer one</label>
+          <!-- `domain` on its own, because the thing that adds one belongs next to the list it
+               adds to. A domain added here is offered from that moment, and it is still offered
+               after a reload once one sample carries it — the page reads the values back off the
+               corpus. Nothing here removes one. -->
+          <div class="ticks">
+            <div class="lab">domain</div>
+            <div class="tickbox" id="domain-ticks"></div>
+            <div class="runline">
+              <input id="domain-new" placeholder="another domain, e.g. insurance_sales" spellcheck="false">
+              <button id="domain-add" class="quiet">Add domain</button>
+              <span class="note" id="domain-note"></span>
+            </div>
+            <div class="note" id="domain-said"></div>
+          </div>
+
+          <div class="ticks" id="facet-ticks"></div>
+        </div>
+        <p class="refusal" id="label-refusal" hidden></p>
       </div>
-      <pre id="in-5" class="big"></pre>
-    </div></div>
-    <div class="bar">
-      <button id="replace-run">replace</button>
-      <span class="note">POST /data-quality/personal-data/replace</span>
-    </div>
-    <div class="io out"><div class="lab">out</div><div class="val">
-      <pre id="out-5" class="big"></pre>
-    </div></div>
-    <div class="bar back">
-      <span class="note">back to</span>
-      <button class="back" data-back="1">1 · the sample</button>
-      <button class="back" data-back="2">2 · the spans</button>
-    </div>
-    <div class="why">Two calls with you between them: <b>detect</b> claimed, you tick and edit, and
-      <b>replace</b> answers over what you handed back. Nothing was replaced before you looked, and
-      nothing here records that you looked — the answer is the spans you returned.</div>
+    </article>
+
+    <details class="raw last">
+      <summary>The record this page will post</summary>
+      <pre id="record"></pre>
+    </details>
+
   </section>
-
-  <div class="arrow">▼<span>the sample again, not step 5: this is a check on the label</span></div>
-
-  <section class="step" id="s6">
-    <div class="head"><span class="n">6</span><span class="title">ai review label</span>
-      <span class="backnote" id="back-6"></span>
-      <span class="state" data-state="6"></span>
-    </div>
-    <div class="ticks"><div class="lab">jury — every model ticked sits on the panel</div>
-      <div id="jury-ticks" class="tickbox"></div>
-    </div>
-    <div class="ticks"><div class="lab">finetuned reviewer — one, or none</div>
-      <div id="sft-ticks" class="tickbox"></div>
-    </div>
-    <div class="io in"><div class="lab">in</div><div class="val">
-      <pre id="in-6" class="big"></pre>
-    </div></div>
-    <div class="bar">
-      <button id="review-run">review</button>
-      <span class="note">POST /ai-review</span>
-    </div>
-    <div class="io out"><div class="lab">out</div><div class="val">
-      <pre id="out-6" class="big"></pre>
-    </div></div>
-    <div class="bar back">
-      <span class="note">back to</span>
-      <button class="back" data-back="1">1 · the sample</button>
-      <button class="back" data-back="2">2 · the spans</button>
-      <button class="back" data-back="5">5 · what you kept</button>
-    </div>
-    <div class="why">No data-quality answer is an argument to this. A juror is asked the sample's
-      own question and is never shown the label; <b>label_agreement</b> is what the service made of
-      its votes against the label that arrived.</div>
-  </section>
-
-  <div class="arrow">▼<span>the label, to the person who says whether it ships</span></div>
-
-  <section class="step" id="s7">
-    <div class="head"><span class="n">7</span><span class="title">human check · label</span>
-      <span class="backnote" id="back-7"></span>
-      <span class="src">what ships, before redaction <span class="state" data-state="7"></span></span>
-    </div>
-    <div class="bar">
-      <label class="mode"><input type="radio" name="verdict" id="v-correct" checked> correct — everything ships as it arrived</label>
-      <label class="mode"><input type="radio" name="verdict" id="v-modify"> modify — edit any of the three below</label>
-    </div>
-    <div id="label-editor" class="editor hidden">
-      <div class="lab">messages</div>
-      <textarea id="messages-text" spellcheck="false"></textarea>
-      <div class="lab">tools</div>
-      <textarea id="tools-text" spellcheck="false"></textarea>
-      <div class="lab">label</div>
-      <textarea id="label-text" spellcheck="false"></textarea>
-      <div class="bar">
-        <button id="label-check">check</button>
-        <span class="note" id="label-note"></span>
-      </div>
-    </div>
-    <div class="ticks" id="facet-ticks"></div>
-    <div class="io out"><div class="lab">out</div><div class="val">
-      <pre id="out-7" class="big"></pre>
-    </div></div>
-    <div class="bar back">
-      <span class="note">back to</span>
-      <button class="back" data-back="1">1 · the sample</button>
-      <button class="back" data-back="2">2 · the spans</button>
-      <button class="back" data-back="5">5 · what you kept</button>
-      <button class="back" data-back="6">6 · the reviewers</button>
-    </div>
-    <div class="why">A label that is not JSON is carried as <b>{unparsed: …}</b> rather than
-      dropped or guessed at — and a record carrying one is refused when you press <b>approve</b>,
-      so fix it here. No route is called at this step; the call after it is step 8's.
-      <b>The ticks are the other half of this step.</b> Nothing computes them and nothing can fill
-      one in later, so a sample stored without one is stored without it for good. The values you
-      may tick are this page's own list — the store answers what the corpus carries, never what it
-      was allowed to carry — and <b>language</b> is not among them because step 1 already declared
-      it.</div>
-  </section>
-
-  <div class="arrow">▼<span>the eight answers, as one record</span></div>
-
-  <section class="step" id="s8">
-    <div class="head"><span class="n">8</span><span class="title">final result</span>
-      <span class="src">the record this page assembles <span class="state" data-state="8"></span></span>
-    </div>
-    <div class="io in"><div class="lab">in</div><div class="val">
-      <pre id="in-8" class="big"></pre>
-    </div></div>
-    <div class="bar">
-      <button id="assemble">assemble</button>
-      <span class="note">POST /data-quality/personal-data/redact, then the record</span>
-    </div>
-    <div class="io out"><div class="lab">out</div><div class="val">
-      <pre id="record" class="big"></pre>
-    </div></div>
-    <div class="bar back">
-      <span class="note">back to</span>
-      <button class="back" data-back="1">1 · the sample</button>
-      <button class="back" data-back="2">2 · the spans</button>
-      <button class="back" data-back="5">5 · what you kept</button>
-      <button class="back" data-back="6">6 · the reviewers</button>
-      <button class="back" data-back="7">7 · the label</button>
-    </div>
-    <div class="bar">
-      <button id="approve">approve</button>
-      <span class="note" id="approve-note"></span>
-    </div>
-    <div class="why"><b>approve posts this record</b> to <b>POST /records</b>, which writes one
-      row in each of the two tables or in neither. Two things get it refused, and only two: nobody
-      ran the personal-data scan, or a value the redaction confirmed is still in what ships. Either
-      names the step, nothing is written, and you stay on this card — <b>back to</b> is how you go
-      and fix it. A declared facet nobody ticked is refused here too, by name. With no database
-      attached the answer says which variable to set, and all eight steps work exactly as they
-      do now.</div>
-  </section>
-
 </main>
+
+<footer class="actions">
+  <button id="skip" class="quiet">Skip</button>
+  <span class="note" id="submit-note"></span>
+  <button id="submit" class="accent">Submit &amp; next</button>
+</footer>
+
+<!-- Both sheets open over the screen and close back to the same sample: a reviewer who needs the
+     guide needs it in the middle of a sample and not before the first one. -->
+<div class="sheet" id="sheet-guide" hidden>
+  <div class="sheetbox">
+    <div class="sheethead"><h2>How to label</h2><button class="close" data-close="sheet-guide">Close</button></div>
+    <div class="sheetbody">
+      <div class="guide">
+        <h3>What a sample is</h3>
+        <p>One conversation, and the catalog of tools the assistant was allowed to call in it. The
+          label is the calls it should have made at the last turn — nothing earlier, nothing the
+          catalog does not offer.</p>
+
+        <h3>What makes a label right</h3>
+        <p>Every call the turn needs, with the arguments the conversation actually supports. An
+          argument nobody stated is a wrong call, not a good guess.</p>
+        <p><b>No call is an answer.</b> A turn that needs no tool is labelled with an empty list,
+          and that is a finished sample — not a row somebody skipped.</p>
+
+        <h3>What you tick, and when</h3>
+        <p>On <b>the data</b>: which detected spans really are personal data. A span you untick
+          stays in the text as it arrived. You never ask for the replacement — every span still
+          ticked is replaced as you tick, and the Checks panel says how many.</p>
+        <p>On <b>the label</b>: whether it ships as it is, and what kind of sample it is. The facets
+          are the only thing here nothing can compute, and nothing can fill one in later — a sample
+          stored without one is stored without it for good.</p>
+        <div id="guide-facets"></div>
+
+        <h3>What gets a sample refused</h3>
+        <p>Three things, and only three: nobody ran the personal-data scan; a value the redaction
+          confirmed is still in what ships; a facet above that nobody ticked. Each names itself on
+          the panel it belongs to, nothing is written, and you stay on the sample.</p>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-import" hidden>
+  <div class="sheetbox">
+    <div class="sheethead"><h2>Import raw data</h2><button class="close" data-close="sheet-import">Close</button></div>
+    <div class="sheetbody">
+
+      <p class="lead">One JSON object per line — a <code>.jsonl</code> file. Every line becomes a
+        sample waiting to be labelled. Importing the same file twice imports nothing the second
+        time, so a failed import is safe to run again.</p>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".jsonl,.json,.ndjson,.txt">
+        <span class="dropsaid" id="drop-said">Drop a file here, or choose one</span>
+      </label>
+      <div class="runline">
+        <button id="import-run" class="accent" disabled>Import</button>
+        <span class="note" id="import-note"></span>
+      </div>
+      <div id="import-said"></div>
+      <p class="lead">One sample from somewhere else does not need a file: paste it straight into
+        <b>the sample</b> pane. That way needs no database at all.</p>
+
+    </div>
+  </div>
+</div>
+
+<!-- The list a reviewer picks from. Click a row to open it; tick rows to walk just those. -->
+<div class="sheet" id="sheet-list" hidden>
+  <div class="sheetbox">
+    <div class="sheethead"><h2>Samples</h2>
+      <span class="note" id="list-note"></span>
+      <button class="close" data-close="sheet-list">Close</button>
+    </div>
+    <div class="sheetbody">
+      <div class="runline">
+        <button id="list-walk" class="accent" disabled>Label the selected</button>
+        <button id="list-none" class="quiet" disabled>Clear selection</button>
+      </div>
+      <div class="rows" id="list-rows"></div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>

@@ -1,13 +1,15 @@
 """adapter · one APIRouter for tool_decision: a request body in, one part's answer out."""
 
+import uuid
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session
 
 from dataforce.edge.database import db
 from dataforce.edge.served_models import check_served_models, list_served_models
@@ -34,11 +36,23 @@ from dataforce.profile.tool_decision.sample_building import (
     ToolDecisionSampleBuilding,
     count_by_facet,
     count_by_pair,
+    count_queued_states,
     count_total_samples,
+    mark_queued_sample,
     merge_tool_decision_db,
+    name_queued_sample,
+    queue_tool_decision_samples,
+    select_next_queued_sample,
+    select_queued_sample,
+    select_queued_samples,
     select_sample_contents,
 )
 from dataforce.profile.tool_decision.schema import (
+    QueuedSampleImport,
+    QueuedSampleList,
+    QueuedSampleWaiting,
+    QueueState,
+    SamplesNamed,
     ToolDecisionDatasetStatistics,
     ToolDecisionSample,
 )
@@ -47,6 +61,7 @@ from dataforce.services.tool_decision import (
     detect_personal_data,
     predict_tool_decision_by_llm,
     predict_tool_decision_by_sft,
+    read_queued_samples,
     redact_personal_data,
     replace_personal_data,
     report_abnormalities,
@@ -59,9 +74,24 @@ PAGE = Path(__file__).resolve().parents[2] / "static" / "index.html"
 
 
 class Sample(BaseModel):
+    """One sample as a route receives it. **The name is optional, because a raw line has none.**
+
+    A corpus line is `{messages, tools, label}` -- nothing writes an `id` into one -- and the only
+    thing in this service that reads a sample's name is the key a record is stored under. Every
+    other route here scans, replaces or votes on the text and never looks at it, so demanding one
+    made a raw line unscannable for a field nobody was going to use. The one route that needs it
+    asks for it itself, in a sentence.
+    """
+
     model_config = ConfigDict(extra="allow")
 
-    id: str = Field(..., description="What the sample is called.")
+    id: str | None = Field(
+        default=None,
+        description=(
+            "What the sample is called. Absent on a raw line; `/samples/named` answers the "
+            "name an import would give one, and that name is what a record is stored under."
+        ),
+    )
     messages: tuple[Mapping[str, Any], ...] = Field(
         default=(), description="The conversation, in order."
     )
@@ -247,6 +277,38 @@ async def post_abnormal(sample: Sample) -> None:
     return await report_abnormalities(sample.model_dump())
 
 
+@router.post(
+    "/samples/named",
+    summary="the same lines, each under the name an import would give it",
+)
+def post_named_samples(
+    lines: Annotated[bytes, Body(media_type="application/x-ndjson")],
+) -> SamplesNamed:
+    """One JSON object per line, answered with each line's own name on it.
+
+    **No session, and that is the point.** This is how a sample pasted into the page gets a name
+    without a queue row being written for it, so the review works with the store turned off. The
+    name is the content's, the same one `/queue/import` gives, so the two ways in cannot put one
+    sample in the corpus under two names.
+
+    A line nobody can read is named by its number and the rest are still answered, which is the
+    import's rule too: one bad line in a paste of forty is not a reason to refuse the other
+    thirty-nine.
+    """
+    try:
+        text = lines.decode("utf-8")
+    except UnicodeDecodeError as unreadable:
+        raise HTTPException(
+            status_code=422, detail=f"what was pasted is not UTF-8: {unreadable}"
+        ) from unreadable
+    samples, refused = read_queued_samples(text)
+    return SamplesNamed(
+        read=len(samples) + len(refused),
+        samples=tuple(named for _, named in map(name_queued_sample, samples)),
+        unreadable=refused,
+    )
+
+
 @router.post("/ai-review", summary="what the reviewers say the label should be")
 async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
     """Both verdicts, or 422 for a declaration this deployment cannot act on.
@@ -281,12 +343,169 @@ async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-@router.post("/records", summary="one reviewed sample, into both tables")
-def post_record(review: ReviewedSample) -> RecordStored:
+def open_store() -> Session:
+    """A session, or the refusal that names the variable to set.
+
+    The store is a place to put the result of a review and never a dependency of one, so this is
+    the only shape *no database* takes at the edge: a status, and the name of the thing to set.
+    """
     session = db.open_session()
     if session is None:
         raise HTTPException(
             status_code=503, detail=f"no database attached: set {db.variable}"
+        )
+    return session
+
+
+@router.post(
+    "/queue/import", summary="a file of raw samples, as rows waiting to be labelled"
+)
+def post_queue_import(
+    lines: Annotated[bytes, Body(media_type="application/x-ndjson")],
+) -> QueuedSampleImport:
+    """One JSON object per line. Re-importing a file imports nothing the second time."""
+    session = open_store()
+    try:
+        text = lines.decode("utf-8")
+    except UnicodeDecodeError as unreadable:
+        # Named rather than counted as one bad line: a file in the wrong encoding has no readable
+        # lines at all, and reporting it as line 1 would send the reviewer to fix a line.
+        raise HTTPException(
+            status_code=422, detail=f"the file is not UTF-8: {unreadable}"
+        ) from unreadable
+    samples, refused = read_queued_samples(text)
+    with session:
+        imported, already_held = queue_tool_decision_samples(session, samples)
+    return QueuedSampleImport(
+        read=len(samples) + len(refused),
+        imported=imported,
+        already_held=already_held,
+        unreadable=refused,
+    )
+
+
+def describe_queue(session: Session) -> QueuedSampleWaiting:
+    """The next waiting sample and the three counts, read on the one session.
+
+    One shape for all three routes that answer it, because the sample and the counts are read in
+    the same breath and a second call would let the two disagree on the reviewer's screen.
+    """
+    waiting = select_next_queued_sample(session)
+    counted = count_queued_states(session)
+    return QueuedSampleWaiting(
+        sample=None if waiting is None else dict(waiting[1]),
+        key=None if waiting is None else str(waiting[0]),
+        waiting=counted[QueueState.WAITING],
+        done=counted[QueueState.DONE],
+        skipped=counted[QueueState.SKIPPED],
+    )
+
+
+class StoreAttached(BaseModel):
+    """Which database a record would land in, said so a person can recognise it.
+
+    **Never the DSN.** This route is reachable by anyone who can open the page, and a connection
+    string carries a password. What comes back names the database and nothing that would let a
+    reader connect to it.
+    """
+
+    attached: bool = Field(..., description="Whether there is a database at all.")
+    describes: str | None = Field(
+        default=None,
+        description="The database, named: a file name, or a dialect, host and name.",
+    )
+    variable: str = Field(
+        ...,
+        description="The variable that names it, for a message that says what to set.",
+    )
+
+
+@router.get("/store", summary="which database a record would land in")
+def get_store() -> StoreAttached:
+    """Read rather than set: the DSN stays where a deployment put it.
+
+    A page that could set it would let anyone who opens the page point this service at any database
+    it can reach, which is a different and much larger thing than showing them where they are.
+    """
+    return StoreAttached(
+        attached=db.open_engine() is not None,
+        describes=db.describe(),
+        variable=db.variable,
+    )
+
+
+@router.get("/queue", summary="the samples in the queue, to pick from")
+def get_queue(limit: int = 200, offset: int = 0) -> QueuedSampleList:
+    """A page of the queue in walk order, every state included.
+
+    `limit` is capped rather than trusted: a corpus is as large as somebody's file, and one request
+    asking for all of it is one response nobody can render.
+    """
+    session = open_store()
+    with session:
+        counted = count_queued_states(session)
+        return QueuedSampleList(
+            samples=select_queued_samples(
+                session, min(max(limit, 1), 1000), max(offset, 0)
+            ),
+            waiting=counted[QueueState.WAITING],
+            done=counted[QueueState.DONE],
+            skipped=counted[QueueState.SKIPPED],
+        )
+
+
+@router.get("/queue/next", summary="the next sample to label, and how much is left")
+def get_queue_next() -> QueuedSampleWaiting:
+    """An empty queue answers an empty sample, not an error: nothing is wrong with being done."""
+    session = open_store()
+    with session:
+        return describe_queue(session)
+
+
+@router.get("/queue/{key}", summary="one queued sample, picked out of the list")
+def get_queued_sample(key: uuid.UUID) -> QueuedSampleWaiting:
+    """Whatever state it is in: picking a row already labelled is asking to look at it again."""
+    session = open_store()
+    with session:
+        found = select_queued_sample(session, key)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"no queued sample under {key}")
+        counted = count_queued_states(session)
+        return QueuedSampleWaiting(
+            sample=found,
+            key=str(key),
+            waiting=counted[QueueState.WAITING],
+            done=counted[QueueState.DONE],
+            skipped=counted[QueueState.SKIPPED],
+        )
+
+
+@router.post("/queue/{key}/skip", summary="pass this one over, and take the next")
+def post_queue_skip(key: uuid.UUID) -> QueuedSampleWaiting:
+    """The row stays, in the state that says it was passed over, and the next one comes back."""
+    session = open_store()
+    with session:
+        if not mark_queued_sample(session, key, QueueState.SKIPPED):
+            raise HTTPException(status_code=404, detail=f"no queued sample under {key}")
+        session.commit()
+        return describe_queue(session)
+
+
+@router.post("/records", summary="one reviewed sample, into both tables")
+def post_record(
+    review: ReviewedSample, queue_key: uuid.UUID | None = None
+) -> RecordStored:
+    session = open_store()
+    if review.id is None:
+        # In a sentence, not as a validation list: a body FastAPI could not read answers with the
+        # whole sample echoed back inside it, and *which field* disappears into the echo. This is
+        # the one route where the name is load-bearing, so it says so and says where to get one.
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "this sample has no name, and its name is the key the row is stored under. "
+                "Ask /samples/named for one, or import the line and label it from the queue."
+            ),
         )
     document = review.model_dump(by_alias=True)
     try:
@@ -302,6 +521,15 @@ def post_record(review: ReviewedSample) -> RecordStored:
             detail=f"tick every declared facet: {', '.join(unanswered)} went unanswered",
         )
     with session:
+        # Before the write and on the same session, so the one commit inside `merge_rows` carries
+        # all three rows. A queue row marked done against a record that was never written is the
+        # one failure a corpus cannot detect later: that sample is never offered to anybody again.
+        if queue_key is not None and not mark_queued_sample(
+            session, queue_key, QueueState.DONE
+        ):
+            raise HTTPException(
+                status_code=404, detail=f"no queued sample under {queue_key}"
+            )
         stored = merge_tool_decision_db(session, document, sample)
     return RecordStored(
         id=str(stored.key),
@@ -315,11 +543,7 @@ def post_record(review: ReviewedSample) -> RecordStored:
     summary="what the labelled dataset holds, counted when it is asked",
 )
 def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
-    session = db.open_session()
-    if session is None:
-        raise HTTPException(
-            status_code=503, detail=f"no database attached: set {db.variable}"
-        )
+    session = open_store()
     with session:
         return build_dataset_statistics(
             sample_totals=count_total_samples(session),

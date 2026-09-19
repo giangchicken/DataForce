@@ -39,7 +39,7 @@ list here to keep in step with it.
 import json
 import uuid
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -52,6 +52,9 @@ from dataforce.modalities.text2text.dataset_management import (
     DatasetSampleBuilding,
     ShippedDatasetSample,
 )
+from dataforce.modalities.text2text.dataset_management.duplicate_data_checking import (
+    canonical_json,
+)
 from dataforce.tables import Base
 
 from .label_statistics import (
@@ -60,15 +63,25 @@ from .label_statistics import (
     validate_label_calls,
 )
 from .schema import (
+    QueuedSampleRow,
+    QueueState,
     ToolDecisionDataStamp,
+    ToolDecisionQueuedSample,
     ToolDecisionRecord,
     ToolDecisionSample,
     ToolDecisionSampleContent,
 )
 
-# The namespace a row key is derived in -- fixed, so one posted name keeps one key for the life of
-# the corpus. `store_tool_decision_sample` says why it is derived rather than minted.
 TOOL_DECISION_KEY_NAMESPACE = uuid.UUID("6f3f9e1a-0f6b-5c7e-9f2a-1d4b8c3e7a50")
+
+# How much of the opening turn a list row carries. A cap and not a whole conversation: the list is
+# a thing to pick from, and three hundred rows of full transcripts is a page nobody can read and a
+# response nobody should send.
+PREVIEW_CHARACTERS = 200
+
+# How many keys go into one `IN (...)`. SQLite compiles a bound variable per element and refuses
+# past its own limit, which a corpus of ten thousand lines would reach in one statement.
+KEYS_PER_LOOKUP = 500
 
 
 class ToolDecisionSampleBuilding(DatasetSampleBuilding):
@@ -96,6 +109,7 @@ def create_tables(engine: Engine) -> None:
             for named in (
                 ToolDecisionRecord.__tablename__,
                 ToolDecisionSample.__tablename__,
+                ToolDecisionQueuedSample.__tablename__,
             )
         ],
     )
@@ -123,18 +137,7 @@ def build_tool_decision_sample(
 def merge_tool_decision_db(
     session: Session, document: Mapping[str, Any], sample: DatasetSample
 ) -> ToolDecisionDataStamp:
-    """The key and the two times this write stamps on both of this task's rows.
 
-    The key is derived from the posted name and never minted: a fresh one would make a sample
-    reviewed twice into two rows holding one review. The name stays readable in `record.document`.
-
-    `created_time` is read **before** the merge, because `merge` replaces the whole row: the column
-    that never moves is carried forward by hand here, or it moves on every repost. `None` back from
-    that read is no row yet, and then now is what both times take.
-
-    Both rows go to `merge_rows`, which is `edge/database.py`'s and not this task's: one
-    transaction over the two is a rule about rows that belong to one another, not about tools.
-    """
     key = uuid.uuid5(TOOL_DECISION_KEY_NAMESPACE, str(document["id"]))
     modified = datetime.now()
     first = session.scalar(
@@ -157,17 +160,7 @@ def merge_tool_decision_db(
 def rebuild_tool_decision_dataset(
     session: Session, building: DatasetSampleBuilding
 ) -> int:
-    """Every sample row dropped and recomputed from `record`. How many it wrote.
 
-    The invariant made runnable: this table is a function of the other, so a row edited by hand is
-    corrected by this and a rebuild over an empty `record` empties it. The two times are carried
-    from the record rather than taken now, because when a review landed is a fact about the review.
-
-    Read whole before anything is written, rather than added to while the cursor is open. One
-    transaction, so a rebuild that fails leaves the table it was rebuilding intact rather than
-    empty. A record that no longer passes the precondition raises here and stops the rebuild:
-    finishing around it would leave a table nothing can call a function of the other.
-    """
     written = 0
     reviews = session.execute(
         select(
@@ -189,6 +182,192 @@ def rebuild_tool_decision_dataset(
         written += 1
     session.commit()
     return written
+
+
+def build_queue_key(document: Mapping[str, Any]) -> uuid.UUID:
+    """The key one raw line takes, derived from what the line says and nothing else.
+
+    Content and not a counter, so importing the same file twice imports nothing the second time --
+    which is the whole of what makes an import safe to re-run after it failed half way.
+    """
+    return uuid.uuid5(TOOL_DECISION_KEY_NAMESPACE, canonical_json(document))
+
+
+def name_queued_sample(document: Mapping[str, Any]) -> tuple[uuid.UUID, dict[str, Any]]:
+    """The key a raw line takes, and the line carrying that key as its own name.
+
+    **One place, because two ways in have to arrive at the same name.** A sample imported from a
+    file and the same sample pasted into the page are the same content, so they are the same key
+    and the same row -- pasting one the corpus already holds updates it rather than writing a
+    second copy of it. Two expressions of this rule would drift, and nothing would notice until a
+    corpus held the same sample twice under different names.
+
+    A line that named itself keeps its name. The key is still the content's, so the row is the
+    same row either way, and what a corpus calls its own samples is not this service's to
+    overwrite.
+    """
+    key = build_queue_key(document)
+    return key, {"id": str(key), **document}
+
+
+def list_held_queue_keys(session: Session, keys: Sequence[uuid.UUID]) -> set[uuid.UUID]:
+    """Which of these the queue already holds, asked in batches the dialect will take."""
+    held: set[uuid.UUID] = set()
+    for at in range(0, len(keys), KEYS_PER_LOOKUP):
+        asked = keys[at : at + KEYS_PER_LOOKUP]
+        held.update(
+            session.scalars(
+                select(ToolDecisionQueuedSample.id).where(
+                    ToolDecisionQueuedSample.id.in_(asked)
+                )
+            )
+        )
+    return held
+
+
+def queue_tool_decision_samples(
+    session: Session, documents: Sequence[Mapping[str, Any]]
+) -> tuple[int, int]:
+    """Every document the queue does not hold, written as one waiting row. How many, and how many
+    it already had.
+
+    A document with no `id` is given the queue key as its name, by `name_queued_sample` and not
+    here: a raw line pasted into the page is named by that same function, and the two have to
+    agree or one sample arrives under two names.
+
+    Duplicates *within* one file collapse to one row, which is the same rule as duplicates across
+    two: the key is the content, so the second copy is a row that is already held.
+    """
+    keyed = [name_queued_sample(document) for document in documents]
+    held = list_held_queue_keys(session, [key for key, _ in keyed])
+    imported = 0
+    now = datetime.now()
+    # Counted on from what the table already holds, so a second import lands behind the first
+    # rather than interleaved with it. Read once: the whole import is one transaction, and nothing
+    # else writes this table.
+    arrived = session.scalar(select(func.max(ToolDecisionQueuedSample.arrived))) or 0
+    for key, document in keyed:
+        if key in held:
+            continue
+        held.add(key)
+        arrived += 1
+        session.add(
+            ToolDecisionQueuedSample(
+                id=key,
+                document=document,
+                imported_time=now,
+                arrived=arrived,
+                state=QueueState.WAITING,
+            )
+        )
+        imported += 1
+    session.commit()
+    return imported, len(keyed) - imported
+
+
+def select_next_queued_sample(
+    session: Session,
+) -> tuple[uuid.UUID, Mapping[str, Any]] | None:
+    """The first row nobody has labelled or skipped, or `None` where none is waiting.
+
+    In the order the lines arrived, so a file curated in an order is walked in that order and a
+    reviewer who comes back tomorrow carries on rather than starting again from whatever the
+    database felt like returning.
+    """
+    found = session.execute(
+        select(ToolDecisionQueuedSample.id, ToolDecisionQueuedSample.document)
+        .where(ToolDecisionQueuedSample.state == QueueState.WAITING)
+        .order_by(ToolDecisionQueuedSample.arrived)
+        .limit(1)
+    ).first()
+    if found is None:
+        return None
+    return found[0], found[1]
+
+
+def read_opening_turn(document: Mapping[str, Any]) -> str:
+    """The first thing said in a sample, cut to a preview, or nothing where nothing was said."""
+    turns = document.get("messages") or []
+    if not turns:
+        return ""
+    said = turns[0].get("content")
+    if not isinstance(said, str):
+        said = json.dumps(said, ensure_ascii=False)
+    return said[:PREVIEW_CHARACTERS]
+
+
+def select_queued_samples(
+    session: Session, limit: int, offset: int
+) -> tuple[QueuedSampleRow, ...]:
+    """A page of the queue in walk order, whatever state each row is in.
+
+    Every state, because the list is what a reviewer picks from and *what has already been done* is
+    half of what they are looking for -- a list of only the waiting ones cannot answer whether a
+    sample was skipped or labelled by somebody else.
+    """
+    found = session.execute(
+        select(
+            ToolDecisionQueuedSample.id,
+            ToolDecisionQueuedSample.state,
+            ToolDecisionQueuedSample.arrived,
+            ToolDecisionQueuedSample.document,
+        )
+        .order_by(ToolDecisionQueuedSample.arrived)
+        .limit(limit)
+        .offset(offset)
+    )
+    return tuple(
+        QueuedSampleRow(
+            key=str(key),
+            state=state,
+            arrived=arrived,
+            said=read_opening_turn(document),
+        )
+        for key, state, arrived, document in found
+    )
+
+
+def select_queued_sample(session: Session, key: uuid.UUID) -> Mapping[str, Any] | None:
+    """One queued sample by key, whatever state it is in, or `None` where the queue has no such row.
+
+    Whatever state: a reviewer who picks a row they already labelled is asking to look at it again,
+    and refusing them because it is marked done would be the page enforcing a rule the store does
+    not have -- a second record under the same key replaces the first, which is the write's own
+    answer to being labelled twice.
+    """
+    found = session.get(ToolDecisionQueuedSample, key)
+    if found is None:
+        return None
+    return dict(found.document)
+
+
+def count_queued_states(session: Session) -> Mapping[str, int]:
+    """How many rows stand in each state, every state named even where it holds nothing.
+
+    Named even at zero because these are read as *how much is left*: a state missing from the
+    answer would be drawn as a blank rather than as a nought.
+    """
+    counted = {state.value: 0 for state in QueueState}
+    for state, number in session.execute(
+        select(ToolDecisionQueuedSample.state, func.count()).group_by(
+            ToolDecisionQueuedSample.state
+        )
+    ):
+        counted[state] = number
+    return counted
+
+
+def mark_queued_sample(session: Session, key: uuid.UUID, state: QueueState) -> bool:
+    """That row moved to that state, and whether there was a row to move.
+
+    No commit: the caller owns the transaction, because the one state change that matters -- a
+    sample marked done -- has to land with the two rows the record wrote or not at all.
+    """
+    found = session.get(ToolDecisionQueuedSample, key)
+    if found is None:
+        return False
+    found.state = state
+    return True
 
 
 def count_total_samples(session: Session) -> Mapping[str, int]:
@@ -235,11 +414,7 @@ def count_by_pair(
 def select_sample_contents(
     session: Session,
 ) -> tuple[ToolDecisionSampleContent, ...]:
-    """Every stored sample's key, input and label -- the three columns the statistics read.
 
-    **One read, three questions**: the duplicate grouping is given all three and the label
-    measurements read two, so a second query would fetch the same rows again.
-    """
     found = session.execute(
         select(
             ToolDecisionSample.id, ToolDecisionSample.input, ToolDecisionSample.label

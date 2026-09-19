@@ -164,6 +164,16 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T20 | One card at a time, and a bar that moves between them | 4 | | L |
 | T21 | The first card is the guide, and the header is a title | 4 | T20 | M |
 | T22 | The strip, and the statistics under the guide | 4 | T11, T21 | M |
+| T23 | A database is there without being configured | 5 | | M |
+| T24 | A raw corpus arrives, and becomes a queue | 5 | T23 | L |
+| T25 | The queue is walked, and a submitted sample leaves it | 5 | T24 | M |
+| T26 | Two panes, and the sample never leaves the screen | 5 | | L |
+| T27 | One button runs the machine steps | 5 | T26 | L |
+| T28 | The two decisions, and the action bar | 5 | T25, T26 | L |
+| T29 | Import on the page, the strip, and the guide as a panel | 5 | T24, T26 | M |
+| T30 | A sample can be pasted, and that path needs no database | 5 | T26 | M |
+| T31 | The queue is a list to pick from, one row or a group | 5 | T24, T26 | L |
+| T32 | The page says which database, and never the DSN | 5 | T23, T26 | S |
 
 ---
 
@@ -219,9 +229,14 @@ the table name carries the task, so nothing needs qualifying, and a UUID column 
 chosen for it.
 
 **Approach.** `Uuid` for the key. `JSON` for `document`, `input`, `label` and `notes`. The nine
-facet columns § *`dataset`* names, each typed for what it holds — a string for `language` and
-`domain`, a boolean for `ambiguous` and `schema_valid`, an integer for the three counts, `JSON` for
+facet columns § *`dataset`* names, each typed for what it holds — a string for `language`,
+`domain` and `ambiguous`, a boolean for `schema_valid`, an integer for the three counts, `JSON` for
 `personal_data` and `call_trigger`, which are both sets. Plain `DateTime` for the two times.
+
+`ambiguous` was a boolean and is now a string, because § *The facets* asks it as `LOW`, `MED` or
+`HIGH`. There are no migrations, so a database written before that keeps its old column: the change
+lands on a file made after it, and a Postgres deployment that already holds rows needs the `ALTER`
+written by hand.
 
 The tag is `shape`, the same as every other `schema.py` in the repository: a table class names
 columns and their types and answers no question. It imports `Base` from `dataforce/tables.py`,
@@ -785,6 +800,18 @@ is a jump; `←` and `→` move a card only while focus is outside a field.
   it.
 - Under `prefers-reduced-motion` the card changes with no slide.
 
+**Decided since.** The rail carries **nine** markings and not eight: without one for the guide, the
+card the statistics are on is reachable only by walking back to the front, and *every card
+reachable from every other* is the requirement above it. The spec now says nine.
+
+The arrows between the rectangles had nowhere to go — a deck has no edge to draw a sentence on.
+Each became a `.handed` line under the head of the card it described being handed. The fan's split
+in two: *none of them feeds another* is the rail's bracket, where the spec already put it, and each
+of the three cards says only what it was handed. No sentence was dropped and none is in two places.
+
+One card is marked open in the markup as well as by the script, so a page whose JavaScript never
+arrives shows the guide rather than an empty frame.
+
 **Source.** § *The page* — a deck, not a scroll.
 
 ### T21 · The first card is the guide, and the header is a title
@@ -796,6 +823,16 @@ is a jump; `←` and `→` move a card only while focus is outside a field.
   label, what to tick at the two human steps, and what gets a sample refused.
 - No route name, no file path, no sentence about wiring.
 - The architecture prose that was in the header is gone from `ui/` and still on the flow page.
+
+**Decided since.** The facet list on the guide is rendered from `DECLARED_FACETS`, the same
+declaration the ticks are drawn from: what a facet means is written once, so the card read before
+starting and the card ticked on cannot come apart.
+
+The state legend moved out of the header and onto the guide, because it is now how a *rail marking*
+reads and not how a rectangle reads. One sentence the old header carried is on neither the flow page
+nor the guide as it stood — how the model lists behave while the service is up — so it went to the
+guide, with the file path taken out of it: what a labeller needs there is that the list is re-read
+and that a redraw costs them no tick.
 
 **Blocked by.** T20.
 
@@ -818,11 +855,245 @@ is a jump; `←` and `→` move a card only while focus is outside a field.
 is no field naming the axes beside it: the field name is what says which two variables the grid is
 over, rows first. A page that wants a different pair asks for a different field.
 
+The matrix is drawn over the **union** of the page's tick lists and the grid's own axes, while the
+*empty cell count* is over the page's lists alone. Two different questions: what is still to label
+is what a person can tick, but a row stored under a value the list no longer offers is still a row,
+and a matrix that hid it would be a grid nobody can reconcile against the total above it. Such a
+value is drawn struck through.
+
+Where the two tables disagree on how many rows they hold, the strip shows both rather than one of
+them. The spec calls that a bug rather than a figure, and a single number would be the page picking
+which table to believe.
+
 **Blocked by.** T11, T21.
 
 **Source.** § *The page* — the statistics sit on the guide card; a strip stays on every card.
 
 ---
+
+---
+
+## Phase 5 · The page is one screen, and a corpus is walked
+
+**Phase goal.** A reviewer brings data in — a `.jsonl` imported, or one sample pasted — then
+labels sample after sample on one screen where the conversation never leaves and the machine work
+is one button, picking from the queue or walking it in order.
+
+### T23 · A database is there without being configured
+
+**Goal.** A deployment that set nothing still has somewhere to put a row.
+
+**Context.** § *Context* — unset `DATAFORCE_DATABASE_URL` means a SQLite file beside the
+repository, made on startup; a set DSN wins; `off` is how the *no store* state stays reachable.
+
+**Acceptance criteria.**
+- With the variable unset, `open_session()` answers a session against a SQLite file and the task's
+  tables exist without anyone running a command.
+- With the variable set, that DSN is used and no file is made.
+- With the variable set to `off`, `open_session()` answers `None` exactly as an unset one used to,
+  and every route that handles *no store* still does.
+- The file is gitignored.
+
+**Decided since.** The tables are made in `create_app`'s lifespan. Putting it inside `open_engine`
+was tried and taken back out: it left `store_engine` unable to hand a test a database with no table
+in it, which is the whole of what Phase 0's suite measures.
+
+`create_engine` connects to nothing, so no SQLite file exists until something asks for a connection.
+The unit tests assert on the DSN that was resolved; that a file appears and takes a record is proven
+where the app is actually started.
+
+**Source.** § *Context* — the DSN bullet.
+
+### T24 · A raw corpus arrives, and becomes a queue
+
+**Goal.** A `.jsonl` of raw samples becomes rows waiting to be labelled.
+
+**Context.** § *Raw data in* — one sample per line; the key is `uuid5` over the line's content, so
+a second import of the same file imports nothing; the answer counts read, new, already held and
+unreadable, and names an unreadable line by its number.
+
+**Acceptance criteria.**
+- A third table in `profile/tool_decision/schema.py` holds the raw line, when it arrived, and one
+  of *waiting*, *done*, *skipped*.
+- Importing the same file twice leaves the row count unchanged and reports the second as already
+  held.
+- An unreadable line is counted and named by its number, and the readable lines around it still
+  import.
+- With no store attached the route says so in the service's own words and writes nothing.
+
+**Out of scope.** Any format but JSON-per-line.
+
+**Decided since.** A line carrying no `id` is given the queue key as its name; a line that names
+itself keeps it. Every route downstream reads a sample by name, so an anonymous corpus would be
+unlabellable — and the name is what lets a queue row and the record written from it be found by one
+another.
+
+Duplicates *within* one file collapse the same way duplicates across two do, because the key is the
+content and the second copy is a row already held. Nothing extra had to be written for it.
+
+**Source.** § *Raw data in, and the queue it becomes.*
+
+### T25 · The queue is walked, and a submitted sample leaves it
+
+**Goal.** The next waiting sample can be asked for, skipped, or finished.
+
+**Context.** § *Raw data in* — a submitted sample is marked done in the same transaction that
+writes the two tables: three writes or none. Skipping is a state, not a deletion.
+
+**Acceptance criteria.**
+- A route answers the next waiting sample, with how many are waiting, done and skipped.
+- A record posted with a queue key marks that row done in the transaction that writes the two
+  tables; a refused record leaves the row waiting.
+- A skipped row stays in the table and is not offered again.
+- An empty queue is answered as empty, not as an error.
+
+**Decided since.** The mark is made *before* `merge_tool_decision_db` and on the same session, so
+the one commit inside `merge_rows` carries all three rows.
+
+The claim is only worth anything on the path where the write fails *after* the mark: a refused
+record never reaches the mark, and an unknown key never reaches the write. That path has a test of
+its own, which makes the write throw and then asserts the sample is still waiting for somebody.
+
+**Source.** § *Raw data in* — marked done in the same transaction; skipping is a state.
+
+### T26 · Two panes, and the sample never leaves the screen
+
+**Goal.** The page becomes a left pane holding the conversation and a right pane holding the
+review.
+
+**Context.** § *The page* — the left pane scrolls on its own and is never replaced; the strip and
+the action bar do not scroll at all.
+
+**Acceptance criteria.**
+- The turns and the catalog are rendered as a conversation, not as JSON, and stay on screen
+  through every decision.
+- The two panes scroll independently; the strip and the action bar stay put.
+- At phone width the panes stack with the sample first and nothing overflows sideways.
+- The visual language is the one chosen: system sans, sentence case, one accent, soft panel
+  borders.
+
+**Source.** § *The page* — the sample never leaves the screen.
+
+### T27 · One button runs the machine steps
+
+**Goal.** The personal-data scan, the duplicate and abnormal checks, the replacement and the
+reviewers' vote become one click.
+
+**Context.** § *The page* — one button, never on load, because the vote costs a model call. A
+machine answer is a verdict with the payload behind a disclosure.
+
+**Acceptance criteria.**
+- One button runs them in order, says which it is on, and a step that fails names itself and
+  stops the ones after it.
+- Nothing calls a route on load.
+- Each answer shows as one line, with the route's own JSON reachable behind a disclosure.
+- A scan that found something opens its panel without being asked.
+
+**Decided since.** They run in flow order and a failure stops the rest, because the ones after a
+refused scan would each be asked about a sample the service has already refused to read.
+
+The scan's own working opens unasked when it finds something — the reviewer is about to be asked
+which of those spans are real, and the offsets are how they tell.
+
+The five became two. **Duplicate and abnormal came off the screen** — both routes answer as they
+always did and neither is asked from here, because they were two calls per sample buying a line
+that reads *nothing to report*, and there is nothing for a reviewer to do with either. They come
+back when there is. **The replacement stopped being a step**: a span the reviewer keeps is a value
+that has to come out, so it comes out as they tick, and a copy that is wrong until somebody presses
+a button is a copy that ships wrong.
+
+**The check list became three columns**, and the middle one holds the model that check spends.
+The pickers had been two panels down the page, and `/models` answers a bare array that the page
+read as though it carried a `models` key — so every list drew empty, every run stopped on *tick a
+verifier first*, and there was no tick box on the screen to fix it with. The stub could not catch
+that, because a stub answers whatever shape the page was written against; the check that does is
+`tests/ui/reading.js`, handed the real route's own answer.
+
+**Source.** § *The page* — one button runs both checks.
+
+### T28 · The two decisions, and the action bar
+
+**Goal.** The reviewer's three inputs — spans to keep, the label verdict, the facet ticks — are two
+panels above one fixed bar.
+
+**Context.** § *The page* — the data panel and the label panel; the bar holds skip and submit;
+`Enter` submits while focus is outside a field; a refusal lands on the panel that owns it.
+
+**Acceptance criteria.**
+- Submit posts the record and opens the next sample in one motion.
+- Skip marks the row skipped and opens the next sample.
+- A refusal — scan not run, a confirmed value still shipping, a declared facet not ticked — is
+  shown on the panel that owns it, names itself, writes nothing and keeps the reviewer on the
+  sample.
+- `Enter` inside a textarea types a newline and does not submit.
+
+**Source.** § *The page* — the action bar; a sample is refused for the same two reasons.
+
+### T29 · Import on the page, the strip, and the guide as a panel
+
+**Goal.** The reviewer can load a corpus, read where it stands, and open the guide without leaving
+the sample.
+
+**Context.** § *The page* — the strip carries samples left, rows stored and empty cells; the guide
+opens over the screen and closes back to the same sample, with the statistics under it.
+
+**Acceptance criteria.**
+- A `.jsonl` can be dropped on the page or chosen, and the counts the route answered are shown.
+- The strip shows samples left, rows stored and empty cells, and is asked again after a record is
+  written — not on a timer and not on every sample.
+- The guide opens over the screen, carries no route name or file path, and closes back to the same
+  sample.
+- With no store attached the strip says so in the service's own words and the guide shows the guide
+  and no statistics.
+
+**Source.** § *The page* — a strip stays across the top; the guide is a panel.
+
+### T30 · A sample can be pasted, and that path needs no database
+
+**Goal.** One sample from somewhere else can be labelled without importing a corpus.
+
+**Context.** § *Raw data in* — an object, an array of them, or one per line. A pasted sample is
+opened where it is and carries no queue key; the same paste can be added to the queue instead.
+
+**Acceptance criteria.**
+- A pasted object, array or set of lines is read, and what will not read names the line.
+- **Label the first now** opens it with no call to the queue at all, so it works with the store
+  turned off.
+- Submitting a pasted sample writes the two tables and marks nothing done.
+- **Add to the queue** sends the same lines a file would, so one sample pasted twice is one row.
+
+**Source.** § *Raw data in* — a sample can also be pasted.
+
+### T31 · The queue is a list to pick from, one row or a group
+
+**Goal.** A reviewer can see every sample and choose which to label.
+
+**Context.** § *Raw data in* — every row in walk order whatever its state, the opening turn as a
+preview; clicking opens one, ticking walks just those, in arrival order.
+
+**Acceptance criteria.**
+- The list shows every row with its state, the ones already labelled included.
+- A row carries a preview of the opening turn, not the conversation, and a page is capped.
+- Clicking a row opens that sample; a row already labelled can be opened again.
+- Ticking rows and walking them visits exactly those, in the order they arrived.
+- A ticked row the queue no longer holds is said, not skipped in silence.
+- With no store attached the list says which variable to set.
+
+**Source.** § *Raw data in* — a list a reviewer picks from.
+
+### T32 · The page says which database, and never the DSN
+
+**Goal.** A reviewer can see where a record will land before writing four hundred of them.
+
+**Context.** § *Raw data in* — the database named, never the connection string; shown, not chosen.
+
+**Acceptance criteria.**
+- The header names the attached database: a file name, or a dialect, host and name.
+- No password and no user reaches the page, on any dialect.
+- With nothing attached it says so and names the variable to set.
+- Nothing on the page can set the DSN.
+
+**Source.** § *Raw data in* — the page says which database a record will land in.
 
 ## What this plan decides that the spec does not
 
@@ -836,3 +1107,16 @@ over, rows first. A page that wants a different pair asks for a different field.
 | A declared facet nobody ticked is a `422` naming it | T16 | The spec wants that write to fail. Which layer says so, and whether it reads as a facet or as a constraint, is the route's |
 | The write commits rather than opening its own transaction | T15 | Both give *two rows or neither*. The explicit form refuses a session that has already been read on, which `rebuild_tool_decision_dataset` legitimately has |
 | `rebuild_tool_decision_dataset` has no route | T19 | Who may drop a table is a decision, and nothing has asked for one |
+| The page's behaviour is checked in node, from pytest | T20–T22 | The repository installs no browser and no `jsdom`, and two tasks of `ui/` had already shipped unchecked. A DOM stub small enough to sit beside the tests is what the page will start against; `make check` runs it and skips loudly where node is absent. What the page *looks* like is still read by a person |
+| The default DSN is resolved against the working directory | T23 | The spec says unset means a SQLite file beside the repository. Which directory *beside* means is a wire detail, and the cost — started from two directories it is two corpora — is stated where the DSN is read |
+| The tables are made in the app's lifespan, not on the way to an engine | T23 | Both give *an install nobody configured takes the first record*. Making them inside `open_engine` would leave nothing able to open a database and find it as it really is, which is what the store's own suite does all day |
+| A line with no `id` is named by its queue key | T24 | The spec says the queue holds the raw line. Naming an anonymous one is not a correction: every route downstream reads a sample by name, so a corpus of unnamed lines would be unlabellable, and the name is what lets the queue row and its record find one another |
+| An unreadable line is named by its number | T24 | The spec says an unreadable line does not stop the ones around it. That it is reported *by number* is this plan's: a count is the one thing a person cannot act on |
+| The queue key travels as a query parameter | T25 | It is how the record was reached, not part of what the review answered. In the body it would be stored inside `record.document`, which is the review and nothing else |
+| Skip answers the next sample | T25 | *Skip and move on* is one act for the reviewer. Two calls would let the count on screen and the sample on screen disagree |
+| The machine steps run on a button, not on load | T27 | The spec leaves the trigger open. The reviewers' vote spends a model call and a corpus is walked by people who skip, so a sample opened and passed over has to be able to cost nothing |
+| A refusal is routed to a panel by reading the service's own words | T28 | The spec says the refusal lands on the panel that owns it. Nothing on the wire says which panel that is, so the page reads the sentence — and shows it unparaphrased, on the label panel where submit was pressed if it cannot tell |
+| A queued row carries an arrival number | T25, T31 | The spec says a corpus is walked; that it is walked in the order the file was written is what `imported_time` could not deliver, because every row of one import shares it and the tie falls to a content hash |
+| The store is described, not rendered as a DSN | T32 | The spec forbids the connection string. Which parts survive — dialect, host, database, and not the user — is this plan's, and the user is left out because it answers nothing a reviewer asked |
+| A paste is read in the page, not sent to a route | T30 | The route takes lines and makes rows; the paste path has to work with no store at all, so the page reads the JSON itself and only sends it when the reviewer asks for the queue |
+| The list is capped at a thousand rows a page | T31 | The spec says a preview, not a transcript. The number is a wire detail; that one request cannot ask for an unbounded corpus is not |

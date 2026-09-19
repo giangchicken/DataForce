@@ -4,7 +4,7 @@
 
 A reviewed sample lands in **two** tables, written in one transaction.
 
-- **`tool_decision_record`** keeps the whole of what the eight steps answered — what arrived, what
+- **`tool_decision_record`** keeps the whole of what the review answered — what arrived, what
   ships, the spans, the outcome, every juror's vote. It holds personal data verbatim, so it is never
   exported and never sold. It is the evidence for trusting the other table.
 - **`tool_decision_dataset`** keeps what a buyer gets: the input and the label as the review left
@@ -17,7 +17,7 @@ the whole design: the table that must be protected and the table that is sold ar
 rather than one table and a promise about which columns anyone reads.
 
 **The tables are the task's; the condition over them is the modality's.** A sample arrives here
-having passed all eight steps, so nothing in this store decides whether it is worth keeping. What
+having passed the whole review, so nothing in this store decides whether it is worth keeping. What
 `tool_decision` stores, in which columns, is declared in `profile/tool_decision/schema.py` — its
 own two tables. The SQL over them sits beside it, in the two files that are handed a session. What every text2text sample has in common, whatever the
 task, is declared once in `modalities/text2text/dataset_management/`.
@@ -35,8 +35,11 @@ What the repository already decided, and what this spec therefore does not:
 
 - `pyproject.toml` carries `sqlalchemy>=2.0.52,<2.1` for exactly this, unimported today. SQLite and
   Postgres are one code path with two DSNs, not two adapters.
-- The DSN is read once, from `DATAFORCE_DATABASE_URL`. There is no default and no fallback file: a
-  DSN that is unset or empty means *no store*, which every caller handles.
+- The DSN is read once, from `DATAFORCE_DATABASE_URL`. **Unset means a SQLite file beside the
+  repository**, made on startup, so a deployment that configured nothing still has somewhere to put
+  a row. A DSN that is set wins, which is how Postgres arrives. The *no store* state every caller
+  handles is still reachable, by setting the variable to `off` — it has to stay reachable, because
+  the review works without a store and a state nothing can reach is a state nothing tests.
 - **There are no migrations.** `Base.metadata.create_all` is the only thing that makes a table, so
   it only ever *creates*. Changing a column on a database that already holds rows is a statement
   somebody writes by hand, which is the reason a new facet goes in `notes` rather than in a column.
@@ -214,15 +217,22 @@ result and is the only table anything is ever exported from.
 22. **Declared, and the modality's**, because any text2text task asks them of any sample:
     - `language` — `vi` or `en`. The flow already declares it per request and then throws it away;
       it belongs on the row, because a scan, a juror and a buyer all need to know.
-    - `ambiguous` — the reviewer says this sample is genuinely arguable. Two annotators differing
-      on one of these is signal about the task, not a mistake by either, and a corpus that cannot
-      mark them will keep re-litigating the same rows.
+    - `ambiguous` — **how arguable the sample is: `LOW`, `MED` or `HIGH`.** A level and not a
+      yes, because *arguable* is a matter of degree and a reviewer forced to pick one of two puts
+      everything half-arguable on whichever side they lean. Two annotators differing on a `HIGH`
+      one is signal about the task, not a mistake by either, and a corpus that cannot mark them
+      will keep re-litigating the same rows. The column is text; which levels there are lives
+      with the page, like every other declared facet.
 23. **Declared, and the profile's**, named in this task's vocabulary:
     - `domain` — the **bot's business function**, not the customer's industry: `debt_collection`
       (đòi nợ), `telesale`, `bill_reminder` (nhắc cước), `customer_care` (tổng đài chăm sóc khách
       hàng). **The list lives with the page**, which is where a labeller ticks it, and grows
       there when a bot does a job that is not one of these. Nothing below the edge holds a copy:
-      a read of the store answers what the rows carry, never what they were allowed to carry. An
+      a read of the store answers what the rows carry, never what they were allowed to carry.
+      **The page carries a box that adds one**, and what makes an added domain outlast the tab it
+      was typed in is that same read — the offered list is what is declared plus what the rows
+      already hold, so a domain becomes permanent by being used. The cost, stated: nothing takes
+      one away again, so a typo that reaches a row is offered until that row is fixed. An
       industry — banking, retail, insurance — is a different axis and is § *Open*.
     - `call_trigger` — **how the call is triggered**, which is the verb of the sample and the facet a
       buyer is really shopping for. One value per call, so a sample holds the set of them:
@@ -304,57 +314,138 @@ result and is the only table anything is ever exported from.
       `ambiguous` facet exists.
 32. No statistic is stored. Each is a query when it is asked, so a panel cannot be stale.
 
-**The page — a deck, not a scroll.**
+**The page — one screen, two decisions.**
 
-33. The labelling page shows **one card at a time**: the guide first, then the eight steps. One bar
-    under the card holds all of the navigation — `<`, the rail, `>` — so moving is one place and
-    not three. `←` and `→` move a card as well, but only while the focus is outside a field: inside
-    a textarea an arrow key moves the caret, and a page that steals it is a page nobody can type
-    in.
-34. **The deck is not a wizard.** Every card is reachable from every other, in any order, whatever
-    has answered so far. The steps are independent — the pipeline spec's *every step is reachable on
-    its own* — and a deck that gated one card behind another would put a rule on the screen that
-    the service does not have.
-35. **The rail gives back what the scroll was giving away for free.** Eight markings in flow order,
-    one per step, each carrying that step's state — answered, waiting, edited, refused, not asked —
-    and each a jump to its card. A page as tall as eight rectangles shows all eight states for
-    nothing; a deck has to hand that back deliberately, or it is the same page with flipping added.
-    The rail is also where the fan is drawn: 2, 3 and 4 are grouped, because they are handed the
-    same sample and none of them feeds another.
-36. **A jump is not a *back to*, and both stay.** The rail moves the reviewer and means nothing
-    else. **back to** says *the answer this card was built on is wrong*: it drops the record, marks
-    the card it lands on with *make the correction here*, and re-opens **assemble** and
-    **approve**. Two different acts, so two different controls — one moves, one changes what will
-    ship.
-37. **The first card is the labelling guide**, written for the person labelling. What a
+33. **The sample never leaves the screen.** The page is two panes: the sample on the left — the
+    turns and the catalog, rendered as a conversation and not as JSON — and the review on the
+    right. The left pane scrolls on its own and is never replaced, because every decision on the
+    right is a judgement *about* what is in it. A page that hides the conversation while asking
+    whether its label is right is asking the reviewer to answer from memory.
+34. **Eight steps are two decisions.** Only three of the eight ever held one: which detected spans
+    are real, whether the label ships as it arrived, and what the sample's facets are. The other
+    five are machine work, and a screen per machine step is a screen with nothing on it to decide.
+    The two decisions are the two panels on the right, in that order, and the facets belong to the
+    second because they describe the label's sample and are ticked while the reviewer is already
+    looking at it.
+35. **One button runs both checks**: the personal-data scan, and the reviewers' vote. One click
+    rather than two, and never on load — the vote costs a model call, so a sample opened and
+    skipped must be able to cost nothing. The button says which check it is on while it runs, and
+    one that fails names itself and stops the one after it.
+    - **The duplicate and abnormal scans are off the screen.** Both routes answer as they always
+      did and neither is asked from here. They come back when there is something for a reviewer
+      to *do* with what they report; until then they are two calls per sample buying a line that
+      reads *nothing to report*.
+    - **The replacement is not a step.** A span the reviewer keeps is a value that has to come
+      out, so it comes out as they tick: unticking a span, moving an offset or adding a row makes
+      the copy again by itself, and a copy that is wrong until somebody presses a button is a copy
+      that ships wrong. An answer that arrives after a newer one is dropped rather than painted,
+      because it is the copy of spans that are no longer on the screen.
+36. **The checks are three columns: the check, the model that answers it, and what it said.** The
+    middle one is the point — the model a check spends sits on that check's own row. A picker
+    somewhere further down the page is one nobody finds, and a run that stops on *tick a verifier
+    first* with no tick box in sight is a dead end. Each answer is a verdict and not a payload:
+    what was found, or that nothing was, in one cell. The raw JSON each route answered stays
+    reachable behind a disclosure on the panel it belongs to, because a reviewer who distrusts a
+    verdict has to be able to see what it was made from.
+37. **The reviewer's own two answers are the only required input.** The data panel lists the
+    detected spans with a keep tick each; the label panel carries *correct* or *modify*, the three
+    editable texts behind *modify*, and a tick for every declared facet. Nothing else on the screen
+    is a field.
+38. **The action bar is fixed to the bottom and holds exactly two acts**: skip this sample, and
+    submit it. Submit posts the record and opens the next sample in one motion, because a reviewer
+    who has to go and fetch the next one has been given a fourth decision. `Enter` submits while
+    the focus is outside a field, and nothing else on the page is a keyboard shortcut.
+39. **A sample is refused for the same two reasons it always was**, and the refusal lands on the
+    panel that owns it rather than in a bar at the bottom: nobody ran the personal-data scan, or a
+    value the redaction confirmed still sits in what ships. A declared facet nobody ticked is
+    refused the same way, on the label panel, by name. Nothing is written and the reviewer stays on
+    the sample.
+40. **The guide is a panel the reviewer opens, not a card they pass through.** What a
     `tool_decision` sample is; what makes a label right, the empty label included — *no tool call
-    is needed* is an answer and not a skipped row; what to tick at the two human steps and what
-    each declared facet means; what gets a sample refused. No route name, no file path, no sentence
-    about how the page is wired.
-38. **The guide says what to do; the drawing says why the flow is shaped this way.** That split is
-    already the pipeline spec's — `edge/static/index.html` explains the flow, `ui/` labels with it
-    — and every card's own note obeys it too: the note in a card is what to do *here*. A sentence
-    that would have to be rewritten because a route was renamed is a sentence on the wrong page.
-39. **The statistics sit on the guide card, under the guide.** A distribution read in a report is
-    a report; read on the card a labeller opens before they start, it is an instruction — *this is
-    what the corpus is short of*. That is why they are not a ninth card and not a panel somebody has
-    to go looking for.
-40. **A strip stays on every card**: how many rows are stored, and **how many cells of the joint
-    distribution matrix are still empty**, which the page counts by crossing its own tick lists
-    against the grid the route answers. Two items, because the strip is read sideways while the
-    reviewer is working on something else. The second is the one that changes what they do next,
-    and *which* cells those are is the guide card's to show.
-41. The statistics are asked for on load and again after a record is written. Not on a timer, and
-    not on every flip.
-42. Where no database is attached the strip says so in the service's own words, the guide card shows
-    the guide and no statistics, and all eight steps work exactly as they do today. The store is a
-    place to put the result, never a dependency of the review.
-43. Step 7 grows a tick for **every declared facet**, and the values to tick are the page's own
-    list: a tickable value is a thing a person chooses, and the store has no use for one until a
-    sample carries it. The cost, stated: a facet the page never draws a tick for is a column that
-    is always `null`, and nothing but review catches that. That is where the human already is, and
-    a second form at the end would be a second place to describe one sample. **approve**
-    posts the record, and the last card says it landed — or names the step that did not run.
+    is needed* is an answer and not a skipped row; what each declared facet means; what gets a
+    sample refused. No route name, no file path, no sentence about how the page is wired. It opens
+    over the screen and closes back to the same sample, because a reviewer who needs it needs it in
+    the middle of a sample and not before the first one.
+41. **A strip stays across the top**: how many samples are left in the queue, how many rows are
+    stored, and **how many cells of the joint distribution matrix are still empty**, which the page
+    counts by crossing its own tick lists against the grid the route answers. The third is the one
+    that changes what the reviewer does next, and *which* cells those are is the guide panel's to
+    show, under the statistics.
+42. The statistics are asked for on load and again after a record is written. Not on a timer, and
+    not on every sample.
+43. **The values to tick are the page's own list**: a tickable value is a thing a person chooses,
+    and the store has no use for one until a sample carries it. The cost, stated: a facet the page
+    never draws a tick for is a column that is always `null`, and nothing but review catches that.
+
+**Raw data in, and the queue it becomes.**
+
+44. **A corpus is imported once and walked.** The page takes a `.jsonl` file — one sample per line
+    — and every line becomes a row waiting to be labelled. A reviewer who has to paste JSON before
+    each sample is doing data entry, and the time that costs is the whole of what makes a corpus
+    expensive.
+45. **Import is idempotent.** A row's key is `uuid5` over the line's own content, so importing the
+    same file twice imports nothing the second time. The answer says how many lines were read, how
+    many were new, how many were already held and how many were unreadable — and an unreadable line
+    is counted and named by its number, never dropped in silence and never a reason to refuse the
+    lines around it.
+46. **The queue is a third table in this task's profile**, holding the raw line as it arrived, when
+    it was imported, and which of *waiting*, *done* or *skipped* it is. Raw, because the reviewer's
+    corrections belong to `record` and a queue that held corrected samples could not be re-walked.
+47. **A submitted sample is marked done in the same transaction that writes the two tables.** Three
+    writes or none. A queue row marked done against a record that was never written is a sample
+    nobody will ever be shown again, which is the one failure a corpus cannot detect later.
+48. **Skipping is a state, not a deletion.** A skipped row stays, so a corpus can be asked what was
+    passed over — and a reviewer who skips is usually saying *not me, not now*, which is a fact
+    about the sample and worth keeping.
+49. **A sample can also be pasted, into the pane that holds the sample.** An object, an array of
+    them, or one per line. Pasting is not a worse import: it is the only way a sample from
+    somewhere else arrives, and **it is the only way this page works with the store turned off**,
+    because a queue is rows in a table. So a pasted sample is opened and labelled where it is,
+    carrying no queue key — nothing was waiting for it, and there is nothing to mark done. The same
+    paste can be added to the queue instead, as the same lines a file becomes, so one sample pasted
+    twice is one row.
+    **Where the box is, is the requirement.** A person looking for somewhere to put a sample looks
+    at the thing labelled *the sample*; a paste box behind a button in a panel about importing is
+    one nobody finds, whatever it can do. A file is different and stays in that panel — a file is
+    not a thing anybody tries to paste.
+    A queue with nothing waiting opens the box rather than only reporting that there is nothing,
+    because a screen whose only content is *there is no work* offers no next move.
+    **A pasted sample is named before it is opened, and the service names it.** A raw corpus line
+    is `{messages, tools, label}` and carries no `id`; every route from the scan onward reads a
+    sample by name, and the key a record is stored under *is* its name, so an unnamed sample can
+    be neither checked nor stored. The name is the same one an import gives — the content's — so
+    pasting a sample the corpus already holds lands on that row instead of beside it, and a name
+    the line carried is kept, because what a corpus calls its own rows is not this service's to
+    overwrite. It is asked for rather than computed on the page: a key made in the browser would
+    be a second definition of one, in another language, and the two would drift silently. The
+    route that answers it opens no database, which is what keeps this path working with the store
+    turned off.
+    **And no route demands a name it does not read.** One place in this service reads a sample's
+    name — the key a record is stored under. The scans, the replacement, the redaction and the
+    vote read the text and nothing else, so a raw line was being refused by them for a field that
+    would have gone straight back out unread. Only `POST /records` insists, and it says so in a
+    sentence naming where to get a name: a body the service could not read comes back as a
+    validation list with the whole sample echoed inside it, and *which field* is then buried in a
+    panel holding the reviewer's own conversation. The page reads such a list the same way — the
+    field and the message, never the echo.
+50. **The queue is a list a reviewer picks from, not only an order they are marched through.**
+    Every row, in walk order, whatever state it is in: *what has already been done* is half of
+    what somebody scanning the list is looking for, and a list of only the waiting ones cannot
+    answer whether a sample was skipped or labelled by someone else. A row carries the opening turn
+    as a preview and not the conversation — a list of three hundred transcripts is a page nobody
+    can read.
+51. **Clicking a row opens it; ticking rows walks just those.** Two acts, because they answer two
+    questions — *this one* and *this group*. A ticked group is walked in the order the rows
+    arrived, not the order they were ticked: ticking is choosing a subset, never an ordering. A
+    reviewer who never opens the list is marched through the queue's own order, which is what they
+    get today.
+52. **The page says which database a record will land in, and never the DSN.** A connection string
+    carries a password and the page is readable by anyone who can open it, so what is shown is the
+    database named — a file name, or a dialect, a host and a name — and nothing that would let a
+    reader connect. It is shown rather than chosen: a page that could set the DSN would let anyone
+    who opens it point this service at any database it can reach, which is a much larger thing
+    than telling them where they are. Where nothing is attached it says so, and names the variable
+    to set.
 
 ## Design
 
@@ -369,7 +460,7 @@ facet is worth a column when something groups by it. One shared table would make
 nullable column that most rows leave empty, or a JSON blob nothing can index. A table per task
 costs a `create_all` per task and buys a schema that says what this corpus actually is.
 
-**Why the refusal is an error and not a row.** A sample arrives here having passed eight steps in
+**Why the refusal is an error and not a row.** A sample arrives here having passed the review in
 front of a person, so *should this be kept* has already been answered. The only thing left to check
 is whether the steps ran at all, and that is a broken request rather than a fact about the corpus.
 The cost is stated: nothing counts what the pipeline is failing at, because a failing sample is
@@ -418,32 +509,43 @@ invented rather than observed, and the shape that gets invented is the one every
 to implement. The module fixes the placement and declares nothing until there is something to
 declare.
 
-**Why a deck.** Eight rectangles stacked is a page as tall as all eight, and a labeller works in
-one at a time — the other seven are scenery on the way back to the one they are in. A card is
-the unit the work is actually done in. The cost is stated, and it is the whole of the risk: a long
-page hands over every step's state for free and a deck does not. The rail is that cost paid back,
-and the day a state cannot be read off the rail, the deck is the wrong shape for this page rather
-than the rail being one badge short.
+**Why two panes and not a sequence.** A sequence — a card per step, or a page as tall as all of
+them — makes the reviewer navigate between the thing being judged and the judgement. Every such
+shape has the same fault: at the moment the label is decided, the conversation it is a label *of*
+is somewhere else. Two panes fix the fault rather than the symptom. What a sequence is good at,
+showing where the work has got to, is handed back by the panels being open at once: every step's
+state is readable without going anywhere.
 
-**The frame's height.** Step 2 is a table of spans and step 3 is one word. A frame that resizes on
-every flip reads as broken, so it has a floor and no ceiling: it does not collapse under a short
-card, and a tall card scrolls inside it rather than pushing the navigation off the bottom of the
-screen. Wherever the reviewer is in the deck, the arrows are in the same place.
+**Why the machine steps are one button.** Five of the eight steps are calls the reviewer cannot
+influence — they read the sample and answer. Their being separate was a fact about the service's
+routes leaking onto the screen. One button is the honest shape, and it is not automatic on load
+for one reason only: the reviewers' vote spends a model call, and a corpus is walked by people who
+skip. Free work could run on load; work that costs money waits to be asked.
 
-**Motion.** The flip is the only thing on this page that moves by itself, and it is answering a
-keypress: one slide, in the direction of travel, and nothing else. None of it under
-`prefers-reduced-motion`, where the card simply changes.
+**Why the verdict and not the payload.** A route answers JSON and the old page showed it, which
+made every step's panel the same size whatever it said. A reviewer needs *nothing was found* in one
+line and the whole payload only when they doubt it. The disclosure is not a tidying-up: a verdict
+nobody can check is worse than a payload nobody reads.
+
+**The height.** The two panes scroll independently and the strip and the action bar do not scroll
+at all. Whatever the sample's length, submit is in the same place — a reviewer doing this four
+hundred times reaches for it without looking, and a button that moves costs more than it looks like
+it should.
+
+**Motion.** Panels open and close, and nothing else moves by itself. None of it under
+`prefers-reduced-motion`.
 
 **Why the header is a title and the strip.** Architecture prose — one call per rectangle, what
 `config/model/` holds, where the record goes — is true and is not for the person labelling, who
 needs to know what a good label is. It belongs on the page whose job is explaining the flow. Above
-the deck there is a title and two numbers; the reading a labeller has to do is on the first card.
+the panes there is a title and three numbers; the reading a labeller has to do is in the guide.
 
-**Why the statistics are on a card and not in a dashboard.** A dashboard is a thing somebody opens
-on purpose, which means on the day they remember to. These statistics exist to change what gets
-labelled next, so they are put where the labelling starts. The same argument is why the strip
-carries a count of empty cells rather than a total: a total is a number to feel good about, and an
-empty cell is a job.
+**Why the statistics are in the guide and not in a dashboard.** A dashboard is a thing somebody
+opens on purpose, which means on the day they remember to. These statistics exist to change what
+gets labelled next, so they sit behind the one panel a reviewer already opens when they are unsure,
+and their headline — the count of empty cells — is on the strip where it cannot be missed. That is
+also why the strip carries empty cells rather than a total: a total is a number to feel good about,
+and an empty cell is a job.
 
 ## What else to add
 
@@ -525,10 +627,10 @@ Proposals, not decisions:
   describes is a modality package and a service module both named `dataset_management`. Renaming is
   a move plus one cross-reference in the pipeline spec; leaving it is a directory that names the
   reader's second guess.
-- **Which language the guide card is written in.** The repository is written in English and the
+- **Which language the guide is written in.** The repository is written in English and the
   labellers work in Vietnamese. The guide is the first page here whose reader is not a developer,
-  so nothing before it has had to decide this, and the eight cards' own notes go the same way the
-  guide does.
+  so nothing before it has had to decide this, and the panels' own notes go the same way the guide
+  does.
 
 ## Sources
 

@@ -47,7 +47,7 @@ CATALOG = [
 OPENED = [{"name": "OpenTicket", "arguments": {}}]
 TICKED = {
     "language": "vi",
-    "ambiguous": False,
+    "ambiguous": "MED",
     "domain": "customer_care",
     "call_trigger": ["user_utterance"],
     "direction": "inbound",
@@ -352,7 +352,7 @@ def test_a_rebuilt_row_carries_the_facets_the_document_was_ticked_with(
     row = read_dataset_row(store_session, key)
     assert (row.language, row.ambiguous, row.call_trigger) == (
         "vi",
-        False,
+        "MED",
         ["user_utterance"],
     )
     assert row.notes == {"direction": "inbound", "have_conversation_flow": True}

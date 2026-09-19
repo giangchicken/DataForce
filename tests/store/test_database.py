@@ -1,23 +1,29 @@
 """`edge/database.py` -- what *no database* answers, and what one engine for the process means.
 
 **No database attached is a state**, not a failure: the labelling flow works with nothing behind
-it, so `open_session()` answers `None` for the unset, the empty and the whitespace spellings, all
-three of which a compose file produces.
+it, so `open_session()` answers `None` where the variable says `off`, in any case a person types it.
+
+**Unset is not that state.** It is the default SQLite file in the working directory, tables and
+all, so an install nobody configured can take the first record. The empty and the whitespace
+spellings -- both of which a compose file produces -- mean the same default, because a blank line
+in a compose file is an absence and not a decision to turn the store off.
 
 **A time is stored as it was written.** Nothing converts, on either dialect, so what a row holds is
 this deployment's own clock and not an instant anybody can place from the value alone. That is the
 cost of having no `TypeDecorator` here, and it is the trade this store took on purpose.
 """
 
+import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
 from threading import Barrier
 
 import pytest
 from sqlalchemy import Engine
 
-from dataforce.edge.database import db
+from dataforce.edge.database import DEFAULT_STORE_FILE, NO_STORE, db
 from dataforce.profile.tool_decision.sample_building import (
     create_tables,
 )
@@ -32,24 +38,71 @@ WROTE_AT = datetime(2026, 9, 16, 15, 30, 45)
 THREADS = 8
 
 
+def test_every_test_runs_with_the_store_turned_off_unless_it_says_otherwise() -> None:
+    """The invariant the whole suite's safety rests on, asserted rather than assumed.
+
+    `tests/conftest.py` sets the variable to `off` for every test. If that is ever relaxed back to
+    *unset*, every test that does not declare its own DSN silently starts writing to one shared
+    SQLite file in the checkout -- and the store suite drops every table it made. Finding that out
+    by noticing a file appear is too slow, so it is a test.
+    """
+    assert os.environ["DATAFORCE_DATABASE_URL"] == NO_STORE
+    assert db.open_engine() is None
+
+
+@pytest.mark.parametrize(
+    "declared", ["off", "OFF", " Off "], ids=["off", "shouted", "padded"]
+)
+def test_the_store_turned_off_is_a_state_and_nothing_raises(
+    declared: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The state § *The page* requires: the whole review works with no store behind it.
+
+    Matched without case and after stripping, because this is the spelling a deployment reaches
+    for to turn the store off and there is nothing to gain by refusing three quarters of it.
+    """
+    monkeypatch.setenv("DATAFORCE_DATABASE_URL", declared)
+
+    assert db.open_engine() is None
+    assert db.open_session() is None
+
+
 @pytest.mark.parametrize(
     "declared", [None, "", "   "], ids=["unset", "empty", "whitespace"]
 )
-def test_an_undeclared_dsn_is_a_state_and_nothing_raises(
-    declared: str | None, monkeypatch: pytest.MonkeyPatch
+def test_an_undeclared_dsn_is_the_file_in_the_working_directory(
+    declared: str | None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The state § *The page* requires: all eight steps work with no store behind them.
+    """§ *Context* -- unset means a SQLite file made on first use, not *no store*.
 
-    Whitespace among them, because a variable set to a blank line in a compose file is the same
-    absence as an unset one and must not be read as a DSN somewhere further away.
+    `chdir` because the default is resolved against the working directory, which is the whole of
+    what makes it a *checkout's* database; without it this test would write into the repository.
+
+    The DSN is what is read, not the file: `create_engine` connects to nothing, so no SQLite file
+    exists until something asks for a connection. That an unconfigured install can take a record is
+    proven where the app is started, which is the layer that makes the tables.
     """
     if declared is None:
         monkeypatch.delenv("DATAFORCE_DATABASE_URL", raising=False)
     else:
         monkeypatch.setenv("DATAFORCE_DATABASE_URL", declared)
+    monkeypatch.chdir(tmp_path)
 
-    assert db.open_engine() is None
-    assert db.open_session() is None
+    assert db.read_url() == f"sqlite+pysqlite:///{tmp_path / DEFAULT_STORE_FILE}"
+    assert db.open_engine() is not None
+    assert db.open_session() is not None
+
+
+def test_a_declared_dsn_beats_the_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A deployment that names a database gets that one, and the default is not consulted."""
+    named = f"sqlite+pysqlite:///{tmp_path / 'named.sqlite3'}"
+    monkeypatch.setenv("DATAFORCE_DATABASE_URL", named)
+    monkeypatch.chdir(tmp_path)
+
+    assert db.read_url() == named
+    assert DEFAULT_STORE_FILE not in (db.read_url() or "")
 
 
 def test_a_time_comes_back_the_way_it_was_written(store_engine: Engine) -> None:

@@ -42,6 +42,7 @@ from dataforce.profile.tool_decision.sample_building import (
     select_sample_contents,
 )
 from dataforce.profile.tool_decision.schema import (
+    ToolDecisionQueuedSample,
     ToolDecisionRecord,
     ToolDecisionSample,
 )
@@ -94,7 +95,7 @@ def build_sample(**overridden: Any) -> ToolDecisionSample:
         "modified_time": AT,
         "language": "vi",
         "personal_data": [],
-        "ambiguous": False,
+        "ambiguous": "LOW",
         "domain": "debt_collection",
         "call_trigger": [],
         "number_turns": 0,
@@ -105,7 +106,7 @@ def build_sample(**overridden: Any) -> ToolDecisionSample:
     return ToolDecisionSample(**(columns | overridden))
 
 
-def test_created_tables_makes_this_task_s_two_and_no_others(
+def test_created_tables_makes_this_task_s_three_and_no_others(
     store_engine: Engine,
 ) -> None:
     """Measured as a difference, because a throwaway server may already hold somebody else's."""
@@ -116,6 +117,7 @@ def test_created_tables_makes_this_task_s_two_and_no_others(
     assert set(inspect(store_engine).get_table_names()) - before == {
         ToolDecisionRecord.__tablename__,
         ToolDecisionSample.__tablename__,
+        ToolDecisionQueuedSample.__tablename__,
     }
 
 
@@ -249,7 +251,7 @@ COUNTED: tuple[Mapping[str, Any], ...] = (
         "domain": "telesale",
         "call_trigger": ["user_utterance", "every_turn"],
         "language": "en",
-        "ambiguous": True,
+        "ambiguous": "HIGH",
         "schema_valid": False,
         "number_turns": 4,
     },
@@ -307,13 +309,17 @@ def test_row_counts_answers_each_table_and_not_one_of_them_twice(
 def test_counted_by_facet_answers_a_count_per_value_of_every_facet(
     corpus_session: Session,
 ) -> None:
-    """All nine, and every kind of column among them: text, boolean, integer and a JSON set."""
+    """All nine, and every kind of column among them: text, boolean, integer and a JSON set.
+
+    A text column is counted by its own value and every other kind by the JSON of it, which is
+    what `ambiguous` reading `LOW` rather than `"LOW"` shows.
+    """
     counted = count_by_facet(corpus_session)
 
     assert set(counted) == set(ToolDecisionSample.FACETS)
     assert counted["domain"] == {"debt_collection": 2, "telesale": 1}
     assert counted["language"] == {"en": 1, "vi": 2}
-    assert counted["ambiguous"] == {"false": 2, "true": 1}
+    assert counted["ambiguous"] == {"LOW": 2, "HIGH": 1}
     assert counted["number_turns"] == {"2": 2, "4": 1}
     assert counted["schema_valid"] == {"false": 1, "true": 2}
 

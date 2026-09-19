@@ -28,7 +28,7 @@ import pytest
 from agent_toolkit.llm import set_config_resolver
 from fastapi.testclient import TestClient
 
-from dataforce.edge.database import db
+from dataforce.edge.database import DEFAULT_STORE_FILE, db
 from dataforce.edge.main import UI, create_app
 from dataforce.edge.routers.text2text import tool_decision as route
 from dataforce.modalities.text2text.data_quality import (
@@ -658,7 +658,7 @@ def store_one_sample(**overridden: Any) -> None:
         "label": LOOKED_UP,
         "language": "vi",
         "personal_data": [],
-        "ambiguous": False,
+        "ambiguous": "LOW",
         "domain": "debt_collection",
         "call_trigger": ["condition_met"],
         "number_turns": 1,
@@ -851,7 +851,7 @@ POSTED_SCAN: Mapping[str, Any] = {
 }
 TICKED: Mapping[str, Any] = {
     "language": "vi",
-    "ambiguous": False,
+    "ambiguous": "LOW",
     "domain": "customer_care",
     "call_trigger": ["user_utterance"],
     "direction": "inbound",
@@ -877,6 +877,32 @@ def build_review(**overridden: Any) -> dict[str, Any]:
         "class": dict(TICKED),
     }
     return review | overridden
+
+
+def test_an_install_nobody_configured_takes_the_first_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_endpoints: None
+) -> None:
+    """§ *Context* -- unset means a file in the working directory, and startup makes the tables.
+
+    This is the whole of what *a database is already there* has to mean: nothing exported, no
+    command run, and the first record lands. `with` rather than a bare `TestClient`, because the
+    tables are made in the app's lifespan and a client that never enters it never starts the app.
+
+    `chdir` keeps the file out of the repository, and is also what makes the assertion about it
+    honest -- the default is resolved against the working directory.
+    """
+    monkeypatch.delenv("DATAFORCE_DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    with TestClient(create_app()) as unconfigured:
+        resp = unconfigured.post(f"{BASE}/records", json=build_review())
+
+        assert resp.status_code == 200, resp.text
+        assert unconfigured.get(f"{BASE}/records/stats").json()["sample_totals"] == {
+            "tool_decision_record": 1,
+            "tool_decision_dataset": 1,
+        }
+    assert (tmp_path / DEFAULT_STORE_FILE).exists()
 
 
 def test_a_record_says_where_to_attach_a_database_rather_than_dropping_it(
@@ -986,10 +1012,11 @@ def test_a_facet_posted_as_null_is_as_unanswered_as_one_left_out(
 def test_a_facet_answered_false_or_empty_is_answered(
     client: TestClient, attached: None
 ) -> None:
-    """`ambiguous: false` and `call_trigger: []` are claims a reviewer made -- *not arguable*, and
-    *this sample calls nothing*. A check that refused what is falsy would refuse the no-call
-    sample, which is the one § *The facets* is most careful to say is an answer."""
-    ticked = dict(TICKED) | {"ambiguous": False, "call_trigger": []}
+    """`have_conversation_flow: false` and `call_trigger: []` are claims a reviewer made -- *not
+    part of a flow*, and *this sample calls nothing*. A check that refused what is falsy would
+    refuse the no-call sample, which is the one § *The facets* is most careful to say is an
+    answer."""
+    ticked = dict(TICKED) | {"have_conversation_flow": False, "call_trigger": []}
 
     resp = client.post(f"{BASE}/records", json=build_review(**{"class": ticked}))
 

@@ -11,6 +11,7 @@ from .data_quality import (
 from .dataset_management import (
     build_dataset_statistics,
     create_joint_distribution_matrix,
+    read_queued_samples,
     summarise_labels,
 )
 
@@ -19,6 +20,7 @@ __all__ = [
     "create_joint_distribution_matrix",
     "summarise_labels",
     "build_dataset_statistics",
+    "read_queued_samples",
     "report_duplicates",
     "detect_personal_data",
     "redact_personal_data",

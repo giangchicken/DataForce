@@ -75,7 +75,7 @@ def build_document(**overridden: Any) -> dict[str, Any]:
         "abnormal": None,
         "llm": None,
         "sft": None,
-        "class": {"language": "vi", "ambiguous": False, "domain": "customer_care"},
+        "class": {"language": "vi", "ambiguous": "LOW", "domain": "customer_care"},
     }
     return document | overridden
 
