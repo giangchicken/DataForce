@@ -27,8 +27,6 @@ export const checked = {};
 
 export const NO_CALL = '<div class="nocall">No call — the turn needs no tool. That is an answer, not a skipped row.</div>';
 
-export const TICK_LISTS = ["verifier-ticks", "jury-ticks", "sft-ticks"];
-
 export const COPY_AFTER = 180;
 
 export const DECLARED_FACETS = [

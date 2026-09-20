@@ -2,13 +2,13 @@
 
 import { ask, call } from "./wire.js";
 import {
-  $, chars, esc, json, marked, onKey, onReturn, readTick, same, say, sayInTicks, show, sliced,
-  tickBox, ticksNamed, wordFor
+  $, chars, esc, json, marked, onKey, onReturn, readTick, same, say, show, sliced, ticksNamed,
+  wordFor
 } from "./screen.js";
 import {
-  CHECKS, COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, TICK_LISTS,
-  checked, held, ticked
+  CHECKS, COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, checked, held, ticked
 } from "./held.js";
+import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
 
 function mark(step, state, text) {
@@ -105,44 +105,6 @@ function openSample(sample, key) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
   }
   say("domain-note", "");
-}
-
-let drawn = null;
-
-async function paintTicks() {
-  const answer = await ask("/models", {});
-  if (!answer.ok) return sayInTicks(TICK_LISTS, answer.detail);
-  const served = Array.isArray(answer.data) ? answer.data : [];
-  if (!served.length) {
-    drawn = null;
-    return sayInTicks(TICK_LISTS,
-      "no model is configured: config/model/ holds none this deployment can serve");
-  }
-  if (same(served, drawn)) return;
-  drawn = served;
-  $("verifier-ticks").innerHTML = served.map(name => tickBox("verifier", name)).join("");
-  $("jury-ticks").innerHTML = served.map(name => tickBox("jury", name)).join("");
-  $("sft-ticks").innerHTML = '<label class="inline"><input type="radio" name="sft" value="" checked> none</label>'
-    + served.map(name => tickBox("sft", name)).join("");
-  retick(served);
-}
-
-function retick(served) {
-  const wasVerifier = ticked.verifier;
-  const wasJury = ticked.jury.filter(name => served.includes(name));
-  const wasSft = ticked.sft;
-  ticked.verifier = served.includes(wasVerifier) ? wasVerifier : served[0];
-  ticked.jury = wasJury.length ? wasJury : [served[0]];
-  ticked.sft = served.includes(wasSft) ? wasSft : null;
-  for (const box of ticksNamed("verifier")) {
-    box.checked = box.value === ticked.verifier;
-  }
-  for (const box of ticksNamed("jury")) {
-    box.checked = ticked.jury.includes(box.value);
-  }
-  for (const box of ticksNamed("sft")) {
-    box.checked = box.value === (ticked.sft || "");
-  }
 }
 
 function forgetEverything() {
@@ -1165,13 +1127,7 @@ for (const id of ["v-correct", "v-modify"]) {
   };
 }
 
-for (const id of TICK_LISTS) {
-  $(id).onchange = () => {
-    ticked.verifier = readTick("verifier");
-    ticked.jury = ticksNamed("jury").filter(box => box.checked).map(box => box.value);
-    ticked.sft = readTick("sft") || null;
-  };
-}
+for (const id of TICK_LISTS) $(id).onchange = readTicked;
 
 $("span-table").oninput = () => { paintValues(); copyLater(); };
 $("keep-table").onchange = event => {
