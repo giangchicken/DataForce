@@ -8,6 +8,7 @@ import {
   COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, STATE_SAID, held
 } from "./held.js";
 import { CHECKS, forgetChecks, mark, paintChecks } from "./checks.js";
+import { composeRecord } from "./record.js";
 import {
   addDomain, facetValues, paintDomainTicks, paintFacetTicks, paintGuideFacets,
   readDeclaredFacets
@@ -180,7 +181,7 @@ async function refreshCopy() {
   sayPersonalData();
   paintReviewText();
   paintCalls($("v-modify").checked);
-  composeRecord();
+  composeRecord(readDeclaredFacets());
   return true;
 }
 
@@ -189,27 +190,6 @@ function copyBroke(why) {
   held.copyNote = why;
   paintReviewText();
   return false;
-}
-
-function composeRecord() {
-  if (!held.sample || !held.shipped) return;
-  const redacted = held.shipped.sample;
-  held.record = {
-    ...held.sample,
-    messages: held.sample.messages ?? [],
-    tools: held.sample.tools ?? [],
-    label: held.sample.label ?? null,
-    new_messages: redacted.messages,
-    new_tools: same(redacted.tools, held.sample.tools ?? []) ? null : redacted.tools,
-    new_label: redacted.label,
-    personal_data: held.detected ? { ...held.handed, outcome: held.shipped.outcome } : null,
-    duplicate: null,
-    abnormal: null,
-    llm: held.review ? held.review.llm : null,
-    sft: held.review ? held.review.sft : null,
-    class: readDeclaredFacets()
-  };
-  show("record", held.record);
 }
 
 async function assemble() {
@@ -716,12 +696,12 @@ $("drop").ondrop = event => {
 
 $("language").onchange = () => { forgetEverything(); if (held.sample) fillEditor(); };
 
-$("domain-add").onclick = () => { addDomain(); composeRecord(); };
+$("domain-add").onclick = () => { addDomain(); composeRecord(readDeclaredFacets()); };
 $("domain-new").onkeydown = event => {
   if (event.key !== "Enter") return;
   event.preventDefault();
   addDomain();
-  composeRecord();
+  composeRecord(readDeclaredFacets());
 };
 
 for (const id of ["v-correct", "v-modify"]) {
@@ -744,7 +724,9 @@ $("keep-table").onchange = event => {
   paintKeepTable();
 };
 $("auto").onchange = () => { copyLater(); paintKeepTable(); };
-for (const id of ["facet-ticks", "domain-ticks"]) $(id).onchange = composeRecord;
+for (const id of ["facet-ticks", "domain-ticks"]) {
+  $(id).onchange = () => composeRecord(readDeclaredFacets());
+}
 $("label-text").oninput = copyLater;
 $("take-consensus").onclick = () => { if (takeConsensus()) copyLater(); };
 
