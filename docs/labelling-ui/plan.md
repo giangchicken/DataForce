@@ -406,6 +406,15 @@ phase and looked at in a browser rather than asserted in a test.
 - The four bands are in order, each with a banner naming it.
 - The page is opened at `/ui/` and read at desktop and phone width before this is committed.
 
+**What moves, and where to look.** Thirty-one of the twenty values sit on an exact midpoint of the
+scale — 6, 10, 14 and 20 are all equidistant between two tokens — so they are resolved by role and
+not by arithmetic: a value inside a control rounds down, a value between two things rounds up. The
+rest go to the token nearest them, and none goes to a farther one. Two type changes are worth a
+look rather than a diff: everything set at 13px reads at 14px now (every table, the tick labels, a
+call, and the conversation the reviewers are handed — whose own comment always said it should be
+the size the prose is), and the strip reads at 12px, which is what made its narrow override
+redundant.
+
 **Source.** `spec.md` Requirement 13; `layout.md` § *`style.css`, in four bands*.
 
 **Verify.** `make check`, then `uv run uvicorn dataforce.edge.main:app --port 8000` and read
@@ -444,6 +453,16 @@ does have users.
 ordinary text. Two rules were defined and never used, `h3.way` and `.mono`, neither of which any
 commit has ever used. And `dropped` named two different things: a stored row whose label will not
 call, and a span the reviewer chose not to replace. They are split, not merged.
+
+**What a reader sees change.** Four things, none of them wrong and none of them visible to
+`make check`, which is why this phase is read in a browser. Merging `lead` into `note` takes card
+1's instruction paragraph and the two in the import sheet from 14px to 12px. `p.note` now sets the
+margin a `<p>` used to get from the browser, so the note under the two verdict radios sits tighter
+against them and the statistics' paragraphs lose a top margin they had. The checks table's *What it
+said* column is 12px, because the state word is one size everywhere. And nothing else gained a
+property in the merge: `overflow-wrap: anywhere` stayed on the cell, where a refusal is a sentence
+in a fixed-width column, rather than moving onto every state word — in the card head, which is a
+flex row, it would let a long verdict break mid-word instead of widening the head.
 
 **Source.** `spec.md` Requirement 14.
 

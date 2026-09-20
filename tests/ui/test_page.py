@@ -194,6 +194,18 @@ def test_every_element_the_script_reaches_for_is_on_the_page() -> None:
     )
 
 
+def unremarked(source: str) -> str:
+    """`source` with the comments taken out, so markup quoted in one is not read as markup.
+
+    This repository quotes a tag in a comment freely, and a class named in an explanation is a
+    class nobody asked to style. Only a comment that owns its whole line is taken, because `//`
+    lives inside a string and inside a regex too.
+    """
+    source = re.sub(r"<!--.*?-->", " ", source, flags=re.S)
+    source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
+    return re.sub(r"^[ \t]*//.*$", "", source, flags=re.M)
+
+
 def classes_written(source: str) -> set[str]:
     """Every class name `source` writes, including the ones a template expression decides.
 
@@ -201,6 +213,7 @@ def classes_written(source: str) -> set[str]:
     reads the attribute as a flat string sees no name at all and a renamed rule goes unnoticed.
     This walks the attribute instead: bare words outside `${...}`, string literals inside it.
     """
+    source = unremarked(source)
     found: set[str] = set()
 
     def keep(held: str) -> None:
