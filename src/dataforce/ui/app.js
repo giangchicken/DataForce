@@ -11,73 +11,11 @@
 // reviewer cannot influence -- is one button, because a screen per machine step is a screen with
 // nothing on it to decide.
 
-const API = "/text2text/tool-decision";
-
-// --------------------------------------------------------------------------- plumbing
-
-const $ = id => document.getElementById(id);
-const json = v => JSON.stringify(v, null, 2);
-// Every interpolation into markup goes through this. What a span reads is a value out of the
-// sample, and a corpus that says `<b>` is a corpus, not an instruction.
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const wordFor = (number, one, more) => (number === 1 ? one : more);
-
-// Offsets are code points, because that is what slicing `review_text` in Python counts. A browser
-// indexes UTF-16 units, so `text.slice(start, end)` reads a different string from the same two
-// numbers the moment something outside the BMP is in the text.
-const chars = text => Array.from(text);
-const sliced = (text, start, end) => chars(text).slice(start, end).join("");
-
-// One call, and one reading of what came back. A refusal is the service's own `detail`, never
-// paraphrased and never retried: a second call is a person pressing the button again.
-async function ask(path, how) {
-  let resp;
-  try {
-    resp = await fetch(API + path, how);
-  } catch (error) {
-    return { ok: false, detail: `no answer from the service: ${error}` };
-  }
-  const text = await resp.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (resp.ok) return { ok: true, data };
-  const detail = data && data.detail !== undefined ? data.detail : data;
-  return { ok: false, detail: `${resp.status} — ${sayDetail(detail)}` };
-}
-
-// What a refusal reads as. A sentence is the service's own and is passed through untouched.
-//
-// **A body the service could not read is not a sentence.** FastAPI answers one with a list of
-// `{loc, msg, input}`, and `input` is *the whole sample echoed back* -- so dumping it prints the
-// entire conversation into a cell and buries the one thing a person can act on. Which field, and
-// what was wrong with it, is the whole of what they need.
-function sayDetail(detail) {
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail) && detail.length && detail.every(one => one && one.msg)) {
-    return detail.map(one =>
-      `${(one.loc || []).filter(at => at !== "body").join(".") || "the body"}: ${one.msg}`).join("; ");
-  }
-  return json(detail);
-}
-
-const call = (path, body) => ask(path, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body)
-});
-
-function show(id, value, kind = "") {
-  const el = $(id);
-  el.className = kind;
-  el.textContent = value === undefined ? "" : json(value);
-}
-
-function say(id, said, kind = "") {
-  const el = $(id);
-  el.className = kind ? `${el.dataset.base || "note"} ${kind}` : (el.dataset.base || "note");
-  el.textContent = said;
-}
+import { ask, call } from "./wire.js";
+import {
+  $, chars, esc, json, marked, onKey, onReturn, readTick, same, say, sayInTicks, show, sliced,
+  tickBox, ticksNamed, wordFor
+} from "./screen.js";
 
 // --------------------------------------------------------------------------- what the page holds
 
@@ -240,7 +178,7 @@ function openSample(sample, key) {
   // By name, over the declaration: `domain` is drawn in its own block now, and a sweep of one
   // container would leave the previous sample's domain ticked on this one.
   for (const facet of DECLARED_FACETS) {
-    for (const box of document.querySelectorAll(`input[name="f-${facet.name}"]`)) box.checked = false;
+    for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
   }
   say("domain-note", "");
 }
@@ -338,7 +276,7 @@ let drawn = null;
 
 async function paintTicks() {
   const answer = await ask("/models", {});
-  if (!answer.ok) return sayInTicks(answer.detail);
+  if (!answer.ok) return sayInTicks(TICK_LISTS, answer.detail);
   // **The route answers a bare array of names.** Reading a `models` key off it finds `undefined`
   // on every deployment, every list draws empty, and the run stops on `tick a verifier first`
   // with nothing to tick -- which is exactly what it did. Anything else claims nothing.
@@ -347,7 +285,8 @@ async function paintTicks() {
     // And forgotten, so a directory that fills up again is drawn rather than matching what was
     // last drawn and being skipped.
     drawn = null;
-    return sayInTicks("no model is configured: config/model/ holds none this deployment can serve");
+    return sayInTicks(TICK_LISTS,
+      "no model is configured: config/model/ holds none this deployment can serve");
   }
   // Asked again whenever the window comes back, because `config/model/` is a directory a
   // deployment edits while the service is up. A list that has not changed is not drawn again:
@@ -376,23 +315,16 @@ function retick(served) {
   ticked.verifier = served.includes(wasVerifier) ? wasVerifier : served[0];
   ticked.jury = wasJury.length ? wasJury : [served[0]];
   ticked.sft = served.includes(wasSft) ? wasSft : null;
-  for (const box of document.querySelectorAll('input[name="verifier"]')) {
+  for (const box of ticksNamed("verifier")) {
     box.checked = box.value === ticked.verifier;
   }
-  for (const box of document.querySelectorAll('input[name="jury"]')) {
+  for (const box of ticksNamed("jury")) {
     box.checked = ticked.jury.includes(box.value);
   }
-  for (const box of document.querySelectorAll('input[name="sft"]')) {
+  for (const box of ticksNamed("sft")) {
     box.checked = box.value === (ticked.sft || "");
   }
 }
-
-const tickBox = (name, value) =>
-  `<label class="inline"><input type="${name === "jury" ? "checkbox" : "radio"}" name="${name}"`
-  + ` value="${esc(value)}"> ${esc(value)}</label>`;
-
-const sayInTicks = said => TICK_LISTS.forEach(id => { $(id).innerHTML = `<span class="none">${esc(said)}</span>`; });
-const readTick = name => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || "";
 
 // --------------------------------------------------------------------------- forgetting
 
@@ -1019,7 +951,7 @@ function paintDomainTicks() {
 // One radio, set by value. Written out rather than left to the browser's own grouping because
 // this also has to put a tick back on a list that has just been rewritten under it.
 function tickDomain(value) {
-  for (const box of document.querySelectorAll('input[name="f-domain"]')) {
+  for (const box of ticksNamed("f-domain")) {
     box.checked = !!value && box.value === value;
   }
 }
@@ -1049,7 +981,7 @@ function addDomain() {
 function readDeclaredFacets() {
   const answered = { language: $("language").value };
   for (const facet of DECLARED_FACETS) {
-    const boxes = [...document.querySelectorAll(`input[name="f-${facet.name}"]`)];
+    const boxes = ticksNamed(`f-${facet.name}`);
     if (facet.pick === "yes") answered[facet.name] = boxes[0].checked;
     else if (facet.pick === "any") answered[facet.name] = boxes.filter(box => box.checked).map(box => box.value);
     else {
@@ -1666,7 +1598,7 @@ $("dataset-rows").onclick = event => {
   const open = event.target.closest("[data-stored]");
   if (open) openStored(open.dataset.stored);
 };
-for (const button of document.querySelectorAll("[data-close]")) {
+for (const button of marked("close")) {
   button.onclick = () => shutSheet(button.dataset.close);
 }
 for (const id of SHEETS) {
@@ -1729,7 +1661,7 @@ for (const id of ["v-correct", "v-modify"]) {
 for (const id of TICK_LISTS) {
   $(id).onchange = () => {
     ticked.verifier = readTick("verifier");
-    ticked.jury = [...document.querySelectorAll('input[name="jury"]:checked')].map(box => box.value);
+    ticked.jury = ticksNamed("jury").filter(box => box.checked).map(box => box.value);
     ticked.sft = readTick("sft") || null;
   };
 }
@@ -1752,10 +1684,10 @@ for (const id of ["facet-ticks", "domain-ticks"]) $(id).onchange = composeRecord
 $("label-text").oninput = copyLater;
 $("take-consensus").onclick = takeConsensus;
 
-document.addEventListener("keydown", steer);
+onKey(steer);
 // A model file added to `config/model/` while this page is open. Asked on focus and not on an
 // interval: a directory nobody edited is a request answering the same thing over and over.
-window.addEventListener("focus", paintTicks);
+onReturn(paintTicks);
 
 paintTicks();
 askStore();
