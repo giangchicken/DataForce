@@ -1,6 +1,11 @@
 /* The visual language: system sans, sentence case, one accent, soft grey panel borders, and more
    air than a form needs. A labeller is in here for hours, so nothing shouts and nothing is
-   rendered in a colour that has to be decoded — a state is a word first and a colour second. */
+   rendered in a colour that has to be decoded — a state is a word first and a colour second.
+
+   Four bands, in this order: tokens, primitives, components, screens. A component defined twice
+   shows up as two rules in the same band. */
+
+/* ============================================================================= band 1 · tokens */
 
 :root {
   --bg: #f6f7f9;
@@ -16,11 +21,25 @@
   --ok-soft: #ecfdf3;
   --warn: #b42318;
   --warn-soft: #fef3f2;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --text-1: 12px;
+  --text-2: 14px;
+  --text-3: 16px;
+
   --radius: 8px;
   --top: 56px;
   --bottom: 60px;
   color-scheme: light;
 }
+
+/* ========================================================================= band 2 · primitives */
 
 * { box-sizing: border-box; }
 
@@ -29,7 +48,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+  font: var(--text-2)/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
         Arial, "Noto Sans", sans-serif;
 }
 
@@ -43,7 +62,7 @@ button {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
-  padding: 7px 13px;
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
 }
 button:hover:not(:disabled) { border-color: var(--faint); background: #fbfbfc; }
@@ -53,7 +72,271 @@ button.accent { background: var(--accent); border-color: var(--accent); color: #
 button.accent:hover:not(:disabled) { background: #2850bd; border-color: #2850bd; }
 button.quiet { color: var(--dim); }
 
-/* ---------------------------------------------------------------- the strip and the action bar */
+table { border-collapse: collapse; width: 100%; font-size: var(--text-2); }
+th, td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+th { font-size: var(--text-1); font-weight: 600; color: var(--dim); white-space: nowrap; }
+td input[type=text], td input:not([type]) {
+  font: inherit; width: 100%; min-width: 70px;
+  border: 1px solid var(--line); border-radius: 5px; padding: var(--space-1) var(--space-2);
+}
+tbody:empty { display: none; }
+table:has(tbody:empty) { display: none; }
+
+select {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--panel);
+}
+
+textarea {
+  width: 100%;
+  min-height: 84px;
+  font-size: var(--text-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  background: #fcfcfd;
+}
+textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+pre {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-3);
+  background: #fbfbfc;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: var(--text-1);
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+pre:empty { display: none; }
+pre.bad { border-color: #fecdca; background: var(--warn-soft); color: var(--warn); }
+pre.ok { border-color: #abefc6; background: var(--ok-soft); }
+
+/* ========================================================================= band 3 · components */
+
+/* the card */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-4);
+}
+.panelhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.panelhead h2 {
+  font-size: var(--text-2);
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.panelhead .step {
+  display: inline-grid;
+  place-items: center;
+  width: 19px; height: 19px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--panel);
+  font-size: var(--text-1);
+}
+.panelbody { padding: var(--space-4); }
+
+/* the question head */
+
+.panehead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) 0 var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: var(--space-3);
+}
+.panehead.sticky { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.panehead h2 { font-size: var(--text-2); font-weight: 600; margin: 0; letter-spacing: .01em; }
+.panehead .name { font-size: var(--text-1); color: var(--faint); }
+.panehead .count { font-size: var(--text-1); color: var(--dim); }
+.panehead .inline { margin-left: auto; }
+
+/* the state word */
+
+.verdict { margin-left: auto; font-size: var(--text-1); color: var(--dim); }
+.verdict.ok { color: var(--ok); }
+.verdict.bad { color: var(--warn); }
+.verdict.busy { color: var(--accent); }
+
+/* the act row */
+
+.runline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-3) 0;
+}
+
+/* the note */
+
+.lead { margin: 0 0 var(--space-3); color: var(--dim); }
+.lab { font-size: var(--text-1); font-weight: 600; color: var(--dim); margin: var(--space-4) 0 var(--space-2); }
+.lab.tight { margin-top: 0; }
+.note { font-size: var(--text-1); color: var(--dim); overflow-wrap: anywhere; }
+.empty { color: var(--faint); padding: var(--space-3) 0; }
+
+/* the refusal, and a label that will not call. The same warm red, because it is the same kind of
+   news: something on this screen will not do what it says. The faults are a list and not a
+   sentence -- a label makes more than one call, and which one is broken is the first thing
+   somebody fixing it needs. */
+
+.refusal {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border: 1px solid #fecdca;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.faults {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border: 1px solid #fecdca;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: var(--text-2);
+}
+.faults ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
+.faults li { margin-top: var(--space-1); overflow-wrap: anywhere; }
+.faults code { font-size: var(--text-1); }
+
+/* the table */
+
+.tablewrap { overflow-x: auto; }
+
+/* the tick list */
+
+.ticks { margin-top: var(--space-3); }
+.tickbox { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.tickbox .none { color: var(--faint); font-size: var(--text-1); }
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.inline input { margin: 0; accent-color: var(--accent); }
+.choice { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-1) 0; }
+
+/* the disclosure */
+
+details.raw { margin-top: var(--space-4); }
+details.raw.last { margin: 0 0 var(--space-1); }
+details.raw > summary {
+  cursor: pointer;
+  font-size: var(--text-1);
+  color: var(--dim);
+  padding: var(--space-1) 0;
+  list-style: revert;
+}
+details.raw > summary:hover { color: var(--ink); }
+details.raw[open] > summary { margin-bottom: var(--space-2); }
+
+/* the sample, drawn as itself -- by the sample pane and by a stored row opened out of the corpus */
+
+.turns { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.turn { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-3); }
+.turn .who {
+  font-size: var(--text-1);
+  color: var(--dim);
+  text-transform: lowercase;
+  padding-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.turn .said {
+  background: #fafbfc;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.turn.assistant .said { background: var(--accent-soft); border-color: #dde5fa; }
+.turn .said:empty::before { content: "(nothing said)"; color: var(--faint); }
+.turn .calls { margin-top: var(--space-2); }
+
+.catalog { display: flex; flex-direction: column; gap: var(--space-2); }
+.tool {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+}
+.tool b { font-weight: 600; }
+.tool .args { color: var(--dim); font-size: var(--text-1); overflow-wrap: anywhere; }
+.tool .note { color: var(--dim); font-size: var(--text-1); margin-top: var(--space-1); }
+
+.calls { margin-bottom: var(--space-3); }
+.call {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.call b { font-weight: 600; }
+.call .args { color: var(--dim); font-size: var(--text-1); }
+.nocall { color: var(--dim); font-style: italic; }
+
+/* which database is attached */
+
+.store {
+  font-size: var(--text-1);
+  color: var(--dim);
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.store::before {
+  content: "\25cf";
+  color: var(--ok);
+  margin-right: var(--space-1);
+}
+.store.none { color: var(--warn); border-color: #fecdca; background: var(--warn-soft); }
+.store.none::before { color: var(--warn); }
+.store:empty { display: none; }
+
+/* ============================================================================ band 4 · screens */
+
+/* the strip and the action bar */
 
 .top, .actions {
   position: fixed;
@@ -62,9 +345,9 @@ button.quiet { color: var(--dim); }
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   background: var(--panel);
-  padding: 0 20px;
+  padding: 0 var(--space-5);
 }
 .top {
   top: 0;
@@ -83,22 +366,29 @@ button.quiet { color: var(--dim); }
 .actions #submit-note + #submit { margin-left: 0; }
 
 .brand { font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
-.topacts { margin-left: auto; display: flex; gap: 8px; }
+.topacts { margin-left: auto; display: flex; gap: var(--space-2); }
 
-.strip { display: flex; gap: 18px; flex-wrap: wrap; color: var(--dim); font-size: 13px; min-width: 0; }
+.strip {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  color: var(--dim);
+  font-size: var(--text-1);
+  min-width: 0;
+}
 .strip b { color: var(--ink); font-weight: 600; }
 .strip.none { color: var(--warn); }
 .strip:empty::before { content: "Asking what the corpus holds…"; color: var(--faint); }
 
-/* ------------------------------------------------------------------------------- the two panes */
+/* the two panes */
 
 .work {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: 16px;
-  padding: 16px 20px;
-  padding-top: calc(var(--top) + env(safe-area-inset-top, 0px) + 16px);
-  padding-bottom: calc(var(--bottom) + env(safe-area-inset-bottom, 0px) + 16px);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  padding-top: calc(var(--top) + env(safe-area-inset-top, 0px) + var(--space-4));
+  padding-bottom: calc(var(--bottom) + env(safe-area-inset-bottom, 0px) + var(--space-4));
   height: 100%;
 }
 
@@ -109,117 +399,16 @@ button.quiet { color: var(--dim); }
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0 16px 16px;
+  padding: 0 var(--space-4) var(--space-4);
 }
 #pane-review { background: transparent; border: 0; padding: 0; }
 
-.panehead {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 14px 0 10px;
-  border-bottom: 1px solid var(--line-soft);
-  margin-bottom: 12px;
-}
-.panehead.sticky { position: sticky; top: 0; background: var(--panel); z-index: 1; }
-.panehead h2 { font-size: 13px; font-weight: 600; margin: 0; letter-spacing: .01em; }
-.panehead .name { font-size: 12px; color: var(--faint); }
-.panehead .count { font-size: 12px; color: var(--dim); }
-.panehead .inline { margin-left: auto; }
+/* the checks. Three columns: which check, which model answers it, and what it said. The model sits
+   on the row of the check that spends it -- a picker anywhere else is one nobody finds. */
 
-/* ------------------------------------------------------------------------- the sample, as turns */
-
-.turns { display: flex; flex-direction: column; gap: 10px; }
-
-.turn { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; }
-.turn .who {
-  font-size: 11px;
-  color: var(--dim);
-  text-transform: lowercase;
-  padding-top: 7px;
-  overflow-wrap: anywhere;
-}
-.turn .said {
-  background: #fafbfc;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 9px 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.turn.assistant .said { background: var(--accent-soft); border-color: #dde5fa; }
-.turn .said:empty::before { content: "(nothing said)"; color: var(--faint); }
-.turn .calls { margin-top: 8px; }
-
-.catalog { display: flex; flex-direction: column; gap: 8px; }
-.tool {
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 9px 12px;
-}
-.tool b { font-weight: 600; }
-.tool .args { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
-.tool .note { color: var(--dim); font-size: 12.5px; margin-top: 3px; }
-
-.empty { color: var(--faint); padding: 10px 0; }
-
-/* ---------------------------------------------------------------------------------- the panels */
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  margin-bottom: 14px;
-}
-.panelhead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.panelhead h2 { font-size: 13px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; }
-.panelhead .step {
-  display: inline-grid;
-  place-items: center;
-  width: 19px; height: 19px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--panel);
-  font-size: 11px;
-}
-.panelbody { padding: 14px 16px; }
-
-.verdict { margin-left: auto; font-size: 12px; color: var(--dim); }
-.verdict.ok { color: var(--ok); }
-.verdict.bad { color: var(--warn); }
-.verdict.busy { color: var(--accent); }
-
-.lead { margin: 0 0 12px; color: var(--dim); }
-.lab { font-size: 12px; font-weight: 600; color: var(--dim); margin: 14px 0 6px; }
-.lab.tight { margin-top: 0; }
-.note { font-size: 12.5px; color: var(--dim); overflow-wrap: anywhere; }
-
-.runline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
-
-.refusal {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border: 1px solid #fecdca;
-  border-left: 3px solid var(--warn);
-  border-radius: 6px;
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-/* -------------------------------------------------------------------------------- the checks */
-
-/* Three columns: which check, which model answers it, and what it said. The model sits on the
-   row of the check that spends it -- a picker anywhere else is one nobody finds. */
-.checks { margin-top: 12px; table-layout: fixed; }
+.checks { margin-top: var(--space-3); table-layout: fixed; }
 .checks th[scope=row] {
-  font-size: 13px;
+  font-size: var(--text-2);
   font-weight: 600;
   color: var(--ink);
   white-space: normal;
@@ -227,125 +416,122 @@ button.quiet { color: var(--dim); }
 }
 .checks thead th { width: auto; }
 .checks td { vertical-align: top; }
-.checks .said { color: var(--dim); font-size: 13px; overflow-wrap: anywhere; width: 34%; }
+.checks .said { color: var(--dim); font-size: var(--text-2); overflow-wrap: anywhere; width: 34%; }
 .checks .said.ok { color: var(--ok); }
 .checks .said.bad { color: var(--warn); }
 .checks .said.busy { color: var(--accent); }
-.checks .lab { margin: 0 0 4px; }
-.checks .lab + .tickbox + .lab { margin-top: 9px; }
-.checks .tickbox { gap: 5px 12px; }
+.checks .lab { margin: 0 0 var(--space-1); }
+.checks .lab + .tickbox + .lab { margin-top: var(--space-2); }
+.checks .tickbox { gap: var(--space-1) var(--space-3); }
 
-/* --------------------------------------------------------------------- tables, ticks, editors */
+/* card 2 -- the facets, and the box that adds a domain beside the list it adds to */
 
-.tablewrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
-th { font-size: 11px; font-weight: 600; color: var(--dim); white-space: nowrap; }
-td input[type=text], td input:not([type]) {
-  font: inherit; width: 100%; min-width: 70px;
-  border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px;
-}
-tbody:empty { display: none; }
-table:has(tbody:empty) { display: none; }
-
-.ticks { margin-top: 12px; }
-.tickbox { display: flex; flex-wrap: wrap; gap: 8px 14px; }
-.tickbox .none { color: var(--faint); font-size: 12.5px; }
-
-.inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.inline input { margin: 0; accent-color: var(--accent); }
-.choice { display: flex; flex-direction: column; gap: 7px; margin: 4px 0 2px; }
-
-select { font: inherit; border: 1px solid var(--line); border-radius: 5px; padding: 2px 5px; background: var(--panel); }
-
-textarea {
-  width: 100%;
-  min-height: 84px;
-  font-size: 12.5px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 10px;
-  resize: vertical;
-  background: #fcfcfd;
-}
-textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-
-.facetwrap { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--line-soft); }
-
-/* The box that adds a domain, beside the list it adds to. */
-.facetwrap .runline { margin: 8px 0 0; }
+.facetwrap { margin-top: var(--space-4); padding-top: var(--space-1); border-top: 1px solid var(--line-soft); }
+.facetwrap .runline { margin: var(--space-2) 0 0; }
 #domain-new {
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-2);
   flex: 1 1 200px;
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 5px;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   background: var(--panel);
 }
 #domain-new:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-.calls { margin-bottom: 12px; }
-.call {
-  border: 1px solid var(--line-soft);
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
-  padding: 8px 11px;
-  margin-bottom: 7px;
-  font-size: 13px;
-  overflow-wrap: anywhere;
+/* the conversation the reviewers are handed. The one text on this page meant to be *read* rather
+   than inspected: every other `pre` holds a route's JSON, which is a thing you scan for a key, so
+   this one is set in the page's own face at the size the rest of the prose is, and it keeps the
+   line breaks the service wrote into it rather than showing them as `\n`. Taller, because a
+   reviewer reads to the end of it. */
+
+.reviewtext {
+  font-family: inherit;
+  font-size: var(--text-2);
+  line-height: 1.55;
+  color: var(--ink);
+  background: #fff;
+  max-height: 420px;
 }
-.call b { font-weight: 600; }
-.call .args { color: var(--dim); font-size: 12px; }
-.nocall { color: var(--dim); font-style: italic; }
 
-/* ------------------------------------------------------------------------------- disclosures */
+/* pasting into the sample pane */
 
-details.raw { margin-top: 14px; }
-details.raw.last { margin: 0 0 4px; }
-details.raw > summary {
-  cursor: pointer;
-  font-size: 12.5px;
-  color: var(--dim);
-  padding: 5px 0;
-  list-style: revert;
-}
-details.raw > summary:hover { color: var(--ink); }
-details.raw[open] > summary { margin-bottom: 6px; }
-
-pre {
-  margin: 0 0 8px;
-  padding: 10px 12px;
+.pasting {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
   background: #fbfbfc;
-  border: 1px solid var(--line-soft);
-  border-radius: 6px;
-  font-size: 12px;
-  max-height: 340px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
-pre:empty { display: none; }
-pre.bad { border-color: #fecdca; background: var(--warn-soft); color: var(--warn); }
-pre.ok { border-color: #abefc6; background: var(--ok-soft); }
+.pasting[hidden] { display: none !important; }
+.pasting textarea { min-height: 120px; background: var(--panel); }
+.pasting .runline { margin: var(--space-3) 0 0; }
+.pasting .note { margin: var(--space-2) 0 0; }
+.pasting .note:empty { display: none; }
 
-/* The one text on this page meant to be *read* rather than inspected. Every other `pre` holds a
-   route's JSON, which is a thing you scan for a key; this holds a conversation, so it is set in
-   the page's own face at the size the rest of the prose is, and it keeps the line breaks the
-   service wrote into it rather than showing them as `\n`. Taller, because a reviewer reads to
-   the end of it. */
-/* A stored row opened out of the corpus. The conversation is drawn by the same code the sample
+.panehead #paste-open { margin-left: auto; }
+.panehead #paste-open + .inline { margin-left: 0; }
+
+/* the four sheets */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: rgba(16, 19, 25, .38);
+  display: grid;
+  place-items: start center;
+  padding: var(--space-5) var(--space-4);
+  overflow-y: auto;
+}
+.sheet[hidden] { display: none !important; }
+.sheetbox {
+  width: min(760px, 100%);
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(16, 19, 25, .18);
+}
+.sheethead {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line-soft);
+}
+.sheethead h2 { margin: 0; font-size: var(--text-3); font-weight: 600; }
+.sheethead .close { margin-left: auto; }
+.sheetbody { padding: var(--space-4) var(--space-5) var(--space-5); }
+
+.guide h3 { font-size: var(--text-2); font-weight: 600; margin: var(--space-5) 0 var(--space-2); }
+.guide h3:first-child { margin-top: 0; }
+.guide p { margin: 0 0 var(--space-2); color: #3a4150; }
+
+.facet { padding: var(--space-2) 0; border-top: 1px solid var(--line-soft); }
+.facet b { font-weight: 600; }
+.facet .pick { color: var(--accent); font-size: var(--text-1); margin-left: var(--space-2); }
+.facet .values { display: block; color: var(--dim); font-size: var(--text-1); margin-top: var(--space-1); }
+.facet .note { margin-top: var(--space-1); }
+
+.drop {
+  display: grid;
+  place-items: center;
+  min-height: 128px;
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  background: #fbfbfc;
+  cursor: pointer;
+  text-align: center;
+  padding: var(--space-4);
+}
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop input { display: none; }
+.dropsaid { color: var(--dim); }
+
+/* a stored row opened out of the corpus. The conversation is drawn by the same code the sample
    pane uses, so it takes the same styles; this only gives it a box and a ceiling, because a sheet
    that grows with the sample scrolls the table off the top. */
-.storedone { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+
+.storedone { margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
 .storedone .turns { max-height: 320px; overflow: auto; }
 #dataset-rows td { vertical-align: top; }
 #dataset-rows td.ok { color: var(--ok); }
@@ -362,134 +548,33 @@ pre.ok { border-color: #abefc6; background: var(--ok-soft); }
 #dataset-rows .open:hover { text-decoration: underline; }
 #dataset-rows tr.dropped { background: var(--warn-soft); }
 
-.reviewtext {
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ink);
-  background: #fff;
-  max-height: 420px;
-}
+/* the sample list */
 
-/* ------------------------------------------------------------------------------- the two sheets */
-
-.sheet {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  background: rgba(16, 19, 25, .38);
-  display: grid;
-  place-items: start center;
-  padding: 24px 16px;
-  overflow-y: auto;
-}
-.sheet[hidden] { display: none !important; }
-.sheetbox {
-  width: min(760px, 100%);
-  background: var(--panel);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(16, 19, 25, .18);
-}
-.sheethead {
-  display: flex;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.sheethead h2 { margin: 0; font-size: 15px; font-weight: 600; }
-.sheethead .close { margin-left: auto; }
-.sheetbody { padding: 18px 20px 22px; }
-
-.guide h3 { font-size: 13px; font-weight: 600; margin: 20px 0 6px; }
-.guide h3:first-child { margin-top: 0; }
-.guide p { margin: 0 0 9px; color: #3a4150; }
-
-.facet { padding: 9px 0; border-top: 1px solid var(--line-soft); }
-.facet b { font-weight: 600; }
-.facet .pick { color: var(--accent); font-size: 12px; margin-left: 8px; }
-.facet .values { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
-.facet .note { margin-top: 2px; }
-
-.drop {
-  display: grid;
-  place-items: center;
-  min-height: 128px;
-  border: 1.5px dashed var(--line);
-  border-radius: var(--radius);
-  background: #fbfbfc;
-  cursor: pointer;
-  text-align: center;
-  padding: 16px;
-}
-.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
-.drop input { display: none; }
-.dropsaid { color: var(--dim); }
-
-/* ------------------------------------------------------------------- pasting into the sample pane */
-
-.pasting {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-bottom: 14px;
-  background: #fbfbfc;
-}
-.pasting[hidden] { display: none !important; }
-.pasting textarea { min-height: 120px; background: var(--panel); }
-.pasting .runline { margin: 10px 0 0; }
-.pasting .note { margin: 8px 0 0; }
-.pasting .note:empty { display: none; }
-
-.panehead #paste-open { margin-left: auto; }
-.panehead #paste-open + .inline { margin-left: 0; }
-
-/* ------------------------------------------------------------ which database, and the sample list */
-
-.store {
-  font-size: 12px;
-  color: var(--dim);
-  white-space: nowrap;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  max-width: 30ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.store::before {
-  content: "\25cf";
-  color: var(--ok);
-  margin-right: 6px;
-}
-.store.none { color: var(--warn); border-color: #fecdca; background: var(--warn-soft); }
-.store.none::before { color: var(--warn); }
-.store:empty { display: none; }
-
-h3.way { font-size: 13px; font-weight: 600; margin: 24px 0 8px; }
+h3.way { font-size: var(--text-2); font-weight: 600; margin: var(--space-5) 0 var(--space-2); }
 h3.way:first-child { margin-top: 0; }
 
 .rows { display: flex; flex-direction: column; border-top: 1px solid var(--line-soft); }
 .rows .row {
   display: flex;
   align-items: stretch;
-  gap: 2px;
+  gap: var(--space-1);
   border-bottom: 1px solid var(--line-soft);
 }
 .rows .row:hover { background: #fafbfc; }
 .rows .row.here { background: var(--accent-soft); }
-.rows .tick { display: grid; place-items: center; padding: 0 4px 0 8px; cursor: pointer; }
+.rows .tick { display: grid; place-items: center; padding: 0 var(--space-1) 0 var(--space-2); cursor: pointer; }
 .rows .tick input { margin: 0; accent-color: var(--accent); }
 .rows .open {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-3);
   border: 0;
   background: none;
   border-radius: 0;
   text-align: left;
-  padding: 9px 10px;
+  padding: var(--space-2) var(--space-3);
 }
 .rows .open:hover { background: none; border: 0; }
 .rows .at {
@@ -497,7 +582,7 @@ h3.way:first-child { margin-top: 0; }
   min-width: 2.5ch;
   text-align: right;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-1);
   font-variant-numeric: tabular-nums;
 }
 .rows .said {
@@ -507,16 +592,16 @@ h3.way:first-child { margin-top: 0; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rows .was { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
+.rows .was { flex: 0 0 auto; font-size: var(--text-1); color: var(--dim); }
 .rows .row.done .said { color: var(--dim); }
 .rows .row.done .was { color: var(--ok); }
 .rows .row.skipped .said { color: var(--faint); }
 
-/* ------------------------------------------------------------------------------ the statistics */
+/* the statistics */
 
-.stats { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
-.figs { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-bottom: 6px; }
-.figs div { font-size: 13px; color: var(--dim); }
+.stats { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.figs { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5); margin-bottom: var(--space-2); }
+.figs div { font-size: var(--text-2); color: var(--dim); }
 .figs b { color: var(--ink); font-weight: 600; }
 
 table.matrix th.axis { font-weight: 600; color: var(--ink); }
@@ -525,7 +610,7 @@ table.matrix .cell.zero { color: var(--warn); background: var(--warn-soft); }
 table.matrix .axis.gone { text-decoration: line-through; color: var(--faint); }
 table.counts td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* -------------------------------------------------------------------------------------- narrow */
+/* narrow */
 
 @media (max-width: 900px) {
   .work {
@@ -534,42 +619,23 @@ table.counts td:last-child { text-align: right; font-variant-numeric: tabular-nu
     min-height: 100%;
   }
   .pane { overflow-y: visible; }
-  .strip { font-size: 12px; gap: 12px; }
+  .strip { gap: var(--space-3); }
 }
 
 @media (max-width: 560px) {
-  .top, .actions, .work { padding-left: 12px; padding-right: 12px; }
+  .top, .actions, .work { padding-left: var(--space-3); padding-right: var(--space-3); }
   .brand { display: none; }
-  .turn { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+  .turn { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
   .turn .who { padding-top: 0; }
   /* Three columns of tick boxes do not fit a phone. The row becomes a stack, which keeps the
      model next to the check it answers for -- the one thing the three columns are for. */
   .checks, .checks tbody, .checks tr, .checks th, .checks td { display: block; width: auto; }
   .checks thead { display: none; }
-  .checks tr { padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
-  .checks th, .checks td { border: 0; padding: 2px 0; }
+  .checks tr { padding: var(--space-2) 0; border-bottom: 1px solid var(--line-soft); }
+  .checks th, .checks td { border: 0; padding: var(--space-1) 0; }
   .checks .said { width: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
-
-/* ------------------------------------------------------------------ a label that will not call */
-
-/* The same warm red a refusal gets, because it is the same kind of news: something on this screen
-   will not do what it says. A list and not a sentence -- a label makes more than one call, and
-   which one is broken is the first thing somebody fixing it needs. */
-.faults {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border: 1px solid #fecdca;
-  border-left: 3px solid var(--warn);
-  border-radius: 6px;
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-size: 13px;
-}
-.faults ul { margin: 6px 0 0; padding-left: 18px; }
-.faults li { margin-top: 4px; overflow-wrap: anywhere; }
-.faults code { font-size: 12.5px; }

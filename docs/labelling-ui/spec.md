@@ -55,11 +55,11 @@ not say which module owns which ids is one in which fourteen files can each reac
 ### The screen
 
 - The right pane carries **11 controls and 3 panels** visible at once, before a sheet is open.
-- `style.css` uses **20 distinct spacing values** — 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16,
-  18, 20, 22, 24, 26px — and **five font sizes**, one of which is `12.5px`. There is no scale;
-  there are twenty numbers, each chosen next to the thing it spaces. That is what
-  `AGENTS_UI.md`'s Aesthetic-Usability law is about, and it is measurable rather than a matter of
-  taste.
+- `style.css` is **six spacing tokens** — 4 / 8 / 12 / 16 / 24 / 32 — and **three type sizes**, in
+  four bands *(20 distinct spacing values — 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20,
+  22, 24, 26px — and five font sizes, one of them `12.5px`; no scale, twenty numbers each chosen
+  next to the thing it spaces)*. That is what `AGENTS_UI.md`'s Aesthetic-Usability law is about, and
+  it is measurable rather than a matter of taste.
 - **48 distinct classes**, several of which mean the same thing: `note` ×12, `lab` ×4, `lab tight`
   ×3, `lead` ×3, `verdict` ×3, `said` ×2 — six names for *a small line of secondary text*, each
   with its own rules. Law of Similarity, failing.
@@ -145,9 +145,9 @@ Tailwind and shadcn. Three things in it are worth taking and one is not.
   changes in one place (`C-2`). This page already has most of it — `index.html` is a frame of
   panels and ids, and everything inside a panel is painted by the script.
 - The *token layer*: `design-tokens.json` and one Tailwind config, so spacing and type are chosen
-  once and used everywhere. That is the answer to the twenty spacing values, and it needs neither
-  Tailwind nor a build — CSS custom properties already do it, and this file already has a token
-  block with the colours in it.
+  once and used everywhere. That is the answer to the twenty spacing values, and it needed neither
+  Tailwind nor a build — CSS custom properties do it, and the token block that held only the colours
+  now carries the scale beside them.
 - The *machinery*: 1822 files of infrastructure, a framework, a lockfile and a build. That is what
   `T-3` is about, and it does not transfer to a 2678-line page by scale alone.
 
