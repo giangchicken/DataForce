@@ -33,7 +33,7 @@ const tickInput = facet =>
 export function paintFacetTicks() {
   paintDomainTicks();
   $("facet-ticks").innerHTML = DECLARED_FACETS.filter(facet => facet.name !== "domain").map(facet =>
-    `<div class="lab">${esc(facet.name)}</div>`
+    `<div class="fieldname">${esc(facet.name)}</div>`
     + `<div class="tickbox">${tickInput(facet)}</div>`
     + `<div class="note">${esc(facet.said)}</div>`).join("");
 }

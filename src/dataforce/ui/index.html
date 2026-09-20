@@ -86,17 +86,17 @@
           <tr>
             <th scope="row">Personal data</th>
             <td><div class="tickbox" id="verifier-ticks"></div></td>
-            <td class="said" id="said-2">not run</td>
+            <td class="verdict" id="said-2">not run</td>
           </tr>
           <tr>
             <th scope="row">Label</th>
             <td>
-              <div class="lab tight">Jury</div>
+              <div class="fieldname tight">Jury</div>
               <div class="tickbox" id="jury-ticks"></div>
-              <div class="lab">Finetuned</div>
+              <div class="fieldname">Finetuned</div>
               <div class="tickbox" id="sft-ticks"></div>
             </td>
-            <td class="said" id="said-6">not run</td>
+            <td class="verdict" id="said-6">not run</td>
           </tr>
         </tbody></table></div>
       </div>
@@ -108,7 +108,7 @@
         <span class="verdict" id="data-verdict"></span>
       </div>
       <div class="panelbody">
-        <p class="lead">Tick the spans that really are personal data. What you untick is left in
+        <p class="note">Tick the spans that really are personal data. What you untick is left in
           the text exactly as it arrived. <b>Every span you keep is replaced as you tick</b> — there
           is no second button, and the copy on the Checks panel says what it did.</p>
         <div class="tablewrap"><table id="keep-table"><thead><tr>
@@ -124,8 +124,8 @@
              Two versions of it, and which one is up says where the sample has got to. The
              shipping copy cannot be shown earlier, because **the label is part of this text**: a
              copy made before the label is settled is a copy of a label about to change. -->
-        <div class="shown">
-          <div class="lab" id="text-which">The text the scan reads</div>
+        <div>
+          <div class="fieldname" id="text-which">The text the scan reads</div>
           <pre class="reviewtext" id="review-text"></pre>
         </div>
 
@@ -150,7 +150,7 @@
         <span class="verdict" id="label-verdict"></span>
       </div>
       <div class="panelbody">
-        <div class="lab tight" id="calls-which">The label as it arrived</div>
+        <div class="fieldname tight" id="calls-which">The label as it arrived</div>
         <div class="calls" id="calls"></div>
         <!-- Above the question, because it is about the thing the question is asked of. The same
              rule the store writes `schema_valid` from, asked here rather than read off a row
@@ -181,8 +181,8 @@
              that can quietly make the sample agree with the label. What they are here to decide
              is which calls that conversation should have produced. Redaction still rewrites the
              turns and the catalog — that is a value coming out, not a reviewer rewriting one. -->
-        <div id="label-editor" class="editor" hidden>
-          <div class="lab tight">Label</div>
+        <div id="label-editor" hidden>
+          <div class="fieldname tight">Label</div>
           <textarea id="label-text" spellcheck="false"></textarea>
           <div class="runline">
             <button id="label-check" class="quiet">Check it is JSON</button>
@@ -195,14 +195,14 @@
         </details>
 
         <div class="facetwrap">
-          <div class="lab">What kind of sample is this?</div>
+          <div class="fieldname">What kind of sample is this?</div>
 
           <!-- `domain` on its own, because the thing that adds one belongs next to the list it
                adds to. A domain added here is offered from that moment, and it is still offered
                after a reload once one sample carries it — the page reads the values back off the
                corpus. Nothing here removes one. -->
           <div class="ticks">
-            <div class="lab">domain</div>
+            <div class="fieldname">domain</div>
             <div class="tickbox" id="domain-ticks"></div>
             <div class="runline">
               <input id="domain-new" placeholder="another domain, e.g. insurance_sales" spellcheck="false">
@@ -274,19 +274,19 @@
     <div class="sheethead"><h2>Import raw data</h2><button class="close" data-close="sheet-import">Close</button></div>
     <div class="sheetbody">
 
-      <p class="lead">One JSON object per line — a <code>.jsonl</code> file. Every line becomes a
+      <p class="note">One JSON object per line — a <code>.jsonl</code> file. Every line becomes a
         sample waiting to be labelled. Importing the same file twice imports nothing the second
         time, so a failed import is safe to run again.</p>
       <label class="drop" id="drop">
         <input type="file" id="file" accept=".jsonl,.json,.ndjson,.txt">
-        <span class="dropsaid" id="drop-said">Drop a file here, or choose one</span>
+        <span class="note" id="drop-said">Drop a file here, or choose one</span>
       </label>
       <div class="runline">
         <button id="import-run" class="accent" disabled>Import</button>
         <span class="note" id="import-note"></span>
       </div>
       <div id="import-said"></div>
-      <p class="lead">One sample from somewhere else does not need a file: paste it straight into
+      <p class="note">One sample from somewhere else does not need a file: paste it straight into
         <b>the sample</b> pane. That way needs no database at all.</p>
 
     </div>

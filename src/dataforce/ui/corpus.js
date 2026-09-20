@@ -59,11 +59,11 @@ export async function openStored(key) {
   const valid = one.facets.schema_valid;
   say("dataset-note", `#${key}`);
   $("dataset-one").innerHTML = `<div class="storedone">`
-    + `<div class="lab">Label as it ships</div>`
+    + `<div class="fieldname">Label as it ships</div>`
     + `<div class="calls">${drawCalls(one.label || [])}</div>`
     + (valid ? "" : `<p class="refusal">Nothing could validate this label against the catalog`
       + ` — a call names a tool that was never offered, or leaves out an argument it requires.</p>`)
-    + `<div class="lab">The conversation</div>`
+    + `<div class="fieldname">The conversation</div>`
     + `<div class="turns">${drawTurns(one.input.messages || [])}</div>`
     + `</div>`;
 }
@@ -107,7 +107,7 @@ function sayNoStatistics(said) {
   held.counted = null;
   $("strip").className = "strip none";
   $("strip").textContent = said;
-  $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
+  $("stats").innerHTML = '<div class="fieldname">What the corpus holds</div>'
     + `<div class="note">${esc(said)}</div>`;
 }
 
@@ -170,33 +170,33 @@ function paintStatistics() {
   const groups = held.counted.duplicate_groups || {};
   const empty = listEmptyCells(grid);
   const byFacet = held.counted.counted_distribution_by_facet || {};
-  $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
-    + '<div class="lab">Domain against call trigger</div>'
+  $("stats").innerHTML = '<div class="fieldname">What the corpus holds</div>'
+    + '<div class="fieldname">Domain against call trigger</div>'
     + buildMatrixTable(grid)
     + (empty.length
       ? `<p class="note">Still empty: ${esc(empty.map(([a, b]) => `${a} × ${b}`).join(", "))}.</p>`
       : '<p class="note">Every cell has at least one sample.</p>')
-    + '<div class="lab">The labels</div>'
+    + '<div class="fieldname">The labels</div>'
     + '<div class="figs">'
     + `<div><b>${esc(label.total ?? 0)}</b> ${wordFor(label.total ?? 0, "row", "rows")}</div>`
     + `<div><b>${esc(label.number_not_null_label ?? 0)}</b> answered with a call</div>`
     + `<div><b>${esc(label.number_diff_label ?? 0)}</b> distinct ${wordFor(label.number_diff_label ?? 0, "answer", "answers")}</div>`
     + `<div><b>${esc(held.counted.number_tools_offered ?? 0)}</b> ${wordFor(held.counted.number_tools_offered ?? 0, "tool", "tools")} the catalogs put in front of the model</div>`
     + '</div>'
-    + '<div class="lab">Tools called</div>'
+    + '<div class="fieldname">Tools called</div>'
     + (Object.keys(calls).length
       ? '<div class="tablewrap"><table class="counts"><tbody>'
         + Object.entries(calls).map(([name, number]) =>
           `<tr><td>${esc(name)}</td><td>${esc(number)}</td></tr>`).join("")
         + '</tbody></table></div>'
       : '<p class="note">No stored sample calls a tool yet.</p>')
-    + '<div class="lab">The same input twice</div>'
+    + '<div class="fieldname">The same input twice</div>'
     + '<div class="figs">'
     + `<div><b>${esc((groups.same_label || []).length)}</b> ${wordFor((groups.same_label || []).length, "group", "groups")} agreeing</div>`
     + `<div><b>${esc((groups.diff_label || []).length)}</b> ${wordFor((groups.diff_label || []).length, "group", "groups")} disagreeing</div>`
     + '</div>'
     + Object.entries(byFacet).map(([facet, values]) =>
-      `<div class="lab">${esc(facet)}</div>`
+      `<div class="fieldname">${esc(facet)}</div>`
       + '<div class="tablewrap"><table class="counts"><tbody>'
       + (Object.keys(values).length
         ? Object.entries(values).map(([value, number]) =>

@@ -34,8 +34,8 @@ function paintSpanTable() {
   $("span-table").querySelector("tbody").innerHTML = held.rows.map((span, i) => `
     <tr>
       <td>${esc(span.id)}</td>
-      <td><input class="num" data-f="start" data-i="${i}" value="${esc(span.start)}"></td>
-      <td><input class="num" data-f="end" data-i="${i}" value="${esc(span.end)}"></td>
+      <td><input data-f="start" data-i="${i}" value="${esc(span.start)}"></td>
+      <td><input data-f="end" data-i="${i}" value="${esc(span.end)}"></td>
       <td><input data-f="personal_data_class" data-i="${i}" value="${esc(span.personal_data_class)}"></td>
       <td><input data-f="placeholder" data-i="${i}" value="${esc(span.placeholder)}"></td>
       <td class="value" data-value="${i}"></td>
@@ -128,7 +128,7 @@ export function paintKeepTable() {
     if (row.broke) return `<tr><td></td><td colspan="4" class="value bad">${esc(row.broke)}</td></tr>`;
     const nested = $("auto").checked && inside(row, rows);
     const out = dropped(row, rows);
-    return `<tr class="${out ? "dropped" : ""}">
+    return `<tr class="${out ? "out" : ""}">
       <td><input type="checkbox" data-keep="${row.i}"${held.keeps[row.i] === false ? "" : " checked"}${nested ? " disabled" : ""}></td>
       <td>${esc(row.personal_data_class)}</td>
       <td>${esc(row.placeholder)}</td>

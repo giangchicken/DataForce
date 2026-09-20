@@ -426,6 +426,25 @@ is cheapest to fix.
 - Every class `index.html` uses is defined in the components or screens band, and none in both.
 - The markup changes with it; no class is left defined and unused.
 
+**What landed instead, and why.** Three things. The six spellings are not six spellings of one
+role: measured, `note` and `lead` are one role spelled twice, `verdict` and the checks table's
+`said` are one role spelled twice, and `tight` is a modifier, not a name — it stays, because a
+modifier is not a role. `:first-child` was tried in its place and is **not** the same rule: `tight`
+marks three elements and `:first-child` marks ten, so seven headings the author left a gap above
+lost it — including one whose gap came from a margin collapsing through an empty wrapper this task
+had just emptied further. Where a gap goes is the author's call, not the tree's. `lab` is a fourth
+thing — the name over a control — renamed `fieldname`, because on this page *label* is the tool
+call being reviewed. The skeleton is **not**
+defined: nothing shows one until `T17`, and a rule with no user is what this task's own last
+criterion forbids. The band names the empty region instead, which is the skeleton's sibling and
+does have users.
+
+**And what the sweep found.** Four classes were written and never defined — `shown`, `editor`,
+`num`, and the keep table's `value` — so the row that says a span's offsets do not slice read as
+ordinary text. Two rules were defined and never used, `h3.way` and `.mono`, neither of which any
+commit has ever used. And `dropped` named two different things: a stored row whose label will not
+call, and a span the reviewer chose not to replace. They are split, not merged.
+
 **Source.** `spec.md` Requirement 14.
 
 **Verify.** `make check`

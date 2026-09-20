@@ -32,6 +32,7 @@ READING = Path(__file__).parent / "reading.js"
 LOADING = Path(__file__).parent / "loading.js"
 UI = Path(__file__).parents[2] / "src" / "dataforce" / "ui"
 PAGE = (UI / "index.html").read_text(encoding="utf-8")
+STYLE = (UI / "style.css").read_text(encoding="utf-8")
 
 # Words that would mean the guide is explaining the wiring rather than the work.
 WIRING = (
@@ -193,6 +194,100 @@ def test_every_element_the_script_reaches_for_is_on_the_page() -> None:
     )
 
 
+def classes_written(source: str) -> set[str]:
+    """Every class name `source` writes, including the ones a template expression decides.
+
+    `class="${out ? "out" : ""}"` is how half the states on this page are written, so a sweep that
+    reads the attribute as a flat string sees no name at all and a renamed rule goes unnoticed.
+    This walks the attribute instead: bare words outside `${...}`, string literals inside it.
+    """
+    found: set[str] = set()
+
+    def keep(held: str) -> None:
+        found.update(
+            word for word in held.split() if re.fullmatch(r"[A-Za-z][\w-]*", word)
+        )
+
+    def skip_literal(text: str, at: int) -> int:
+        shut = text[at]
+        at += 1
+        while at < len(text) and text[at] != shut:
+            at += 2 if text[at] == "\\" else 1
+        return at + 1
+
+    for opened in re.finditer(r'class="', source):
+        at, depth, inside, word, quote = opened.end(), 0, 0, "", ""
+        while at < len(source):
+            here = source[at]
+            if quote:
+                if here == quote:
+                    keep(word)
+                    word, quote = "", ""
+                else:
+                    word += here
+            elif depth:
+                # Inside `${...}`: a name is only a class where the expression writes it as a
+                # string in its own right. An identifier is the expression choosing between
+                # them, and a string inside a call is that call's argument -- `offList("domain",
+                # row) ? " gone" : ""` names one class, and `domain` is not it.
+                if here in "\"'`":
+                    if inside:
+                        at = skip_literal(source, at)
+                        continue
+                    quote = here
+                elif here in "([":
+                    inside += 1
+                elif here in ")]":
+                    inside -= 1
+                elif here == "{":
+                    depth += 1
+                elif here == "}":
+                    depth -= 1
+            elif source.startswith("${", at):
+                keep(word)
+                word, depth, at = "", 1, at + 1
+            elif here == '"':
+                keep(word)
+                break
+            else:
+                word += here
+            at += 1
+
+    for held in re.findall(r"""className\s*=\s*["'`]([^"'`]*)""", source):
+        keep(held)
+    for held in re.findall(r"""classList\.\w+\(\s*["']([\w-]+)["']""", source):
+        found.add(held)
+    return found
+
+
+def test_every_class_the_page_writes_has_a_rule() -> None:
+    """A class with no rule is markup that claims a treatment `style.css` never gave it.
+
+    `shown`, `editor`, `num` and the keep table's `value` cell were each written and never
+    defined, so the row that says a span's offsets do not slice read as ordinary text. Nothing
+    else catches it: an unknown class is not an error in a browser or in the stub, and the page
+    renders whatever it is handed.
+
+    Two limits, both stated rather than implied. The *name* is what is held to have a rule, which
+    is as far as a sweep goes without a rendering engine: `#dataset-rows td.bad` defines `bad`
+    here even where the cell carrying it is in another table. And a class whose name is data --
+    `class="turn ${who}"`, `class="row ${row.state}"` -- is not a name this reads, because the
+    names are in `held.js` rather than in the markup.
+    """
+    defined: set[str] = set()
+    bare = re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S)
+    for selector in re.findall(r"([^{}]+)\{", bare):
+        if selector.strip().startswith("@"):
+            continue
+        defined |= set(re.findall(r"\.([A-Za-z][\w-]*)", selector))
+
+    written = classes_written(PAGE) | classes_written(SCRIPTS)
+
+    assert not written - defined, (
+        f"ui/ writes classes style.css does not define: {sorted(written - defined)}"
+    )
+
+
 def test_no_module_calls_a_name_it_did_not_import() -> None:
     """A function that moved to another module and is still called by name is a dead button.
 
@@ -250,8 +345,15 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
 
     panel = PAGE[PAGE.index('id="panel-checks"') : PAGE.index('id="panel-data"')]
     assert panel.count("<th>") == 3
+    # And each answer cell carries the state word's own class. `dom.js` mints an element on first
+    # reach with no class at all, so no check driving the page can see what the markup says here:
+    # a cell left spelled `said` would render unstyled from load until the first paint, and every
+    # behavioural claim would still pass.
     for _, _, said in rows:
         assert f'id="{said}"' in panel
+        assert re.search(rf'<td class="verdict" id="{said}">', panel), (
+            f"{said} is the cell a check answers in, so it is a state word like the others"
+        )
     # And each picker is in that panel, once: a second copy anywhere else is a second control for
     # the same choice, and the reviewer cannot tell which one the run reads.
     for picker in ("verifier-ticks", "jury-ticks", "sft-ticks"):

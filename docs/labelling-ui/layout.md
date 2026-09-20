@@ -380,7 +380,7 @@ thing its name promises.
 | what is unanswered | said as a refusal, after submit | said in the bar, **before** — and still as a refusal after |
 | spacing | 20 distinct pixel values | **6 tokens**: 4 / 8 / 12 / 16 / 24 / 32 |
 | type | 5 sizes, one of them `12.5px` | **3 sizes** |
-| *a small grey line* | `note`, `lab`, `lab tight`, `lead`, `verdict`, `said` | **one** name |
+| *a small grey line* | `note`, `lab`, `lab tight`, `lead`, `verdict`, `said` | **one name per role**: `note`, `verdict`, `fieldname` |
 | waiting | one string, on the strip | a skeleton in every table about to fill |
 | disclosures | 4, all correct | unchanged, and the only collapsed things |
 
@@ -489,7 +489,7 @@ run starts, so the direction is panel → `checks.js`. What runs the two checks 
 |---|---|
 | **tokens** | the colour set that is already there, plus the spacing scale and the three type sizes |
 | **primitives** | `button`, `input`, `select`, `textarea`, `table`, `pre` — the bare elements |
-| **components** | the card, the question head, the state word, the act row, the note, the disclosure, the table, the tick list, the form field, the skeleton. **One rule per role** |
+| **components** | the card, the question head, the state word, the act row, the note, the empty region, the form field, the refusal, the table, the tick list, the disclosure, the sample as turns, the store line. **One rule per role.** The skeleton joins them in `T17`, which is what first has something to show one for |
 | **screens** | the header, the two panes, the action bar, the four sheets, and the narrow layout |
 
 A component defined twice shows up as two rules in the same band, which is the whole reason the

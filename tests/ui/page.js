@@ -275,6 +275,9 @@ async function main() {
   claims("the reviewers' verdict reads as agreement with the label",
     page.el("said-6").textContent.includes("75%")
     && page.byId.get("label-verdict").textContent.includes("75%"));
+  claims("**a check's cell and the panel's word are painted by one hand** — both say `verdict`",
+    page.el("said-2").className.split(" ")[0] === "verdict"
+    && page.byId.get("checks-verdict").className.split(" ")[0] === "verdict");
   claims("**the text is shown as a text** — the sample as one string, not a route's JSON about it",
     page.el("review-text").textContent === REVIEW_TEXT);
   claims("**and its line breaks are line breaks**, not `\\n` printed into a payload",

@@ -60,9 +60,12 @@ not say which module owns which ids is one in which fourteen files can each reac
   22, 24, 26px — and five font sizes, one of them `12.5px`; no scale, twenty numbers each chosen
   next to the thing it spaces)*. That is what `AGENTS_UI.md`'s Aesthetic-Usability law is about, and
   it is measurable rather than a matter of taste.
-- **48 distinct classes**, several of which mean the same thing: `note` ×12, `lab` ×4, `lab tight`
-  ×3, `lead` ×3, `verdict` ×3, `said` ×2 — six names for *a small line of secondary text*, each
-  with its own rules. Law of Similarity, failing.
+- **One name per role**: secondary text is `note`, a state word is `verdict`, a form field's name
+  is `fieldname` *(48 distinct classes. The six counted as one role — `note` ×12, `lab` ×4, `lab
+  tight` ×3, `lead` ×3, `verdict` ×3, `said` ×2 — measured as two roles spelled twice each and one
+  spelled with a modifier: `note` and `lead` both said secondary text, `verdict` and the checks
+  table's `said` both said the state word, and `tight` said "this one comes first". Law of
+  Similarity, failing)*.
 - **All three panels are `<article class="panel">`.** One of them — Checks — holds no decision at
   all: it is five machine calls the reviewer cannot influence, which the store spec collapsed into
   one button for exactly that reason. It looks identical to the two panels that ask the reviewer
@@ -234,10 +237,11 @@ already knows is a labelling tool, not a CMS.
     32 and nothing else; type is three sizes and `12.5px` is not one of them. Every rule in
     `style.css` uses a token, and a raw pixel value in a margin, a padding or a gap is a finding.
     *(Aesthetic-Usability.)*
-14. **One name per role.** The six spellings of *a small line of secondary text* become one. The
-    component set is named once — a card, a band, a question head, a state word, a note, a
-    disclosure, a table, a tick list, an editor — and a panel that needs a seventh spelling of
-    something is a panel to look at again. *(Law of Similarity.)*
+14. **One name per role.** Secondary text is spelled one way, a state word one way, a form field's
+    name one way. The component set is named once — a card, a question head, a state word, an act
+    row, a note, an empty region, a form field, a refusal, a table, a tick list, a disclosure — and
+    a panel that needs a second spelling of something is a panel to look at again. Every class the
+    markup writes has a rule, and every rule has a user. *(Law of Similarity.)*
 15. **A state is a word first and a colour second.** Already the CSS's own stated rule, carried
     forward: nothing on this screen may be legible only to someone who can tell two colours apart.
 16. **Everything a person waits for says it is working.** The queue's next sample, the samples list,
