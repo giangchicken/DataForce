@@ -23,3 +23,8 @@ export function composeRecord(facets) {
   };
   show("record", held.record);
 }
+
+export function forgetRecord() {
+  held.record = null;
+  show("record", undefined);
+}

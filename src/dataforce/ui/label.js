@@ -1,11 +1,13 @@
-// adapter · card 2 above the facets: what the panel agreed, what arrived, and the label being
-// written. Owns label-editor, label-text, label-fault, label-verdict, label-refusal, out-6,
-// v-correct, v-modify, take-consensus, consensus-line, consensus-note, label-check, label-note.
+// adapter · card 2 above the facets: what the panel agreed, what arrived, and the label
+// being written. Owns label-editor, label-text, label-fault, label-note,
+// label-verdict, label-refusal, out-6, v-correct, v-modify, consensus-line, consensus-note.
 
 import { asking, cannotAsk, mark } from "./checks.js";
 import { paintCalls, saidLanguage } from "./conversation.js";
 import { held, ticked } from "./held.js";
 import { $, esc, json, say, sayVerdict, show } from "./screen.js";
+
+export const rewriting = () => $("v-modify").checked;
 import { call } from "./wire.js";
 
 export async function review() {
@@ -39,7 +41,7 @@ export function fillEditor() {
 
 function typedLabel() {
   const arrived = held.sample.label ?? null;
-  if (!$("v-modify").checked) return arrived;
+  if (!rewriting()) return arrived;
   try { return JSON.parse($("label-text").value); } catch { return { unparsed: $("label-text").value }; }
 }
 
@@ -55,7 +57,7 @@ export function paintShipped() {
     ? "not JSON, carried as {unparsed: …}"
     : "re-parsed as a label", unparsed ? "bad" : "");
   held.record = null;
-  paintCalls($("v-modify").checked);
+  paintCalls(rewriting());
 }
 
 let faultAt = 0;
@@ -121,12 +123,10 @@ export function forgetLabel() {
   sayVerdict("label-verdict", "", "");
 }
 
-export function hideLabelRefusal() {
-  $("label-refusal").hidden = true;
-  $("label-refusal").textContent = "";
+export function sayLabelRefusal(detail) {
+  $("label-refusal").hidden = detail === "";
+  $("label-refusal").textContent = detail;
 }
-
-export const rewriting = () => $("v-modify").checked;
 
 export function forgetVerdict() {
   $("v-correct").checked = false;
@@ -135,6 +135,6 @@ export function forgetVerdict() {
 }
 
 export function tookVerdict() {
-  $("label-editor").hidden = !$("v-modify").checked;
-  held.settled = $("v-correct").checked || $("v-modify").checked;
+  $("label-editor").hidden = !rewriting();
+  held.settled = $("v-correct").checked || rewriting();
 }

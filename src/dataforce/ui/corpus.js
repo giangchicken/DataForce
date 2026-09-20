@@ -1,6 +1,6 @@
 // adapter · what is already stored: the dataset sheet, the statistics grid, the strip, and
-// which database a record lands in. Owns sheet-dataset, dataset-rows, dataset-bad,
-// dataset-one, dataset-more, dataset-note, stats, strip, store.
+// which database a record lands in. Owns dataset-rows, dataset-bad, dataset-one,
+// dataset-more, dataset-note, stats, strip, store.
 
 import { drawCalls, drawTurns } from "./conversation.js";
 import { facetValues, paintDomainTicks } from "./facets.js";

@@ -1,6 +1,5 @@
 // adapter · how a corpus gets in: one sample pasted, or a file of lines. Owns pasting,
-// paste-open, paste-text, paste-now, paste-queue, paste-cancel, paste-note, sheet-import,
-// file, drop, drop-said, import-run, import-note, import-said.
+// paste-text, paste-note, drop, drop-said, import-run, import-note, import-said.
 
 import { $, esc, say, wordFor } from "./screen.js";
 import { ask } from "./wire.js";
@@ -79,12 +78,10 @@ export async function runImport() {
   if (!chosen) return;
   $("import-run").disabled = true;
   say("import-note", "reading…");
-  try {
-    return await sendLines(await chosen.text(), "import-note");
-  } finally {
-    $("import-run").disabled = !chosen;
-  }
+  return sendLines(await chosen.text(), "import-note");
 }
+
+export const importBusy = on => { $("import-run").disabled = on || !chosen; };
 
 async function sendLines(text, noteId) {
   const answer = await ask("/queue/import", {

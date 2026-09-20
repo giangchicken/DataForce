@@ -1,6 +1,6 @@
-// adapter · card 1: the values the reviewer keeps, the ones they add, and the copy that ships.
-// Owns panel-data, span-table, span-add, span-check, span-note, keep-table, auto, scan-raw,
-// review-text, text-which, data-verdict, data-refusal.
+// adapter · card 1: the values the reviewer keeps, the ones they add, and the copy that
+// ships. Owns span-table, span-note, keep-table, auto, scan-raw, review-text,
+// text-which, data-verdict, data-refusal.
 
 import { asking, cannotAsk, mark } from "./checks.js";
 import { saidLanguage } from "./conversation.js";
@@ -187,7 +187,7 @@ export function forgetPersonalData() {
   sayVerdict("data-verdict", "no scan yet", "");
 }
 
-export function hideDataRefusal() {
-  $("data-refusal").hidden = true;
-  $("data-refusal").textContent = "";
+export function sayDataRefusal(detail) {
+  $("data-refusal").hidden = detail === "";
+  $("data-refusal").textContent = detail;
 }

@@ -1,5 +1,5 @@
 // adapter · which sample is next, how much of the corpus is left, and the rows a reviewer
-// picked to walk. Owns sheet-list, list-walk, list-none, list-rows, list-note, sample-name.
+// picked to walk. Owns list-walk, list-none, list-rows, list-note, sample-name.
 
 import { STATE_SAID, held } from "./held.js";
 import { $, esc, say } from "./screen.js";

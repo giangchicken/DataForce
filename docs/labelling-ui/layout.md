@@ -452,22 +452,36 @@ what the copy is — and stays one file while the copy has no consumer but that 
 
 ### The import direction
 
+Measured, not intended. `held.js`, `screen.js` and `wire.js` import nothing; `app.js` imports every
+one of the other thirteen and nothing imports it.
+
 ```
-held.js ──────────────► nothing
-   ▲
-   │                    screen.js ──► nothing
-   │                        ▲
-   │   ┌────────────────────┘
-   │   │
-  the eleven adapters ──► wire.js, screen.js, held.js, conversation.js
-   ▲
-   │
-app.js (wiring) ──────► everything · nothing imports it
+held.js ─┐                                        ┌─► nothing
+screen.js┼─► nothing                     wire.js ─┘
+         │
+conversation.js ─► held, screen          checks.js ─► screen, wire
+record.js       ─► held, screen          models.js, queue.js, importing.js ─► held, screen, wire
+         ▲
+facets.js        ─► conversation, held, screen
+personal-data.js ─► checks, conversation, held, screen
+label.js         ─► checks, conversation, held, screen, wire
+corpus.js        ─► conversation, facets, held, queue, screen, wire
+         ▲
+app.js (wiring)  ─► everything · nothing imports it
 ```
 
-`record.js` is the only `logic`, so it imports `held.js` and nothing else. An adapter importing
-another adapter is allowed and happens twice — `conversation.js` is read by the sample pane and by
-`corpus.js`, and `checks.js` calls into `personal-data.js` and `label.js` to run them.
+`record.js` is the only `logic`. It imports `held.js` and `screen.js` — `show` is how the record
+reaches `#record`, which the plan's `T8` allows and which is the one place a `logic` module touches
+the page.
+
+An adapter importing another adapter is allowed and happens **eight** times, all in the same
+direction and none of them a cycle: the two cards and the facets read `conversation.js`, the two
+cards report on their check through `checks.js`, and `corpus.js` reads the conversation to draw a
+stored row, the facets to know what a value is, and the queue to know how much is left.
+
+**`checks.js` does not call the panels.** The panels call `mark` on the copy path, not only when a
+run starts, so the direction is panel → `checks.js`. What runs the two checks in order is `RUNS` in
+`app.js`, which is the only module allowed to know both.
 
 ### `style.css`, in four bands
 

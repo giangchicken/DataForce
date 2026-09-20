@@ -1,11 +1,11 @@
 // wiring · the composition root: every handler, the keyboard, the first paints, and the
-// page's reaction to a change. Owns the frame and the action bar: pane-sample, pane-review,
-// open-list, open-dataset, open-import, open-guide, sheet-guide, run-checks, skip, submit,
-// submit-note. It attaches handlers to elements other modules own and reads none of them.
+// page's reaction to a change. Draws nothing. Attaches handlers to controls other modules
+// own and reads none of them. Owns the sheets and the action bar: sheet-guide, sheet-import,
+// sheet-list, sheet-dataset, submit, submit-note.
 
 import { call } from "./wire.js";
 import {
-  $, marked, onKey, onReturn, say, show, ticksNamed
+  $, marked, onKey, onReturn, say, ticksNamed
 } from "./screen.js";
 import {
   COPY_AFTER, DECLARED_FACETS, held
@@ -14,7 +14,8 @@ import {
   CHECKS, forgetChecks, mark, paintChecks, sayChecking, sayChecksVerdict
 } from "./checks.js";
 import {
-  labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting, tookFile
+  importBusy, labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting,
+  tookFile
 } from "./importing.js";
 import {
   askList, forgetQueue, nextQueued, oneQueued, paintList, picked, pickedChanged,
@@ -23,17 +24,17 @@ import {
 import {
   askDataset, askStatistics, askStore, openStored, paintDataset, paintStrip
 } from "./corpus.js";
-import { composeRecord } from "./record.js";
+import { composeRecord, forgetRecord } from "./record.js";
 import {
-  addDomain, paintFacetTicks, paintGuideFacets, readDeclaredFacets
+  addDomain, forgetDomainNote, paintFacetTicks, paintGuideFacets, readDeclaredFacets
 } from "./facets.js";
 import {
-  checkLabel, fillEditor, forgetLabel, forgetVerdict, hideLabelRefusal, paintShipped, review,
-  rewriting, takeConsensus, tookVerdict
+  checkLabel, fillEditor, forgetLabel, forgetVerdict, paintShipped, review, rewriting,
+  sayLabelRefusal, takeConsensus, tookVerdict
 } from "./label.js";
 import {
-  addSpan, checkSpans, detect, editedSpans, forgetPersonalData, handedBack, hideDataRefusal,
-  paintKeepTable, paintReviewText, paintValues, sayPersonalData
+  addSpan, checkSpans, detect, editedSpans, forgetPersonalData, handedBack,
+  paintKeepTable, paintReviewText, paintValues, sayDataRefusal, sayPersonalData
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { paintCalls, paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
@@ -100,7 +101,7 @@ function openSample(sample, key) {
   for (const facet of DECLARED_FACETS) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
   }
-  say("domain-note", "");
+  forgetDomainNote();
 }
 
 function forgetEverything() {
@@ -119,13 +120,13 @@ function forgetEverything() {
   forgetPersonalData();
   forgetLabel();
   forgetChecks();
-  show("record", undefined);
+  forgetRecord();
   hideRefusals();
 }
 
 function hideRefusals() {
-  hideDataRefusal();
-  hideLabelRefusal();
+  sayDataRefusal("");
+  sayLabelRefusal("");
 }
 
 const RUNS = { 2: async () => await detect() && refreshCopy(), 6: review };
@@ -210,21 +211,19 @@ async function assemble() {
   paintShipped();
   checkLabel();
   if (!await refreshCopy()) {
-    sayRefusal("data-refusal", held.copyNote || "the copy that ships could not be made");
+    sayDataRefusal(held.copyNote || "the copy that ships could not be made");
     return false;
   }
   return held.record !== null;
 }
 
-function sayRefusal(id, detail) {
-  $(id).hidden = false;
-  $(id).textContent = detail;
-}
 
-function whichPanel(detail) {
+
+function sayOnItsPanel(detail) {
   const said = String(detail).toLowerCase();
-  if (said.includes("personal") || said.includes("scan") || said.includes("redact")) return "data-refusal";
-  return "label-refusal";
+  const data = said.includes("personal") || said.includes("scan") || said.includes("redact");
+  if (data) sayDataRefusal(detail);
+  else sayLabelRefusal(detail);
 }
 
 async function submit() {
@@ -237,7 +236,7 @@ async function submit() {
     const where = held.key ? `/records?queue_key=${encodeURIComponent(held.key)}` : "/records";
     const answer = await call(where, held.record);
     if (!answer.ok) {
-      sayRefusal(whichPanel(answer.detail), answer.detail);
+      sayOnItsPanel(answer.detail);
       return say("submit-note", "refused — nothing was written", "bad");
     }
 
@@ -341,7 +340,13 @@ $("list-rows").onchange = event => {
 };
 
 $("file").onchange = event => tookFile(event.target.files[0]);
-$("import-run").onclick = async () => { if (await runImport()) await importLanded(); };
+$("import-run").onclick = async () => {
+  try {
+    if (await runImport()) await importLanded();
+  } finally {
+    importBusy(false);
+  }
+};
 $("drop").ondragover = event => { event.preventDefault(); markDrop(true); };
 $("drop").ondragleave = () => markDrop(false);
 $("drop").ondrop = event => {
@@ -352,12 +357,11 @@ $("drop").ondrop = event => {
 
 $("language").onchange = () => { forgetEverything(); if (held.sample) fillEditor(); };
 
-$("domain-add").onclick = () => { addDomain(); composeRecord(readDeclaredFacets()); };
+$("domain-add").onclick = () => { if (addDomain()) composeRecord(readDeclaredFacets()); };
 $("domain-new").onkeydown = event => {
   if (event.key !== "Enter") return;
   event.preventDefault();
-  addDomain();
-  composeRecord(readDeclaredFacets());
+  if (addDomain()) composeRecord(readDeclaredFacets());
 };
 
 for (const id of ["v-correct", "v-modify"]) {
