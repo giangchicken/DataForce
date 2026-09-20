@@ -6,9 +6,10 @@ import {
   tickBox, ticksNamed, wordFor
 } from "./screen.js";
 import {
-  CHECKS, COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, NO_CALL, PICK_SAID, STATE_SAID, TICK_LISTS,
+  CHECKS, COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, TICK_LISTS,
   checked, held, ticked
 } from "./held.js";
+import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
 
 function mark(step, state, text) {
   checked[step] = { state, text };
@@ -92,10 +93,9 @@ function openSample(sample, key) {
   }
   frozen(false);
   $("sample-name").textContent = sample.id ? `#${sample.id}` : "";
-  show("raw-sample", sample);
   paintTurns();
   paintCatalog();
-  paintCalls();
+  paintCalls($("v-modify").checked);
   fillEditor();
   $("v-correct").checked = false;
   $("v-modify").checked = false;
@@ -105,68 +105,6 @@ function openSample(sample, key) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
   }
   say("domain-note", "");
-}
-
-function paintTurns() {
-  const turns = held.sample.messages || [];
-  if (!turns.length) {
-    $("turns").innerHTML = '<div class="empty">This sample carries no turns.</div>';
-    return;
-  }
-  $("turns").innerHTML = drawTurns(turns);
-}
-
-const drawTurns = turns => turns.map(turn => {
-  const who = String(turn.role ?? "?");
-  const said = typeof turn.content === "string" ? turn.content
-    : turn.content == null ? "" : json(turn.content);
-  const calls = turn.tool_calls ? `<div class="calls">${drawCalls(turn.tool_calls)}</div>` : "";
-  return `<div class="turn ${esc(who)}"><div class="who">${esc(who)}</div>`
-    + `<div class="said">${esc(said)}${calls}</div></div>`;
-}).join("");
-
-function paintCatalog() {
-  const tools = held.sample.tools || [];
-  $("tool-count").textContent = `${tools.length} ${wordFor(tools.length, "tool", "tools")}`;
-  if (!tools.length) {
-    $("catalog").innerHTML = '<div class="empty">No tools were offered.</div>';
-    return;
-  }
-  $("catalog").innerHTML = tools.map(tool => {
-    const spec = tool.function || tool;
-    const args = Object.keys((spec.parameters || {}).properties || {});
-    return `<div class="tool"><b>${esc(spec.name ?? "(unnamed)")}</b>`
-      + (args.length ? `<span class="args"> (${esc(args.join(", "))})</span>` : "")
-      + (spec.description ? `<div class="note">${esc(spec.description)}</div>` : "")
-      + "</div>";
-  }).join("");
-}
-
-const drawCalls = calls => calls.map(one => {
-  const spec = typeof one === "string" ? { name: one } : (one && one.function) || one || {};
-  const args = spec.arguments === undefined ? "" : json(spec.arguments);
-  return `<div class="call"><b>${esc(spec.name ?? "(unnamed)")}</b>`
-    + (args ? `<div class="args">${esc(args)}</div>` : "") + "</div>";
-}).join("");
-
-function paintCalls() {
-  if (!held.sample) return;
-  const ships = held.settled && held.shipped;
-  const label = ships
-    ? held.shipped.sample.label
-    : (held.edited ? held.edited.label : held.sample.label);
-  $("calls-which").textContent = ships
-    ? "The label as it ships — this is what is stored"
-    : $("v-modify").checked
-      ? "The label as you are rewriting it"
-      : "The label as it arrived";
-  $("calls").innerHTML = drawLabel(label);
-}
-
-function drawLabel(label) {
-  if (label === null || label === undefined) return NO_CALL;
-  if (!Array.isArray(label)) return '<div class="nocall">Not JSON yet — the box below says what is wrong.</div>';
-  return label.length ? drawCalls(label) : NO_CALL;
 }
 
 let drawn = null;
@@ -452,7 +390,7 @@ async function refreshCopy() {
   held.copyNote = null;
   sayPersonalData();
   paintReviewText();
-  paintCalls();
+  paintCalls($("v-modify").checked);
   composeRecord();
   return true;
 }
@@ -543,7 +481,7 @@ function paintShipped() {
     ? "not JSON, carried as {unparsed: …}"
     : "re-parsed as a label", unparsed ? "bad" : "");
   held.record = null;
-  paintCalls();
+  paintCalls($("v-modify").checked);
 }
 
 let faultAt = 0;
