@@ -2,7 +2,6 @@
 
 const API = "/text2text/tool-decision";
 
-// One call, and one reading of what came back.
 export async function ask(path, how) {
   let resp;
   try {
@@ -18,12 +17,6 @@ export async function ask(path, how) {
   return { ok: false, detail: `${resp.status} — ${sayDetail(detail)}` };
 }
 
-// What a refusal reads as. A sentence is the service's own and is passed through untouched.
-//
-// **A body the service could not read is not a sentence.** FastAPI answers one with a list of
-// `{loc, msg, input}`, and `input` is *the whole sample echoed back* -- so dumping it prints the
-// entire conversation into a cell and buries the one thing a person can act on. Which field, and
-// what was wrong with it, is the whole of what they need.
 function sayDetail(detail) {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length && detail.every(one => one && one.msg)) {
