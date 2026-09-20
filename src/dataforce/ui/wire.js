@@ -1,11 +1,4 @@
-// adapter · one call to the service, and one reading of what came back.
-//
-// Two decisions live here and nowhere else: what a route answers, and what a refusal reads as.
-// Everything that draws calls through `ask` or `call`, so no panel holds a second idea of either
-// -- and a refusal is the service's own sentence, never paraphrased and never retried, because a
-// second call is a person pressing the button again.
-//
-// This module owns no id. It never touches the page.
+// adapter · one call to the service, and one reading of what came back. Owns no id.
 
 const API = "/text2text/tool-decision";
 
@@ -31,9 +24,6 @@ export async function ask(path, how) {
 // `{loc, msg, input}`, and `input` is *the whole sample echoed back* -- so dumping it prints the
 // entire conversation into a cell and buries the one thing a person can act on. Which field, and
 // what was wrong with it, is the whole of what they need.
-//
-// Kept here rather than exported: reading a refusal is what `ask` does, and a panel that read one
-// for itself would be a second answer to a question this module already answers.
 function sayDetail(detail) {
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length && detail.every(one => one && one.msg)) {
