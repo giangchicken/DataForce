@@ -1,5 +1,5 @@
 // adapter · a turn, a tool call and a label, drawn. Owns turns, catalog, tool-count,
-// raw-sample, calls, calls-which.
+// raw-sample, calls, calls-which, language.
 
 import { held, NO_CALL } from "./held.js";
 import { $, esc, json, show, wordFor } from "./screen.js";
@@ -72,3 +72,5 @@ export function sayNoSample(said) {
   $("catalog").innerHTML = "";
   $("tool-count").textContent = "";
 }
+
+export const saidLanguage = () => $("language").value;

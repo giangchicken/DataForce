@@ -1,4 +1,5 @@
-// adapter · the two checks, and the row each one reports on. Owns said-2, said-6.
+// adapter · the two checks, and the row each one reports on. Owns said-2, said-6,
+// checks-note, checks-verdict.
 
 import { $, say, sayVerdict } from "./screen.js";
 import { call } from "./wire.js";
@@ -40,6 +41,10 @@ export async function asking(step, body, path) {
 export function forgetChecks() {
   for (const step of CHECKS.map(one => one.step)) delete checked[step];
   paintChecks();
-  say("checks-note", "Two calls: the personal-data scan, then the reviewers.");
-  sayVerdict("checks-verdict", "not run", "");
+  sayChecking("Two calls: the personal-data scan, then the reviewers.");
+  sayChecksVerdict("not run", "");
 }
+
+export const sayChecking = (said, kind = "") => say("checks-note", said, kind);
+
+export const sayChecksVerdict = (said, kind) => sayVerdict("checks-verdict", said, kind);

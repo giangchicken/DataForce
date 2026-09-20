@@ -1,13 +1,18 @@
-// wiring · the composition root.
+// wiring · the composition root: every handler, the keyboard, the first paints, and the
+// page's reaction to a change. Owns the frame and the action bar: pane-sample, pane-review,
+// open-list, open-dataset, open-import, open-guide, sheet-guide, run-checks, skip, submit,
+// submit-note. It attaches handlers to elements other modules own and reads none of them.
 
 import { call } from "./wire.js";
 import {
-  $, marked, onKey, onReturn, say, sayVerdict, show, ticksNamed
+  $, marked, onKey, onReturn, say, show, ticksNamed
 } from "./screen.js";
 import {
   COPY_AFTER, DECLARED_FACETS, held
 } from "./held.js";
-import { CHECKS, forgetChecks, mark, paintChecks } from "./checks.js";
+import {
+  CHECKS, forgetChecks, mark, paintChecks, sayChecking, sayChecksVerdict
+} from "./checks.js";
 import {
   labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting, tookFile
 } from "./importing.js";
@@ -128,19 +133,19 @@ const RUNS = { 2: async () => await detect() && refreshCopy(), 6: review };
 async function runChecks() {
   if (!held.sample) return;
   frozen(true);
-  sayVerdict("checks-verdict", "running…", "busy");
+  sayChecksVerdict("running…", "busy");
   hideRefusals();
   try {
     for (const { step, what } of CHECKS) {
-      say("checks-note", `Asking: ${what.toLowerCase()}…`);
+      sayChecking(`Asking: ${what.toLowerCase()}…`);
       if (!await RUNS[step]()) {
-        sayVerdict("checks-verdict", `stopped at ${what.toLowerCase()}`, "bad");
-        say("checks-note", `${what} did not answer, so the steps after it were not asked.`, "bad");
+        sayChecksVerdict(`stopped at ${what.toLowerCase()}`, "bad");
+        sayChecking(`${what} did not answer, so the steps after it were not asked.`, "bad");
         return;
       }
     }
-    sayVerdict("checks-verdict", "both answered", "ok");
-    say("checks-note", "Every machine step answered. What is left is yours.");
+    sayChecksVerdict("both answered", "ok");
+    sayChecking("Every machine step answered. What is left is yours.");
   } finally {
     frozen(!held.sample);
   }
@@ -288,8 +293,8 @@ paintChecks();
 $("run-checks").onclick = runChecks;
 $("submit").onclick = submit;
 $("skip").onclick = skip;
-$("span-check").onclick = checkSpans;
-$("span-add").onclick = addSpan;
+$("span-check").onclick = () => { if (checkSpans()) copyLater(); };
+$("span-add").onclick = () => { if (addSpan()) copyLater(); };
 $("label-check").onclick = paintShipped;
 
 const SHEETS = ["sheet-guide", "sheet-import", "sheet-list", "sheet-dataset"];

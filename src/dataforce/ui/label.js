@@ -1,9 +1,9 @@
 // adapter · card 2 above the facets: what the panel agreed, what arrived, and the label being
 // written. Owns label-editor, label-text, label-fault, label-verdict, label-refusal, out-6,
-// v-correct, v-modify, take-consensus, consensus.
+// v-correct, v-modify, take-consensus, consensus-line, consensus-note, label-check, label-note.
 
 import { asking, cannotAsk, mark } from "./checks.js";
-import { paintCalls } from "./conversation.js";
+import { paintCalls, saidLanguage } from "./conversation.js";
 import { held, ticked } from "./held.js";
 import { $, esc, json, say, sayVerdict, show } from "./screen.js";
 import { call } from "./wire.js";
@@ -12,7 +12,7 @@ export async function review() {
   if (!held.sample) return cannotAsk(6, "no sample");
   const answer = await asking(6, {
     ...held.sample,
-    language: $("language").value,
+    language: saidLanguage(),
     jury_models: ticked.jury,
     sft_model: ticked.sft
   }, "/ai-review");

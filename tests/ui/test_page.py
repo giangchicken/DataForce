@@ -193,6 +193,48 @@ def test_every_element_the_script_reaches_for_is_on_the_page() -> None:
     )
 
 
+def test_no_module_calls_a_name_it_did_not_import() -> None:
+    """A function that moved to another module and is still called by name is a dead button.
+
+    Modules are strict mode, so reaching one is a `ReferenceError` at *call* time -- the page
+    loads, every other check passes, and the control throws the first time somebody presses it.
+    Nothing else here catches it: the behavioural checks drive the controls they were written for,
+    and a control nobody drives is exactly the one a split leaves behind.
+    """
+    declared = re.compile(
+        r"^(?:export )?(?:async )?(?:function|const|let|var|class) (\w+)", re.M
+    )
+    home: dict[str, str] = {}
+    for path in sorted(UI.glob("*.js")):
+        for name in declared.findall(path.read_text(encoding="utf-8")):
+            home.setdefault(name, path.name)
+
+    reached = []
+    for path in sorted(UI.glob("*.js")):
+        source = path.read_text(encoding="utf-8")
+        brought = {
+            name.strip()
+            for head in re.findall(r'import \{([^}]*)\} from "[^"]+";', source)
+            for name in head.replace("\n", " ").split(",")
+            if name.strip()
+        }
+        mine = set(
+            re.findall(
+                r"^\s*(?:export )?(?:async )?(?:function|const|let|var) (\w+)",
+                source,
+                re.M,
+            )
+        )
+        body = re.sub(r'import \{[^}]*\} from "[^"]+";', "", source)
+        for name, wrote in home.items():
+            if wrote == path.name or name in brought or name in mine:
+                continue
+            if re.search(rf"(?<![\w$.]){re.escape(name)}\s*\(", body):
+                reached.append(f"{path.name} calls {name}(), which {wrote} declares")
+
+    assert not reached, "\n".join(reached)
+
+
 def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
     """Three columns: which check, which model answers it, and what it said.
 

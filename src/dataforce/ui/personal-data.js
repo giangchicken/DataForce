@@ -1,8 +1,9 @@
 // adapter · card 1: the values the reviewer keeps, the ones they add, and the copy that ships.
-// Owns panel-data, span-table, span-note, keep-table, auto, scan-raw, review-text, text-which,
-// data-verdict, data-refusal.
+// Owns panel-data, span-table, span-add, span-check, span-note, keep-table, auto, scan-raw,
+// review-text, text-which, data-verdict, data-refusal.
 
 import { asking, cannotAsk, mark } from "./checks.js";
+import { saidLanguage } from "./conversation.js";
 import { held, ticked } from "./held.js";
 import { $, chars, esc, same, say, sayVerdict, sliced, wordFor } from "./screen.js";
 
@@ -10,7 +11,7 @@ export async function detect() {
   if (!held.sample) return cannotAsk(2, "no sample");
   if (!ticked.verifier) return cannotAsk(2, "tick a verifier first");
   const answer = await asking(2, {
-    ...held.sample, language: $("language").value, verifier_model: ticked.verifier
+    ...held.sample, language: saidLanguage(), verifier_model: ticked.verifier
   }, "/data-quality/personal-data");
   if (!answer.ok) return false;
   held.detected = answer.data;
@@ -90,9 +91,9 @@ export function checkSpans() {
   const edited = !broke.length && !same(comparable(rows), comparable(held.detected.spans));
   if (!broke.length) {
     held.rows = rows.map(({ i, value, ...span }) => span);
-    if (edited) copyLater();
     paintKeepTable();
   }
+  return edited;
 }
 
 export function addSpan() {
@@ -109,8 +110,8 @@ export function addSpan() {
     start: 0, end: 0, personal_data_class: "", placeholder: "", reason: null
   });
   paintSpanTable();
-  copyLater();
   say("span-note", "a row added: type its offsets, then re-read");
+  return true;
 }
 
 const inside = (span, spans) => spans.some(other =>

@@ -1,6 +1,8 @@
 // adapter · which facets a person ticks, and where a value that is not declared comes from.
-// Owns facet-ticks, domain-ticks, domain-new, domain-add, domain-note, guide-facets.
+// Owns facet-ticks, domain-ticks, domain-new, domain-add, domain-note, domain-said,
+// guide-facets.
 
+import { saidLanguage } from "./conversation.js";
 import { DECLARED_FACETS, PICK_SAID, held } from "./held.js";
 import { $, esc, readTick, say, ticksNamed } from "./screen.js";
 
@@ -71,7 +73,7 @@ export function addDomain() {
 }
 
 export function readDeclaredFacets() {
-  const answered = { language: $("language").value };
+  const answered = { language: saidLanguage() };
   for (const facet of DECLARED_FACETS) {
     const boxes = ticksNamed(`f-${facet.name}`);
     if (facet.pick === "yes") answered[facet.name] = boxes[0].checked;
