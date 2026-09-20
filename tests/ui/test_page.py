@@ -301,6 +301,34 @@ def test_every_class_the_page_writes_has_a_rule() -> None:
     )
 
 
+# The four classes no sweep can read off the markup, because their names are values rather than
+# text: a turn's `role` (`class="turn ${who}"`), a queue row's `state` (`class="row ${row.state}"`,
+# whose names are `STATE_SAID`'s keys in `held.js`), and the kind a check's verdict is said in
+# (`checks.js`'s state map). A fifth belongs here only with the same kind of answer beside it.
+FROM_DATA = {"assistant", "busy", "done", "skipped"}
+
+
+def test_every_rule_has_a_user() -> None:
+    """A rule nobody writes is a treatment for a screen that does not exist.
+
+    `h3.way` and `.mono` were both defined and never used -- `git log -S` finds no commit that
+    used either, so they were written against a page that was never built. Nothing else catches
+    it: dead CSS costs nothing at runtime and shows up in no output.
+    """
+    defined: set[str] = set()
+    bare = re.sub(r"/\*.*?\*/", "", STYLE, flags=re.S)
+    for selector in re.findall(r"([^{}]+)\{", bare):
+        if selector.strip().startswith("@"):
+            continue
+        defined |= set(re.findall(r"\.([A-Za-z][\w-]*)", selector))
+
+    written = classes_written(PAGE) | classes_written(SCRIPTS) | FROM_DATA
+
+    assert not defined - written, (
+        f"style.css defines classes nothing in ui/ writes: {sorted(defined - written)}"
+    )
+
+
 def test_no_module_calls_a_name_it_did_not_import() -> None:
     """A function that moved to another module and is still called by name is a dead button.
 

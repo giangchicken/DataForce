@@ -652,6 +652,13 @@ screen of anyone who can open the page.
 - Nothing on this screen asks for `tool_decision_record`, and the sheet says in one line that the
   un-redacted half is not served.
 
+**One thing already broken, found while `T13` was being reviewed.** `index.html` gives that table
+`class="rows"`, and `.rows` is the **sample list** — `display: flex; flex-direction: column`, which
+blockifies a `<table>`. It predates this plan (`86b3d9e`) and it is one name doing two jobs, which
+is what `T13` is about; it is written here rather than fixed there because the fix is read by
+looking at the sheet, and this is the task that opens it. Nothing else on that table depends on the
+class: every rule that styles it is `#dataset-rows`-scoped.
+
 **Source.** `spec.md` Requirement 26; `docs/tool-decision-store/spec.md` § *The page* — *the corpus
 can be read back, and only the redacted half of it*.
 
