@@ -5,9 +5,14 @@ import {
   $, esc, marked, onKey, onReturn, same, say, sayVerdict, show, ticksNamed, wordFor
 } from "./screen.js";
 import {
-  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, STATE_SAID, held
+  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, held
 } from "./held.js";
 import { CHECKS, forgetChecks, mark, paintChecks } from "./checks.js";
+import { labelPasted, queuePasted, runImport, showPasting, tookFile } from "./importing.js";
+import {
+  askList, forgetQueue, nextQueued, oneQueued, paintList, picked, pickedChanged,
+  sayQueueName, skipQueued, waiting, walkThese
+} from "./queue.js";
 import { composeRecord } from "./record.js";
 import {
   addDomain, facetValues, paintDomainTicks, paintFacetTicks, paintGuideFacets,
@@ -23,29 +28,34 @@ import {
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
 
-let left = null;
-
-let walking = [];
-
 async function askNext() {
-  while (walking.length) {
-    const key = walking.shift();
-    const answer = await ask(`/queue/${encodeURIComponent(key)}`, {});
-    if (answer.ok) {
-      left = answer.data;
-      openSample(answer.data.sample, answer.data.key);
-      return paintStrip();
-    }
-    say("submit-note", `a picked sample is gone: ${answer.detail}`, "bad");
-  }
-  const answer = await ask("/queue/next", {});
-  if (!answer.ok) {
-    left = null;
-    return sayNoQueue(answer.detail);
-  }
-  left = answer.data;
+  const { answer, gone } = await nextQueued();
+  for (const said of gone) say("submit-note", said, "bad");
+  if (!answer.ok) return sayNoQueue(answer.detail);
   openSample(answer.data.sample, answer.data.key);
   paintStrip();
+}
+
+async function walkPicked() {
+  if (!walkThese()) return;
+  shutSheet("sheet-list");
+  say("submit-note", "");
+  await askNext();
+}
+
+async function openPicked(key) {
+  shutSheet("sheet-list");
+  const answer = await oneQueued(key);
+  if (!answer.ok) return say("submit-note", answer.detail, "bad");
+  say("submit-note", "");
+  openSample(answer.data.sample, answer.data.key);
+  paintStrip();
+}
+
+async function importLanded() {
+  askStatistics();
+  if (!held.sample) await askNext();
+  else if (waiting()) paintStrip();
 }
 
 function sayNoQueue(said) {
@@ -53,16 +63,11 @@ function sayNoQueue(said) {
   held.sample = null;
   $("turns").innerHTML = `<div class="empty">${esc(said)}</div>`;
   $("catalog").innerHTML = "";
-  $("sample-name").textContent = "";
+  sayQueueName("");
   $("tool-count").textContent = "";
   paintStrip();
   frozen(true);
   showPasting(true);
-}
-
-function showPasting(open) {
-  $("pasting").hidden = !open;
-  if (open) $("paste-text").focus();
 }
 
 function frozen(off) {
@@ -77,7 +82,7 @@ function openSample(sample, key) {
     return sayNoQueue("Nothing is waiting. Import a file, or come back when somebody adds one.");
   }
   frozen(false);
-  $("sample-name").textContent = sample.id ? `#${sample.id}` : "";
+  sayQueueName(sample.id ? `#${sample.id}` : "");
   paintTurns();
   paintCatalog();
   paintCalls($("v-modify").checked);
@@ -246,181 +251,14 @@ async function skip() {
   frozen(true);
   say("submit-note", "skipping…");
   try {
-    const answer = await call(`/queue/${encodeURIComponent(held.key)}/skip`, undefined);
+    const answer = await skipQueued(held.key);
     if (!answer.ok) return say("submit-note", answer.detail, "bad");
     say("submit-note", "");
-    left = answer.data;
     openSample(answer.data.sample, answer.data.key);
     paintStrip();
   } finally {
     frozen(!held.sample);
   }
-}
-
-function readPasted(text) {
-  const said = text.trim();
-  if (!said) return { samples: [], broke: "nothing pasted" };
-  try {
-    const read = JSON.parse(said);
-    if (Array.isArray(read)) {
-      const bad = read.findIndex(one => !one || typeof one !== "object" || Array.isArray(one));
-      if (bad !== -1) return { samples: [], broke: `item ${bad + 1} is not a sample object` };
-      return { samples: read, broke: "" };
-    }
-    if (typeof read === "object" && read !== null) return { samples: [read], broke: "" };
-    return { samples: [], broke: "that is JSON, but not a sample object" };
-  } catch {
-    const lines = said.split("\n").filter(line => line.trim());
-    const samples = [];
-    for (const [at, line] of lines.entries()) {
-      try {
-        const read = JSON.parse(line);
-        if (!read || typeof read !== "object" || Array.isArray(read)) {
-          return { samples: [], broke: `line ${at + 1} is not a sample object` };
-        }
-        samples.push(read);
-      } catch (error) {
-        return { samples: [], broke: `line ${at + 1} is not JSON: ${error.message}` };
-      }
-    }
-    return { samples, broke: "" };
-  }
-}
-
-async function labelPasted() {
-  const { samples, broke } = readPasted($("paste-text").value);
-  if (broke) return say("paste-note", broke, "bad");
-  say("paste-note", "reading…");
-  const answer = await ask("/samples/named", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-ndjson" },
-    body: samples.map(one => JSON.stringify(one)).join("\n")
-  });
-  if (!answer.ok) return say("paste-note", answer.detail, "bad");
-  const named = answer.data.samples || [];
-  if (!named.length) return say("paste-note", "nothing in that was a sample", "bad");
-  say("paste-note", named.length > 1
-    ? `${named.length} read — opening the first; add them to the queue to walk the rest`
-    : "read as one sample");
-  walking = [];
-  left = null;
-  openSample(named[0], null);
-  paintStrip();
-  showPasting(false);
-}
-
-async function queuePasted() {
-  const { samples, broke } = readPasted($("paste-text").value);
-  if (broke) return say("paste-note", broke, "bad");
-  say("paste-note", "adding…");
-  await sendLines(samples.map(one => JSON.stringify(one)).join("\n"), "paste-note");
-}
-
-let chosen = null;
-
-function tookFile(file) {
-  chosen = file;
-  $("drop-said").textContent = file ? `${file.name} — ${file.size} bytes` : "Drop a file here, or choose one";
-  $("import-run").disabled = !file;
-  say("import-note", "");
-}
-
-async function runImport() {
-  if (!chosen) return;
-  $("import-run").disabled = true;
-  say("import-note", "reading…");
-  try {
-    await sendLines(await chosen.text(), "import-note");
-  } finally {
-    $("import-run").disabled = !chosen;
-  }
-}
-
-async function sendLines(text, noteId) {
-  const answer = await ask("/queue/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-ndjson" },
-    body: text
-  });
-  if (!answer.ok) {
-    say(noteId, answer.detail, "bad");
-    return;
-  }
-  say(noteId, "");
-  const came = answer.data;
-  $("import-said").innerHTML = '<div class="figs">'
-    + `<div><b>${esc(came.read)}</b> ${wordFor(came.read, "line", "lines")} read</div>`
-    + `<div><b>${esc(came.imported)}</b> now waiting</div>`
-    + `<div><b>${esc(came.already_held)}</b> already held</div></div>`
-    + (came.unreadable.length
-      ? `<p class="refusal">${esc(came.unreadable.length)} `
-        + `${wordFor(came.unreadable.length, "line was", "lines were")} not a JSON object and `
-        + `${wordFor(came.unreadable.length, "was", "were")} left out — `
-        + `${wordFor(came.unreadable.length, "line", "lines")} ${esc(came.unreadable.join(", "))}. `
-        + "Everything else imported.</p>"
-      : "");
-  askStatistics();
-  if (!held.sample) await askNext();
-  else if (left) paintStrip();
-}
-
-const picked = new Set();
-let listed = [];
-
-async function askList() {
-  const answer = await ask("/queue", {});
-  if (!answer.ok) {
-    listed = [];
-    $("list-rows").innerHTML = `<div class="empty">${esc(answer.detail)}</div>`;
-    return say("list-note", "");
-  }
-  listed = answer.data.samples || [];
-  say("list-note", `${listed.length} of ${answer.data.waiting + answer.data.done + answer.data.skipped}`);
-  paintList();
-}
-
-function paintList() {
-  if (!listed.length) {
-    $("list-rows").innerHTML = '<div class="empty">The queue is empty. Add a file or paste a sample.</div>';
-    return pickedChanged();
-  }
-  $("list-rows").innerHTML = listed.map(row =>
-    `<div class="row ${esc(row.state)}${row.key === held.key ? " here" : ""}">`
-    + `<label class="tick"><input type="checkbox" data-pick="${esc(row.key)}"`
-    + `${picked.has(row.key) ? " checked" : ""}></label>`
-    + `<button class="open" data-open="${esc(row.key)}">`
-    + `<span class="at">${esc(row.arrived)}</span>`
-    + `<span class="said">${esc(row.said) || "<i>no turns</i>"}</span>`
-    + `<span class="was">${esc(STATE_SAID[row.state] || row.state)}</span>`
-    + "</button></div>").join("");
-  pickedChanged();
-}
-
-function pickedChanged() {
-  $("list-walk").disabled = picked.size === 0;
-  $("list-none").disabled = picked.size === 0;
-  $("list-walk").textContent = picked.size
-    ? `Label the ${picked.size} selected`
-    : "Label the selected";
-}
-
-async function walkPicked() {
-  walking = listed.filter(row => picked.has(row.key)).map(row => row.key);
-  if (!walking.length) return;
-  shutSheet("sheet-list");
-  say("submit-note", "");
-  await askNext();
-}
-
-async function openPicked(key) {
-  shutSheet("sheet-list");
-  walking = [];
-  const answer = await ask(`/queue/${encodeURIComponent(key)}`, {});
-  if (!answer.ok) return say("submit-note", answer.detail, "bad");
-  say("submit-note", "");
-  left = answer.data;
-  openSample(answer.data.sample, answer.data.key);
-  paintStrip();
 }
 
 let stored = [];
@@ -559,10 +397,10 @@ function buildMatrixTable(grid) {
 
 function paintStrip() {
   const bits = [];
-  if (left) {
-    bits.push(`<b>${esc(left.waiting)}</b> waiting`);
-    if (left.done) bits.push(`<b>${esc(left.done)}</b> done`);
-    if (left.skipped) bits.push(`<b>${esc(left.skipped)}</b> skipped`);
+  if (waiting()) {
+    bits.push(`<b>${esc(waiting().waiting)}</b> waiting`);
+    if (waiting().done) bits.push(`<b>${esc(waiting().done)}</b> done`);
+    if (waiting().skipped) bits.push(`<b>${esc(waiting().skipped)}</b> skipped`);
   }
   if (held.counted) {
     const totals = Object.values(held.counted.sample_totals || {});
@@ -668,8 +506,14 @@ for (const id of SHEETS) {
 
 $("paste-open").onclick = () => showPasting($("pasting").hidden);
 $("paste-cancel").onclick = () => showPasting(false);
-$("paste-now").onclick = labelPasted;
-$("paste-queue").onclick = queuePasted;
+$("paste-now").onclick = async () => {
+  const one = await labelPasted();
+  if (!one) return;
+  forgetQueue();
+  openSample(one, null);
+  paintStrip();
+};
+$("paste-queue").onclick = async () => { if (await queuePasted()) await importLanded(); };
 $("list-walk").onclick = walkPicked;
 $("list-none").onclick = () => { picked.clear(); paintList(); };
 $("list-rows").onclick = event => {
@@ -685,7 +529,7 @@ $("list-rows").onchange = event => {
 };
 
 $("file").onchange = event => tookFile(event.target.files[0]);
-$("import-run").onclick = runImport;
+$("import-run").onclick = async () => { if (await runImport()) await importLanded(); };
 $("drop").ondragover = event => { event.preventDefault(); $("drop").classList.add("over"); };
 $("drop").ondragleave = () => $("drop").classList.remove("over");
 $("drop").ondrop = event => {
