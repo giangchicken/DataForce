@@ -18,13 +18,6 @@ export const held = {
 
 export const ticked = { verifier: null, jury: [], sft: null };
 
-export const CHECKS = [
-  { step: 2, what: "Personal data", said: "said-2" },
-  { step: 6, what: "Label", said: "said-6" }
-];
-
-export const checked = {};
-
 export const NO_CALL = '<div class="nocall">No call — the turn needs no tool. That is an answer, not a skipped row.</div>';
 
 export const COPY_AFTER = 180;

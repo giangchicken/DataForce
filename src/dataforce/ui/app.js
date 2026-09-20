@@ -2,41 +2,15 @@
 
 import { ask, call } from "./wire.js";
 import {
-  $, chars, esc, json, marked, onKey, onReturn, readTick, same, say, show, sliced, ticksNamed,
+  $, chars, esc, json, marked, onKey, onReturn, readTick, same, say, sayVerdict, show, sliced, ticksNamed,
   wordFor
 } from "./screen.js";
 import {
-  CHECKS, COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, checked, held, ticked
+  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, held, ticked
 } from "./held.js";
+import { CHECKS, asking, cannotAsk, checked, mark, paintChecks } from "./checks.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
-
-function mark(step, state, text) {
-  checked[step] = { state, text };
-  paintChecks();
-}
-
-function paintChecks() {
-  for (const { step, said } of CHECKS) {
-    const at = checked[step] || { state: "", text: "not run" };
-    const kind = { answered: "ok", bad: "bad", unasked: "bad", wait: "busy", edited: "ok" }[at.state] || "";
-    const cell = $(said);
-    cell.className = `said${kind ? ` ${kind}` : ""}`;
-    cell.textContent = at.text || "not run";
-  }
-}
-
-function cannotAsk(step, why) {
-  mark(step, "unasked", why);
-  return false;
-}
-
-async function asking(step, body, path) {
-  mark(step, "wait", "asking…");
-  const answer = await call(path, body);
-  if (!answer.ok) mark(step, "bad", answer.detail);
-  return answer;
-}
 
 let left = null;
 
@@ -134,11 +108,6 @@ function forgetEverything() {
   sayVerdict("checks-verdict", "not run", "");
   sayVerdict("data-verdict", "no scan yet", "");
   sayVerdict("label-verdict", "", "");
-}
-
-function sayVerdict(id, said, kind) {
-  $(id).className = `verdict${kind ? ` ${kind}` : ""}`;
-  $(id).textContent = said;
 }
 
 function hideRefusals() {

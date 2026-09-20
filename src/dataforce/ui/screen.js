@@ -21,6 +21,11 @@ export function say(id, said, kind = "") {
   el.textContent = said;
 }
 
+export function sayVerdict(id, said, kind) {
+  $(id).className = `verdict${kind ? ` ${kind}` : ""}`;
+  $(id).textContent = said;
+}
+
 export const tickBox = (name, value) =>
   `<label class="inline"><input type="${name === "jury" ? "checkbox" : "radio"}" name="${name}"`
   + ` value="${esc(value)}"> ${esc(value)}</label>`;

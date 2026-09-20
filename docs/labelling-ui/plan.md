@@ -247,8 +247,15 @@ write the same list is skipped, because rewriting markup takes the focus out of 
 tick. `checks.js` hides the order the two checks run in and the row each reports on.
 
 **Acceptance criteria.**
-- `checks.js` holds the step numbers and `RUNS`; nothing else names a step number.
+- `checks.js` holds `CHECKS` and the row each check reports on.
 - Reticking survives a redraw of a list whose contents did not change.
+
+**What landed instead, and why.** Two commits, not one. `checks.js` cannot hold `RUNS`: `detect`
+and `review` live in the panels, the panels call `mark` on the copy path and not only at a run's
+start, so the import runs panel → `checks.js` and `RUNS` in `checks.js` would close a cycle.
+`RUNS` and `runChecks` sit in `app.js`, which is the only module allowed to know both panels. The
+step numbers stay named in the panels with it; binding a reporter per check would be machinery
+around a mechanism `T14` and `T20` delete.
 
 **Source.** `layout.md` § *The two acts, and where each one sits*.
 
