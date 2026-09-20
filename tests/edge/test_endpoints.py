@@ -43,6 +43,7 @@ from dataforce.profile.tool_decision.schema import (
     ToolDecisionRecord,
     ToolDecisionSample,
 )
+from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.tables import Base
 
 BASE = "/text2text/tool-decision"
@@ -333,26 +334,6 @@ def test_an_unserved_verifier_is_refused_before_any_model_is_called(
 # ----------------------------------------------------------------- replacing, with no model
 
 
-def test_the_replace_route_takes_the_detect_answer_back_and_asks_no_model(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The same shape in, the copy out, and no name to refuse.
-
-    Its body carries no model at all, which is why nothing on this route can be refused for a name
-    this deployment does not serve -- and why the spans it replaces are the reviewer's rather than
-    the detectors'.
-    """
-    forbid_model_calls(monkeypatch)
-
-    resp = client.post(f"{BASE}/data-quality/personal-data/replace", json=DETECTED)
-
-    assert resp.status_code == 200
-    assert resp.json() == {
-        "redacted_text": REVIEW_TEXT.replace(PHONE, "<PHONE_1>"),
-        "outcome": "redacted",
-    }
-
-
 # ----------------------------------------------------------------- redacting, with no model
 
 
@@ -372,7 +353,7 @@ def test_the_redact_route_replaces_a_handed_back_value_in_every_field(
     )
 
     assert resp.status_code == 200
-    answer = resp.json()
+    answer = resp.json()["sample"]
     assert PHONE not in json.dumps(answer, ensure_ascii=False)
     assert answer["messages"][0]["content"] == str(
         SAMPLE["messages"][0]["content"]
@@ -384,6 +365,40 @@ def test_the_redact_route_replaces_a_handed_back_value_in_every_field(
     assert answer["label"] == SAMPLE["label"]
     assert answer["id"] == SAMPLE["id"]
     assert answer["source"] == SOURCE
+
+
+def test_the_redacted_record_comes_back_with_the_text_it_now_reads_as(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The half a reviewer can actually check, and the one place the label is visibly redacted.
+
+    A record is JSON, and *the phone number in the argument is the same one as in the turn* is a
+    claim nobody reads off JSON. Rendered forward from the redacted record -- the turns, the
+    catalog, then the label -- so the two placeholders stand one screen apart and are the same
+    string, which is what co-reference means here.
+    """
+    forbid_model_calls(monkeypatch)
+    # The number the customer gave, carried into the call that was labelled -- which is the whole
+    # case: a label is copied out of the conversation, so it holds what the conversation held.
+    called = {
+        **SAMPLE,
+        "label": [{"name": "OpenTicket", "arguments": {"ma_khach": PHONE}}],
+    }
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/redact",
+        json={**called, "detected": DETECTED},
+    )
+
+    text = resp.json()["review_text"]
+    assert PHONE not in text
+    # The label is *in* the text, and carries the placeholder the turn carries -- one string, so
+    # a model reading the pair still reads them as the same person's number.
+    said, label = text.split("label: ")
+    assert "<PHONE_1>" in said
+    assert "<PHONE_1>" in label
+    # The same text a scan builds, so the offsets a second scan answers index this one.
+    assert text == build_review_text(resp.json()["sample"])
 
 
 def test_the_spans_handed_back_are_not_a_key_of_the_record(
@@ -401,7 +416,7 @@ def test_the_spans_handed_back_are_not_a_key_of_the_record(
         json={**SAMPLE, "detected": DETECTED},
     )
 
-    assert set(resp.json()) == set(SAMPLE)
+    assert set(resp.json()["sample"]) == set(SAMPLE)
 
 
 def test_no_span_handed_back_is_nothing_replaced(
@@ -423,7 +438,82 @@ def test_no_span_handed_back_is_nothing_replaced(
     )
 
     assert resp.status_code == 200
-    assert resp.json() == dict(SAMPLE)
+    assert resp.json()["sample"] == dict(SAMPLE)
+
+
+# ----------------------------------------------------------------- is the label even callable
+
+
+def test_a_label_the_catalog_cannot_take_is_answered_with_what_is_wrong_with_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The shape a corpus really arrives in**: a tool's name where a call should be.
+
+    The store writes `schema_valid` false for this row at write time, which somebody finds days
+    later reading the corpus. Asked here, the same rule reaches the reviewer while the sample is
+    still in front of them -- and it names the call and says what a call is made of, because
+    *invalid* on its own sends them nowhere.
+    """
+    forbid_model_calls(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/label",
+        json={**SAMPLE, "label": ["OpenTicket"]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "schema_valid": False,
+        "faults": [
+            'call 1 does not read as a tool call: it has to be {"name": ..., "arguments": {...}}'
+        ],
+    }
+
+
+def test_a_label_the_catalog_can_take_is_answered_with_nothing_to_say(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sample's own label, which calls the one tool it was offered and supplies what it asks."""
+    forbid_model_calls(monkeypatch)
+
+    resp = client.post(f"{BASE}/data-quality/label", json=dict(SAMPLE))
+
+    assert resp.status_code == 200
+    assert resp.json() == {"schema_valid": True, "faults": []}
+
+
+def test_a_label_nothing_can_call_is_a_check_and_never_a_refusal(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """200 with a verdict, not 422. What the label ought to be is the reviewer's to say.
+
+    A route that refused would decide it from the far side of a fetch, and a corpus of hard rows
+    is exactly the corpus worth labelling.
+    """
+    forbid_model_calls(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/label",
+        json={**SAMPLE, "label": [{"name": "Refund", "arguments": {}}]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["faults"] == [
+        "call 1 names Refund, which this sample's catalog does not offer"
+    ]
+
+
+def test_a_sample_needing_no_call_is_not_a_fault(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty label is an answer, and both spellings of it reach this route from the page."""
+    forbid_model_calls(monkeypatch)
+
+    empty = client.post(f"{BASE}/data-quality/label", json={**SAMPLE, "label": []})
+    absent = client.post(f"{BASE}/data-quality/label", json={**SAMPLE, "label": None})
+
+    assert empty.json() == {"schema_valid": True, "faults": []}
+    assert absent.json() == {"schema_valid": True, "faults": []}
 
 
 # ----------------------------------------------------------------- the two that report nothing
@@ -846,7 +936,6 @@ POSTED_SCAN: Mapping[str, Any] = {
             "reason": None,
         }
     ],
-    "redacted_text": f"user: {REDACTED_TURN}",
     "outcome": "redacted",
 }
 TICKED: Mapping[str, Any] = {
@@ -929,6 +1018,118 @@ def test_a_finished_record_lands_in_both_tables_and_the_answer_says_so(
         "tool_decision_record": 1,
         "tool_decision_dataset": 1,
     }
+
+
+def test_the_corpus_reads_back_as_a_page_of_the_redacted_table(
+    client: TestClient, attached: None
+) -> None:
+    """The gap between the queue and the statistics: a row somebody wrote, readable.
+
+    **Off `tool_decision_dataset` and off nothing else.** The record table keeps what arrived so a
+    review can be audited; serving it here would put the phone number on the screen of anyone who
+    can open the page, which is what the whole part exists to prevent. So the raw turn must not be
+    in this answer, and the redacted one must.
+    """
+    stored = client.post(f"{BASE}/records", json=build_review())
+
+    resp = client.get(f"{BASE}/records")
+
+    assert resp.status_code == 200
+    listed = resp.json()
+    assert listed["total"] == 1
+    (row,) = listed["samples"]
+    # The key the write answered, not one this test derived: how a name becomes a key is the
+    # store's, and a test that recomputed it would agree with itself rather than with the store.
+    assert row["key"] == stored.json()["id"]
+    assert POSTED_PHONE not in resp.text
+    assert REDACTED_TURN.startswith(row["said"][:10])
+    # The facets it was filed under, which is what the list is read for.
+    assert row["domain"] == TICKED["domain"]
+    assert row["ambiguous"] == TICKED["ambiguous"]
+    assert row["personal_data"] == ["PHONE"]
+    assert row["schema_valid"] is True
+
+
+def test_one_stored_sample_comes_back_whole_and_stats_is_not_read_as_a_key(
+    client: TestClient, attached: None
+) -> None:
+    """The detail behind a row, and the route-order trap `/queue/next` already taught.
+
+    `stats` is this router's own name. Declared after the route that takes a `{key}` it would be
+    parsed as one, and asking for the statistics would answer *no stored sample under stats*.
+    """
+    key = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+
+    resp = client.get(f"{BASE}/records/{key}")
+
+    assert resp.status_code == 200
+    one = resp.json()
+    assert one["input"]["messages"] == [{"role": "user", "content": REDACTED_TURN}]
+    assert one["label"] == OPENED
+    assert one["facets"]["schema_valid"] is True
+    assert POSTED_PHONE not in resp.text
+    assert client.get(f"{BASE}/records/stats").status_code == 200
+
+
+def test_a_label_naming_a_tool_without_calling_it_reads_back_as_one_nothing_validated(
+    client: TestClient, attached: None
+) -> None:
+    """**The row a person opens this list to find.**
+
+    A corpus line whose label is a bare tool name -- `["VerifyEmail_15d"]`, the argument baked
+    into the name instead of supplied -- calls nothing the catalog offers. It is stored, because
+    nothing about a corpus is refused here, and it is stored *saying so*: no calls, and nothing
+    validated. `0` beside `false` is what tells it from a sample correctly labelled as needing no
+    tool, which is `0` beside `true`.
+    """
+    named_only = build_review(
+        id="s-bare", label=["VerifyEmail_15d"], new_label=["VerifyEmail_15d"]
+    )
+    key = client.post(f"{BASE}/records", json=named_only).json()["id"]
+
+    one = client.get(f"{BASE}/records/{key}").json()
+
+    assert one["label"] == ["VerifyEmail_15d"]
+    assert one["facets"]["number_label_tools"] == 0
+    assert one["facets"]["schema_valid"] is False
+    (row,) = [
+        each
+        for each in client.get(f"{BASE}/records").json()["samples"]
+        if each["key"] == key
+    ]
+    assert row["schema_valid"] is False
+    assert row["number_label_tools"] == 0
+
+
+def test_the_warning_and_the_stored_column_are_one_rule_and_not_two(
+    client: TestClient, attached: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the route warns about and what the row is marked with have to be the same thing.
+
+    Two readings of *callable* would let the page wave a label through and the corpus mark that
+    same label broken -- the failure this check exists to close, arrived at from the other side.
+    """
+    forbid_model_calls(monkeypatch)
+    named_only = build_review(
+        id="s-warned", label=["VerifyEmail_15d"], new_label=["VerifyEmail_15d"]
+    )
+
+    warned = client.post(f"{BASE}/data-quality/label", json=named_only)
+    key = client.post(f"{BASE}/records", json=named_only).json()["id"]
+
+    assert warned.json()["schema_valid"] is False
+    assert warned.json()["faults"][0].startswith("call 1 does not read as a tool call")
+    assert client.get(f"{BASE}/records/{key}").json()["facets"]["schema_valid"] is False
+
+
+def test_a_stored_sample_nobody_holds_is_a_sentence_and_not_an_empty_row(
+    client: TestClient, attached: None
+) -> None:
+    """404 naming the key, on the same terms as the queue's: nothing was written and nothing is."""
+    resp = client.get(f"{BASE}/records/{uuid.uuid4()}")
+
+    assert resp.status_code == 404
+    assert "no stored sample under" in resp.json()["detail"]
 
 
 def test_the_stored_row_carries_what_ships_and_the_facets_it_was_ticked_with(

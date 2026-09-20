@@ -26,13 +26,42 @@ function claims(said, held) {
 process.on("unhandledRejection", error =>
   fails(`a promise was left rejected: ${error && error.stack ? error.stack : error}`));
 
-const SAID = "xin chào 0912345678";
+const PHONE = "0912345678";
+const SAID = `xin chào ${PHONE}`;
+// **The number the customer gave, carried into the call that was labelled.** A label is copied out
+// of the conversation, so it holds what the conversation held -- and a fixture whose label carries
+// nothing personal is a fixture that cannot tell whether the label is redacted at all.
 const ONE = {
   id: "s1",
   messages: [{ role: "user", content: SAID }, { role: "assistant", content: "vâng ạ" }],
   tools: [{ type: "function", function: { name: "Lookup", description: "tra cứu khách hàng",
     parameters: { type: "object", properties: { ma: { type: "string" } } } } }],
-  label: [{ name: "Lookup", arguments: { ma: "KH-1" } }]
+  label: [{ name: "Lookup", arguments: { ma: PHONE } }]
+};
+
+// The one string the scan reads and every offset indexes: the turns, the catalog, then the label.
+// Written out here the way the service writes it, because what the page shows is this and not a
+// route's JSON about it.
+const REVIEW_TEXT = [
+  `user: ${SAID}`,
+  "assistant: vâng ạ",
+  "[Lookup]\ntra cứu khách hàng",
+  `label: [{"name": "Lookup", "arguments": {"ma": "${PHONE}"}}]`
+].join("\n");
+
+const REDACTED_TEXT = REVIEW_TEXT.split(PHONE).join("<PHONE_1>");
+
+// What `/redact` answers: the record with every confirmed value replaced, and that same record
+// rendered again. Both halves, because the record is what a corpus stores and the text is the
+// only thing a person can read the redaction off.
+const REDACTED = {
+  outcome: "redacted",
+  sample: {
+    ...ONE,
+    messages: [{ role: "user", content: "xin chào <PHONE_1>" }, { role: "assistant", content: "vâng ạ" }],
+    label: [{ name: "Lookup", arguments: { ma: "<PHONE_1>" } }]
+  },
+  review_text: REDACTED_TEXT
 };
 const TWO = { id: "s2", messages: [{ role: "user", content: "cảm ơn" }], tools: [], label: [] };
 // **A sample as a corpus really arrives**: `{messages, tools, label}` and no name. Nothing writes
@@ -60,17 +89,64 @@ const ANSWERS = () => ({
   statistics: STATISTICS,
   queue: [ONE, TWO],
   detected: {
-    review_text: SAID,
-    claims: [],
-    spans: [{ id: 1, start: 9, end: 19, personal_data_class: "phone", placeholder: "<PHONE>", reason: null }]
+    review_text: REVIEW_TEXT,
+    claims: [["PHONE", PHONE]],
+    spans: [{ id: 1, start: REVIEW_TEXT.indexOf(PHONE), end: REVIEW_TEXT.indexOf(PHONE) + PHONE.length,
+              personal_data_class: "PHONE", placeholder: "<PHONE_1>", reason: null }]
   },
-  replaced: { review_text: "xin chào <PHONE>", claims: [], spans: [] },
   reviewed: { llm: { label_agreement: 0.75 }, sft: null },
-  redacted: { messages: ONE.messages, tools: ONE.tools, label: ONE.label },
+  redacted: REDACTED,
   imported: { read: 4, imported: 2, already_held: 1, unreadable: [3] }
 });
 
+// Two stored rows: one whose label validates, and one that names a tool without calling it —
+// which is the shape a corpus really arrives in and the reason this list exists.
+const STORED = {
+  total: 2,
+  samples: [
+    { key: "d1", said: "mail anh là <EMAIL_1>", language: "vi", domain: "debt_collection",
+      ambiguous: "LOW", call_trigger: ["condition_met"], personal_data: ["EMAIL"],
+      number_turns: 2, number_label_tools: 1, number_provided_tools: 1, schema_valid: true,
+      modified_time: "2026-09-19T00:00:00" },
+    { key: "d2", said: "anh muốn kiểm tra email", language: "vi", domain: "telesale",
+      ambiguous: "HIGH", call_trigger: ["user_utterance"], personal_data: [],
+      number_turns: 1, number_label_tools: 0, number_provided_tools: 1, schema_valid: false,
+      modified_time: "2026-09-18T00:00:00" }
+  ]
+};
+
+const STORED_ONE = {
+  key: "d2",
+  input: { messages: [{ role: "user", content: "anh muốn kiểm tra email" }], tools: [] },
+  label: ["VerifyEmail_15d"],
+  facets: { schema_valid: false, domain: "telesale" },
+  created_time: "2026-09-18T00:00:00",
+  modified_time: "2026-09-18T00:00:00"
+};
+
+// What the rule answers about a label that names a tool and stops there. The sentence is the
+// service's own, copied here verbatim, because what the page is checked for is passing it through
+// -- a fixture worded like the page's own summary could not tell the two apart.
+const BARE_NAME_FAULT = {
+  schema_valid: false,
+  faults: ['call 1 is the bare name Lookup -- a label says which tool fires *and with what*,'
+    + ' so it has to read {"name": "Lookup", "arguments": {...}}']
+};
+
+// **The label the panel would have written**, carrying the number the customer gave -- which is
+// what makes taking it a real test: the call that lands in the box holds a phone number, and it
+// has to leave in the same placeholder the turn does.
+const CONSENSUS = `[{"name": "Lookup", "arguments": {"ma": "${PHONE}", "kenh": "app"}}]`;
+
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 const paths = page => page.asked.map(one => one.path.split("?")[0]);
+
+// A call that spends something: a model, or a row. `/data-quality/label` is neither -- it is the
+// store's `schema_valid` rule over two fields already in the browser -- so it is the one check
+// the page may ask for without a reviewer having asked for anything.
+const machine = one =>
+  one === "/ai-review" || (one.startsWith("/data-quality") && one !== "/data-quality/label");
 
 // A click and a tick as the page receives them: an event whose target answers `closest`, which is
 // how both handlers find the row that was acted on.
@@ -94,7 +170,9 @@ async function main() {
   claims("the models, the statistics and the queue are asked on load",
     ["/models", "/records/stats", "/queue/next"].every(one => onLoad.includes(one)));
   claims("**no machine step runs on load** — the vote costs a model call and a skipped sample must cost nothing",
-    !onLoad.some(one => one.startsWith("/data-quality") || one === "/ai-review"));
+    !onLoad.some(machine));
+  claims("**the label is checked against its catalog the moment a sample opens** — the warning is about the question the panel is asking, so it cannot arrive after the answer",
+    onLoad.includes("/data-quality/label"));
 
   // ------------------------------------------------------------------ the sample, as itself
   const turns = page.byId.get("turns").innerHTML;
@@ -174,8 +252,8 @@ async function main() {
   for (let n = 0; n < 8; n += 1) await settled();
   const ran = paths(page);
   claims("one button runs both checks, in flow order",
-    JSON.stringify(ran.filter(one => one.startsWith("/data-quality") || one === "/ai-review"))
-    === JSON.stringify(["/data-quality/personal-data", "/data-quality/personal-data/replace",
+    JSON.stringify(ran.filter(machine))
+    === JSON.stringify(["/data-quality/personal-data", "/data-quality/personal-data/redact",
       "/ai-review"]));
   claims("**the duplicate and abnormal scans are off the screen** and nothing asks for them",
     !ran.includes("/data-quality/duplicate") && !ran.includes("/data-quality/abnormal"));
@@ -188,9 +266,16 @@ async function main() {
   claims("the reviewers' verdict reads as agreement with the label",
     page.el("said-6").textContent.includes("75%")
     && page.byId.get("label-verdict").textContent.includes("75%"));
-  claims("the payload each route answered is still reachable",
-    page.byId.get("out-2").textContent.includes("review_text")
-    && page.byId.get("out-5").textContent.includes("PHONE"));
+  claims("**the text is shown as a text** — the sample as one string, not a route's JSON about it",
+    page.el("review-text").textContent === REVIEW_TEXT);
+  claims("**and its line breaks are line breaks**, not `\\n` printed into a payload",
+    page.el("review-text").textContent.split("\n").length === 5
+    && !page.el("review-text").textContent.includes("\\n"));
+  claims("**nothing on the panel prints what the scan keyed or how it decided**",
+    !page.el("review-text").textContent.includes('"spans"')
+    && !page.el("review-text").textContent.includes('"outcome"'));
+  claims("the text on screen is the one the scan read, while the label is still open",
+    page.el("text-which").textContent.includes("scan read"));
   claims("a scan that found something opens its own working unasked",
     page.byId.get("scan-raw").open === true);
   claims("the data panel says how many spans there are to confirm",
@@ -205,20 +290,20 @@ async function main() {
   claims("a step that fails names itself",
     page.byId.get("checks-verdict").textContent.includes("personal data"));
   claims("**a step that fails stops the ones after it** — the later calls are never made",
-    !paths(page).includes("/data-quality/personal-data/replace") && !paths(page).includes("/ai-review"));
+    !paths(page).includes("/data-quality/personal-data/redact") && !paths(page).includes("/ai-review"));
   claims("the refusal is the service's own sentence, not a paraphrase, on the row that was refused",
     page.el("said-2").textContent.includes("the service fell over")
     && page.el("said-6").textContent === "not run");
 
   // A refusal from the *replacement* lands on the scan's row too, and must not write over the
   // scan's payload — which is the thing a reviewer opens to check a verdict they doubt.
-  page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data/replace": { status: 500, detail: "the copier fell over" } } });
+  page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data/redact": { status: 500, detail: "the copier fell over" } } });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("a replacement that fails says so on the scan's row",
     page.el("said-2").textContent.includes("the copier fell over"));
-  claims("**and it does not write over the scan's payload**, which is what a doubted verdict is checked against",
-    page.byId.get("out-2").textContent.includes("review_text"));
+  claims("**and it does not write over the text the scan read**, which is what a doubted verdict is checked against",
+    page.el("review-text").textContent === REVIEW_TEXT);
   claims("and the vote is not spent on a sample whose copy could not be made",
     !paths(page).includes("/ai-review"));
 
@@ -226,7 +311,7 @@ async function main() {
   page = await start();
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  const copies = () => posted(page, "/data-quality/personal-data/replace").length;
+  const copies = () => posted(page, "/data-quality/personal-data/redact").length;
   const first = copies();
   hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
   claims("unticking a span says at once that the copy is being made again",
@@ -236,7 +321,7 @@ async function main() {
   claims("**the copy is made again when a span is unticked** — nothing is asked for",
     copies() === first + 1);
   claims("and the span left out of it is gone from what was sent",
-    JSON.parse(posted(page, "/data-quality/personal-data/replace").at(-1).body).spans.length === 0);
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 0);
   claims("the row then says nothing was left to replace",
     page.el("said-2").textContent.includes("nothing to replace"));
 
@@ -246,24 +331,25 @@ async function main() {
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const made = copies();
-  page.el("span-table").querySelector('[data-f="end"][data-i="0"]').value = "14";
+  const shorter = String(REVIEW_TEXT.indexOf(PHONE) + 5);
+  page.el("span-table").querySelector('[data-f="end"][data-i="0"]').value = shorter;
   page.el("span-table").oninput();
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
   claims("**an offset typed over remakes the copy too**, and over the offset as it now reads",
     copies() === made + 1
-    && JSON.parse(posted(page, "/data-quality/personal-data/replace").at(-1).body).spans[0].end === 14);
+    && JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans[0].end === Number(shorter));
 
   // Two edits close together, the first copy slow. It lands last and is about spans that are no
   // longer on the screen, so the page must not paint it -- a reviewer who untickes a span and
   // then reticks it would otherwise be shown the copy without it and store that.
   page = await start({ ...ANSWERS(),
     replaced: [
-      { review_text: "the run's copy", claims: [], spans: [] },
-      { review_text: "the copy of an edit already undone", claims: [], spans: [] },
-      { review_text: "the copy of what is on the screen", claims: [], spans: [] }
+      { redacted_text: "the run's copy", outcome: "redacted" },
+      { redacted_text: "the copy of an edit already undone", outcome: "reported" },
+      { redacted_text: "the copy of what is on the screen", outcome: "redacted" }
     ],
-    slow: { "/data-quality/personal-data/replace": [0, 400, 0] } });
+    slow: { "/data-quality/personal-data/redact": [0, 400, 0] } });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
@@ -271,10 +357,247 @@ async function main() {
   hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: true });
   await waited(600);
   for (let n = 0; n < 8; n += 1) await settled();
-  claims("**a copy that lands after a newer one is dropped**, not painted over it",
-    page.byId.get("out-5").textContent.includes("what is on the screen"));
+  claims("**a copy that lands after a newer one is dropped**, not read as the answer to what is on the screen",
+    page.el("said-2").textContent.includes("1 value replaced"));
   claims("and the row is not left saying it is still replacing",
     !page.el("said-2").textContent.includes("replacing…"));
+
+  // ------------------------------- the copy that ships, and the moment a reviewer may see it
+  //
+  // **The label is rendered into this text.** So the redacted copy cannot be made before the
+  // label is settled -- it would be a copy of a label about to change -- and the moment it is
+  // settled, the number in the turn and the number in the call have to carry the *same*
+  // placeholder. That co-reference is the whole reason the label goes through the scan: a label
+  // redacted on its own would say `<PHONE_1>` about nobody.
+  page = await start();
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  // Past the debounce, not straight after the run: asserted on the next tick, *nothing has been
+  // shown yet* would be true of a page whose timer simply had not fired.
+  await waited(320);
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**the copy is made as the reviewer ticks** — the scan's own row reports on it",
+    posted(page, "/data-quality/personal-data/redact").length === 1);
+  claims("**but it is not shown while the label is still open**: the scan's text stays up",
+    page.el("review-text").textContent === REVIEW_TEXT
+    && page.el("text-which").textContent.includes("scan read"));
+  claims("and neither verdict is ticked for the reviewer",
+    !page.el("v-correct").checked && !page.el("v-modify").checked);
+  page.el("v-correct").checked = true;
+  await page.el("v-correct").onchange();
+  claims("saying the label is right says at once that the copy is being made",
+    page.el("review-text").textContent.includes("replacing…"));
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**confirming the label is what puts the redacted text on the screen**",
+    page.el("review-text").textContent === REDACTED_TEXT
+    && page.el("text-which").textContent.includes("ships"));
+  const halves = page.el("review-text").textContent.split("label: ");
+  claims("**the label is redacted with the turns**, which is what it being in the text buys",
+    !halves[1].includes(PHONE) && halves[1].includes("<PHONE_1>"));
+  claims("**and in the placeholder the turn carries**, so the two still read as one person's number",
+    halves[0].includes("<PHONE_1>"));
+  claims("the copy is made from the spans the reviewer kept",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 1);
+  // Both of these were found by running the page against a live service, and neither could be
+  // found here before: the page writes a value into markup escaped -- it has to, a corpus that
+  // says `<b>` is a corpus -- and reads it back through a field, which is where a browser
+  // reverses the escaping. A value that makes that round trip has to come out as it went in.
+  claims("**a placeholder goes back as it reads, not as it was escaped into markup**",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.spans[0].placeholder === "<PHONE_1>");
+  claims("**the language the scan is asked in is the one the markup selects**, nobody having picked",
+    JSON.parse(posted(page, "/data-quality/personal-data").at(-1).body).language === "vi");
+
+  // The box says *the record this page will post*. It held nothing until the post had been made,
+  // and the next sample opening then wiped it — so the one thing it promised to show was the one
+  // thing it never showed.
+  claims("**the record the page will post is on the screen before it is posted**",
+    page.byId.get("record").textContent.includes("new_label")
+    && posted(page, "/records").length === 0);
+  const level = page.inputsNamed("f-ambiguous")[0];
+  level.checked = true;
+  page.el("facet-ticks").onchange();
+  claims("and a facet ticked reaches it too, which nothing else on the page does",
+    JSON.parse(page.byId.get("record").textContent).class.ambiguous === level.value);
+
+  // The other half of the same rule: what gets redacted is the label the reviewer wrote.
+  page = await start();
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  page.el("v-modify").checked = true;
+  await page.el("v-modify").onchange();
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
+  await page.el("label-text").oninput();
+  claims("typing in the label takes the shipping copy down with it",
+    page.el("review-text").textContent.includes("replacing…"));
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**the copy is made from the label the reviewer wrote**, not the one that arrived",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label[0].arguments.ma === "KH-9");
+
+  // -------------------------------------------------- a label the catalog cannot take at all
+  // `["VerifyEmail_15d"]` is a tool's name, not a call. The store marks that row
+  // `schema_valid: false` at write time -- which somebody finds days later, reading the corpus --
+  // and the reviewer who ticked *correct* on it was told nothing at all. Same rule, asked while
+  // they are still looking at the sample.
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT });
+  claims("**a label the catalog cannot take is said before the reviewer is asked anything**",
+    !page.el("label-fault").hidden
+    && page.el("label-fault").innerHTML.includes("call 1 is the bare name Lookup"));
+  claims("**and in the service's own words**, rather than the page's summary of them",
+    page.el("label-fault").innerHTML.includes("which tool fires *and with what*"));
+  claims("one broken call is one line, because a label makes more than one",
+    (page.el("label-fault").innerHTML.match(/<li>/g) || []).length === 1);
+  page.inputsNamed("f-domain")[0].checked = true;
+  await page.byId.get("submit").onclick();
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**a warning and not a gate** — what the label ought to be is still the reviewer's to say",
+    posted(page, "/records").length === 1);
+
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT });
+  page.el("v-modify").checked = true;
+  await page.el("v-modify").onchange();
+  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
+  await page.el("label-text").oninput();
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**rewriting the label asks the catalog about the label as it now stands**",
+    JSON.parse(posted(page, "/data-quality/label").at(-1).body).label[0].arguments.ma === "KH-9");
+  page.answers.labelChecked = { schema_valid: true, faults: [] };
+  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-8"}}]';
+  await page.el("label-text").oninput();
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("and a label that now validates takes the warning back down",
+    page.el("label-fault").hidden);
+
+  // A check nobody could make is not a label that passed, and the difference has to be on screen
+  // where somebody is looking for the faults.
+  page = await start({ ...ANSWERS(),
+    refuse: { "/data-quality/label": { status: 422, detail: "the catalog will not read" } } });
+  claims("**a check that could not be made is said**, not read as a label with nothing wrong",
+    !page.el("label-fault").hidden
+    && page.el("label-fault").textContent.includes("the catalog will not read"));
+
+  // -------------------------------------------------- the panel's own answer, into the box
+  // Two models spelled the call out in full, agreed with each other, and the page put it on the
+  // screen as JSON in a disclosure. A reviewer who agreed had to retype it by hand -- which is
+  // how a label two models had written out shipped as a bare name.
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT,
+    reviewed: { llm: { label_agreement: 0, consensus: CONSENSUS }, sft: null } });
+  claims("**nothing is offered before a panel has answered**", page.el("consensus-line").hidden);
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**the panel having answered is what offers its label**", !page.el("consensus-line").hidden);
+  await page.el("take-consensus").onclick();
+  claims("taking it ticks *modify* and opens the editor, so they can see what they took",
+    page.el("v-modify").checked && !page.el("v-correct").checked
+    && !page.el("label-editor").hidden);
+  claims("**the call arrives with its arguments** — which is the whole of what a bare name was missing",
+    (JSON.parse(page.el("label-text").value)[0].arguments || {}).ma === PHONE);
+  claims("and it is the panel's answer verbatim, laid out and not reworded",
+    JSON.stringify(JSON.parse(page.el("label-text").value)) === JSON.stringify(JSON.parse(CONSENSUS)));
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  const took = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
+  const shippedCall = took.label[0].arguments || {};
+  claims("**what ships is then the label the panel wrote**, and not the one that arrived",
+    shippedCall.kenh === "app");
+  claims("and the number that came with it goes to be redacted like any other",
+    shippedCall.ma === PHONE);
+
+  // -------------------------------------------------- the label block says the label it means
+  // It was painted once, when the sample opened, and never again — so a reviewer who took the
+  // panel's answer went on reading the bare name that arrived, above a tick that would confirm
+  // something else. Whichever label is drawn, the line above it says which one it is.
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT,
+    reviewed: { llm: { label_agreement: 0, consensus: CONSENSUS }, sft: null } });
+  claims("on opening, the block says it is drawing the label that arrived",
+    page.el("calls-which").textContent.includes("arrived")
+    && page.el("calls").innerHTML.includes("Lookup"));
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 10; n += 1) await settled();
+  await page.el("take-consensus").onclick();
+  claims("**taking the panel's answer redraws the label above the tick**, arguments and all",
+    page.el("calls").innerHTML.includes("kenh")
+    && page.el("calls-which").textContent.includes("rewriting"));
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**and once the copy exists the block draws the label that ships**, which is what is stored",
+    page.el("calls-which").textContent.includes("ships")
+    && page.el("calls").innerHTML.includes("&lt;PHONE_1&gt;"));
+  page.el("label-text").value = "[{not json";
+  await page.el("label-text").oninput();
+  claims("a box holding something that is not a label says so, rather than drawing `(unnamed)`",
+    page.el("calls").innerHTML.includes("Not JSON yet")
+    && !page.el("calls").innerHTML.includes("(unnamed)"));
+
+  // **The label, and nothing else.** The turns are what a customer said and the catalog is what
+  // the assistant was offered; a page that let either be retyped is a page that can make the
+  // sample agree with the label instead of the other way round.
+  let offered = true;
+  for (const id of ["messages-text", "tools-text"]) {
+    try { page.el(id); } catch { offered = false; }
+  }
+  claims("**nothing on the page can retype the turns or the catalog**",
+    offered === false);
+  page = await start();
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  page.el("v-modify").checked = true;
+  await page.el("v-modify").onchange();
+  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
+  await page.el("label-text").oninput();
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  const shipping = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
+  claims("so what ships carries the turns as they arrived, whatever was done to the label",
+    same(shipping.messages, ONE.messages) && same(shipping.tools, ONE.tools)
+    && shipping.label[0].arguments.ma === "KH-9");
+
+  // A span moved after the label was settled. What is on screen is then a copy of spans nobody is
+  // ticking any more, which is the same staleness the replacement has and gets the same answer.
+  page = await start();
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  page.el("v-correct").checked = true;
+  await page.el("v-correct").onchange();
+  await waited(400);
+  for (let n = 0; n < 10; n += 1) await settled();
+  const shipped = () => posted(page, "/data-quality/personal-data/redact").length;
+  const madeOnce = shipped();
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
+  claims("unticking a span takes the shipping copy down with it too",
+    page.el("review-text").textContent.includes("replacing…"));
+  await waited(600);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**and it is made again over what is left**, with nothing to press",
+    shipped() === madeOnce + 1
+    && JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 0);
+
+  // Two edits close together with the first copy slow, the same hazard the replacement has: it
+  // lands last and is about a label the reviewer has already retyped. Painted, it would put the
+  // *old* label's text on the screen and leave them reading a redaction of something they undid.
+  page = await start({ ...ANSWERS(),
+    redacted: [
+      { sample: REDACTED.sample, review_text: "the copy of a label already retyped" },
+      { sample: REDACTED.sample, review_text: "the copy of what is on the screen" }
+    ],
+    slow: { "/data-quality/personal-data/redact": [400, 0] } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  page.el("v-modify").checked = true;
+  await page.el("v-modify").onchange();
+  await waited(240);
+  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
+  await page.el("label-text").oninput();
+  await waited(800);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**a shipping copy that lands after a newer one is dropped**, not painted over it",
+    page.el("review-text").textContent === "the copy of what is on the screen");
 
   // ------------------------------------------------------------------ submitting
   page = await start();
@@ -289,6 +612,9 @@ async function main() {
   const sent = JSON.parse(records[0].body);
   claims("the record carries what arrived and what ships",
     sent.messages !== undefined && sent.new_messages !== undefined);
+  claims("**what ships is the record the route answered**, not the envelope it came in",
+    JSON.stringify(sent.new_label) === JSON.stringify(REDACTED.sample.label)
+    && JSON.stringify(sent.new_messages) === JSON.stringify(REDACTED.sample.messages));
   claims("the facets a person ticked travel with the record",
     sent.class.domain === page.inputsNamed("f-domain")[0].value);
   claims("the language declared on the pane rides along", sent.class.language === "en");
@@ -348,6 +674,45 @@ async function main() {
   claims("skip marks that row, by key", posted(page, "/queue/s1/skip").length === 1);
   claims("skip writes no record", posted(page, "/records").length === 0);
   claims("skip opens the next sample", page.byId.get("turns").innerHTML.includes("cảm ơn"));
+
+  // ------------------------------------------------- the corpus, read back off the store
+  //
+  // The one thing this page could not do: the queue says what is *waiting* and the statistics say
+  // what the whole comes to, and a row somebody wrote was readable nowhere between them. A sample
+  // pasted straight in never had a queue row at all, so it went invisible the moment it stored.
+  page = await start({ ...ANSWERS(), dataset: STORED, datasetOne: STORED_ONE });
+  await page.byId.get("open-dataset").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("opening the corpus asks the store for a page of it",
+    posted(page, "/records").some(one => one.method === "GET"));
+  const drawn = page.el("dataset-rows").querySelector("tbody").innerHTML;
+  claims("every stored row is a line, with the facets it was filed under",
+    drawn.includes("debt_collection") && drawn.includes("telesale") && drawn.includes("HIGH"));
+  claims("**the redacted copy is what is shown** — the row reads as it ships",
+    drawn.includes("&lt;EMAIL_1&gt;"));
+  claims("a row nothing could validate says so in its own column",
+    drawn.includes(">no<") && drawn.includes(">yes<"));
+  claims("the sheet says how much the corpus holds",
+    page.byId.get("dataset-note").textContent.includes("2"));
+
+  page.el("dataset-bad").checked = true;
+  page.el("dataset-bad").onchange();
+  const only = page.el("dataset-rows").querySelector("tbody").innerHTML;
+  claims("**the filter leaves only the rows worth going back to**",
+    only.includes("telesale") && !only.includes("debt_collection"));
+
+  hit(page.el("dataset-rows").onclick, "[data-stored]", { stored: "d2" });
+  for (let n = 0; n < 8; n += 1) await settled();
+  const one = page.byId.get("dataset-one").innerHTML;
+  // Read off the drawing and not off the absence of a quote: markup the page writes is escaped,
+  // so a JSON dump would come out as `&quot;role&quot;` and slip past a check looking for `"role":`.
+  claims("opening a row draws its conversation as turns, not as its JSON",
+    one.includes("kiểm tra email") && one.includes('class="turn')
+    && !one.includes("&quot;role&quot;"));
+  claims("**a bare-name label is drawn as the call it claims to be**",
+    one.includes("VerifyEmail_15d") && !one.includes("(unnamed)"));
+  claims("**and the row says why nothing could validate it**",
+    one.includes("never offered") || one.includes("requires"));
 
   // ------------------------------------------------------------------ the keyboard
   page = await start();

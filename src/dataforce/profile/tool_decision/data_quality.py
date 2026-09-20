@@ -1,15 +1,15 @@
 """logic · the data-quality checks over a tool-calling sample.
 
-Personal data is the one with a body to write, and it is two calls. `detect` is the frame of
-reference every offset indexes, two detectors unioned, and the modality's confirmation over the
-spans they earn. `replace_spans_with_placeholders` is the second, over the spans a human handed
-back, and `decide_replacement_outcome` says how far it got. `replace_node` is the third: the same
-replacement over the record's own fields rather than over the review text, which is where the
-record's `new_` keys come from. What this task reads is the turns
-*and* the catalog, because an argument value in a tool call is where a phone number sits.
+Personal data is the one with a body to write, and it is two calls with a human between them.
+`detect` is the frame of reference every offset indexes, two detectors unioned, and the modality's
+confirmation over the spans they earn. `replace_node` is the second, over the spans that human
+handed back: the replacement runs over the record's own fields rather than over the review text,
+because an offset indexes the text and `messages`, `tools` and `label` are other strings -- which
+is where the record's `new_` keys come from. `decide_replacement_outcome` says how far it got.
+What this task reads is `build_review_text`: the turns, the catalog *and* the label, because an
+argument value in a tool call is where a phone number sits and a label is a tool call.
 """
 
-import json
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -37,7 +37,7 @@ from dataforce.modalities.text2text.data_quality.schema import (
     VerifierModelConfig,
 )
 
-from .utils import convert_tools_to_text, list_conversation_turns
+from .utils import build_review_text
 
 # The deployment's, on the same terms as `config/model/`: read from the working directory and named
 # for the method that sends it.
@@ -154,17 +154,6 @@ def replace_node(node: Any, placeholders: Mapping[str, str]) -> Any:
     return node
 
 
-def replace_spans_with_placeholders(
-    text: str, spans: Sequence[PersonalDataSpan]
-) -> str | None:
-    """`text` copied with every span's value replaced by its placeholder, longest value first.
-
-    `None` where there is nothing to replace, which is what `reported` means.
-    """
-    placeholders = read_span_values(text, spans)
-    return replace_text(text, placeholders) if placeholders else None
-
-
 def order_claims_by_class(
     text: str,
     claimed: Mapping[str, str],
@@ -195,20 +184,22 @@ def decide_replacement_outcome(
     text: str,
     claims: Sequence[tuple[str, str]],
     spans: Sequence[PersonalDataSpan],
-    redacted: str | None,
+    redacted: str,
 ) -> PersonalDataReplacementOutcome:
     """How far replacing got, read off the copy rather than off what was asked for.
 
     `reported`: nothing was claimed, so there was nothing to rewrite. `redacted`: every claimed
     value resolved -- the copy holds it nowhere, and every span kept over it reads as its
     placeholder. `withheld`: everything between, including a reviewer who handed back no span at
-    all, because a rewrite asked for and not done is not a clean record.
+    all, because a rewrite asked for and not done is not a clean record. That last case needs no
+    branch of its own: a claim nobody handed a span for is still in the copy, so it never resolves.
 
-    Read off the copy because two values overlapping *in part* keep both spans,
-    and then replacement by value has the second looking for a string the first already cut: its
-    placeholder never lands and the copy holds a fragment of a name. Which span should win is
-    undecided; that this is not those values redacted is not. A claim with no span at all is
-    resolved by the longer value it sat inside.
+    `redacted` is the *record's* copy rendered back as one text, so this measures what ships and
+    not a second rewrite of the scan's own text. Read off the copy because two values overlapping
+    *in part* keep both spans, and then replacement by value has the second looking for a string
+    the first already cut: its placeholder never lands and the copy holds a fragment of a name.
+    Which span should win is undecided; that this is not those values redacted is not. A claim
+    with no span at all is resolved by the longer value it sat inside.
 
     The map is `read_span_values`' own, so a span nothing could be replaced through -- no value at
     those offsets, or no placeholder to put there -- is not in it, and the value it named has to
@@ -216,8 +207,6 @@ def decide_replacement_outcome(
     """
     if not claims:
         return "reported"
-    if redacted is None:
-        return "withheld"
     placeholders = read_span_values(text, spans)
     resolved = [
         value
@@ -306,7 +295,7 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         Spans first, then the confirmation, because what it is asked about is a span. Nothing is
         replaced here: what comes back is what a reviewer is shown.
         """
-        text = self.build_review_text(checking_input.sample)
+        text = build_review_text(checking_input.sample)
         language = checking_input.language
         prompt = self.build_pii_llm_detect_prompt(text, language)
         claimed = {
@@ -318,17 +307,6 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
             checking_input, text, find_and_number_spans(text, claims)
         )
         return PersonalDataDetected(review_text=text, claims=claims, spans=spans)
-
-    def build_review_text(self, sample: Mapping[str, Any]) -> str:
-        """The one string every span's offsets index: the turns, the catalog, then the label.
-
-        The catalog is in it because an argument value in a tool call is where personal data sits,
-        and the label because a label is a tool call.
-        """
-        turns = list_conversation_turns(sample)
-        catalog = convert_tools_to_text(sample.get("tools") or ())
-        label = json.dumps(sample.get("label"), ensure_ascii=False)
-        return "\n".join([*turns, *([catalog] if catalog else []), f"label: {label}"])
 
     def build_pii_llm_detect_prompt(self, text: str, language: str) -> str:
         """`pii_llm_detect.txt` with its two slots filled: the language, and the text to read.

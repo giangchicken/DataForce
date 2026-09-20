@@ -188,22 +188,36 @@ class PersonalDataDetected(Frozen):
     )
 
 
-class PersonalDataReplaced(Frozen):
-    """What replacing came to: the copy that ships, and how far it got."""
+class PersonalDataRedacted(Frozen):
+    """What redacting came to: the record, the text it now reads as, and how far it got.
 
-    redacted_text: str | None = Field(
-        default=None,
+    The second personal-data answer and the last one. It replaces by value over every field the
+    record carries, which is the only reach that gets a confirmed value out of `messages`, out of
+    a tool's description and out of the label at once -- an offset indexes `review_text`, and
+    those are other strings.
+
+    Three things about one copy, because they answer three questions: `sample` is what a corpus
+    stores, `review_text` is that same copy rendered again for somebody to *read* -- the only way
+    to see that the label was redacted too -- and `outcome` is whether it worked.
+    """
+
+    sample: Mapping[str, Any] = Field(
+        ...,
+        description="Every field of the record, with each confirmed value replaced in all of them.",
+    )
+    review_text: str = Field(
+        ...,
         description=(
-            "`review_text` copied, with every span's value replaced by its placeholder. "
-            "None where there was nothing to replace, which is what `reported` means."
+            "The redacted record rendered the way a scan renders one, so what a reviewer reads "
+            "and what a corpus stores are the same copy and not two."
         ),
     )
     outcome: PersonalDataReplacementOutcome = Field(
         ...,
         description=(
-            "`redacted`: every span it was given reads as its placeholder in the copy. "
-            "`reported`: nothing to replace, because no span was handed over. `withheld`: "
-            "replaced as far as the spans allowed, and held out of a release because "
-            "something did not resolve."
+            "`redacted`: every claimed value is gone from the copy and reads as its placeholder. "
+            "`reported`: nothing was claimed, so there was nothing to rewrite. `withheld`: "
+            "rewritten as far as the spans allowed, and held out of a release because something "
+            "did not resolve -- a reviewer who handed back no span included."
         ),
     )

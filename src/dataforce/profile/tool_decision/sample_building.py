@@ -59,12 +59,14 @@ from dataforce.tables import Base
 
 from .label_statistics import (
     list_called_tools,
+    list_label_faults,
     list_offered_tools,
-    validate_label_calls,
 )
 from .schema import (
     QueuedSampleRow,
     QueueState,
+    StoredSample,
+    StoredSampleRow,
     ToolDecisionDataStamp,
     ToolDecisionQueuedSample,
     ToolDecisionRecord,
@@ -97,7 +99,10 @@ class ToolDecisionSampleBuilding(DatasetSampleBuilding):
             "number_turns": len(shipped.messages),
             "number_label_tools": len(list_called_tools(shipped.label)),
             "number_provided_tools": len(list_offered_tools([shipped.tools])),
-            "schema_valid": validate_label_calls(shipped.label, shipped.tools),
+            # Whether the check found nothing to say, and never a second reading of the rule:
+            # the page shows the same sentences before the reviewer ticks *correct*, so a row
+            # marked invalid here is a row they were warned about there.
+            "schema_valid": not list_label_faults(shipped.label, shipped.tools),
         }
 
 
@@ -368,6 +373,62 @@ def mark_queued_sample(session: Session, key: uuid.UUID, state: QueueState) -> b
         return False
     found.state = state
     return True
+
+
+def select_stored_samples(
+    session: Session, limit: int, offset: int
+) -> tuple[StoredSampleRow, ...]:
+    """A page of the stored corpus, newest write first.
+
+    Newest first because the reason to open this is usually the row somebody just wrote -- a
+    corpus walked in arrival order is what the queue already is.
+
+    The columns and the opening turn, never the whole sample: this is read to find rows worth
+    going back to, and a page carrying three hundred conversations is a page nobody renders.
+    """
+    found = session.execute(
+        select(
+            ToolDecisionSample.id,
+            ToolDecisionSample.input,
+            ToolDecisionSample.modified_time,
+            *(
+                getattr(ToolDecisionSample, facet)
+                for facet in ToolDecisionSample.FACETS
+            ),
+        )
+        .order_by(ToolDecisionSample.modified_time.desc(), ToolDecisionSample.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return tuple(
+        StoredSampleRow(
+            key=str(key),
+            said=read_opening_turn(one_input),
+            modified_time=modified_time,
+            **dict(zip(ToolDecisionSample.FACETS, facets, strict=True)),
+        )
+        for key, one_input, modified_time, *facets in found
+    )
+
+
+def select_stored_sample(session: Session, key: uuid.UUID) -> StoredSample | None:
+    """One stored row whole, or `None` where the corpus holds no such row.
+
+    The facets come back as one map keyed by the column's own name rather than as fields of their
+    own, because which facets exist is this profile's and a reader that named them would have to
+    be edited every time one is added.
+    """
+    found = session.get(ToolDecisionSample, key)
+    if found is None:
+        return None
+    return StoredSample(
+        key=str(found.id),
+        input=dict(found.input),
+        label=tuple(found.label) if found.label is not None else None,
+        facets={facet: getattr(found, facet) for facet in ToolDecisionSample.FACETS},
+        created_time=found.created_time,
+        modified_time=found.modified_time,
+    )
 
 
 def count_total_samples(session: Session) -> Mapping[str, int]:

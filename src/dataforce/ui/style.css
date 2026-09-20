@@ -337,6 +337,40 @@ pre:empty { display: none; }
 pre.bad { border-color: #fecdca; background: var(--warn-soft); color: var(--warn); }
 pre.ok { border-color: #abefc6; background: var(--ok-soft); }
 
+/* The one text on this page meant to be *read* rather than inspected. Every other `pre` holds a
+   route's JSON, which is a thing you scan for a key; this holds a conversation, so it is set in
+   the page's own face at the size the rest of the prose is, and it keeps the line breaks the
+   service wrote into it rather than showing them as `\n`. Taller, because a reviewer reads to
+   the end of it. */
+/* A stored row opened out of the corpus. The conversation is drawn by the same code the sample
+   pane uses, so it takes the same styles; this only gives it a box and a ceiling, because a sheet
+   that grows with the sample scrolls the table off the top. */
+.storedone { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.storedone .turns { max-height: 320px; overflow: auto; }
+#dataset-rows td { vertical-align: top; }
+#dataset-rows td.ok { color: var(--ok); }
+#dataset-rows td.bad { color: var(--warn); font-weight: 600; }
+#dataset-rows .open {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+  font: inherit;
+}
+#dataset-rows .open:hover { text-decoration: underline; }
+#dataset-rows tr.dropped { background: var(--warn-soft); }
+
+.reviewtext {
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: #fff;
+  max-height: 420px;
+}
+
 /* ------------------------------------------------------------------------------- the two sheets */
 
 .sheet {
@@ -520,3 +554,22 @@ table.counts td:last-child { text-align: right; font-variant-numeric: tabular-nu
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------------------------------ a label that will not call */
+
+/* The same warm red a refusal gets, because it is the same kind of news: something on this screen
+   will not do what it says. A list and not a sentence -- a label makes more than one call, and
+   which one is broken is the first thing somebody fixing it needs. */
+.faults {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fecdca;
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+}
+.faults ul { margin: 6px 0 0; padding-left: 18px; }
+.faults li { margin-top: 4px; overflow-wrap: anywhere; }
+.faults code { font-size: 12.5px; }

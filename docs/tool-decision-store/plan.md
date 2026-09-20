@@ -401,6 +401,13 @@ read inside a label and a catalog. This is the layer allowed to name them.
 call names a tool the sample was offered and supplies that tool's required parameters. A label
 calling a tool the sample never offered is a broken row, not a hard example.
 
+**Decided since.** It is `list_label_faults`, and it answers a tuple of sentences rather than a
+boolean — `schema_valid` is `not list_label_faults(...)`. The check gained a second reader in T27b:
+the labelling page shows a reviewer what is wrong with the label *before* they say it is correct,
+and *this label is invalid* sends them back to read the catalog while *call 1 leaves out `email`*
+sends them to the one word they have to type. One function rather than two readings of one rule,
+so the column and the warning cannot disagree about the same label.
+
 **Acceptance criteria.**
 - A call naming a tool absent from the catalog is invalid.
 - A call missing a required parameter is invalid; a call missing an optional one is valid.
@@ -986,7 +993,8 @@ machine answer is a verdict with the payload behind a disclosure.
 - One button runs them in order, says which it is on, and a step that fails names itself and
   stops the ones after it.
 - Nothing calls a route on load.
-- Each answer shows as one line, with the route's own JSON reachable behind a disclosure.
+- Each answer shows as one line. The reviewers' own JSON stays reachable behind a disclosure;
+  the personal-data routes' does not, because what a reviewer needs from those is the text.
 - A scan that found something opens its panel without being asked.
 
 **Decided since.** They run in flow order and a failure stops the rest, because the ones after a
@@ -1009,7 +1017,120 @@ verifier first*, and there was no tick box on the screen to fix it with. The stu
 that, because a stub answers whatever shape the page was written against; the check that does is
 `tests/ui/reading.js`, handed the real route's own answer.
 
-**Source.** § *The page* — one button runs both checks.
+**The payload came off the data panel and the text went on.** What was there was two `<pre>`
+blocks of route JSON, so a reviewer's own conversation reached them escaped, keyed and with
+`"outcome": "withheld"` hanging off the end of it — a conversation they had to decode before they
+could judge it. What is there now is the review text: one string, its own line breaks, nothing
+about how the scan keyed or decided.
+
+**And the redacted copy is gated on the label.** The label is rendered into that text, so a copy
+made while the reviewer is still deciding is a copy of a label about to change. *Correct* and
+*modify* stopped being pre-ticked for that reason — *correct* is a thing a person says — and
+saying either is what swaps the text for the redacted one. It is built from the record **as it
+will ship**, so a rewritten label is redacted as rewritten, which needed `/redact` to answer the
+text beside the record: `PersonalDataRedacted`, not a bare dict. Nothing goes the other way —
+`build_review_text` moved to `utils.py` as a function precisely so the forward direction has one
+definition and the backward one stays unwritten.
+
+**And `/replace` went with it.** Two routes were doing one rewrite with different reach: `replace`
+copied `review_text` alone and `redact` copied every field of the record. Nothing read `replace`'s
+answer — `redacted_text` appears in no logic and no page, and `outcome` was stored in the record
+and never read back, because the store's precondition re-derives the answer from the confirmed
+spans rather than trusting a record's word about itself. So the outcome moved onto `redact`, where
+it is measured over what ships rather than over a second rewrite of the scan's own text, and the
+page went from two calls per tick to one. `personal_data` in a record therefore no longer carries
+`redacted_text`; no migration, because that key is validated when a record is posted and never
+again.
+
+**Source.** § *The page* — one button runs both checks; the reviewer's own two answers.
+
+### T27a · The corpus, read back
+
+**Goal.** A person can open what is already stored and find the rows worth going back to.
+
+**Context.** § *The page* — Requirement 53. The queue answers what is waiting and the statistics
+answer what the whole comes to; a row somebody wrote was readable nowhere between them, and a
+sample pasted straight into the pane never had a queue row at all.
+
+**Acceptance criteria.**
+- A sheet lists `tool_decision_dataset` a page at a time, with the facets each row was filed
+  under and the opening turn of the **redacted** copy.
+- Opening a row draws its conversation and its label as calls, not as JSON.
+- The list can be narrowed to rows where `schema_valid` is false, and such a row says why.
+- No route serves `tool_decision_record`.
+
+**Decided since.** **The redacted table and only that one.** The record table keeps what arrived,
+which is what makes a review auditable — and a browser over it would hand a person's phone number
+to anyone who can open the page. So `GET /records` reads `tool_decision_dataset`, and whoever
+needs the original goes to the database with a reason to.
+
+`schema_valid` earns the column because it is the one figure that says a row needs going back to,
+and the pair `(number_label_tools = 0, schema_valid = false)` is exactly the corpus line whose
+label is a bare tool name. **This is where that shows up**, which is why the list came before a
+warning at labelling time: a warning helps the next four hundred rows, and this finds the ones
+already written.
+
+**Source.** § *The page* — Requirement 53.
+
+### T27b · The label is checked before it is confirmed
+
+**Goal.** A reviewer is told the label names a tool without calling it *before* they tick
+*correct*, and can take the panel's answer instead of retyping it.
+
+**Context.** T27a finds the rows already written; this is the other half. A corpus line whose
+label is `["VerifyEmail_15d"]` — the pair `(number_label_tools = 0, schema_valid = false)` — was
+drawn on the label panel as a bare name with nothing said about it, and the reviewer ticking
+*correct* stored it. The jury's answer, spelling the call out in full, was on the same screen as
+JSON in a disclosure.
+
+**Approach.** `POST .../data-quality/label` answers `{schema_valid, faults}` off T8's own function.
+The page asks it when a sample opens and again on the same pause a rewritten label already takes,
+and shows the sentences above the two verdicts. A button beside them puts the panel's consensus in
+the label box verbatim.
+
+**Acceptance criteria.**
+- A label the catalog cannot take is said before either verdict is ticked, in the service's own
+  sentences, one line per broken call.
+- Rewriting the label re-asks about the label as it now stands; one that validates takes the
+  warning down.
+- A check that could not be made is said as that, not read as a label with nothing wrong.
+- It warns and never blocks: the reviewer may still tick *correct* and post.
+- The panel's answer is offered only once a panel has answered, and taking it ticks *modify*,
+  opens the editor and fills the box with the call as the juror wrote it.
+- What ships is then that label, and a value inside its arguments is redacted in the same
+  placeholder the turn carries.
+- The label block above the two verdicts draws the label it is asking about — what arrived, what
+  is being rewritten, or what ships — and says which. It is never a version of the label nobody
+  is about to confirm.
+- The editor offers the label and nothing else.
+
+**Decided since.** **The block was painted once and never again**, which is the half of this that
+was actually on screen: a reviewer who took the panel's answer went on reading the bare name that
+arrived, above a tick that would confirm the call they had just taken. So it redraws from whatever
+label is current, and the line above it says which one that is — there being three is exactly why
+it has to say.
+
+**And the editor lost two of its three boxes.** `messages` and `tools` were editable because the
+record has a `new_` key for each; but the turns are what a customer said and the catalog is what
+the assistant was offered, and a page that lets either be retyped is a page that can make the
+sample agree with the label instead of the other way round. They still ship under `new_`, because
+redaction rewrites them — a value coming out is not a reviewer rewriting one — so nothing about
+the record changed. The cost, stated: a corpus line with a genuinely broken conversation can no
+longer be fixed in the page, and the way to fix one is to fix the corpus.
+
+**A warning and not a gate.** What the label ought to be is the reviewer's to
+say, and a corpus of hard rows is the corpus worth labelling — a route that refused would decide
+it for them from the far side of a fetch. The cost, stated: a reviewer may still tick *correct* on
+a label the catalog cannot take, and T27a's list is where that row turns up.
+
+The consensus goes in **verbatim**, laid out only if it parses. It is the text a juror wrote, and
+the page re-spelling a call would be the page deciding what a call looks like.
+
+**Source.** § *The facets* — `schema_valid`; `docs/tool-decision-pipeline/spec.md` § *Requirements*
+— the label panel says what is wrong before it asks whether the label is right.
+
+**Verify.** `node tests/ui/page.js`; `uv run pytest tests/edge/test_endpoints.py
+tests/profile/test_label_statistics.py -q`.
 
 ### T28 · The two decisions, and the action bar
 
@@ -1020,6 +1141,7 @@ panels above one fixed bar.
 `Enter` submits while focus is outside a field; a refusal lands on the panel that owns it.
 
 **Acceptance criteria.**
+- Neither label verdict is ticked on opening a sample; saying either shows the copy that ships.
 - Submit posts the record and opens the next sample in one motion.
 - Skip marks the row skipped and opens the next sample.
 - A refusal — scan not run, a confirmed value still shipping, a declared facet not ticked — is
@@ -1119,4 +1241,5 @@ preview; clicking opens one, ticking walks just those, in arrival order.
 | A queued row carries an arrival number | T25, T31 | The spec says a corpus is walked; that it is walked in the order the file was written is what `imported_time` could not deliver, because every row of one import shares it and the tie falls to a content hash |
 | The store is described, not rendered as a DSN | T32 | The spec forbids the connection string. Which parts survive — dialect, host, database, and not the user — is this plan's, and the user is left out because it answers nothing a reviewer asked |
 | A paste is read in the page, not sent to a route | T30 | The route takes lines and makes rows; the paste path has to work with no store at all, so the page reads the JSON itself and only sends it when the reviewer asks for the queue |
+| The label check warns and never blocks | T27b | The spec says the reviewer decides what the label is. That they are *told* before deciding is this plan's; that they may still decide against it is what keeps the decision theirs |
 | The list is capped at a thousand rows a page | T31 | The spec says a preview, not a transcript. The number is a wire detail; that one request cannot ask for an unbounded corpus is not |

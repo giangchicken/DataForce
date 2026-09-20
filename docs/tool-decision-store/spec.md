@@ -179,9 +179,12 @@ result and is the only table anything is ever exported from.
     to go and tick it anyway. Neither is a row in either table: `khử nhận dạng` is a condition the `dataset` table
     has to be able to prove about every row it holds, and the cheapest proof is that a row failing it
     never arrived.
-17. **The precondition is the modality's and no task writes its own.** What it reads —
-    `personal_data.outcome` and the redacted copies — is a text2text shape, and the obligation
-    behind it is the law's rather than one task's. A second text2text task inherits it. A legal
+17. **The precondition is the modality's and no task writes its own.** What it reads — the
+    confirmed spans, the text they index, and the three `new_` keys — is a text2text shape, and
+    the obligation behind it is the law's rather than one task's. It reads the spans and **not**
+    `personal_data.outcome`: the outcome is what the redaction says about itself, and a record
+    saying it is clean is not a record that is. The outcome rides along as evidence, measured
+    over what ships, and nothing is gated on it. A second text2text task inherits it. A legal
     condition is the one rule here where a per-task copy must not exist, because a copy that drifts
     is a corpus sold in breach.
 18. Nothing else about the *corpus* is refused. A reviewer who decides a sample should not be used
@@ -213,7 +216,10 @@ result and is the only table anything is ever exported from.
     - `number_provided_tools` — how many tools the catalog offers. One offered tool and five are
       not the same question asked of a model: above one, the sample is also a choice.
     - `schema_valid` — whether every call names a tool in this row's own catalog and supplies that
-      tool's required parameters.
+      tool's required parameters. Computed here, and asked by the labelling page before the row is
+      written at all (`docs/tool-decision-pipeline/spec.md` § *Requirements*): one function, read as
+      a column on one side and as a sentence per broken call on the other. Two readings of it would
+      let the page wave a label through and this table mark that same label broken.
 22. **Declared, and the modality's**, because any text2text task asks them of any sample:
     - `language` — `vi` or `en`. The flow already declares it per request and then throws it away;
       it belongs on the row, because a scan, a juror and a buyer all need to know.
@@ -343,14 +349,41 @@ result and is the only table anything is ever exported from.
 36. **The checks are three columns: the check, the model that answers it, and what it said.** The
     middle one is the point — the model a check spends sits on that check's own row. A picker
     somewhere further down the page is one nobody finds, and a run that stops on *tick a verifier
-    first* with no tick box in sight is a dead end. Each answer is a verdict and not a payload:
-    what was found, or that nothing was, in one cell. The raw JSON each route answered stays
-    reachable behind a disclosure on the panel it belongs to, because a reviewer who distrusts a
-    verdict has to be able to see what it was made from.
+    first* with no tick box in sight is a dead end.
+    - **Each answer is a verdict and not a payload**: what was found, or that nothing was, in one
+      cell. The reviewers' own JSON stays reachable behind a disclosure, because *what did the
+      panel actually say* is the question that panel exists to answer. The personal-data routes'
+      does not: what a reviewer needs from those is the text, not the keys it came wrapped in.
 37. **The reviewer's own two answers are the only required input.** The data panel lists the
     detected spans with a keep tick each; the label panel carries *correct* or *modify*, the three
     editable texts behind *modify*, and a tick for every declared facet. Nothing else on the screen
     is a field.
+    - **What the data panel shows is the review text, as a text**: one string, with the line breaks
+      the service wrote into it. A reviewer is judging a conversation, and a conversation printed
+      as `{"review_text": "user: …\n…", "outcome": "withheld"}` is one they have to decode before
+      they can judge it. Which keys the scan answered under, and how it decided, are the service's
+      business.
+    - **Saying *correct* or *modify* is an act, and neither is ticked for them.** *Correct* is a
+      thing a person says about a label, not a thing a page assumes while they are still reading
+      it. Saying either is also what puts the redacted copy on the panel above: the label is
+      rendered into the review text (pipeline spec, Requirement 6), so a copy made while the label
+      is still open is a copy of a label about to change. From that moment the text shown is the
+      redacted one, made from the record **as it will ship** — a reviewer who rewrote the label
+      reads the label they wrote — and it follows a span unticked, an offset moved or a character
+      typed, with an answer that lands after a newer one dropped rather than painted. Saying
+      neither is not refused: the record is redacted and posted either way, and the cost is stated
+      — that reviewer never saw the copy that shipped.
+    - **The record the page will post is on the screen while it is being made.** It is composed
+      out of the copy above, so it is remade whenever that is, and a facet ticked reaches it too
+      — a facet is the one part of a record nothing computes. Shown *before* the post and not
+      after: a box that only fills in at the moment of posting, and is wiped by the next sample
+      opening, never shows the one thing its name promises.
+    - **The label is redacted with the turns, in the same placeholder.** A label is copied out of
+      the conversation, so it carries what the conversation carried: a customer who gave a number
+      is a `<PHONE_1>` in the turn *and* a `<PHONE_1>` in the argument the call takes. One
+      placeholder per value across the whole record is what makes the pair still read as one
+      person's number rather than two unrelated redactions, and the redacted review text is where
+      a person can see that it did.
 38. **The action bar is fixed to the bottom and holds exactly two acts**: skip this sample, and
     submit it. Submit posts the record and opens the next sample in one motion, because a reviewer
     who has to go and fetch the next one has been given a fourth decision. `Enter` submits while
@@ -446,6 +479,24 @@ result and is the only table anything is ever exported from.
     who opens it point this service at any database it can reach, which is a much larger thing
     than telling them where they are. Where nothing is attached it says so, and names the variable
     to set.
+53. **The corpus can be read back, and only the redacted half of it.** Between the queue, which
+    says what is *waiting*, and the statistics, which say what the whole comes to, a row somebody
+    had written was readable nowhere — and a sample pasted straight in never had a queue row at
+    all, so it went invisible the moment it stored. `GET /records` answers a page of
+    `tool_decision_dataset` and `GET /records/{key}` one row of it whole; there is **no route to
+    `tool_decision_record`**. That table keeps what arrived un-redacted, because that is what
+    makes a review auditable, and serving it would put a person's number on the screen of anyone
+    who can open the page — which is the thing this whole part exists to prevent.
+    - **What a page of it carries is the facets, not the samples.** A page of three hundred rows
+      would be three hundred conversations; what somebody scans a corpus for is which rows are
+      short, which are arguable, and which ones nothing could validate. The sample itself comes
+      back only for the row they open.
+    - **`schema_valid` is the column worth the trip.** A label that names a tool the catalog does
+      not offer, or leaves out an argument it requires, reads false — and false beside
+      `number_label_tools` zero is a label that *named* a tool without calling it, which is how a
+      corpus writing `["VerifyEmail_15d"]` shows up. It is told from a sample correctly labelled
+      as needing no tool, which is zero beside true. The list can be narrowed to those rows,
+      because finding them is the reason to open it.
 
 ## Design
 

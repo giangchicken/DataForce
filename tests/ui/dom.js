@@ -91,6 +91,15 @@ class El {
   scrollIntoView() {}
 }
 
+// **What a browser hands back out of an attribute it parsed.** The page escapes everything it
+// interpolates into markup -- it has to, a corpus that says `<b>` is a corpus -- and a browser
+// reverses that when it reads `.value` back. A stub that returns the raw attribute text hands the
+// page `&lt;EMAIL_1&gt;` where the browser hands it `<EMAIL_1>`, and every value that goes out
+// through the markup and comes back through a field is a string no browser would produce.
+const unescaped = text => text
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
 // The `value` of the one tag in this markup carrying every `data-` attribute asked for. `null`
 // where there is no such tag, which is not the same as one whose value is the empty string.
 function findTag(markup, wanted) {
@@ -100,7 +109,7 @@ function findTag(markup, wanted) {
     const text = tag[0];
     if (!names.every(name => text.includes(`data-${name}="${wanted[name]}"`))) continue;
     const value = text.match(/ value="([^"]*)"/);
-    return value ? value[1] : "";
+    return value ? unescaped(value[1]) : "";
   }
   return null;
 }
@@ -113,7 +122,7 @@ function readTicks(markup) {
     const box = new El("input");
     box.dataset.name = match[2];
     box.name = match[2];
-    box.value = match[3] === undefined ? "" : match[3];
+    box.value = match[3] === undefined ? "" : unescaped(match[3]);
     found.push(box);
   }
   return found;
@@ -133,7 +142,15 @@ function readPageIds(app) {
   const declared = new Map();
   for (const tag of html.matchAll(/<[a-z][^>]*>/gi)) {
     const named = tag[0].match(/ id="([^"]+)"/);
-    if (named) declared.set(named[1], { hidden: / hidden(?=[ >])/.test(tag[0]) });
+    if (named) declared.set(named[1], { hidden: / hidden(?=[ >])/.test(tag[0]), value: "" });
+  }
+  // **A `<select>` answers its first option before anybody picks one.** A stub whose selects start
+  // empty disagrees with the markup about the opening screen, and the page reads that value the
+  // moment a route is called: `language: ""` to a service that knows only `vi` and `en` is a 422
+  // no browser would ever produce, and nothing here would have said so.
+  for (const box of html.matchAll(/<select[^>]* id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)) {
+    const first = box[2].match(/<option value="([^"]*)"/);
+    if (first && declared.has(box[1])) declared.get(box[1]).value = first[1];
   }
   return declared;
 }
@@ -175,6 +192,7 @@ function build(answers, app) {
       if (!byId.has(id)) {
         const made = new El("div", id);
         made.hidden = declared.get(id).hidden;
+        made.value = declared.get(id).value;
         byId.set(id, made);
       }
       return byId.get(id);
@@ -258,11 +276,21 @@ function build(answers, app) {
       // answer, so a page that made up its own would be caught rather than agreed with.
       : named === "/samples/named" ? (answers.named || nameLines(how.body))
       : asKey && !NAMED.includes(asKey[1]) ? oneQueued(asKey[1])
+      // `/records` is two routes on one path: the page posts a record to it and reads the stored
+      // corpus back off it, so the method is what tells them apart here as it does in the router.
+      : named === "/records" && (how.method || "GET") === "GET"
+        ? (answers.dataset || { samples: [], total: 0 })
       : named === "/records" ? (answers.stored || { id: "r1", created_time: "t", modified_time: "t" })
+      : named.startsWith("/records/") ? (answers.datasetOne || null)
       : named.startsWith("/queue/") && named.endsWith("/skip") ? nextQueued()
       : named === "/data-quality/personal-data" ? answers.detected
-      : named === "/data-quality/personal-data/replace" ? answering(named, answers.replaced)
-      : named === "/data-quality/personal-data/redact" ? answers.redacted
+      // Canned, and on purpose: what a callable label is belongs to `label_statistics.py`, and a
+      // second reading of that rule here would let this file and the service disagree about the
+      // fixture while every check stayed green. What is under test is what the page does with
+      // the answer, so a check wanting a broken label sets one.
+      : named === "/data-quality/label"
+        ? (answers.labelChecked || { schema_valid: true, faults: [] })
+      : named === "/data-quality/personal-data/redact" ? answering(named, answers.redacted)
       : named === "/ai-review" ? answers.reviewed
       : null;
     if (waiting) await new Promise(resolve => setTimeout(resolve, waiting));

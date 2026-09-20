@@ -69,7 +69,6 @@ def build_document(**overridden: Any) -> dict[str, Any]:
             "review_text": "user: mở phiếu",
             "claims": [],
             "spans": [],
-            "redacted_text": None,
             "outcome": "reported",
         },
         "duplicate": None,

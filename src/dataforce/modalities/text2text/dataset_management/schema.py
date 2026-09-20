@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..data_quality.schema import PersonalDataDetected, PersonalDataReplaced
+from ..data_quality.schema import PersonalDataDetected, PersonalDataReplacementOutcome
 
 
 class Frozen(BaseModel):
@@ -38,16 +38,30 @@ class StepNotRun(Exception):
     """
 
 
-class ScannedPersonalData(PersonalDataDetected, PersonalDataReplaced):
-    """The record's `personal_data` key: the detect answer and the replace answer, as one object.
+class ScannedPersonalData(PersonalDataDetected):
+    """The record's `personal_data` key: what the scan found, and how far redacting it got.
 
-    Both halves, because that is how the page carries them -- the spans it handed back and what
-    replacing them came to -- and because the precondition needs both: the spans say which values
-    were confirmed, and the text they index is the only place those values can be read from.
+    The detect answer as the page handed it back -- the spans say which values were confirmed and
+    the text they index is the only place those values can be read from, which is what the
+    precondition below needs -- plus the one thing the redaction knows and the spans do not.
 
-    Declared by inheriting the two rather than restating their fields, so a span here and a span a
-    reviewer edited cannot come to mean different things.
+    **The redacted copy itself is not in here.** It used to be, and it was the same text twice:
+    the record already carries what ships under its three `new_` keys, and the precondition reads
+    those rather than a copy alongside them. A second copy of a thing is a second thing to keep
+    in step.
+
+    Declared by inheriting the detect answer rather than restating its fields, so a span here and
+    a span a reviewer edited cannot come to mean different things.
     """
+
+    outcome: PersonalDataReplacementOutcome = Field(
+        ...,
+        description=(
+            "How far the redaction got over what ships. Evidence and not a gate: the "
+            "precondition below re-reads the confirmed values out of what was actually "
+            "written, because a record saying it is clean is not a record that is."
+        ),
+    )
 
 
 class ShippedDatasetSample(Frozen):

@@ -3,8 +3,10 @@
 Every measurement here says `tool`, which is why none of them is the modality's. Every one is also
 a **pure function of a label and a catalog** -- nothing here is handed a session, and that is what
 keeps this `logic` and reachable from `services/`, which is where these figures are composed into
-one answer. The `GROUP BY`s over the same corpus are `sample_building.py`, with the rest of what
-holds a session.
+one answer. `list_label_faults` is the one measurement two callers read differently: the store
+writes `schema_valid` from whether it is empty, and the page reads the sentences themselves.
+The `GROUP BY`s over the same corpus are `sample_building.py`, with the rest of what holds a
+session.
 """
 
 from collections import Counter
@@ -29,7 +31,10 @@ def read_call_arguments(function: Mapping[str, Any]) -> Mapping[str, Any]:
     return arguments if isinstance(arguments, Mapping) else {}
 
 
-def validate_label_calls(label: Sequence[Any] | None, catalog: Sequence[Any]) -> bool:
+def list_label_faults(
+    label: Sequence[Any] | None, catalog: Sequence[Any]
+) -> tuple[str, ...]:
+
     required_by_tool: dict[str, set[str]] = {}
     for offered in catalog:
         function = read_named_function(offered)
@@ -39,13 +44,30 @@ def validate_label_calls(label: Sequence[Any] | None, catalog: Sequence[Any]) ->
 
         if isinstance(parameters, Mapping):
             required_by_tool[function["name"]] = list_required_parameters(parameters)
-    for entry in label or ():
+    faults: list[str] = []
+    for numbered, entry in enumerate(label or (), start=1):
         called = read_named_function(entry)
-        if called is None or called["name"] not in required_by_tool:
-            return False
-        if not required_by_tool[called["name"]] <= set(read_call_arguments(called)):
-            return False
-    return True
+        if called is None:
+            faults.append(
+                f"call {numbered} does not read as a tool call:"
+                f' it has to be {{"name": ..., "arguments": {{...}}}}'
+            )
+            continue
+        if called["name"] not in required_by_tool:
+            faults.append(
+                f"call {numbered} names {called['name']}, which this sample's catalog"
+                " does not offer"
+            )
+            continue
+        missing = sorted(
+            required_by_tool[called["name"]] - set(read_call_arguments(called))
+        )
+        if missing:
+            faults.append(
+                f"call {numbered} to {called['name']} leaves out"
+                f" {', '.join(missing)}, which it requires"
+            )
+    return tuple(faults)
 
 
 def count_tool_calls(

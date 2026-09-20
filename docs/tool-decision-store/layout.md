@@ -177,7 +177,7 @@ to `0` would pad the no-call share, which is the statistic irrelevance detection
 | Function | What it does |
 |---|---|
 | `list_called_tools(label)` | the tool names the label calls |
-| `validate_label_calls(label, catalog)` | BFCL's AST check: every call names a tool in the catalog and supplies its required parameters |
+| `list_label_faults(label, catalog)` | BFCL's AST check, answering one sentence per call that names a tool the catalog does not offer or leaves out an argument it requires. Empty is a valid label, which is what `schema_valid` is written from — and the sentences are what the labelling page shows a reviewer before they say the label is correct, so the column and the warning cannot disagree |
 | `list_offered_tools(catalogs)` | every distinct tool the catalogs put in front of the model, sorted. Counted apart from `count_tool_calls`' keys, because those also hold a tool a broken row invented and an invention is not an offer |
 | `count_tool_calls(labels, catalogs)` | a count per tool the corpus offers, a tool never called included as `0` — **the zeros are the finding**, as in the joint distribution matrix. One mapping rather than a shape: offered is the keys, ever called is the non-zero keys, and the tail is the values |
 

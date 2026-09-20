@@ -9,7 +9,7 @@
 // Usage: reading.js <directory holding models.json, queued.json and stats.json> [app.js]
 const fs = require("fs");
 const path = require("path");
-const { build, settled } = require("./dom.js");
+const { build, settled, waited } = require("./dom.js");
 
 const FROM = process.argv[2];
 const APP = process.argv[3] || path.join(__dirname, "..", "..", "src", "dataforce", "ui", "app.js");
@@ -38,12 +38,9 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
     statistics: real,
     // The queue answer as the route gave it, sample and all.
     queue: [queued.sample],
-    // Enough for one submit to get through, so the key can be followed all the way back.
-    redacted: {
-      messages: queued.sample.messages,
-      tools: queued.sample.tools,
-      label: queued.sample.label ?? null
-    }
+    // The redact route's own answer, both halves of it: the record the page composes `new_*`
+    // out of, and the text it puts on the screen once the label is settled.
+    redacted: read("redacted.json")
   }, APP);
   for (let n = 0; n < 8; n += 1) await settled();
 
@@ -102,6 +99,22 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
   claims("the same input twice is counted", /<b>\d+<\/b> groups? agreeing/.test(stats));
   claims("every facet the table carries has its own count", stats.includes("number_label_tools"));
 
+  // ------------------------------------------- the shipping copy, as the route really answers it
+  // A reviewer says the label is right; the page asks for the record redacted and shows the text
+  // that record now reads as. Both field names are the route's, and a renamed one here is a panel
+  // that says `replacing…` for ever.
+  const copy = read("redacted.json");
+  page.el("v-correct").checked = true;
+  await page.el("v-correct").onchange();
+  await waited(400);
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("confirming the label puts the route's own redacted text on the screen",
+    page.byId.get("review-text").textContent === copy.review_text);
+  claims("**and the label in it carries the placeholder the turn carries**",
+    page.byId.get("review-text").textContent.split("label: ")[1].includes("<PHONE_1>"));
+  claims("the text is a text, with the line breaks the service wrote into it",
+    page.byId.get("review-text").textContent.includes("\n"));
+
   // ---------------------------------------------------- the key, followed all the way back
   // Read off the route's own answer and posted back on submit, which is what marks the queue row
   // done in the same transaction as the two table writes. Nothing else checks this seam: a `key`
@@ -128,7 +141,7 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
     statistics: real,
     queue: [],
     named: naming,
-    redacted: { messages: [], tools: [], label: null }
+    redacted: { sample: { messages: [], tools: [], label: null }, review_text: "label: null" }
   }, APP);
   for (let n = 0; n < 8; n += 1) await settled();
 

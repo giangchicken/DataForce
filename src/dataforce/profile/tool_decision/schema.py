@@ -255,6 +255,110 @@ class QueuedSampleRow(BaseModel):
     )
 
 
+class StoredSampleRow(BaseModel):
+    """One line of the table a person reads the stored corpus by.
+
+    The facets and not the sample: a page of three hundred rows would carry three hundred
+    conversations, and what somebody scans a corpus for is which rows are short, which are
+    arguable, and **which ones nothing could validate** -- a label naming a tool the catalog does
+    not offer, or leaving out an argument the tool requires, is `schema_valid` false and is the
+    one column here that says a row needs going back to.
+
+    Read off `tool_decision_dataset` and never off `tool_decision_record`. The record table keeps
+    what arrived, un-redacted, because that is what makes a review auditable; a route that served
+    it would put a person's phone number on the screen of anyone who can open the page. What is
+    in here is the copy that ships.
+    """
+
+    key: str = Field(..., description="The row's key, which is also the sample's name.")
+    said: str = Field(
+        default="",
+        description="The opening turn of the redacted copy, cut to a preview.",
+    )
+    language: str = Field(..., description="What language the sample is in.")
+    domain: str = Field(..., description="Which domain the reviewer put it in.")
+    ambiguous: str = Field(..., description="How arguable they said it is.")
+    call_trigger: tuple[str, ...] = Field(
+        default=(), description="What they said makes the call fire."
+    )
+    personal_data: tuple[str, ...] = Field(
+        default=(), description="The classes actually redacted out of this row."
+    )
+    number_turns: int = Field(..., description="How many turns the conversation has.")
+    number_label_tools: int = Field(
+        ..., description="How many calls the label makes. Zero is an answer, not a gap."
+    )
+    number_provided_tools: int = Field(
+        ..., description="How many tools the catalog offered."
+    )
+    schema_valid: bool = Field(
+        ...,
+        description=(
+            "Whether every call the label makes names an offered tool and supplies its "
+            "required arguments. False and `number_label_tools` zero together is a label that "
+            "named a tool without calling it."
+        ),
+    )
+    modified_time: datetime = Field(..., description="When this row was last written.")
+
+
+class StoredSampleList(BaseModel):
+    """A page of the stored corpus, and what the whole of it comes to."""
+
+    samples: tuple[StoredSampleRow, ...] = Field(
+        default=(), description="This page of rows, newest write first."
+    )
+    total: int = Field(..., description="How many rows the table holds in all.")
+
+
+class StoredSample(BaseModel):
+    """One stored row whole: the copy that ships, and every facet it is filed under."""
+
+    key: str = Field(..., description="The row's key.")
+    input: Mapping[str, Any] = Field(
+        ..., description="`{messages, tools}` as they ship, redaction included."
+    )
+    label: tuple[Any, ...] | None = Field(
+        default=None,
+        description="The calls as they ship. `()` and `null` both mean no call was needed.",
+    )
+    facets: Mapping[str, Any] = Field(
+        default_factory=dict, description="Every facet column, by name."
+    )
+    created_time: datetime = Field(..., description="When it was first stored.")
+    modified_time: datetime = Field(..., description="When it was last written.")
+
+
+class LabelChecked(BaseModel):
+    """Whether one label validates against the catalog beside it, and what is wrong with it.
+
+    The same measurement `schema_valid` is written from, asked *before* a row is written rather
+    than read off one afterwards. Both, because they catch different rows: this one stops a
+    reviewer ticking *correct* on a label that names a tool without calling it, and the column
+    finds the ones already in the corpus.
+
+    The sentences are the rule's own and the page does not paraphrase them -- a page that worded
+    the fault itself would be a second opinion about what a valid call is.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_valid: bool = Field(
+        ...,
+        description=(
+            "Whether every call the label makes names an offered tool and supplies its "
+            "required arguments. True is `faults` being empty and nothing else."
+        ),
+    )
+    faults: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "One sentence per broken call, naming it by its position in the label. Empty "
+            "where the label validates."
+        ),
+    )
+
+
 class QueuedSampleList(BaseModel):
     """A page of the queue, and what the whole of it comes to.
 

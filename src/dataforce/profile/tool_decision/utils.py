@@ -1,10 +1,16 @@
 """logic · what a task hands a model: one sample, as the text a model reads.
 
-The two renderings live here for the same reason: two definitions of what a turn is,
+The renderings live here for the same reason: two definitions of what a turn is,
 or of what a tool looks like, would let a juror and a reviewer disagree about the text they were
 shown, and nothing would say so. `list_conversation_turns` is the turns; the catalog is the rest of the
-file below it, and `parse_text_to_tools` at the end reads the other way -- text a model
-wrote, back into the format -- so that what a call *is* is also defined once.
+file below it; `build_review_text` is the whole sample as one string, which is the frame of
+reference every personal-data offset indexes; and `parse_text_to_tools` at the end reads the other
+way -- text a model wrote, back into the format -- so that what a call *is* is also defined once.
+
+**There is no way back from a review text to a sample, and there is no need for one.** The one
+thing that has to happen to a record after the text has been read is replacing values in it, and
+that is done by value over the record's own fields -- so the record stays JSON the whole way
+through and this renders it again whenever somebody has to read it.
 
     [tool_name]
     <description, verbatim>
@@ -62,11 +68,7 @@ def needs_subfield_lines(spec: Mapping[str, Any]) -> bool:
 
 
 def read_named_function(entry: Any) -> Mapping[str, Any] | None:
-    """The function one entry holds, wrapped in `{"type", "function"}` or on its own.
 
-    `None` where the entry names none, because an unreadable tool or call is one entry left out
-    rather than a reason to read none of them.
-    """
     if not isinstance(entry, Mapping):
         return None
     function = entry.get("function") if "function" in entry else entry
@@ -157,6 +159,23 @@ def convert_tools_to_text(tools: Sequence[Any]) -> str:
         if (function := read_named_function(entry)) is not None
     ]
     return "\n\n".join(blocks)
+
+
+def build_review_text(sample: Mapping[str, Any]) -> str:
+    """One sample as the single string every personal-data offset indexes.
+
+    The turns, then the catalog, then the label -- the catalog because an argument value in a
+    tool call is where a phone number sits, and the label because a label is a tool call.
+
+    Here rather than on the checking class because it is built twice from two sides: once over
+    the sample a scan was handed, and once over the record a reviewer left, to say what that
+    record now reads as. Two spellings would be two frames of reference, and a set of offsets
+    indexing a text nothing else has.
+    """
+    turns = list_conversation_turns(sample)
+    catalog = convert_tools_to_text(sample.get("tools") or ())
+    label = json.dumps(sample.get("label"), ensure_ascii=False)
+    return "\n".join([*turns, *([catalog] if catalog else []), f"label: {label}"])
 
 
 def parse_text_to_tools(text: str) -> tuple[dict[str, Any], ...]:

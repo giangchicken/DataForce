@@ -25,7 +25,7 @@ from dataforce.modalities.text2text.ai_review.schema import (
 from dataforce.modalities.text2text.data_quality import (
     PersonalDataCheckingConfig,
     PersonalDataDetected,
-    PersonalDataReplaced,
+    PersonalDataRedacted,
 )
 from dataforce.modalities.text2text.data_quality.schema import (
     Language,
@@ -46,24 +46,29 @@ from dataforce.profile.tool_decision.sample_building import (
     select_queued_sample,
     select_queued_samples,
     select_sample_contents,
+    select_stored_sample,
+    select_stored_samples,
 )
 from dataforce.profile.tool_decision.schema import (
+    LabelChecked,
     QueuedSampleImport,
     QueuedSampleList,
     QueuedSampleWaiting,
     QueueState,
     SamplesNamed,
+    StoredSample,
+    StoredSampleList,
     ToolDecisionDatasetStatistics,
     ToolDecisionSample,
 )
 from dataforce.services.tool_decision import (
     build_dataset_statistics,
+    check_label_calls,
     detect_personal_data,
     predict_tool_decision_by_llm,
     predict_tool_decision_by_sft,
     read_queued_samples,
     redact_personal_data,
-    replace_personal_data,
     report_abnormalities,
     report_duplicates,
 )
@@ -216,6 +221,18 @@ class ReviewerVerdicts(BaseModel):
     sft: SFTReviewerVerdict | None = Field(default=None)
 
 
+class StoreAttached(BaseModel):
+    attached: bool = Field(..., description="Whether there is a database at all.")
+    describes: str | None = Field(
+        default=None,
+        description="The database, named: a file name, or a dialect, host and name.",
+    )
+    variable: str = Field(
+        ...,
+        description="The variable that names it, for a message that says what to set.",
+    )
+
+
 @router.get("/", summary="the flow, as a page", response_class=FileResponse)
 def get_page() -> FileResponse:
     return FileResponse(PAGE, media_type="text/html")
@@ -247,22 +264,21 @@ async def post_personal_data(request: PersonalDataScanRequest) -> PersonalDataDe
 
 
 @router.post(
-    "/data-quality/personal-data/replace", summary="replace the spans a reviewer left"
-)
-def post_personal_data_replacement(
-    detected: PersonalDataDetected,
-) -> PersonalDataReplaced:
-    return replace_personal_data(detected)
-
-
-@router.post(
     "/data-quality/personal-data/redact",
-    summary="the sample with every handed-back span's value replaced",
+    summary="the record with every handed-back span's value replaced, and how it reads",
 )
-def post_personal_data_redaction(request: RedactRequest) -> dict[str, Any]:
+def post_personal_data_redaction(request: RedactRequest) -> PersonalDataRedacted:
     return redact_personal_data(
         request.detected, request.model_dump(exclude={"detected"})
     )
+
+
+@router.post(
+    "/data-quality/label",
+    summary="whether this label is callable against its own catalog",
+)
+def post_label_check(sample: Sample) -> LabelChecked:
+    return check_label_calls(sample.label, sample.tools)
 
 
 @router.post("/data-quality/duplicate", summary="which samples this one repeats")
@@ -284,17 +300,6 @@ async def post_abnormal(sample: Sample) -> None:
 def post_named_samples(
     lines: Annotated[bytes, Body(media_type="application/x-ndjson")],
 ) -> SamplesNamed:
-    """One JSON object per line, answered with each line's own name on it.
-
-    **No session, and that is the point.** This is how a sample pasted into the page gets a name
-    without a queue row being written for it, so the review works with the store turned off. The
-    name is the content's, the same one `/queue/import` gives, so the two ways in cannot put one
-    sample in the corpus under two names.
-
-    A line nobody can read is named by its number and the rest are still answered, which is the
-    import's rule too: one bad line in a paste of forty is not a reason to refuse the other
-    thirty-nine.
-    """
     try:
         text = lines.decode("utf-8")
     except UnicodeDecodeError as unreadable:
@@ -311,20 +316,11 @@ def post_named_samples(
 
 @router.post("/ai-review", summary="what the reviewers say the label should be")
 async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
-    """Both verdicts, or 422 for a declaration this deployment cannot act on.
-
-    Two of those: a name it does not serve, and a finetuned reviewer at all while § *Open* stands.
-    The language and the two model keys are declarations about this request and not keys of the
-    record, so the sample handed on is what the corpus carries.
-    """
     sample = request.model_dump(exclude={"language", "jury_models", "sft_model"})
     try:
         check_served_models(
             request.jury_models + ((request.sft_model,) if request.sft_model else ())
         )
-        # The finetuned reviewer is asked first, and the order is the point: while § *Open*
-        # stands, a ticked one is a refusal, and a refusal raised after the panel has answered is
-        # N model calls paid for and thrown away.
         sft = await predict_tool_decision_by_sft(
             SFTModelConfig(model=request.sft_model) if request.sft_model else None,
             sample,
@@ -339,16 +335,10 @@ async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
             sft=sft,
         )
     except ConfigError as error:
-        # A declaration this service cannot act on, as the status that says so.
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def open_store() -> Session:
-    """A session, or the refusal that names the variable to set.
-
-    The store is a place to put the result of a review and never a dependency of one, so this is
-    the only shape *no database* takes at the edge: a status, and the name of the thing to set.
-    """
     session = db.open_session()
     if session is None:
         raise HTTPException(
@@ -368,8 +358,6 @@ def post_queue_import(
     try:
         text = lines.decode("utf-8")
     except UnicodeDecodeError as unreadable:
-        # Named rather than counted as one bad line: a file in the wrong encoding has no readable
-        # lines at all, and reporting it as line 1 would send the reviewer to fix a line.
         raise HTTPException(
             status_code=422, detail=f"the file is not UTF-8: {unreadable}"
         ) from unreadable
@@ -385,11 +373,6 @@ def post_queue_import(
 
 
 def describe_queue(session: Session) -> QueuedSampleWaiting:
-    """The next waiting sample and the three counts, read on the one session.
-
-    One shape for all three routes that answer it, because the sample and the counts are read in
-    the same breath and a second call would let the two disagree on the reviewer's screen.
-    """
     waiting = select_next_queued_sample(session)
     counted = count_queued_states(session)
     return QueuedSampleWaiting(
@@ -401,32 +384,8 @@ def describe_queue(session: Session) -> QueuedSampleWaiting:
     )
 
 
-class StoreAttached(BaseModel):
-    """Which database a record would land in, said so a person can recognise it.
-
-    **Never the DSN.** This route is reachable by anyone who can open the page, and a connection
-    string carries a password. What comes back names the database and nothing that would let a
-    reader connect to it.
-    """
-
-    attached: bool = Field(..., description="Whether there is a database at all.")
-    describes: str | None = Field(
-        default=None,
-        description="The database, named: a file name, or a dialect, host and name.",
-    )
-    variable: str = Field(
-        ...,
-        description="The variable that names it, for a message that says what to set.",
-    )
-
-
 @router.get("/store", summary="which database a record would land in")
 def get_store() -> StoreAttached:
-    """Read rather than set: the DSN stays where a deployment put it.
-
-    A page that could set it would let anyone who opens the page point this service at any database
-    it can reach, which is a different and much larger thing than showing them where they are.
-    """
     return StoreAttached(
         attached=db.open_engine() is not None,
         describes=db.describe(),
@@ -521,9 +480,6 @@ def post_record(
             detail=f"tick every declared facet: {', '.join(unanswered)} went unanswered",
         )
     with session:
-        # Before the write and on the same session, so the one commit inside `merge_rows` carries
-        # all three rows. A queue row marked done against a record that was never written is the
-        # one failure a corpus cannot detect later: that sample is never offered to anybody again.
         if queue_key is not None and not mark_queued_sample(
             session, queue_key, QueueState.DONE
         ):
@@ -538,6 +494,18 @@ def post_record(
     )
 
 
+@router.get("/records", summary="the stored corpus, a page at a time")
+def get_stored_samples(limit: int = 100, offset: int = 0) -> StoredSampleList:
+    session = open_store()
+    with session:
+        return StoredSampleList(
+            samples=select_stored_samples(
+                session, min(max(limit, 1), 1000), max(offset, 0)
+            ),
+            total=count_total_samples(session)[ToolDecisionSample.__tablename__],
+        )
+
+
 @router.get(
     "/records/stats",
     summary="what the labelled dataset holds, counted when it is asked",
@@ -548,11 +516,18 @@ def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
         return build_dataset_statistics(
             sample_totals=count_total_samples(session),
             counted_distribution_by_facet=count_by_facet(session),
-            # The two variables the grid is taken over, named at the read. The field that reports
-            # it is named for this pair, and so is the parameter: cross a different two and the
-            # keyword stops matching, which is what makes the change impossible to make quietly.
             counted_pairs_of_domain_and_call_trigger=count_by_pair(
                 session, "domain", "call_trigger"
             ),
             sample_contents=select_sample_contents(session),
         )
+
+
+@router.get("/records/{key}", summary="one stored sample, as it ships")
+def get_stored_sample(key: uuid.UUID) -> StoredSample:
+    session = open_store()
+    with session:
+        found = select_stored_sample(session, key)
+        if found is None:
+            raise HTTPException(status_code=404, detail=f"no stored sample under {key}")
+        return found

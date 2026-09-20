@@ -88,9 +88,12 @@ const held = {
   rows: [],         // the span rows as the human is editing them, added ones included
   keeps: {},        // which rows the human is handing back
   handed: null,     // the detect shape with the spans as they left it
-  replaced: null,   // what the replacement answered
   review: null,     // what the reviewers said
   edited: null,     // the three, as they ship before redaction
+  settled: false,   // has the reviewer said what the label is?
+  faults: null,     // what the catalog says is wrong with the label on the screen
+  shipped: null,    // the record as it ships, the text it reads as, and how far redacting got
+  copyNote: null,   // why there is no such copy, where something refused to make one
   record: null      // what will be posted
 };
 
@@ -226,9 +229,14 @@ function openSample(sample, key) {
   paintTurns();
   paintCatalog();
   paintCalls();
-  fillEditors();
-  $("v-correct").checked = true;
+  fillEditor();
+  // Neither, because *correct* is something a person says. A page that ticks it for them has
+  // answered the one question on this panel nothing else can answer.
+  $("v-correct").checked = false;
+  $("v-modify").checked = false;
   $("label-editor").hidden = true;
+  // Asked on open and not on a tick: the warning has to be up *before* the question it is about.
+  checkLabel();
   // By name, over the declaration: `domain` is drawn in its own block now, and a sweep of one
   // container would leave the previous sample's domain ticked on this one.
   for (const facet of DECLARED_FACETS) {
@@ -247,15 +255,20 @@ function paintTurns() {
     $("turns").innerHTML = '<div class="empty">This sample carries no turns.</div>';
     return;
   }
-  $("turns").innerHTML = turns.map(turn => {
-    const who = String(turn.role ?? "?");
-    const said = typeof turn.content === "string" ? turn.content
-      : turn.content == null ? "" : json(turn.content);
-    const calls = turn.tool_calls ? `<div class="calls">${drawCalls(turn.tool_calls)}</div>` : "";
-    return `<div class="turn ${esc(who)}"><div class="who">${esc(who)}</div>`
-      + `<div class="said">${esc(said)}${calls}</div></div>`;
-  }).join("");
+  $("turns").innerHTML = drawTurns(turns);
 }
+
+// One conversation, drawn. Its own function because two places draw one now: the pane a reviewer
+// judges a sample in, and a stored row opened out of the corpus. Two spellings would let the two
+// disagree about what a turn looks like, and nothing would say so.
+const drawTurns = turns => turns.map(turn => {
+  const who = String(turn.role ?? "?");
+  const said = typeof turn.content === "string" ? turn.content
+    : turn.content == null ? "" : json(turn.content);
+  const calls = turn.tool_calls ? `<div class="calls">${drawCalls(turn.tool_calls)}</div>` : "";
+  return `<div class="turn ${esc(who)}"><div class="who">${esc(who)}</div>`
+    + `<div class="said">${esc(said)}${calls}</div></div>`;
+}).join("");
 
 function paintCatalog() {
   const tools = held.sample.tools || [];
@@ -285,12 +298,36 @@ const drawCalls = calls => calls.map(one => {
     + (args ? `<div class="args">${esc(args)}</div>` : "") + "</div>";
 }).join("");
 
-// The label the sample arrived with, drawn where the decision about it is made.
+// **The label as it stands, drawn again whenever it changes.** It used to be painted once, when
+// the sample opened, and never after -- so a reviewer who took the panel's answer, or typed a call
+// into the box below, went on reading the bare name that arrived while the label about to be
+// confirmed was something else entirely. A panel showing one label above a tick that confirms
+// another is a panel lying about what the tick does.
+//
+// Three versions, and which is up is said above it: what arrived, what they are rewriting it to,
+// and what ships once the redacted copy exists -- which is the one that becomes `new_label`.
 function paintCalls() {
-  const label = held.sample.label;
-  $("calls").innerHTML = !label || !label.length
-    ? '<div class="nocall">No call — the turn needs no tool. That is an answer, not a skipped row.</div>'
-    : drawCalls(label);
+  if (!held.sample) return;
+  const ships = held.settled && held.shipped;
+  const label = ships
+    ? held.shipped.sample.label
+    : (held.edited ? held.edited.label : held.sample.label);
+  $("calls-which").textContent = ships
+    ? "The label as it ships — this is what is stored"
+    : $("v-modify").checked
+      ? "The label as you are rewriting it"
+      : "The label as it arrived";
+  $("calls").innerHTML = drawLabel(label);
+}
+
+const NO_CALL = '<div class="nocall">No call — the turn needs no tool. That is an answer, not a skipped row.</div>';
+
+// One label as the block reads it. A label is a list of calls; anything else in that box is
+// something the reviewer is still typing, and saying so beats drawing `(unnamed)` at them.
+function drawLabel(label) {
+  if (label === null || label === undefined) return NO_CALL;
+  if (!Array.isArray(label)) return '<div class="nocall">Not JSON yet — the box below says what is wrong.</div>';
+  return label.length ? drawCalls(label) : NO_CALL;
 }
 
 // --------------------------------------------------------------------------- which models answer
@@ -366,11 +403,18 @@ function forgetEverything() {
   held.review = null;
   held.record = null;
   held.handed = null;
-  held.replaced = null;
+  held.shipped = null;
+  held.copyNote = null;
+  held.settled = false;
+  held.faults = null;
   clearTimeout(copySoon);
   copyAt += 1;
+  faultAt += 1;
+  paintReviewText();
+  paintFaults();
+  paintConsensus();
   for (const id of ["span-table", "keep-table"]) $(id).querySelector("tbody").innerHTML = "";
-  for (const id of ["out-2", "out-5", "out-6", "record"]) show(id, undefined);
+  for (const id of ["out-6", "record"]) show(id, undefined);
   say("span-note", "");
   say("checks-note", "Two calls: the personal-data scan, then the reviewers.");
   hideRefusals();
@@ -436,10 +480,10 @@ async function detect() {
   held.rows = answer.data.spans.map(span => ({ ...span }));
   held.keeps = {};
   held.handed = null;
-  held.replaced = null;
+  held.shipped = null;
   held.record = null;
   const found = held.rows.length;
-  show("out-2", answer.data);
+  paintReviewText();
   paintSpanTable();
   paintKeepTable();
   sayVerdict("data-verdict", found ? `${found} to confirm` : "nothing found",
@@ -577,8 +621,10 @@ function paintKeepTable() {
 }
 
 // The spans as the human left them: what the reviewer hands back, and the only spans anything
-// replaces.
+// replaces. The empty shape where no scan has run, because that is a real state the route takes:
+// nothing was confirmed, so nothing is replaced and the record comes back as it arrived.
 function handedBack() {
+  if (!held.detected) return { review_text: "", claims: [], spans: [] };
   const rows = editedSpans().filter(row => !row.broke);
   return {
     review_text: held.detected.review_text,
@@ -587,48 +633,82 @@ function handedBack() {
   };
 }
 
+// The body the copy is made from: the edits as they stand, with those spans beside them. One
+// builder, because the copy on the screen and the record that is posted have to be one answer.
+function shippingBody() {
+  paintShipped();
+  return { ...held.sample, ...held.edited, detected: handedBack() };
+}
+
 // How long a pause counts as *done typing*. An offset is typed a digit at a time and each digit
-// is a different set of spans, so one call per keystroke would be a call per character.
+// is a different set of spans, so one call per keystroke would be a call per character. A label
+// being rewritten is the same thing through a different box.
 const COPY_AFTER = 180;
 
 let copySoon = null;
-// Which replacement is the newest. An answer to an older one landing after it is dropped rather
-// than painted: it is the copy of spans that are no longer on the screen.
+// Which copy is the newest. An answer to an older one landing after it is dropped rather than
+// painted: it is the copy of spans, or of a label, that are no longer on the screen.
 let copyAt = 0;
 
 // **Nothing here is asked for.** A span the reviewer keeps is a value that has to come out, so
-// unticking one, dragging an offset or adding a row makes the copy wrong the moment it happens --
-// and a copy that is wrong until somebody presses a button is a copy that ships wrong.
+// unticking one, dragging an offset, adding a row or typing in the label makes the copy wrong the
+// moment it happens -- and a copy that is wrong until somebody presses a button is a copy that
+// ships wrong.
 function copyLater() {
   held.handed = null;
-  held.replaced = null;
-  held.record = null;
-  show("out-5", undefined);
+  held.shipped = null;
+  held.copyNote = null;
+  // **The boxes, read now and not when the timer fires.** What the label block draws has to be the
+  // label on the screen this instant: a block still showing the copy that shipped before the
+  // keystroke is the same lie as one still showing the name that arrived. It clears the record too.
+  paintShipped();
   sayPersonalData();
+  paintReviewText();
   clearTimeout(copySoon);
   copyAt += 1;
-  copySoon = setTimeout(refreshCopy, COPY_AFTER);
+  copySoon = setTimeout(refreshBoth, COPY_AFTER);
 }
 
+// The two things a changed label makes wrong, asked on the one pause. The copy is wrong because
+// the label is rendered into the text it is made of; the check is wrong because it is a check of
+// that label. Neither waits on the other -- a catalog the label cannot be called against is still
+// worth saying while the redaction is in flight.
+function refreshBoth() {
+  checkLabel();
+  return refreshCopy();
+}
+
+// One call, and it answers both halves: the record with every confirmed value replaced in every
+// field, and that record rendered back as one text. **There is no second route.** There was, and
+// it rewrote the scan's own text instead of the record -- a copy nothing read, and an outcome
+// about a text rather than about what ships.
 async function refreshCopy() {
-  if (!held.detected) return cannotAsk(2, "the scan has not answered");
-  if (editedSpans().some(row => row.broke)) {
-    mark(2, "bad", "a span row is unreadable, so nothing was replaced");
-    return false;
+  if (!held.sample) return false;
+  if (held.detected && editedSpans().some(row => row.broke)) {
+    return copyBroke("a span row is unreadable, so nothing was replaced");
   }
-  const handed = handedBack();
+  const body = shippingBody();
   const mine = (copyAt += 1);
-  const answer = await call("/data-quality/personal-data/replace", handed);
+  const answer = await call("/data-quality/personal-data/redact", body);
   if (mine !== copyAt) return false;
-  if (!answer.ok) {
-    mark(2, "bad", answer.detail);
-    return false;
-  }
-  held.handed = handed;
-  held.replaced = answer.data;
-  show("out-5", answer.data);
+  if (!answer.ok) return copyBroke(answer.detail);
+  held.handed = body.detected;
+  held.shipped = answer.data;
+  held.copyNote = null;
   sayPersonalData();
+  paintReviewText();
+  paintCalls();
+  composeRecord();
   return true;
+}
+
+// A copy that could not be made, said in the two places a reviewer might be looking: the scan's
+// own row, and the text itself where the copy that ships was waiting to appear.
+function copyBroke(why) {
+  mark(2, "bad", why);
+  held.copyNote = why;
+  paintReviewText();
+  return false;
 }
 
 // One line for the scan and the copy together, because they are one act. What the scan found is a
@@ -637,11 +717,49 @@ function sayPersonalData() {
   if (!held.detected) return;
   const found = held.rows.length;
   const scan = found ? `${found} ${wordFor(found, "span", "spans")} found` : "nothing found";
-  if (!held.replaced) return mark(2, "wait", `${scan} · replacing…`);
+  if (!held.shipped) return mark(2, "wait", `${scan} · replacing…`);
   const kept = held.handed.spans.length;
   mark(2, "answered", `${scan} · ${kept
     ? `${kept} ${wordFor(kept, "value", "values")} replaced`
     : "nothing to replace"}`);
+}
+
+// ------------------------------------------------------------------ the text, as a text
+
+// The sample as one string, which is the only thing on this panel a person reads rather than
+// operates. Not JSON: what a route answered is keyed, escaped and wrapped in an envelope, and a
+// conversation shown that way is one the reviewer has to decode before they can judge it. Its own
+// line breaks are line breaks here.
+//
+// Two versions, and which is up is the whole of the state:
+//
+//   *the text the scan reads* — what the offsets index, until the label is settled;
+//   *the text as it ships*    — the record after redaction, rendered again.
+//
+// The copy is *made* as the reviewer ticks, because the scan's own row reports on it. It is not
+// *shown* until they have said what the label is, and cannot be: **the label is rendered into this
+// text**, so a copy put up while they are still deciding is a copy of a label about to change.
+// Once they have said, it answers the question the panel above asks — the number in the turn and
+// the number in the call carry the same placeholder, one screen apart.
+function paintReviewText() {
+  const which = $("text-which");
+  const shown = $("review-text");
+  if (held.settled && held.shipped) {
+    which.textContent = "The text as it ships — every value you kept replaced, the label with it";
+    shown.textContent = held.shipped.review_text;
+  } else if (held.settled && held.copyNote) {
+    which.textContent = "The text as it ships";
+    shown.textContent = held.copyNote;
+  } else if (held.settled) {
+    which.textContent = "The text as it ships";
+    shown.textContent = "replacing…";
+  } else if (held.detected) {
+    which.textContent = "The text the scan read";
+    shown.textContent = held.detected.review_text;
+  } else {
+    which.textContent = "The text the scan reads";
+    shown.textContent = "Nothing has been read for personal data yet.";
+  }
 }
 
 // --------------------------------------------------------------------------- the reviewers
@@ -659,6 +777,7 @@ async function review() {
   mark(6, "answered", sayAgreement(answer.data));
   show("out-6", answer.data);
   sayVerdict("label-verdict", sayAgreement(answer.data), "");
+  paintConsensus();
   return true;
 }
 
@@ -672,10 +791,8 @@ function sayAgreement(reviewed) {
 
 // --------------------------------------------------------------------------- the label editor
 
-function fillEditors() {
+function fillEditor() {
   if (!held.sample) return;
-  $("messages-text").value = json(held.sample.messages ?? []);
-  $("tools-text").value = json(held.sample.tools ?? []);
   $("label-text").value = json(held.sample.label ?? null);
   paintShipped();
 }
@@ -683,30 +800,121 @@ function fillEditors() {
 // A box the human did not open reads back what was in it, so `correct` and an untouched editor
 // agree. Something that is not JSON is carried as `{unparsed: <text>}` -- never dropped, never
 // guessed at.
-function typedOr(id, arrived) {
+function typedLabel() {
+  const arrived = held.sample.label ?? null;
   if (!$("v-modify").checked) return arrived;
-  try { return JSON.parse($(id).value); } catch { return { unparsed: $(id).value }; }
+  try { return JSON.parse($("label-text").value); } catch { return { unparsed: $("label-text").value }; }
 }
 
+// **The three as they ship before redaction -- but only one of them is the reviewer's.** The
+// turns are what a customer said and the catalog is what the assistant was offered; a page that
+// let either be retyped is a page that can make the sample agree with the label instead of the
+// other way round. They still ship under `new_`, because redaction rewrites them, and a value
+// coming out is not a reviewer rewriting one.
 function paintShipped() {
   if (!held.sample) return;
-  const arrived = {
+  held.edited = {
     messages: held.sample.messages ?? [],
     tools: held.sample.tools ?? [],
-    label: held.sample.label ?? null
+    label: typedLabel()
   };
-  held.edited = {
-    messages: typedOr("messages-text", arrived.messages),
-    tools: typedOr("tools-text", arrived.tools),
-    label: typedOr("label-text", arrived.label)
-  };
-  const unparsed = [["messages", "messages-text"], ["tools", "tools-text"], ["label", "label-text"]]
-    .filter(([, id]) => ($("v-modify").checked ? typedOr(id, {}).unparsed !== undefined : false))
-    .map(([named]) => named);
-  say("label-note", unparsed.length
-    ? `${unparsed.join(", ")}: not JSON, carried as {unparsed: …}`
-    : "all three re-parsed", unparsed.length ? "bad" : "");
+  const unparsed = held.edited.label && held.edited.label.unparsed !== undefined;
+  say("label-note", unparsed
+    ? "not JSON, carried as {unparsed: …}"
+    : "re-parsed as a label", unparsed ? "bad" : "");
   held.record = null;
+  paintCalls();
+}
+
+// ------------------------------------------------------- is the label one the catalog can take
+
+// **The store's own rule, asked before the row is written rather than read off one afterwards.**
+// `schema_valid` is computed at write time from the label and the catalog, so a label naming a
+// tool without calling it -- `["VerifyEmail_15d"]`, which is a name and not a call -- was found
+// days later by somebody reading the corpus, and the person who ticked *correct* on it was never
+// told a thing. This is that same function over those same two fields, asked while they are still
+// looking at the sample.
+//
+// A warning and never a gate. What the label ought to be is the reviewer's to say, and a page
+// that refused to submit would be deciding it for them; it says what is wrong and leaves the
+// button alone.
+
+let faultAt = 0;
+
+async function checkLabel() {
+  if (!held.sample) return false;
+  const mine = (faultAt += 1);
+  // The label as it stands this instant: what the editor holds where they are rewriting it, and
+  // what arrived where they are not. `held.edited` is `paintShipped`'s, so the label checked and
+  // the label redacted are one label.
+  const answer = await call("/data-quality/label", { ...held.sample, ...(held.edited || {}) });
+  if (mine !== faultAt) return false;
+  held.faults = answer.ok ? answer.data : null;
+  if (!answer.ok) return sayNoCheck(answer.detail);
+  paintFaults();
+  return true;
+}
+
+// A check that could not be made is not a label that passed. Said where the faults would have
+// been, because that is where somebody is looking for them.
+function sayNoCheck(why) {
+  const said = $("label-fault");
+  said.hidden = false;
+  said.textContent = `the label could not be checked against the catalog: ${why}`;
+  return false;
+}
+
+// The service's own sentences, one per broken call, never reworded here: a page that put the
+// fault in its own words would be a second opinion about what a callable label is.
+function paintFaults() {
+  const said = $("label-fault");
+  const broken = held.faults && !held.faults.schema_valid;
+  said.hidden = !broken;
+  said.innerHTML = broken
+    ? "<b>Nothing here can validate this label against the catalog.</b><ul>"
+      + held.faults.faults.map(one => `<li>${esc(one)}</li>`).join("")
+      + "</ul>"
+    : "";
+}
+
+// ------------------------------------------------------------------ what the panel would write
+
+// The jury's answer was on the screen already, as JSON in a disclosure. A reviewer who agreed
+// with it had to retype the whole call by hand into the box below -- which is how a label that
+// two models had spelled out in full shipped as a bare name.
+function paintConsensus() {
+  const offered = agreedLabel() !== "";
+  $("consensus-line").hidden = !offered;
+  if (offered) say("consensus-note", "the one label the panel agreed on, into the box below");
+}
+
+// What the panel came to, or `""` where there is nothing to take. Read in one place, because the
+// line that offers it and the button that takes it have to agree about whether there is one. A
+// panel nobody agreed with still answered something somebody can start from, so the only question
+// asked here is whether there is text.
+const agreedLabel = () => {
+  const agreed = ((held.review || {}).llm || {}).consensus;
+  return typeof agreed === "string" ? agreed.trim() : "";
+};
+
+// Taken verbatim, and laid out only if it parses: it is the text a juror wrote, and this page
+// re-spelling a call would be the page deciding what a call looks like. Text that will not parse
+// goes in as it stands and *Check it is JSON* says so -- the same thing that happens to anything
+// else typed in there.
+function takeConsensus() {
+  const agreed = agreedLabel();
+  if (!agreed) return false;
+  let laid = agreed;
+  try { laid = json(JSON.parse(agreed)); } catch { laid = agreed; }
+  $("label-text").value = laid;
+  // Pressing this *is* saying the label is being rewritten, so it ticks and opens for them: a
+  // button that filled a hidden box would have done nothing anybody could see.
+  $("v-modify").checked = true;
+  $("v-correct").checked = false;
+  $("label-editor").hidden = false;
+  held.settled = true;
+  copyLater();
+  return true;
 }
 
 // ------------------------------------------------------------------ the facets a person ticks
@@ -828,6 +1036,9 @@ function addDomain() {
   addedValues.domain = [...(addedValues.domain || []), said];
   paintDomainTicks();
   tickDomain(said);
+  // Ticked in code, which fires no `change`: the record would otherwise still say the facet is
+  // unanswered while the screen shows it ticked.
+  composeRecord();
   $("domain-new").value = "";
   say("domain-note", `${said} added and ticked — it stays offered once a sample carries it`);
 }
@@ -856,19 +1067,15 @@ function readDeclaredFacets() {
 // wherever its value occurs. The replacing is the service's -- the offsets index `review_text`,
 // and `messages` and `label` are other strings, so the route runs the same rule by value over
 // every field and answers the copy.
-async function assemble() {
-  if (!held.sample) return false;
-  paintShipped();
-  // No span handed back is no value to replace, which is what the route is told: the three `new_`
-  // keys are then the edits with nothing redacted, because nothing was confirmed.
-  const handed = held.handed ?? { review_text: "", claims: [], spans: [] };
-  const body = { ...held.sample, ...held.edited, detected: handed };
-  const answer = await call("/data-quality/personal-data/redact", body);
-  if (!answer.ok) {
-    sayRefusal("data-refusal", answer.detail);
-    return false;
-  }
-  const redacted = answer.data;
+//
+// **Composed as the reviewer works, not at the moment of posting.** The box below it says *the
+// record this page will post*, and it held nothing until the post had been made -- after which
+// the next sample opened and wiped it, so the one thing it promised to show was the one thing it
+// never showed. Nothing made that necessary: the copy it is built from is already remade on every
+// tick, so this is remade with it.
+function composeRecord() {
+  if (!held.sample || !held.shipped) return;
+  const redacted = held.shipped.sample;
   held.record = {
     ...held.sample,
     messages: held.sample.messages ?? [],
@@ -876,13 +1083,15 @@ async function assemble() {
     label: held.sample.label ?? null,
     new_messages: redacted.messages,
     // `null` where nothing made a new version of the catalog: a copy of it under a second key is
-    // one more thing to keep in step. The human leaving it alone is not enough on its own --
-    // `review_text` holds the catalog, so a confirmed value can sit in a tool's description and
-    // the route rewrites it there. A redacted catalog *is* a new version.
-    new_tools: same(held.edited.tools, held.sample.tools ?? [])
-      && same(redacted.tools, held.sample.tools ?? []) ? null : redacted.tools,
+    // one more thing to keep in step. Nobody can retype the catalog here, so redaction is the
+    // only thing that ever makes a new version of it -- `review_text` holds the catalog, a
+    // confirmed value can sit in a tool's description, and the route rewrites it there.
+    new_tools: same(redacted.tools, held.sample.tools ?? []) ? null : redacted.tools,
     new_label: redacted.label,
-    personal_data: held.handed ? { ...held.handed, ...held.replaced } : null,
+    // `null` is nobody having scanned it, which is the first refusal the store names. The
+    // outcome rides with the spans because it is the one thing about the rewrite the spans do
+    // not say -- and it is measured over what ships, not over a second copy of the scan's text.
+    personal_data: held.detected ? { ...held.handed, outcome: held.shipped.outcome } : null,
     duplicate: null,
     abnormal: null,
     llm: held.review ? held.review.llm : null,
@@ -892,7 +1101,20 @@ async function assemble() {
     class: readDeclaredFacets()
   };
   show("record", held.record);
-  return true;
+}
+
+async function assemble() {
+  if (!held.sample) return false;
+  // The copy, made once more and now rather than on a timer: what is posted has to be the record
+  // as it reads this instant, not as it read before the last keystroke.
+  clearTimeout(copySoon);
+  paintShipped();
+  checkLabel();
+  if (!await refreshCopy()) {
+    sayRefusal("data-refusal", held.copyNote || "the copy that ships could not be made");
+    return false;
+  }
+  return held.record !== null;
 }
 
 // A refusal lands on the panel that owns it, which is the difference between *go and fix this* and
@@ -1163,6 +1385,76 @@ async function openPicked(key) {
   paintStrip();
 }
 
+// ------------------------------------------------------------------ what is already stored
+
+// The corpus read back, which is the one thing this page could not do: the queue says what is
+// *waiting*, the statistics say what the whole comes to, and between them a row somebody wrote
+// was not readable anywhere. A sample pasted straight in never had a queue row at all, so it was
+// invisible the moment it was stored.
+//
+// **The redacted table, because that is the route's own answer.** Nothing here chooses that --
+// `/records` serves `tool_decision_dataset` and there is no route to the other one.
+const DATASET_PAGE = 100;
+
+let stored = [];
+let storedTotal = 0;
+let storedShown = 0;
+
+async function askDataset(more) {
+  storedShown = more ? storedShown + DATASET_PAGE : 0;
+  if (!more) stored = [];
+  say("dataset-note", "reading…");
+  const answer = await ask(`/records?limit=${DATASET_PAGE}&offset=${storedShown}`);
+  if (!answer.ok) return say("dataset-note", answer.detail, "bad");
+  stored = [...stored, ...(answer.data.samples || [])];
+  storedTotal = answer.data.total || 0;
+  $("dataset-one").innerHTML = "";
+  paintDataset();
+}
+
+function paintDataset() {
+  const only = $("dataset-bad").checked;
+  const rows = only ? stored.filter(row => !row.schema_valid) : stored;
+  say("dataset-note", `${rows.length} of ${storedTotal} ${wordFor(storedTotal, "row", "rows")}`);
+  $("dataset-more").disabled = stored.length >= storedTotal;
+  const body = $("dataset-rows").querySelector("tbody");
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="8" class="empty">${
+      only ? "Every stored row validates against its catalog." : "Nothing is stored yet."
+    }</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(row => `<tr class="${row.schema_valid ? "" : "dropped"}">
+    <td><button class="open" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
+    <td>${esc(row.domain)}</td>
+    <td>${esc(row.ambiguous)}</td>
+    <td>${esc(row.number_turns)}</td>
+    <td>${esc(row.number_label_tools)}</td>
+    <td>${esc(row.number_provided_tools)}</td>
+    <td>${esc((row.personal_data || []).join(", ")) || "—"}</td>
+    <td class="${row.schema_valid ? "ok" : "bad"}">${row.schema_valid ? "yes" : "no"}</td>
+  </tr>`).join("");
+}
+
+// One row opened. The label is drawn as calls rather than as JSON for the same reason the sample
+// pane draws the conversation: what somebody is checking is whether the calls fit the turns.
+async function openStored(key) {
+  say("dataset-note", "reading…");
+  const answer = await ask(`/records/${encodeURIComponent(key)}`);
+  if (!answer.ok) return say("dataset-note", answer.detail, "bad");
+  const one = answer.data;
+  const valid = one.facets.schema_valid;
+  say("dataset-note", `#${key}`);
+  $("dataset-one").innerHTML = `<div class="storedone">`
+    + `<div class="lab">Label as it ships</div>`
+    + `<div class="calls">${drawCalls(one.label || [])}</div>`
+    + (valid ? "" : `<p class="refusal">Nothing could validate this label against the catalog`
+      + ` — a call names a tool that was never offered, or leaves out an argument it requires.</p>`)
+    + `<div class="lab">The conversation</div>`
+    + `<div class="turns">${drawTurns(one.input.messages || [])}</div>`
+    + `</div>`;
+}
+
 // --------------------------------------------------------------------------- the sheets
 
 const openSheet = id => { $(id).hidden = false; };
@@ -1362,11 +1654,18 @@ $("span-check").onclick = checkSpans;
 $("span-add").onclick = addSpan;
 $("label-check").onclick = paintShipped;
 
-const SHEETS = ["sheet-guide", "sheet-import", "sheet-list"];
+const SHEETS = ["sheet-guide", "sheet-import", "sheet-list", "sheet-dataset"];
 
 $("open-guide").onclick = () => openSheet("sheet-guide");
 $("open-import").onclick = () => openSheet("sheet-import");
 $("open-list").onclick = () => { openSheet("sheet-list"); askList(); };
+$("open-dataset").onclick = () => { openSheet("sheet-dataset"); askDataset(false); };
+$("dataset-more").onclick = () => askDataset(true);
+$("dataset-bad").onchange = paintDataset;
+$("dataset-rows").onclick = event => {
+  const open = event.target.closest("[data-stored]");
+  if (open) openStored(open.dataset.stored);
+};
 for (const button of document.querySelectorAll("[data-close]")) {
   button.onclick = () => shutSheet(button.dataset.close);
 }
@@ -1403,7 +1702,7 @@ $("drop").ondrop = event => {
   tookFile(event.dataTransfer.files[0]);
 };
 
-$("language").onchange = () => { forgetEverything(); if (held.sample) fillEditors(); };
+$("language").onchange = () => { forgetEverything(); if (held.sample) fillEditor(); };
 
 $("domain-add").onclick = addDomain;
 $("domain-new").onkeydown = event => {
@@ -1417,7 +1716,13 @@ $("domain-new").onkeydown = event => {
 for (const id of ["v-correct", "v-modify"]) {
   $(id).onchange = () => {
     $("label-editor").hidden = !$("v-modify").checked;
+    // Saying what the label is, is what makes the shipping copy possible: the label is rendered
+    // into the text, so there is nothing to redact until it is settled.
+    held.settled = $("v-correct").checked || $("v-modify").checked;
     paintShipped();
+    // Not a new call on its own: the copy already follows the ticking. What saying this changes
+    // is that the reviewer may now *see* it, and that the label it is made from is settled.
+    copyLater();
   };
 }
 
@@ -1438,7 +1743,14 @@ $("keep-table").onchange = event => {
   paintKeepTable();
 };
 $("auto").onchange = () => { copyLater(); paintKeepTable(); };
-for (const id of ["messages-text", "tools-text", "label-text"]) $(id).oninput = () => { held.record = null; };
+// A facet is the one part of the record nothing computes, so ticking one is the only edit that
+// reaches it without going through the copy. `change` on the container, because the boxes inside
+// are redrawn whenever the corpus answers with a value nobody had offered yet.
+for (const id of ["facet-ticks", "domain-ticks"]) $(id).onchange = composeRecord;
+// Typing in a label the reviewer is rewriting makes the copy wrong the moment it happens, the
+// same way moving a span does. So it goes, and comes back once they stop.
+$("label-text").oninput = copyLater;
+$("take-consensus").onclick = takeConsensus;
 
 document.addEventListener("keydown", steer);
 // A model file added to `config/model/` while this page is open. Asked on focus and not on an

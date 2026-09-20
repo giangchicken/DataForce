@@ -23,8 +23,9 @@ from fastapi.testclient import TestClient
 from dataforce.edge.database import db
 from dataforce.edge.main import create_app
 from dataforce.profile.tool_decision.sample_building import create_tables
+from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.tables import Base
-from tests.edge.test_endpoints import BASE, build_review
+from tests.edge.test_endpoints import BASE, POSTED_PHONE, build_review
 
 CHECKS = Path(__file__).parent / "page.js"
 READING = Path(__file__).parent / "reading.js"
@@ -263,7 +264,9 @@ def test_the_page_reads_what_the_routes_actually_answer(
         {
             "messages": arrived["messages"],
             "tools": arrived["tools"],
-            "label": arrived["label"],
+            # The number the customer gave, carried into the call that was labelled. A label with
+            # nothing personal in it cannot show whether the label is redacted at all.
+            "label": [{"name": "OpenTicket", "arguments": {"ma_khach": POSTED_PHONE}}],
         },
         ensure_ascii=False,
     )
@@ -273,6 +276,36 @@ def test_the_page_reads_what_the_routes_actually_answer(
 
     queued = attached_client.get(f"{BASE}/queue/next")
     assert queued.status_code == 200, queued.text
+
+    # The shipping copy, from the route that makes one. Two halves the page reads by name -- the
+    # record under `sample`, the text under `review_text` -- and a stub cannot catch either being
+    # renamed, because a stub answers whatever shape the page was written against.
+    scanned = build_review_text(queued.json()["sample"])
+    at = scanned.index(POSTED_PHONE)
+    redacted = attached_client.post(
+        f"{BASE}/data-quality/personal-data/redact",
+        json={
+            **queued.json()["sample"],
+            "detected": {
+                "review_text": scanned,
+                "claims": [["PHONE", POSTED_PHONE]],
+                "spans": [
+                    {
+                        "id": 1,
+                        "start": at,
+                        "end": at + len(POSTED_PHONE),
+                        "personal_data_class": "PHONE",
+                        "placeholder": "<PHONE_1>",
+                        "reason": None,
+                    }
+                ],
+            },
+        },
+    )
+    assert redacted.status_code == 200, redacted.text
+    # The turn and the label both, which is what the reach is for.
+    assert POSTED_PHONE not in redacted.text
+    assert "<PHONE_1>" in redacted.json()["review_text"].split("label: ")[1]
 
     # One domain the page declares and one it does not. The second is what an *added* domain
     # becomes once a sample carries it, and the page has to offer it back -- which is the whole of
@@ -317,5 +350,6 @@ def test_the_page_reads_what_the_routes_actually_answer(
     (tmp_path / "models.json").write_text(served.text, encoding="utf-8")
     (tmp_path / "named.json").write_text(named.text, encoding="utf-8")
     (tmp_path / "anonymous.json").write_text(anonymous, encoding="utf-8")
+    (tmp_path / "redacted.json").write_text(redacted.text, encoding="utf-8")
 
     run_node(str(READING), str(tmp_path))

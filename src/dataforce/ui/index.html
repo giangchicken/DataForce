@@ -15,6 +15,7 @@
   <div class="strip" id="strip"></div>
   <div class="topacts">
     <button id="open-list" class="quiet">Samples</button>
+    <button id="open-dataset" class="quiet">Dataset</button>
     <button id="open-import" class="quiet">Import</button>
     <button id="open-guide" class="quiet">Guide</button>
   </div>
@@ -114,8 +115,22 @@
           <th>Keep</th><th>Class</th><th>Placeholder</th><th>Value</th><th></th>
         </tr></thead><tbody></tbody></table></div>
         <label class="inline"><input type="checkbox" id="auto" checked> Drop any span inside a longer one</label>
+
+        <!-- The one thing on this panel that is not a control, and the only text a reviewer is
+             asked to read: the sample as one string, with its own line breaks. The routes'
+             answers are JSON *about* a conversation, and a person checking a conversation should
+             be reading the conversation. What the scan keyed and how it decided is its business.
+
+             Two versions of it, and which one is up says where the sample has got to. The
+             shipping copy cannot be shown earlier, because **the label is part of this text**: a
+             copy made before the label is settled is a copy of a label about to change. -->
+        <div class="shown">
+          <div class="lab" id="text-which">The text the scan reads</div>
+          <pre class="reviewtext" id="review-text"></pre>
+        </div>
+
         <details class="raw" id="scan-raw">
-          <summary>What the scan answered</summary>
+          <summary>The spans, by offset</summary>
           <div class="tablewrap"><table id="span-table"><thead><tr>
             <th>id</th><th>start</th><th>end</th><th>class</th><th>placeholder</th><th>value it reads</th>
           </tr></thead><tbody></tbody></table></div>
@@ -124,8 +139,6 @@
             <button id="span-add" class="quiet">Add a span</button>
             <span class="note" id="span-note"></span>
           </div>
-          <pre id="out-2"></pre>
-          <pre id="out-5"></pre>
         </details>
         <p class="refusal" id="data-refusal" hidden></p>
       </div>
@@ -137,17 +150,39 @@
         <span class="verdict" id="label-verdict"></span>
       </div>
       <div class="panelbody">
+        <div class="lab tight" id="calls-which">The label as it arrived</div>
         <div class="calls" id="calls"></div>
+        <!-- Above the question, because it is about the thing the question is asked of. The same
+             rule the store writes `schema_valid` from, asked here rather than read off a row
+             afterwards: a label naming a tool without calling it used to be found days later by
+             somebody reading the corpus, and the reviewer who ticked *correct* on it was never
+             told. It warns and never blocks — what a label ought to be is theirs to say. -->
+        <div class="faults" id="label-fault" hidden></div>
+        <!-- Neither is ticked to begin with, and that is the point: *correct* is a thing a
+             person says about a label, not a thing a page assumes while they are still reading
+             it. Saying either one is also what makes the shipping copy on the panel above
+             possible — the label is rendered into that text, so there is nothing to redact
+             until somebody has settled what the label is. -->
         <div class="choice">
-          <label class="inline"><input type="radio" name="verdict" id="v-correct" checked> Correct — it ships as it arrived</label>
+          <label class="inline"><input type="radio" name="verdict" id="v-correct"> Correct — it ships as it arrived</label>
           <label class="inline"><input type="radio" name="verdict" id="v-modify"> Modify — edit it below</label>
         </div>
+        <p class="note">Say which, and <b>the data</b> above swaps to the copy that ships — the
+          label redacted along with the turns, in the same placeholders.</p>
+        <!-- The panel's own answer is already on the screen as JSON nobody can act on. A reviewer
+             who agrees with it had to retype the whole call by hand; this puts it in the box.
+             Outside the editor because pressing it is what opens the editor. -->
+        <div class="runline" id="consensus-line" hidden>
+          <button id="take-consensus" class="quiet">Rewrite it as the reviewers did</button>
+          <span class="note" id="consensus-note"></span>
+        </div>
+        <!-- **The label, and nothing else.** The turns are what a customer said and the catalog
+             is what the assistant was offered; a page that let a reviewer retype either is a page
+             that can quietly make the sample agree with the label. What they are here to decide
+             is which calls that conversation should have produced. Redaction still rewrites the
+             turns and the catalog — that is a value coming out, not a reviewer rewriting one. -->
         <div id="label-editor" class="editor" hidden>
-          <div class="lab">Messages</div>
-          <textarea id="messages-text" spellcheck="false"></textarea>
-          <div class="lab">Tools</div>
-          <textarea id="tools-text" spellcheck="false"></textarea>
-          <div class="lab">Label</div>
+          <div class="lab tight">Label</div>
           <textarea id="label-text" spellcheck="false"></textarea>
           <div class="runline">
             <button id="label-check" class="quiet">Check it is JSON</button>
@@ -254,6 +289,33 @@
       <p class="lead">One sample from somewhere else does not need a file: paste it straight into
         <b>the sample</b> pane. That way needs no database at all.</p>
 
+    </div>
+  </div>
+</div>
+
+<!-- What is already stored, read back. **The redacted table and not the record table**: the
+     record keeps what arrived so a review can be audited, and a corpus browser that served it
+     would put a person's number on the screen of anyone who opens the page.
+
+     `valid` is the column worth scanning. A label that names a tool the catalog does not offer,
+     or leaves out an argument the tool requires, reads `no` — and `no` beside `calls 0` is a
+     label that named a tool without calling it. -->
+<div class="sheet" id="sheet-dataset" hidden>
+  <div class="sheetbox">
+    <div class="sheethead"><h2>Dataset</h2>
+      <span class="note" id="dataset-note"></span>
+      <button class="close" data-close="sheet-dataset">Close</button>
+    </div>
+    <div class="sheetbody">
+      <div class="runline">
+        <label class="inline"><input type="checkbox" id="dataset-bad"> Only rows nothing could validate</label>
+        <button id="dataset-more" class="quiet">Show more</button>
+      </div>
+      <div class="tablewrap"><table class="rows" id="dataset-rows"><thead><tr>
+        <th>Sample</th><th>Domain</th><th>Arguable</th><th>Turns</th>
+        <th>Calls</th><th>Offered</th><th>Redacted</th><th>Valid</th>
+      </tr></thead><tbody></tbody></table></div>
+      <div id="dataset-one"></div>
     </div>
   </div>
 </div>

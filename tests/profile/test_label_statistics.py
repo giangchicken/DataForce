@@ -1,9 +1,14 @@
-"""What this task's label can be measured by: is it a valid call, and what does the corpus cover.
+"""What this task's label can be measured by: is it a callable call, and what does the corpus cover.
 
-`validate_label_calls` is BFCL's AST check turned on the corpus rather than on a model. A label
+`list_label_faults` is BFCL's AST check turned on the corpus rather than on a model. A label
 calling a tool the sample was never offered is a broken row, and a row nobody notices is one a
 buyer finds. The checks read **this row's own catalog**, so nothing here depends on a corpus-wide
 list of tools.
+
+It answers sentences and not a boolean because two readers want different halves of it: the store
+writes `schema_valid` from whether it came back empty, and the page puts the sentences in front of
+a reviewer before they say the label is correct. So the sentences are checked here too -- a fault
+that does not name which call it is about is one nobody can act on.
 """
 
 from typing import Any
@@ -13,8 +18,8 @@ import pytest
 from dataforce.profile.tool_decision.label_statistics import (
     count_tool_calls,
     list_called_tools,
+    list_label_faults,
     list_offered_tools,
-    validate_label_calls,
 )
 
 LOOKUP = {
@@ -53,23 +58,27 @@ def test_the_tools_a_label_calls_come_back_in_call_order() -> None:
 
 def test_a_call_naming_a_tool_the_sample_never_offered_is_a_broken_row() -> None:
     """Not a hard example: nothing in the row could have produced that call."""
-    assert (
-        validate_label_calls((build_call("Refund", {"so_tien": 1}),), CATALOG) is False
+    faults = list_label_faults((build_call("Refund", {"so_tien": 1}),), CATALOG)
+    assert faults == (
+        "call 1 names Refund, which this sample's catalog does not offer",
     )
 
 
-def test_a_call_missing_a_required_parameter_is_invalid() -> None:
-    """`ma_khach` is what the catalog says the tool cannot be called without."""
-    assert (
-        validate_label_calls((build_call("Lookup", {"kenh": "app"}),), CATALOG) is False
+def test_a_call_missing_a_required_parameter_says_which_parameter() -> None:
+    """`ma_khach` is what the catalog says the tool cannot be called without.
+
+    Named in the sentence, because *this label is invalid* sends a reviewer back to read the
+    catalog and *leaves out ma_khach* sends them to the one word they have to type.
+    """
+    assert list_label_faults((build_call("Lookup", {"kenh": "app"}),), CATALOG) == (
+        "call 1 to Lookup leaves out ma_khach, which it requires",
     )
 
 
 def test_a_call_missing_an_optional_parameter_is_valid() -> None:
     """`kenh` is offered, not demanded, so a call leaving it out is a call."""
     assert (
-        validate_label_calls((build_call("Lookup", {"ma_khach": "KH-1"}),), CATALOG)
-        is True
+        list_label_faults((build_call("Lookup", {"ma_khach": "KH-1"}),), CATALOG) == ()
     )
 
 
@@ -77,22 +86,52 @@ def test_a_required_parameter_that_declares_a_default_is_not_required() -> None:
     """The catalog a model was shown leaves `ngay` out of `require:`, so the check does too."""
     assert "ngay" in LOOKUP["function"]["parameters"]["required"]  # type: ignore[index]
     assert (
-        validate_label_calls((build_call("Lookup", {"ma_khach": "KH-1"}),), CATALOG)
-        is True
+        list_label_faults((build_call("Lookup", {"ma_khach": "KH-1"}),), CATALOG) == ()
     )
 
 
 def test_arguments_written_as_json_text_are_read_as_the_same_call() -> None:
     """A provider writes them as text and a corpus writes the object; one call either way."""
     written = build_call("Lookup", '{"ma_khach": "KH-1"}')
-    assert validate_label_calls((written,), CATALOG) is True
+    assert list_label_faults((written,), CATALOG) == ()
 
 
 def test_an_entry_that_names_no_tool_is_not_a_call() -> None:
     """A label holding something that is not a call is a broken row, not an empty one."""
-    assert (
-        validate_label_calls(({"arguments": {"ma_khach": "KH-1"}},), CATALOG) is False
+    assert list_label_faults(({"arguments": {"ma_khach": "KH-1"}},), CATALOG) == (
+        'call 1 does not read as a tool call: it has to be {"name": ..., "arguments": {...}}',
     )
+
+
+def test_a_bare_tool_name_is_told_what_a_call_is_made_of() -> None:
+    """**The shape a corpus really arrives in**, and the one this whole check exists for.
+
+    `["VerifyEmail_15d"]` is a corpus that recorded *which tool fires* and stopped. Telling the
+    reviewer looking at it that the entry is unreadable says nothing they can act on; telling them
+    what a call has to read as does.
+    """
+    assert list_label_faults(("Lookup",), CATALOG) == (
+        'call 1 does not read as a tool call: it has to be {"name": ..., "arguments": {...}}',
+    )
+
+
+def test_every_broken_call_is_named_by_its_position_in_the_label() -> None:
+    """A label makes more than one call, and *which one* is the first thing a fixer needs.
+
+    All of them and not the first: a reviewer who fixed call 1 and posted again, only to be told
+    about call 3, has been sent round the loop once per fault.
+    """
+    faults = list_label_faults(
+        (
+            build_call("Lookup", {"ma_khach": "KH-1"}),
+            "Refund",
+            build_call("Lookup", {}),
+        ),
+        CATALOG,
+    )
+    assert len(faults) == 2
+    assert faults[0].startswith("call 2 ")
+    assert faults[1].startswith("call 3 ")
 
 
 def test_a_tool_whose_parameters_will_not_read_clears_no_call() -> None:
@@ -102,17 +141,22 @@ def test_a_tool_whose_parameters_will_not_read_clears_no_call() -> None:
     tool no call can be cleared against, not a reason to answer nothing.
     """
     unreadable = {"type": "function", "function": {"name": "L", "parameters": "{}"}}
-    assert validate_label_calls((build_call("L", {}),), (unreadable,)) is False
-    assert validate_label_calls((), (unreadable, *CATALOG)) is True
-    assert validate_label_calls(
-        (build_call("Lookup", {"ma_khach": "KH-1"}),), (unreadable, *CATALOG)
+    assert list_label_faults((build_call("L", {}),), (unreadable,)) == (
+        "call 1 names L, which this sample's catalog does not offer",
+    )
+    assert list_label_faults((), (unreadable, *CATALOG)) == ()
+    assert (
+        list_label_faults(
+            (build_call("Lookup", {"ma_khach": "KH-1"}),), (unreadable, *CATALOG)
+        )
+        == ()
     )
 
 
 def test_an_empty_label_is_valid_however_it_is_spelled() -> None:
     """A sample needing no call is an answer. Both spellings, because neither is settled."""
-    assert validate_label_calls((), CATALOG) is True
-    assert validate_label_calls(None, CATALOG) is True
+    assert list_label_faults((), CATALOG) == ()
+    assert list_label_faults(None, CATALOG) == ()
 
 
 def test_the_counts_say_what_is_offered_and_what_is_ever_called() -> None:

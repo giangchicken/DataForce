@@ -55,7 +55,6 @@ SCANNED: dict[str, Any] = {
     "review_text": REVIEW_TEXT,
     "claims": [["PHONE", PHONE], ["EMAIL", EMAIL]],
     "spans": [build_span(PHONE, "PHONE", 1), build_span(EMAIL, "EMAIL", 2)],
-    "redacted_text": "user: Chào anh <PHONE_1>, mail <EMAIL_1>\nlabel: null",
     "outcome": "redacted",
 }
 
@@ -229,7 +228,6 @@ def test_a_value_json_would_escape_is_still_found_in_what_ships(
                             "reason": None,
                         }
                     ],
-                    "redacted_text": "user: <NAME_1> gọi",
                     "outcome": "redacted",
                 },
                 new_messages=[{"role": "user", "content": f"{quoted} gọi"}],

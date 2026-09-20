@@ -2,9 +2,9 @@
 
 from .ai_review import predict_tool_decision_by_llm, predict_tool_decision_by_sft
 from .data_quality import (
+    check_label_calls,
     detect_personal_data,
     redact_personal_data,
-    replace_personal_data,
     report_abnormalities,
     report_duplicates,
 )
@@ -17,6 +17,7 @@ from .dataset_management import (
 
 __all__ = [
     "report_abnormalities",
+    "check_label_calls",
     "create_joint_distribution_matrix",
     "summarise_labels",
     "build_dataset_statistics",
@@ -24,7 +25,6 @@ __all__ = [
     "report_duplicates",
     "detect_personal_data",
     "redact_personal_data",
-    "replace_personal_data",
     "predict_tool_decision_by_llm",
     "predict_tool_decision_by_sft",
 ]

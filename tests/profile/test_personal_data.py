@@ -56,10 +56,10 @@ from dataforce.profile.tool_decision.data_quality import (
     order_claims_by_class,
     replace_node,
 )
+from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.services.tool_decision import (
     detect_personal_data,
     redact_personal_data,
-    replace_personal_data,
 )
 
 EMAIL = "minh0912345678@vd.vn"
@@ -307,7 +307,7 @@ async def test_review_text_holds_the_turns_the_catalog_and_the_label() -> None:
     The turns alone would miss the argument value in the label, which is exactly where a phone
     number sits in a tool-calling sample.
     """
-    text = StubbedModels().build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
 
     assert text.startswith("user: Chào em")
     assert "assistant: Dạ em mở phiếu" in text
@@ -362,18 +362,19 @@ async def test_a_deployment_s_own_scan_runs_beside_the_four() -> None:
     said = f"anh {NAME} bao loi phieu {ticket}"
     checker = StubbedModels(scans=(*SCANS, ("TICKET", lambda text, language: [ticket])))
 
-    detected = await checker.detect(
-        build_scan_input({"id": "own", "messages": [{"role": "user", "content": said}]})
+    scanned = build_scan_input(
+        {"id": "own", "messages": [{"role": "user", "content": said}]}
     )
-    replaced = replace_personal_data(detected)
+    detected = await checker.detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert list_placeholders(detected, ticket) == {"<TICKET_1>"}
     assert list_placeholders(detected, NAME) == {"<NAME_1>"}
     assert (
-        replaced.redacted_text
+        redacted.review_text
         == "user: anh <NAME_1> bao loi phieu <TICKET_1>\nlabel: null"
     )
-    assert replaced.outcome == "redacted"
+    assert redacted.outcome == "redacted"
 
 
 async def test_the_model_detects_what_no_rule_scan_can() -> None:
@@ -382,15 +383,14 @@ async def test_the_model_detects_what_no_rule_scan_can() -> None:
     It is detected, confirmed, spanned and replaced like any other value, and the class the model
     named is what its placeholder reads.
     """
-    detected = await StubbedModels(detected={ADDRESS: "ADDRESS"}).detect(
-        build_scan_input(SAMPLE)
-    )
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels(detected={ADDRESS: "ADDRESS"}).detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert list_placeholders(detected, ADDRESS) == {"<ADDRESS_1>"}
-    assert replaced.redacted_text is not None
-    assert ADDRESS not in replaced.redacted_text
-    assert replaced.outcome == "redacted"
+    assert redacted.review_text is not None
+    assert ADDRESS not in redacted.review_text
+    assert redacted.outcome == "redacted"
 
 
 async def test_a_class_only_the_model_named_is_numbered_after_the_declared_four() -> (
@@ -451,7 +451,7 @@ async def test_a_value_the_model_did_not_copy_is_dropped(
         ],
     )
     checker = ToolDecisionPersonalChecking(build_checking_config())
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
 
     assert await read_llm_claims(checker, text) == {ADDRESS: "ADDRESS"}
 
@@ -474,7 +474,7 @@ async def test_an_entry_missing_a_half_names_nothing(
         ],
     )
     checker = ToolDecisionPersonalChecking(build_checking_config())
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
 
     assert await read_llm_claims(checker, text) == {}
     assert set(read_span_slices(await checker.detect(build_scan_input(SAMPLE)))) == {
@@ -502,9 +502,7 @@ async def test_a_readable_finding_survives_an_unreadable_one(
     )
     checker = ToolDecisionPersonalChecking(build_checking_config())
 
-    assert await read_llm_claims(checker, checker.build_review_text(SAMPLE)) == {
-        NAME: "NAME"
-    }
+    assert await read_llm_claims(checker, build_review_text(SAMPLE)) == {NAME: "NAME"}
 
 
 async def test_the_class_the_model_wrote_is_read_in_upper_case(
@@ -515,7 +513,7 @@ async def test_the_class_the_model_wrote_is_read_in_upper_case(
         monkeypatch, detected=[{"text": ADDRESS, "label": "home address"}]
     )
     checker = ToolDecisionPersonalChecking(build_checking_config())
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
 
     assert await read_llm_claims(checker, text) == {ADDRESS: "HOME_ADDRESS"}
 
@@ -537,7 +535,7 @@ async def test_the_confirmation_is_handed_the_spans_the_text_and_the_language() 
 
     text, spans, language = checker.asked[0]
     assert language == "vi"
-    assert text == checker.build_review_text(SAMPLE)
+    assert text == build_review_text(SAMPLE)
     assert [span.id for span in spans] == [1, 2, 3, 4, 5]
     assert [
         (span.personal_data_class, text[span.start : span.end]) for span in spans
@@ -552,15 +550,14 @@ async def test_the_confirmation_is_handed_the_spans_the_text_and_the_language() 
 
 async def test_only_a_confirmed_value_is_replaced() -> None:
     """The confirmation is what sets the precision: what it leaves out earns no span at all."""
-    detected = await StubbedModels(confirmed=[EMAIL, NAME]).detect(
-        build_scan_input(SAMPLE)
-    )
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels(confirmed=[EMAIL, NAME]).detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert list_placeholders(detected, PHONE) == set()
-    assert replaced.redacted_text is not None
-    assert PHONE in replaced.redacted_text
-    assert replaced.outcome == "withheld"
+    assert redacted.review_text is not None
+    assert PHONE in redacted.review_text
+    assert redacted.outcome == "withheld"
 
 
 async def test_an_answer_about_a_span_that_was_not_shown_is_discarded(
@@ -583,7 +580,7 @@ async def test_an_answer_about_a_span_that_was_not_shown_is_discarded(
         ],
     )
     checker = ToolDecisionPersonalChecking(build_checking_config())
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
     claimed = checker.pii_rule_detector.detect(text, "vi")
     candidates = find_and_number_spans(
         text, order_claims_by_class(text, claimed, checker.pii_rule_detector.classes)
@@ -592,15 +589,16 @@ async def test_an_answer_about_a_span_that_was_not_shown_is_discarded(
     confirmed = await checker.confirm_pii_by_llm(
         build_scan_input(SAMPLE), text, candidates
     )
-    detected = await checker.detect(build_scan_input(SAMPLE))
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(SAMPLE)
+    detected = await checker.detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert [(span.id, span.reason) for span in confirmed] == [
         (3, "the phone in the label")
     ]
     assert [span.id for span in detected.spans] == [3]
     assert read_span_slices(detected) == [PHONE]
-    assert replaced.outcome == "withheld"
+    assert redacted.outcome == "withheld"
 
 
 async def test_a_confirmed_span_carries_the_reason_it_was_confirmed_for(
@@ -640,12 +638,13 @@ async def test_nothing_detected_is_nobody_asked_to_confirm(
     prompts: list[str] = []
     install_model_answers(monkeypatch, prompts=prompts)
 
+    scanned = build_scan_input(NOTHING_TO_FIND)
     detected = await ToolDecisionPersonalChecking(build_checking_config()).detect(
-        build_scan_input(NOTHING_TO_FIND)
+        scanned
     )
-    replaced = replace_personal_data(detected)
+    redacted = redact_personal_data(detected, scanned.sample)
 
-    assert replaced.outcome == "reported"
+    assert redacted.outcome == "reported"
     assert len(prompts) == 1
     assert "## Detected" not in prompts[0]
 
@@ -723,21 +722,20 @@ async def test_a_span_inside_a_longer_span_is_dropped() -> None:
     """
     checker = StubbedModels(scans=(("NAME", lambda text, language: [NAME, "Văn"]),))
 
-    detected = await checker.detect(
-        build_scan_input(
-            {
-                "id": "nested",
-                "messages": [{"role": "user", "content": f"anh {NAME} noi"}],
-            }
-        )
+    scanned = build_scan_input(
+        {
+            "id": "nested",
+            "messages": [{"role": "user", "content": f"anh {NAME} noi"}],
+        }
     )
-    replaced = replace_personal_data(detected)
+    detected = await checker.detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert [span.placeholder for span in detected.spans] == ["<NAME_1>"]
-    assert replaced.redacted_text == "user: anh <NAME_1> noi\nlabel: null"
+    assert redacted.review_text == "user: anh <NAME_1> noi\nlabel: null"
     # And the dropped span is not a value left over: `Văn` went with the name it sat inside, so
     # every detected value resolved and the scan says `redacted` rather than holding the record.
-    assert replaced.outcome == "redacted"
+    assert redacted.outcome == "redacted"
 
 
 async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> None:
@@ -755,12 +753,11 @@ async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> No
     """
     said = "so 0912345678 va don hang 09123456789012"
 
-    detected = await StubbedModels().detect(
-        build_scan_input(
-            {"id": "order", "messages": [{"role": "user", "content": said}]}
-        )
+    scanned = build_scan_input(
+        {"id": "order", "messages": [{"role": "user", "content": said}]}
     )
-    replaced = replace_personal_data(detected)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert [(span.start, span.end) for span in detected.spans] == [
         (
@@ -768,9 +765,9 @@ async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> No
             detected.review_text.index(PHONE) + len(PHONE),
         )
     ]
-    assert replaced.redacted_text is not None
-    assert "<PHONE_1>9012" in replaced.redacted_text
-    assert replaced.outcome == "redacted"
+    assert redacted.review_text is not None
+    assert "<PHONE_1>9012" in redacted.review_text
+    assert redacted.outcome == "redacted"
 
 
 async def test_the_longest_value_is_replaced_first() -> None:
@@ -779,37 +776,35 @@ async def test_the_longest_value_is_replaced_first() -> None:
     Replacement is by value over the whole text, so a shorter value inside a longer one cuts it in
     half unless the longer one goes first.
     """
-    detected = await StubbedModels().detect(build_scan_input(SAMPLE))
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
-    assert replaced.redacted_text is not None
-    assert "minh<PHONE_1>@vd.vn" not in replaced.redacted_text
-    assert "<EMAIL_1>" in replaced.redacted_text
-    assert replaced.redacted_text.count("<PHONE_1>") == 2
+    assert redacted.review_text is not None
+    assert "minh<PHONE_1>@vd.vn" not in redacted.review_text
+    assert "<EMAIL_1>" in redacted.review_text
+    assert redacted.review_text.count("<PHONE_1>") == 2
     for value in (EMAIL, PHONE, NAME):
-        assert value not in replaced.redacted_text
+        assert value not in redacted.review_text
 
 
 async def test_two_addresses_each_get_their_own_placeholder() -> None:
     """Per-class numbering over the real detector, so `_2` is a rendering something has read."""
-    detected = await StubbedModels().detect(
-        build_scan_input(
-            {
-                "id": "two",
-                "messages": [
-                    {"role": "user", "content": "mail anh@vd.vn, cc chi@vd.vn nhe"},
-                ],
-            }
-        )
+    scanned = build_scan_input(
+        {
+            "id": "two",
+            "messages": [
+                {"role": "user", "content": "mail anh@vd.vn, cc chi@vd.vn nhe"},
+            ],
+        }
     )
-    replaced = replace_personal_data(detected)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert list_placeholders(detected, "anh@vd.vn") == {"<EMAIL_1>"}
     assert list_placeholders(detected, "chi@vd.vn") == {"<EMAIL_2>"}
-    assert (
-        replaced.redacted_text == "user: mail <EMAIL_1>, cc <EMAIL_2> nhe\nlabel: null"
-    )
-    assert replaced.outcome == "redacted"
+    assert redacted.review_text == "user: mail <EMAIL_1>, cc <EMAIL_2> nhe\nlabel: null"
+    assert redacted.outcome == "redacted"
 
 
 async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() -> None:
@@ -839,20 +834,23 @@ async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() 
 
 async def test_the_outcome_is_reported_where_nothing_was_detected() -> None:
     """`reported`: nothing was rewritten, so there is nothing to hold back."""
-    detected = await StubbedModels().detect(build_scan_input(NOTHING_TO_FIND))
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(NOTHING_TO_FIND)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert detected.spans == ()
-    assert replaced.redacted_text is None
-    assert replaced.outcome == "reported"
+    # Nothing was claimed, so the copy is the record as it arrived -- rendered, not absent.
+    assert redacted.review_text == build_review_text(NOTHING_TO_FIND)
+    assert redacted.outcome == "reported"
 
 
 async def test_the_outcome_is_redacted_where_every_detected_value_resolved() -> None:
     """`redacted`: the copy was made and the confirmation confirmed all of it."""
-    detected = await StubbedModels().detect(build_scan_input(SAMPLE))
-    replaced = replace_personal_data(detected)
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
-    assert replaced.outcome == "redacted"
+    assert redacted.outcome == "redacted"
 
 
 async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
@@ -864,26 +862,25 @@ async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
     first already cut and its placeholder never lands. Which span should win is undecided. What is
     decided is that a copy holding half of a value is not that value redacted.
     """
-    detected = await StubbedModels().detect(
-        build_scan_input(
-            {
-                "id": "overlap",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "Chào em, anh Trần Văn Anh Minh Hoàng Long.",
-                    }
-                ],
-            }
-        )
+    scanned = build_scan_input(
+        {
+            "id": "overlap",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Chào em, anh Trần Văn Anh Minh Hoàng Long.",
+                }
+            ],
+        }
     )
-    replaced = replace_personal_data(detected)
+    detected = await StubbedModels().detect(scanned)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert [span.placeholder for span in detected.spans] == ["<NAME_1>", "<NAME_2>"]
-    assert replaced.redacted_text is not None
-    assert "<NAME_1>" in replaced.redacted_text
-    assert "<NAME_2>" not in replaced.redacted_text
-    assert replaced.outcome == "withheld"
+    assert redacted.review_text is not None
+    assert "<NAME_1>" in redacted.review_text
+    assert "<NAME_2>" not in redacted.review_text
+    assert redacted.outcome == "withheld"
 
 
 def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() -> None:
@@ -894,6 +891,7 @@ def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() 
     itself `redacted` -- which is the one thing an outcome may not do.
     """
     said = f"{NAME} và {PHONE}"
+    sample = {"messages": [{"role": "user", "content": said}]}
     detected = PersonalDataDetected(
         review_text=said,
         claims=(("NAME", NAME), ("PHONE", PHONE)),
@@ -903,10 +901,10 @@ def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() 
         ),
     )
 
-    replaced = replace_personal_data(detected)
+    redacted = redact_personal_data(detected, sample)
 
-    assert replaced.redacted_text == "<X_1> và <X_1>"
-    assert replaced.outcome == "redacted"
+    assert redacted.review_text == "user: <X_1> và <X_1>\nlabel: null"
+    assert redacted.outcome == "redacted"
 
 
 def test_a_span_with_no_placeholder_replaces_nothing_and_holds_the_record_back() -> (
@@ -919,16 +917,19 @@ def test_a_span_with_no_placeholder_replaces_nothing_and_holds_the_record_back()
     stretch of its text and called itself clean.
     """
     said = f"số {PHONE}"
+    sample = {"messages": [{"role": "user", "content": said}]}
     detected = PersonalDataDetected(
         review_text=said,
         claims=(("PHONE", PHONE),),
         spans=(build_span(said, PHONE, "PHONE", "", 1),),
     )
 
-    replaced = replace_personal_data(detected)
+    redacted = redact_personal_data(detected, sample)
 
-    assert replaced.redacted_text is None
-    assert replaced.outcome == "withheld"
+    # Nothing was put in its place, so the number is still there to read -- which is the whole
+    # difference between a copy held back and one that quietly lost a stretch of its text.
+    assert PHONE in redacted.review_text
+    assert redacted.outcome == "withheld"
 
 
 # ----------------------------------------------------------------- the copy over the record
@@ -946,8 +947,8 @@ async def test_a_value_confirmed_once_is_replaced_wherever_it_occurs() -> None:
 
     redacted = redact_personal_data(detected, SAMPLE)
 
-    said = json.dumps(redacted, ensure_ascii=False)
-    assert redacted["label"] == [
+    said = json.dumps(redacted.sample, ensure_ascii=False)
+    assert redacted.sample["label"] == [
         {"name": "OpenTicket", "arguments": {"ma_khach": "<PHONE_1>"}}
     ]
     for value in (EMAIL, PHONE, NAME):
@@ -957,8 +958,8 @@ async def test_a_value_confirmed_once_is_replaced_wherever_it_occurs() -> None:
     assert ADDRESS in said
     # Nothing structural moved with the values: the catalog holds no personal data, so it comes
     # back as it arrived, keys, nesting and all.
-    assert redacted["tools"] == SAMPLE["tools"]
-    assert redacted["id"] == SAMPLE["id"]
+    assert redacted.sample["tools"] == SAMPLE["tools"]
+    assert redacted.sample["id"] == SAMPLE["id"]
 
 
 async def test_no_span_handed_back_leaves_the_record_as_it_arrived() -> None:
@@ -971,7 +972,7 @@ async def test_no_span_handed_back_leaves_the_record_as_it_arrived() -> None:
 
     redacted = redact_personal_data(detected.model_copy(update={"spans": ()}), SAMPLE)
 
-    assert redacted == dict(SAMPLE)
+    assert redacted.sample == dict(SAMPLE)
 
 
 async def test_a_value_the_reviewer_dropped_stays_in_the_record() -> None:
@@ -987,7 +988,7 @@ async def test_a_value_the_reviewer_dropped_stays_in_the_record() -> None:
 
     redacted = redact_personal_data(detected.model_copy(update={"spans": kept}), SAMPLE)
 
-    said = json.dumps(redacted, ensure_ascii=False)
+    said = json.dumps(redacted.sample, ensure_ascii=False)
     assert PHONE in said
     assert "<EMAIL_1>" in said
     assert "<NAME_1>" in said
@@ -1059,7 +1060,7 @@ async def test_a_record_that_says_nothing_about_its_language_is_scanned_in_vietn
         checking_input
     )
 
-    assert replace_personal_data(detected).outcome == "reported"
+    assert redact_personal_data(detected, quiet).outcome == "reported"
     assert read_section(prompts[0], "## Conversation Language") == ["vi"]
 
 
@@ -1080,14 +1081,16 @@ async def test_a_failed_call_answers_nothing_and_says_so_on_stdout(
     for module in (personal_data_checking, data_quality):
         monkeypatch.setattr(module, "complete", refused)
 
+    scanned = build_scan_input(SAMPLE)
     detected = await ToolDecisionPersonalChecking(build_checking_config()).detect(
-        build_scan_input(SAMPLE)
+        scanned
     )
-    replaced = replace_personal_data(detected)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert detected.spans == ()
-    assert replaced.redacted_text is None
-    assert replaced.outcome == "withheld"
+    # Nothing confirmed is nothing replaced, so the copy still holds every value the rules found.
+    assert PHONE in redacted.review_text
+    assert redacted.outcome == "withheld"
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [event["event"] for event in events] == [
         "pii_llm_detect_failed",
@@ -1113,13 +1116,14 @@ async def test_an_answer_of_the_wrong_shape_is_not_an_answer(
     for module in (personal_data_checking, data_quality):
         monkeypatch.setattr(module, "complete", prose)
 
+    scanned = build_scan_input(SAMPLE)
     detected = await ToolDecisionPersonalChecking(build_checking_config()).detect(
-        build_scan_input(SAMPLE)
+        scanned
     )
-    replaced = replace_personal_data(detected)
+    redacted = redact_personal_data(detected, scanned.sample)
 
     assert detected.spans == ()
-    assert replaced.outcome == "withheld"
+    assert redacted.outcome == "withheld"
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [event["event"] for event in events] == [
         "pii_llm_detect_failed",
@@ -1165,7 +1169,7 @@ async def test_the_detect_prompt_carries_the_language_and_the_text() -> None:
     reads as nonsense and passes a containment check.
     """
     checker = StubbedModels()
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
 
     prompt = checker.build_pii_llm_detect_prompt(text, "vi")
 
@@ -1184,7 +1188,7 @@ async def test_the_confirm_prompt_carries_the_language_the_text_and_the_spans() 
     line because it is what the answer names.
     """
     checker = StubbedModels()
-    text = checker.build_review_text(SAMPLE)
+    text = build_review_text(SAMPLE)
     spans = find_and_number_spans(text, (("EMAIL", EMAIL), ("NAME", NAME)))
 
     prompt = checker.build_pii_llm_confirm_prompt(build_scan_input(SAMPLE), text, spans)
@@ -1221,7 +1225,7 @@ async def test_a_sample_quoting_a_slot_name_is_refilled_until_the_toolkit_stops(
             {"role": "user", "content": "anh noi {{review_text}} va {{language}}"}
         ],
     }
-    text = checker.build_review_text(quoted)
+    text = build_review_text(quoted)
 
     prompt = checker.build_pii_llm_detect_prompt(text, "vi")
     template = read_txt(data_quality.PII_LLM_DETECT_PROMPT)
