@@ -14,6 +14,46 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
+// `<script type="module">`, as far as node goes without a browser.
+//
+// A module is not a script. `vm.runInContext` compiles the classic goal, which answers an
+// `import` with a syntax error, so each file is compiled on its own here and the specifiers are
+// resolved between them: **against the file that wrote one**, which is the rule a browser
+// follows, and **cached by the path it resolves to**, so a module two others import is evaluated
+// once and what it holds is one state rather than two.
+//
+// Loading is asynchronous where running a script was not, which is why `build` is awaited. Nothing
+// is caught: a module that throws while it is evaluated rejects out of this function and
+// takes the run with it, rather than leaving an empty page for every check to pass against.
+async function load(entry, context) {
+  const made = new Map();
+  const compile = identifier => {
+    if (!made.has(identifier)) {
+      made.set(identifier, new vm.SourceTextModule(fs.readFileSync(identifier, "utf8"), {
+        identifier,
+        context
+      }));
+    }
+    return made.get(identifier);
+  };
+  const page = compile(path.resolve(entry));
+  await page.link((specifier, from) => {
+    // **A browser resolves a relative reference and nothing else.** `import { ask } from
+    // "wire.js"` is a bare specifier: a browser refuses it outright, and path resolution would
+    // find the file sitting next door and load it. That is a page green here and blank in a
+    // browser, with one console line nobody's suite reads. This stands in for a browser, so it
+    // refuses what a browser refuses.
+    if (!/^\.{0,2}\//.test(specifier)) {
+      throw new Error(
+        `${path.basename(from.identifier)} imports "${specifier}": a module specifier a browser`
+        + ` will resolve starts with "/", "./" or "../"`
+      );
+    }
+    return compile(path.resolve(path.dirname(from.identifier), specifier));
+  });
+  await page.evaluate();
+}
+
 class El {
   constructor(tag = "div", id = "") {
     this.tagName = tag.toUpperCase();
@@ -155,7 +195,7 @@ function readPageIds(app) {
   return declared;
 }
 
-function build(answers, app) {
+async function build(answers, app) {
   const declared = readPageIds(app);
   El.focused = null;
   const byId = new Map();
@@ -353,20 +393,18 @@ function build(answers, app) {
     fetch
   };
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync(app, "utf8"), context);
-  // Const-declared page functions live in the context's global lexical scope, which a second
-  // script in the same context can reach. That is how a check calls one by name.
-  context.run = code => vm.runInContext(code, context);
+  await load(app, context);
+  // **A module keeps its own declarations.** A classic script put them in the context's global
+  // lexical scope and a check could call one by name; nothing outside a module can, and a browser
+  // cannot either -- so a check reaches the page the way a person does, through an element.
+  //
   // `byId` holds only what the page has touched. `el` is the same lookup the page makes, so a
   // check can reach a field the page has not needed yet -- a textarea nobody has typed in.
   const el = id => document.getElementById(id);
   // `answers` is handed back so a check can change what a route says part way through a run: a
   // deployment's model directory is edited while the page is open, which is the whole reason the
   // page asks again.
-  return {
-    context, byId, bySelector, keys, woken, asked, answers, document, inputsNamed, el,
-    run: context.run
-  };
+  return { context, byId, bySelector, keys, woken, asked, answers, document, inputsNamed, el };
 }
 
 const settled = () => new Promise(resolve => setImmediate(resolve));

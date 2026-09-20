@@ -29,6 +29,7 @@ from tests.edge.test_endpoints import BASE, POSTED_PHONE, build_review
 
 CHECKS = Path(__file__).parent / "page.js"
 READING = Path(__file__).parent / "reading.js"
+LOADING = Path(__file__).parent / "loading.js"
 UI = Path(__file__).parents[2] / "src" / "dataforce" / "ui"
 PAGE = (UI / "index.html").read_text(encoding="utf-8")
 
@@ -44,19 +45,47 @@ WIRING = (
     "endpoint",
 )
 
-APP = (UI / "app.js").read_text(encoding="utf-8")
+# Every script the page loads, as one text: `app.js` alone today. The sweeps below read what `ui/`
+# holds rather than one name, so a module cut out of it is swept the day it exists rather than the
+# day somebody remembers to add it here.
+SCRIPTS = "\n".join(
+    path.read_text(encoding="utf-8") for path in sorted(UI.glob("*.js"))
+)
 GUIDE = PAGE[PAGE.index('id="sheet-guide"') : PAGE.index('id="sheet-import"')]
 
 
 def run_node(*taken: str) -> None:
-    """One node script, skipped loudly where node is absent rather than passing quietly."""
+    """One node script, skipped loudly where node is absent rather than passing quietly.
+
+    `--experimental-vm-modules` is what lets `dom.js` link the page: `index.html` loads `app.js`
+    as a module, and the only thing in node that compiles the module goal inside a context is
+    `vm.SourceTextModule`, which is behind that flag.
+    """
     node = shutil.which("node")
     if node is None:
         pytest.skip(
             "node is not installed, so the page's own checks have nothing to run in"
         )
-    done = subprocess.run([node, *taken], capture_output=True, text=True, timeout=120)
+    done = subprocess.run(
+        [node, "--experimental-vm-modules", *taken],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     assert done.returncode == 0, f"\n{done.stdout}\n{done.stderr}"
+
+
+def test_the_harness_links_modules_and_a_broken_one_takes_the_run_down(
+    tmp_path: Path,
+) -> None:
+    """`app.js` imports nothing yet, so loading it proves only that a module compiles.
+
+    The rest of the loader is what the split will rest on, and it is held here rather than
+    discovered halfway through it: a specifier resolved against the file that wrote it, one
+    instance of a module two others import, and a module that throws while it is evaluated failing
+    the run instead of leaving an empty page every check passes against.
+    """
+    run_node(str(LOADING), str(tmp_path))
 
 
 def test_the_page_behaves_as_the_spec_says() -> None:
@@ -156,11 +185,11 @@ def test_every_element_the_script_reaches_for_is_on_the_page() -> None:
     renamed id is a dead button and a silent page — and a DOM stub that invents an element for
     every id asked of it would pass every behavioural check against exactly that page.
     """
-    wanted = set(re.findall(r'\$\("([a-z0-9-]+)"\)', APP))
+    wanted = set(re.findall(r'\$\("([a-z0-9-]+)"\)', SCRIPTS))
     declared = set(re.findall(r'id="([a-z0-9-]+)"', PAGE))
 
     assert not wanted - declared, (
-        f"app.js reaches for ids the page does not declare: {wanted - declared}"
+        f"ui/ reaches for ids the page does not declare: {wanted - declared}"
     )
 
 
@@ -174,7 +203,7 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
     regex reads literal `$("...")` calls. So the declaration is read here instead, and a row
     renamed without a cell to write in fails by name.
     """
-    rows = re.findall(r'\{ step: (\d+), what: "([^"]+)", said: "([^"]+)" \}', APP)
+    rows = re.findall(r'\{ step: (\d+), what: "([^"]+)", said: "([^"]+)" \}', SCRIPTS)
     assert [what for _, what, _ in rows] == ["Personal data", "Label"]
 
     panel = PAGE[PAGE.index('id="panel-checks"') : PAGE.index('id="panel-data"')]

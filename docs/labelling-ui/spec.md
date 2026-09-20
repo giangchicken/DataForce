@@ -154,10 +154,12 @@ Tailwind and shadcn. Three things in it are worth taking and one is not.
 it. The other half has not, and native ES modules give the file boundaries without either. The
 decision stands on one reason instead of two.
 
-**What the split has to pay for.** `tests/ui/dom.js` runs the page through `vm.runInContext`, which
-takes a classic script and cannot resolve an `import`. `tests/ui/test_page.py` reads `app.js` as
-one text to sweep every `$("id")` against the markup, and `reading.js` takes one app path on the
-command line. All three change; none of it is optional, and it is the whole price of the split.
+**What the split had to pay for, and it is paid.** `tests/ui/dom.js` now compiles each file on its
+own and resolves the specifiers between them (`vm.SourceTextModule`), `tests/ui/test_page.py`
+passes node the flag that turns that on and sweeps `$("id")` over every `.js` under `ui/` rather
+than over one name, and loading a page is awaited where running a script was not. It was the whole
+price of the split and it was paid before a line moved, which is the only order in which a linker
+that is wrong is legible as a linker rather than as a bad cut.
 
 **`AGENTS_UI.md`.** Its laws are what § *The screen* below is written against, and each requirement
 names the one it comes from. Two cautions. It names WordPress admin conventions, Gutenberg's

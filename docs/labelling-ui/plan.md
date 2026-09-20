@@ -134,7 +134,8 @@ modules, and `app.js` still holds every line it holds today.
 
 **Context.** This is the one risky step and it is worth having alone. `dom.js` runs the page with
 `vm.runInContext`, which takes a classic script and cannot resolve an `import`; `test_page.py` reads
-`app.js` as one text and `reading.js` takes one app path on the command line. If the linker is
+`app.js` as one text, `reading.js` takes one app path on the command line, and `page.js` calls a
+page function by name through `vm.runInContext`. If the linker is
 wrong, it is wrong here, against a file nothing has moved yet — so a failure means *the loader*,
 never *the split*. Doing it inside the first extraction would make those two indistinguishable.
 
@@ -147,7 +148,9 @@ in the harness, and `settled`/`waited` already exist for it.
 
 **Acceptance criteria.**
 - `app.js` has no `import` and no `export` yet, and its line count is unchanged.
-- `page.js` and `reading.js` pass with **no edit but the loader**.
+- `page.js` and `reading.js` pass with **no edit but the loader's own**: `build` is awaited, and
+  the file picker is reached through its element — `page.run` reached a page function by name, and
+  a module keeps its declarations, which is what a browser does too.
 - `GET /ui/` still serves a page that works in a browser: the module is fetched, not blocked.
 - A module that throws at import time fails the run loudly rather than passing with an empty page.
 

@@ -31,7 +31,7 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
   const queued = read("queued.json");
   const real = read("stats.json");
   const served = read("models.json");
-  const page = build({
+  const page = await build({
     // The route's own answer, not this file's idea of one. A `models` key read off an array is
     // `undefined` on every deployment, and the only thing that catches it is asking the service.
     models: served,
@@ -136,7 +136,7 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
   // check it runs and a 422 from the store, which is exactly what it did.
   const naming = read("named.json");
   const anonymous = fs.readFileSync(path.join(FROM, "anonymous.json"), "utf8");
-  const pasting = build({
+  const pasting = await build({
     models: served,
     statistics: real,
     queue: [],

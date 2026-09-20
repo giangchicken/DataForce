@@ -157,8 +157,17 @@ const tickRow = (page, key, on) =>
   hit(page.el("list-rows").onchange, "[data-pick]", { pick: key, on });
 const posted = (page, named) => page.asked.filter(one => one.path.split("?")[0] === named);
 
+// A file chosen in the picker, as the page receives it: the input holds it and fires `change`.
+// Through the element and not by calling the page's own function by name -- a module keeps its
+// declarations to itself, and a browser reaches this the same way this does.
+const chose = (page, file) => {
+  const box = page.el("file");
+  box.files = [file];
+  return box.onchange({ target: box });
+};
+
 async function start(answers = ANSWERS()) {
-  const page = build(answers, APP);
+  const page = await build(answers, APP);
   for (let n = 0; n < 8; n += 1) await settled();
   return page;
 }
@@ -772,7 +781,7 @@ async function main() {
       { ...STATISTICS,
         counted_distribution_by_facet: { domain: { debt_collection: 3, a_new_domain: 1 } } }] });
   page.inputsNamed("f-domain")[0].checked = true;
-  page.run(`tookFile({ name: "more.jsonl", size: 9, text: async () => '{"a":1}' })`);
+  chose(page, { name: "more.jsonl", size: 9, text: async () => '{"a":1}' });
   await page.el("import-run").onclick();
   for (let n = 0; n < 10; n += 1) await settled();
   claims("a domain the corpus grew into is taken into the list without a reload",
@@ -814,7 +823,7 @@ async function main() {
 
   // ------------------------------------------------------------------ import
   page = await start();
-  page.run(`tookFile({ name: "corpus.jsonl", size: 40, text: async () => '{"a":1}\\n{"b":2}' })`);
+  chose(page, { name: "corpus.jsonl", size: 40, text: async () => '{"a":1}\n{"b":2}' });
   await page.byId.get("import-run").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const sentFile = posted(page, "/queue/import");

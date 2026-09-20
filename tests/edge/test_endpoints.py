@@ -187,6 +187,33 @@ def test_the_labelling_ui_is_served_at_its_own_mount(client: TestClient) -> None
     assert resp.text == (UI / "index.html").read_text(encoding="utf-8")
 
 
+def test_the_page_is_loaded_as_a_module_and_the_mount_serves_one(
+    client: TestClient,
+) -> None:
+    """`<script type="module">` is what gives the page files to be split into.
+
+    A browser refuses to run a module served as anything but JavaScript -- and refuses it
+    *silently*, with no request failing and nothing in the page to say so. Reading the tag alone
+    would pass against a mount answering `text/plain`, so the media type is read here too.
+
+    Both spellings, because the answer is not this repository's: `StaticFiles` asks `mimetypes`,
+    which reads the machine's own table, and `.js` is `text/javascript` on one distribution and
+    `application/javascript` on the next. A browser runs a module served as either, so a check
+    that named one would go red on a deployment this sentence blesses.
+    """
+    assert '<script type="module" src="app.js"></script>' in (
+        UI / "index.html"
+    ).read_text(encoding="utf-8")
+
+    resp = client.get("/ui/app.js")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].split(";")[0].strip() in {
+        "text/javascript",
+        "application/javascript",
+    }
+
+
 def test_the_ui_ticks_from_the_endpoint_rather_than_naming_a_model_itself() -> None:
     """The directory is the list, so the UI asks for it.
 
