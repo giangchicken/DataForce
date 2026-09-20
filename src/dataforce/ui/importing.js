@@ -111,3 +111,7 @@ async function sendLines(text, noteId) {
       : "");
   return true;
 }
+
+export const pastingOpen = () => $("pasting").hidden;
+
+export const markDrop = on => $("drop").classList.toggle("over", on);

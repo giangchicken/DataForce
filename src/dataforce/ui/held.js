@@ -47,5 +47,3 @@ export const PICK_SAID = {
 };
 
 export const STATE_SAID = { waiting: "", done: "labelled", skipped: "skipped" };
-
-export const DATASET_PAGE = 100;

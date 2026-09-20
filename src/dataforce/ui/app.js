@@ -1,32 +1,37 @@
 // wiring · the composition root.
 
-import { ask, call } from "./wire.js";
+import { call } from "./wire.js";
 import {
-  $, esc, marked, onKey, onReturn, same, say, sayVerdict, show, ticksNamed, wordFor
+  $, marked, onKey, onReturn, say, sayVerdict, show, ticksNamed
 } from "./screen.js";
 import {
-  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, held
+  COPY_AFTER, DECLARED_FACETS, held
 } from "./held.js";
 import { CHECKS, forgetChecks, mark, paintChecks } from "./checks.js";
-import { labelPasted, queuePasted, runImport, showPasting, tookFile } from "./importing.js";
+import {
+  labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting, tookFile
+} from "./importing.js";
 import {
   askList, forgetQueue, nextQueued, oneQueued, paintList, picked, pickedChanged,
   sayQueueName, skipQueued, waiting, walkThese
 } from "./queue.js";
+import {
+  askDataset, askStatistics, askStore, openStored, paintDataset, paintStrip
+} from "./corpus.js";
 import { composeRecord } from "./record.js";
 import {
-  addDomain, facetValues, paintDomainTicks, paintFacetTicks, paintGuideFacets,
-  readDeclaredFacets
+  addDomain, paintFacetTicks, paintGuideFacets, readDeclaredFacets
 } from "./facets.js";
 import {
-  checkLabel, fillEditor, forgetLabel, hideLabelRefusal, paintShipped, review, takeConsensus
+  checkLabel, fillEditor, forgetLabel, forgetVerdict, hideLabelRefusal, paintShipped, review,
+  rewriting, takeConsensus, tookVerdict
 } from "./label.js";
 import {
   addSpan, checkSpans, detect, editedSpans, forgetPersonalData, handedBack, hideDataRefusal,
   paintKeepTable, paintReviewText, paintValues, sayPersonalData
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
-import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
+import { paintCalls, paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
 
 async function askNext() {
   const { answer, gone } = await nextQueued();
@@ -61,10 +66,8 @@ async function importLanded() {
 function sayNoQueue(said) {
   held.key = null;
   held.sample = null;
-  $("turns").innerHTML = `<div class="empty">${esc(said)}</div>`;
-  $("catalog").innerHTML = "";
+  sayNoSample(said);
   sayQueueName("");
-  $("tool-count").textContent = "";
   paintStrip();
   frozen(true);
   showPasting(true);
@@ -85,11 +88,9 @@ function openSample(sample, key) {
   sayQueueName(sample.id ? `#${sample.id}` : "");
   paintTurns();
   paintCatalog();
-  paintCalls($("v-modify").checked);
+  paintCalls(rewriting());
   fillEditor();
-  $("v-correct").checked = false;
-  $("v-modify").checked = false;
-  $("label-editor").hidden = true;
+  forgetVerdict();
   checkLabel();
   for (const facet of DECLARED_FACETS) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
@@ -185,7 +186,7 @@ async function refreshCopy() {
   held.copyNote = null;
   sayPersonalData();
   paintReviewText();
-  paintCalls($("v-modify").checked);
+  paintCalls(rewriting());
   composeRecord(readDeclaredFacets());
   return true;
 }
@@ -261,202 +262,8 @@ async function skip() {
   }
 }
 
-let stored = [];
-let storedTotal = 0;
-let storedShown = 0;
-
-async function askDataset(more) {
-  storedShown = more ? storedShown + DATASET_PAGE : 0;
-  if (!more) stored = [];
-  say("dataset-note", "reading…");
-  const answer = await ask(`/records?limit=${DATASET_PAGE}&offset=${storedShown}`);
-  if (!answer.ok) return say("dataset-note", answer.detail, "bad");
-  stored = [...stored, ...(answer.data.samples || [])];
-  storedTotal = answer.data.total || 0;
-  $("dataset-one").innerHTML = "";
-  paintDataset();
-}
-
-function paintDataset() {
-  const only = $("dataset-bad").checked;
-  const rows = only ? stored.filter(row => !row.schema_valid) : stored;
-  say("dataset-note", `${rows.length} of ${storedTotal} ${wordFor(storedTotal, "row", "rows")}`);
-  $("dataset-more").disabled = stored.length >= storedTotal;
-  const body = $("dataset-rows").querySelector("tbody");
-  if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="8" class="empty">${
-      only ? "Every stored row validates against its catalog." : "Nothing is stored yet."
-    }</td></tr>`;
-    return;
-  }
-  body.innerHTML = rows.map(row => `<tr class="${row.schema_valid ? "" : "dropped"}">
-    <td><button class="open" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
-    <td>${esc(row.domain)}</td>
-    <td>${esc(row.ambiguous)}</td>
-    <td>${esc(row.number_turns)}</td>
-    <td>${esc(row.number_label_tools)}</td>
-    <td>${esc(row.number_provided_tools)}</td>
-    <td>${esc((row.personal_data || []).join(", ")) || "—"}</td>
-    <td class="${row.schema_valid ? "ok" : "bad"}">${row.schema_valid ? "yes" : "no"}</td>
-  </tr>`).join("");
-}
-
-async function openStored(key) {
-  say("dataset-note", "reading…");
-  const answer = await ask(`/records/${encodeURIComponent(key)}`);
-  if (!answer.ok) return say("dataset-note", answer.detail, "bad");
-  const one = answer.data;
-  const valid = one.facets.schema_valid;
-  say("dataset-note", `#${key}`);
-  $("dataset-one").innerHTML = `<div class="storedone">`
-    + `<div class="lab">Label as it ships</div>`
-    + `<div class="calls">${drawCalls(one.label || [])}</div>`
-    + (valid ? "" : `<p class="refusal">Nothing could validate this label against the catalog`
-      + ` — a call names a tool that was never offered, or leaves out an argument it requires.</p>`)
-    + `<div class="lab">The conversation</div>`
-    + `<div class="turns">${drawTurns(one.input.messages || [])}</div>`
-    + `</div>`;
-}
-
 const openSheet = id => { $(id).hidden = false; };
 const shutSheet = id => { $(id).hidden = true; };
-
-async function askStore() {
-  const answer = await ask("/store", {});
-  if (!answer.ok) {
-    $("store").className = "store none";
-    $("store").textContent = "";
-    return;
-  }
-  const said = answer.data;
-  if (!said || typeof said !== "object" || typeof said.attached !== "boolean") {
-    $("store").className = "store";
-    $("store").textContent = "";
-    return;
-  }
-  $("store").className = said.attached ? "store" : "store none";
-  $("store").textContent = said.attached
-    ? said.describes
-    : `no database — set ${said.variable}`;
-  $("store").title = said.attached
-    ? `records land in ${said.describes}`
-    : "the review works with nothing attached; nothing will be stored";
-}
-
-async function askStatistics() {
-  const answer = await ask("/records/stats", {});
-  if (!answer.ok) return sayNoStatistics(answer.detail);
-  held.counted = answer.data;
-  try {
-    paintDomainTicks();
-    paintStrip();
-    paintStatistics();
-  } catch (error) {
-    sayNoStatistics(`the statistics came back unreadable: ${error}`);
-  }
-}
-
-function sayNoStatistics(said) {
-  held.counted = null;
-  $("strip").className = "strip none";
-  $("strip").textContent = said;
-  $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
-    + `<div class="note">${esc(said)}</div>`;
-}
-
-function listEmptyCells(grid) {
-  const empty = [];
-  for (const domain of facetValues("domain")) {
-    for (const trigger of facetValues("call_trigger")) {
-      if (!((grid[domain] || {})[trigger])) empty.push([domain, trigger]);
-    }
-  }
-  return empty;
-}
-
-const offList = (facet, value) => !facetValues(facet).includes(value);
-
-function buildMatrixTable(grid) {
-  const rows = [...new Set([...facetValues("domain"), ...Object.keys(grid)])];
-  const columns = [...new Set([
-    ...facetValues("call_trigger"),
-    ...Object.values(grid).flatMap(row => Object.keys(row))
-  ])];
-  const head = columns.map(column =>
-    `<th class="axis${offList("call_trigger", column) ? " gone" : ""}">${esc(column)}</th>`).join("");
-  const body = rows.map(row => {
-    const cells = columns.map(column => {
-      const number = (grid[row] || {})[column] || 0;
-      return `<td class="cell${number ? "" : " zero"}">${esc(number)}</td>`;
-    }).join("");
-    return `<tr><th class="axis${offList("domain", row) ? " gone" : ""}">${esc(row)}</th>${cells}</tr>`;
-  }).join("");
-  return '<div class="tablewrap"><table class="matrix">'
-    + `<thead><tr><th class="axis"></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-function paintStrip() {
-  const bits = [];
-  if (waiting()) {
-    bits.push(`<b>${esc(waiting().waiting)}</b> waiting`);
-    if (waiting().done) bits.push(`<b>${esc(waiting().done)}</b> done`);
-    if (waiting().skipped) bits.push(`<b>${esc(waiting().skipped)}</b> skipped`);
-  }
-  if (held.counted) {
-    const totals = Object.values(held.counted.sample_totals || {});
-    const stored = totals.length ? Math.min(...totals) : 0;
-    bits.push(`<b>${esc(stored)}</b> ${wordFor(stored, "row", "rows")} stored`
-      + (new Set(totals).size > 1 ? " — the two tables disagree" : ""));
-    const grid = held.counted.counted_distribution_by_domain_and_call_trigger || {};
-    const empty = listEmptyCells(grid).length;
-    const cells = facetValues("domain").length * facetValues("call_trigger").length;
-    bits.push(`<b>${esc(empty)}</b> of ${esc(cells)} cells still empty`);
-  }
-  $("strip").className = "strip";
-  $("strip").innerHTML = bits.join("");
-}
-
-function paintStatistics() {
-  const grid = held.counted.counted_distribution_by_domain_and_call_trigger || {};
-  const label = held.counted.label_summary || {};
-  const calls = held.counted.tool_call_counts || {};
-  const groups = held.counted.duplicate_groups || {};
-  const empty = listEmptyCells(grid);
-  const byFacet = held.counted.counted_distribution_by_facet || {};
-  $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
-    + '<div class="lab">Domain against call trigger</div>'
-    + buildMatrixTable(grid)
-    + (empty.length
-      ? `<p class="note">Still empty: ${esc(empty.map(([a, b]) => `${a} × ${b}`).join(", "))}.</p>`
-      : '<p class="note">Every cell has at least one sample.</p>')
-    + '<div class="lab">The labels</div>'
-    + '<div class="figs">'
-    + `<div><b>${esc(label.total ?? 0)}</b> ${wordFor(label.total ?? 0, "row", "rows")}</div>`
-    + `<div><b>${esc(label.number_not_null_label ?? 0)}</b> answered with a call</div>`
-    + `<div><b>${esc(label.number_diff_label ?? 0)}</b> distinct ${wordFor(label.number_diff_label ?? 0, "answer", "answers")}</div>`
-    + `<div><b>${esc(held.counted.number_tools_offered ?? 0)}</b> ${wordFor(held.counted.number_tools_offered ?? 0, "tool", "tools")} the catalogs put in front of the model</div>`
-    + '</div>'
-    + '<div class="lab">Tools called</div>'
-    + (Object.keys(calls).length
-      ? '<div class="tablewrap"><table class="counts"><tbody>'
-        + Object.entries(calls).map(([name, number]) =>
-          `<tr><td>${esc(name)}</td><td>${esc(number)}</td></tr>`).join("")
-        + '</tbody></table></div>'
-      : '<p class="note">No stored sample calls a tool yet.</p>')
-    + '<div class="lab">The same input twice</div>'
-    + '<div class="figs">'
-    + `<div><b>${esc((groups.same_label || []).length)}</b> ${wordFor((groups.same_label || []).length, "group", "groups")} agreeing</div>`
-    + `<div><b>${esc((groups.diff_label || []).length)}</b> ${wordFor((groups.diff_label || []).length, "group", "groups")} disagreeing</div>`
-    + '</div>'
-    + Object.entries(byFacet).map(([facet, values]) =>
-      `<div class="lab">${esc(facet)}</div>`
-      + '<div class="tablewrap"><table class="counts"><tbody>'
-      + (Object.keys(values).length
-        ? Object.entries(values).map(([value, number]) =>
-          `<tr><td>${esc(value)}</td><td>${esc(number)}</td></tr>`).join("")
-        : '<tr><td class="note">nothing stored</td><td></td></tr>')
-      + '</tbody></table></div>').join("");
-}
 
 const typing = node => !!node && (node.isContentEditable
   || ["INPUT", "TEXTAREA", "SELECT"].includes(node.tagName));
@@ -504,7 +311,7 @@ for (const id of SHEETS) {
   $(id).onclick = event => { if (event.target === $(id)) shutSheet(id); };
 }
 
-$("paste-open").onclick = () => showPasting($("pasting").hidden);
+$("paste-open").onclick = () => showPasting(pastingOpen());
 $("paste-cancel").onclick = () => showPasting(false);
 $("paste-now").onclick = async () => {
   const one = await labelPasted();
@@ -530,11 +337,11 @@ $("list-rows").onchange = event => {
 
 $("file").onchange = event => tookFile(event.target.files[0]);
 $("import-run").onclick = async () => { if (await runImport()) await importLanded(); };
-$("drop").ondragover = event => { event.preventDefault(); $("drop").classList.add("over"); };
-$("drop").ondragleave = () => $("drop").classList.remove("over");
+$("drop").ondragover = event => { event.preventDefault(); markDrop(true); };
+$("drop").ondragleave = () => markDrop(false);
 $("drop").ondrop = event => {
   event.preventDefault();
-  $("drop").classList.remove("over");
+  markDrop(false);
   tookFile(event.dataTransfer.files[0]);
 };
 
@@ -550,8 +357,7 @@ $("domain-new").onkeydown = event => {
 
 for (const id of ["v-correct", "v-modify"]) {
   $(id).onchange = () => {
-    $("label-editor").hidden = !$("v-modify").checked;
-    held.settled = $("v-correct").checked || $("v-modify").checked;
+    tookVerdict();
     paintShipped();
     copyLater();
   };

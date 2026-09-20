@@ -66,3 +66,9 @@ function drawLabel(label) {
   if (!Array.isArray(label)) return '<div class="nocall">Not JSON yet — the box below says what is wrong.</div>';
   return label.length ? drawCalls(label) : NO_CALL;
 }
+
+export function sayNoSample(said) {
+  $("turns").innerHTML = `<div class="empty">${esc(said)}</div>`;
+  $("catalog").innerHTML = "";
+  $("tool-count").textContent = "";
+}

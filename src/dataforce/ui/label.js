@@ -125,3 +125,16 @@ export function hideLabelRefusal() {
   $("label-refusal").hidden = true;
   $("label-refusal").textContent = "";
 }
+
+export const rewriting = () => $("v-modify").checked;
+
+export function forgetVerdict() {
+  $("v-correct").checked = false;
+  $("v-modify").checked = false;
+  $("label-editor").hidden = true;
+}
+
+export function tookVerdict() {
+  $("label-editor").hidden = !$("v-modify").checked;
+  held.settled = $("v-correct").checked || $("v-modify").checked;
+}

@@ -341,10 +341,17 @@ and the two transitions that repaint the whole screen. That is `wiring` by `H-8`
 nothing imports it.
 
 **Acceptance criteria.**
-- `app.js` is under 200 lines, draws nothing, and nothing imports it.
-- `corpus.js` holds the dataset sheet, the statistics grid and the store line; the seam between the
-  first two is named and not cut.
+- `app.js` **is 389 lines**, draws nothing, and nothing imports it.
+- `corpus.js` holds the dataset sheet, the statistics grid, the strip and the store line; the seam
+  between the first two is named and not cut.
 - Fourteen files, and the tag census is eleven `adapter`, one `shape`, one `logic`, one `wiring`.
+
+**Why 389 and not under 200.** The number was written before the graph was measured. The four
+panels are not a tree: `personal-data` and `label` call each other, and `record` calls both. What
+broke the cycle was lifting the page's reaction to a change — `copyLater`, `refreshBoth`,
+`refreshCopy`, `assemble`, `submit`, `skip`, `openSample`, `forgetEverything`, `runChecks` and the
+keyboard — into the only module allowed to know every panel. That is 389 lines of composition and
+no drawing, and it is the price of a `ui/` with no import cycle in it.
 
 **Source.** `spec.md` Requirements 1–5.
 
