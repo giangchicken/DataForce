@@ -25,13 +25,16 @@ frozen, then the screen changes on the moved source.** A commit that does both p
 
 ## Context
 
-What the repository already is, measured at `7694033` on 2026-09-20.
+What the repository already is. The source is what Phase 1 left; the measurement that started this
+was taken at `7694033` on 2026-09-20 and is what the numbers in brackets are.
 
 ### The source
 
-- `ui/` is three files: `app.js` 1763 lines, `style.css` 575, `index.html` 340 — 2678 together.
-- `app.js` holds 24 labelled sections, 135 top-level declarations and **17 module-level mutable
-  bindings**. `held` alone is read or written in 116 places.
+- `ui/` is fourteen files: `index.html`, `style.css`, and twelve ES modules `app.js` loads. `app.js`
+  is 389 lines of composition and draws nothing *(it was one file of 1763)*.
+- The tag census is eleven `adapter`, one `shape` (`held.js`), one `logic` (`record.js`) and one
+  `wiring` (`app.js`), and nothing imports `app.js` *(135 top-level declarations and 17
+  module-level mutable bindings sat in one scope; `held` alone is read or written in 116 places)*.
 
 **The premise, checked.** `app.js` has 5 commits out of the repository's 248, so it is not a file
 that changes often — the claim that editing it keeps breaking something is not visible as churn.
@@ -413,11 +416,12 @@ is.
 A document that disagrees with the tree is a stale document, so these are rewritten in the change
 that makes them untrue, not added to.
 
-- `docs/tool-decision-pipeline/spec.md` Requirement 45 — "Three files, no build step, no npm" — the
-  count changes and the rest does not.
-- Its Decision 15, which keeps its conclusion and loses the half-reason that expired.
-- Its Design § *The labelling UI*, the paragraph that reasons from three files.
-- Its file table rows `ui/index.html`, `ui/app.js`, `ui/style.css`.
+- ~~`docs/tool-decision-pipeline/spec.md` Requirement 45~~ — done in `T11`: fourteen files, and no
+  build step, no npm, nothing from a CDN unchanged.
+- ~~Its Decision 15~~ — done: it keeps its conclusion and stands on one reason instead of two.
+- ~~Its Design § *The labelling UI*~~ — done: it no longer reasons from three files.
+- Its file table rows `ui/index.html`, `ui/app.js`, `ui/style.css` — still to do; the table is what
+  `layout.md` § *The tree* lists.
 - `docs/tool-decision-store/spec.md` § *The page*, **the checks are three columns** — the three
   columns stand; the sentence gains that they are a band rather than a panel.
 - The same section, **the action bar holds exactly two acts** — still two acts, and it gains the line

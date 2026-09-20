@@ -346,9 +346,11 @@ walks and the statistics it shows are that spec's and they are what reshaped it.
 still says about that page is what every one of its answers has to be true of, whatever shape it is
 drawn in.
 
-45. `ui/` is the UI: `index.html`, `app.js`, `style.css`, mounted as static files at `/ui` by
-    `create_app()`. Three files, no build step, no npm, nothing from a CDN — the rule the drawing
-    already follows, and the reason a labeller needs nothing installed but the service.
+45. `ui/` is the UI: `index.html`, `style.css` and twelve ES modules that `app.js` loads, mounted
+    as static files at `/ui` by `create_app()`. Fourteen files, no build step, no npm, nothing
+    from a CDN — native modules give the file boundaries without any of the three, which is the
+    reason a labeller needs nothing installed but the service. `docs/labelling-ui/layout.md`
+    § *The tree* is the list, and what each module hides is the table under it.
 46. It computes no answer of its own. Every rectangle shows what a route answered, and the only
     thing the UI composes is the record at the end (Requirement 3) — so a rule lives in one place,
     and the page that labels cannot disagree with the service about what a span or a vote is. The
@@ -583,11 +585,12 @@ can always reproduce them. It calls nothing: what each rectangle shows is recomp
 script, which is what makes it readable as a description of the flow and useless as a labelling
 tool.
 
-**The labelling UI.** `src/dataforce/ui/` — `index.html`, `app.js`, `style.css` — mounted by
-`create_app()` with Starlette's `StaticFiles` at `/ui`, so one process serves the API and the tool
-that drives it and a labeller needs nothing installed. Three files rather than one, because this
-one has a script worth reading on its own; still no build step and no npm, so what is deployed is
-what is written.
+**The labelling UI.** `src/dataforce/ui/` — `index.html`, `style.css`, and `app.js` loading
+twelve ES modules — mounted by `create_app()` with Starlette's `StaticFiles` at `/ui`, so one
+process serves the API and the tool that drives it and a labeller needs nothing installed.
+Fourteen files rather than one, because a 1763-line script is the condition under which nobody can
+tell which half of a change broke something; still no build step and no npm, so what is deployed
+is what is written. `app.js` is the composition root and nothing imports it.
 
 Inside the package and not at `src/ui/`, because `[tool.hatch.build.targets.wheel]` declares
 `packages = ["src/dataforce"]` and ships every file under it — which is how
@@ -647,9 +650,15 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 | `profile/tool_decision/utils.py` | `list_conversation_turns` and `build_review_text`, which both parts read, and the two directions of the OpenAI tool format: the catalog as text, and text as calls |
 | `config/prompts/profiles/tool_decision/pii_llm_detect.txt` | what the second detector is asked |
 | `config/prompts/modalities/text2text/data_quality/pii_llm_confirm.txt` | the spans the confirmation is shown, and the `{id, reason, confirmed}` it answers |
-| `ui/index.html` | the eight rectangles, their buttons and their editable boxes |
-| `ui/app.js` | one `fetch` per route, the ticks read off `GET /models`, and the record composed as the reviewer works |
-| `ui/style.css` | the flow's layout, and the states a rectangle can be in |
+| `ui/index.html` | every element the page has, and the one place an id is declared |
+| `ui/style.css` | the layout, and the states a region can be in |
+| `ui/app.js` | `wiring` · the composition root: every handler, the keyboard, the first paints, and the page's reaction to a change |
+| `ui/wire.js`, `ui/screen.js` | `adapter` · one call and one reading of a refusal; that the page is a DOM at all |
+| `ui/held.js` | `shape` · what the page holds between one sample and the next |
+| `ui/record.js` | `logic` · the one thing this page composes |
+| `ui/conversation.js`, `ui/checks.js`, `ui/models.js` | `adapter` · a turn, a call and a label drawn; the two checks; which models answer |
+| `ui/personal-data.js`, `ui/label.js`, `ui/facets.js` | `adapter` · card 1; card 2 above the facets; the facets |
+| `ui/queue.js`, `ui/importing.js`, `ui/corpus.js` | `adapter` · which sample is next; how a corpus gets in; what is already stored |
 | `edge/main.py` | mounts `ui/` at `/ui`; it is `wiring`, which is the layer allowed to know both |
 
 ## Decisions
@@ -704,8 +713,11 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
 14. **A panel config is one model or a list of them.** Alternative: always a list. A deployment
     asking one model would declare a one-element list and every reader would carry the same
     unwrapping, so `jurors` carries it once instead, in the class the panel belongs to.
-15. **The page is one static HTML file the edge serves.** Alternative: a Vite app under `ui/`. A
-    build step and a lockfile are a mouth to feed (T-3) for a skeleton meant to be deleted (T-5).
+15. **The page is static files the edge serves.** Alternative: a Vite app under `ui/`. A build
+    step and a lockfile are a mouth to feed (`T-3`). The decision stands on that reason alone now:
+    the other half of it — *for a skeleton meant to be deleted* — has expired, because the page is
+    the labelling tool and nothing plans to delete it. What the build step was wanted for is file
+    boundaries, and native ES modules give those with no lockfile and nothing to run.
 16. **`auto` on step 5 is the outermost rule, not a confidence threshold.** It is the same rule spans
     are resolved by inside `detect`, applied again where a human did not override it.
 17. **The language is declared, not guessed, and it is one of the two the scans know.** Alternative:
@@ -765,12 +777,12 @@ a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided
     noise in a tool used every day, and the loading states that make the tool usable are noise in
     a description. The cost, stated: two files to keep in step, and the drawing is the one that
     rots quietly, because no test drives either.
-22. **Three static files, no build step, inside the package.** Alternative: the `ui/` layout with
-    npm and a bundler. That buys components and a dependency tree, a second toolchain in the gate,
-    and a `dist/` that can disagree with its source; what this UI does is eight rectangles and
-    seven `fetch` calls. Inside `src/dataforce/` because the wheel ships every file under the
-    package and nothing else, so a UI beside it would be missing from an install. Reversible: it
-    is three files and a mount.
+22. **Static files, no build step, inside the package.** Alternative: the `ui/` layout with npm
+    and a bundler. That buys components and a dependency tree, a second toolchain in the gate,
+    and a `dist/` that can disagree with its source; the file boundaries it is really wanted for
+    are what `<script type="module">` already gives. Inside `src/dataforce/` because the wheel
+    ships every file under the package and nothing else, so a UI beside it would be missing from
+    an install. Reversible: it is a directory and a mount.
 23. **Approve posts nowhere, and says so.** Alternative: have approve write the record somewhere —
     a file, a queue, the store that was just deferred. Every one of those is the store's decision
     taken in the UI, and the UI is the last place that decision should be made. So approve froze
@@ -819,9 +831,10 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
 - What a human step returns differs from what it was given only where the human changed something.
 - No endpoint's response mentions a part it does not own. Check: each response model is one part's
   own shape.
-- The UI holds no rule the service holds. Check: `ui/app.js` computes no span, no consensus, no
-  copy, no outcome and no redacted record — each of those is a field it read off a response. The
-  record it composes is the one thing nothing else composes, and it composes it out of answers.
+- The UI holds no rule the service holds. Check: nothing under `ui/` computes a span, a consensus,
+  a copy, an outcome or a redacted record — each of those is a field a module read off a response.
+  The record it composes is the one thing nothing else composes, it composes it out of answers, and
+  `record.js` is the only file under `ui/` tagged `logic`.
 - One rule turns a value into a placeholder. Check: `replace_text` is the only place a value is
   swapped for one, `replace_node` is that rule over a record's strings, and both are handed the
   same `{value: placeholder}` pairs `read_span_values` read off `review_text` — which is also the map
@@ -910,8 +923,9 @@ the store's, and `docs/tool-decision-store/spec.md` is what it is spent on. Noth
   loop once per fault. The route and the stored column are checked against *one another* over the
   same label, which is the only way to prove they are one rule.
 - **The drawing is driven by nobody; the UI is.** A browser is still the check for what either one
-  *looks* like, and a test says of the drawing only that it is served. `ui/app.js` runs in node
-  against a DOM stub (`tests/ui/dom.js`), driven from pytest by `tests/ui/test_page.py`, so
+  *looks* like, and a test says of the drawing only that it is served. `ui/` is loaded in node as
+  the modules a browser loads, against a DOM stub (`tests/ui/dom.js`), driven from pytest by
+  `tests/ui/test_page.py`, so
   every sentence this spec makes about the page is a check that fails when the page stops saying
   it. Two things are read off the files rather than driven: `GET /ui/` answers the UI's
   `index.html`, and no model name the drawing writes down appears anywhere under `ui/`, because the
