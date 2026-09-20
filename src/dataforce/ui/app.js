@@ -2,15 +2,22 @@
 
 import { ask, call } from "./wire.js";
 import {
-  $, esc, json, marked, onKey, onReturn, readTick, same, say, sayVerdict, show, ticksNamed, wordFor
+  $, esc, marked, onKey, onReturn, same, say, sayVerdict, show, ticksNamed, wordFor
 } from "./screen.js";
 import {
-  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, PICK_SAID, STATE_SAID, held, ticked
+  COPY_AFTER, DATASET_PAGE, DECLARED_FACETS, STATE_SAID, held
 } from "./held.js";
-import { CHECKS, asking, cannotAsk, checked, mark, paintChecks } from "./checks.js";
+import { CHECKS, forgetChecks, mark, paintChecks } from "./checks.js";
 import {
-  addSpan, checkSpans, detect, editedSpans, handedBack, paintKeepTable, paintReviewText,
-  paintValues, sayPersonalData
+  addDomain, facetValues, paintDomainTicks, paintFacetTicks, paintGuideFacets,
+  readDeclaredFacets
+} from "./facets.js";
+import {
+  checkLabel, fillEditor, forgetLabel, hideLabelRefusal, paintShipped, review, takeConsensus
+} from "./label.js";
+import {
+  addSpan, checkSpans, detect, editedSpans, forgetPersonalData, handedBack, hideDataRefusal,
+  paintKeepTable, paintReviewText, paintValues, sayPersonalData
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { drawCalls, drawTurns, paintCalls, paintCatalog, paintTurns } from "./conversation.js";
@@ -97,27 +104,16 @@ function forgetEverything() {
   held.faults = null;
   clearTimeout(copySoon);
   copyAt += 1;
-  faultAt += 1;
-  paintReviewText();
-  paintFaults();
-  paintConsensus();
-  for (const id of ["span-table", "keep-table"]) $(id).querySelector("tbody").innerHTML = "";
-  for (const id of ["out-6", "record"]) show(id, undefined);
-  say("span-note", "");
-  say("checks-note", "Two calls: the personal-data scan, then the reviewers.");
+  forgetPersonalData();
+  forgetLabel();
+  forgetChecks();
+  show("record", undefined);
   hideRefusals();
-  for (const step of CHECKS.map(one => one.step)) delete checked[step];
-  paintChecks();
-  sayVerdict("checks-verdict", "not run", "");
-  sayVerdict("data-verdict", "no scan yet", "");
-  sayVerdict("label-verdict", "", "");
 }
 
 function hideRefusals() {
-  for (const id of ["data-refusal", "label-refusal"]) {
-    $(id).hidden = true;
-    $(id).textContent = "";
-  }
+  hideDataRefusal();
+  hideLabelRefusal();
 }
 
 const RUNS = { 2: async () => await detect() && refreshCopy(), 6: review };
@@ -193,194 +189,6 @@ function copyBroke(why) {
   held.copyNote = why;
   paintReviewText();
   return false;
-}
-
-async function review() {
-  if (!held.sample) return cannotAsk(6, "no sample");
-  const answer = await asking(6, {
-    ...held.sample,
-    language: $("language").value,
-    jury_models: ticked.jury,
-    sft_model: ticked.sft
-  }, "/ai-review");
-  if (!answer.ok) return false;
-  held.review = answer.data;
-  mark(6, "answered", sayAgreement(answer.data));
-  show("out-6", answer.data);
-  sayVerdict("label-verdict", sayAgreement(answer.data), "");
-  paintConsensus();
-  return true;
-}
-
-function sayAgreement(reviewed) {
-  const agreed = ((reviewed || {}).llm || {}).label_agreement;
-  if (typeof agreed !== "number") return "reviewed";
-  return `${Math.round(agreed * 100)}% agreement with the label`;
-}
-
-function fillEditor() {
-  if (!held.sample) return;
-  $("label-text").value = json(held.sample.label ?? null);
-  paintShipped();
-}
-
-function typedLabel() {
-  const arrived = held.sample.label ?? null;
-  if (!$("v-modify").checked) return arrived;
-  try { return JSON.parse($("label-text").value); } catch { return { unparsed: $("label-text").value }; }
-}
-
-function paintShipped() {
-  if (!held.sample) return;
-  held.edited = {
-    messages: held.sample.messages ?? [],
-    tools: held.sample.tools ?? [],
-    label: typedLabel()
-  };
-  const unparsed = held.edited.label && held.edited.label.unparsed !== undefined;
-  say("label-note", unparsed
-    ? "not JSON, carried as {unparsed: …}"
-    : "re-parsed as a label", unparsed ? "bad" : "");
-  held.record = null;
-  paintCalls($("v-modify").checked);
-}
-
-let faultAt = 0;
-
-async function checkLabel() {
-  if (!held.sample) return false;
-  const mine = (faultAt += 1);
-  const answer = await call("/data-quality/label", { ...held.sample, ...(held.edited || {}) });
-  if (mine !== faultAt) return false;
-  held.faults = answer.ok ? answer.data : null;
-  if (!answer.ok) return sayNoCheck(answer.detail);
-  paintFaults();
-  return true;
-}
-
-function sayNoCheck(why) {
-  const said = $("label-fault");
-  said.hidden = false;
-  said.textContent = `the label could not be checked against the catalog: ${why}`;
-  return false;
-}
-
-function paintFaults() {
-  const said = $("label-fault");
-  const broken = held.faults && !held.faults.schema_valid;
-  said.hidden = !broken;
-  said.innerHTML = broken
-    ? "<b>Nothing here can validate this label against the catalog.</b><ul>"
-      + held.faults.faults.map(one => `<li>${esc(one)}</li>`).join("")
-      + "</ul>"
-    : "";
-}
-
-function paintConsensus() {
-  const offered = agreedLabel() !== "";
-  $("consensus-line").hidden = !offered;
-  if (offered) say("consensus-note", "the one label the panel agreed on, into the box below");
-}
-
-const agreedLabel = () => {
-  const agreed = ((held.review || {}).llm || {}).consensus;
-  return typeof agreed === "string" ? agreed.trim() : "";
-};
-
-function takeConsensus() {
-  const agreed = agreedLabel();
-  if (!agreed) return false;
-  let laid = agreed;
-  try { laid = json(JSON.parse(agreed)); } catch { laid = agreed; }
-  $("label-text").value = laid;
-  $("v-modify").checked = true;
-  $("v-correct").checked = false;
-  $("label-editor").hidden = false;
-  held.settled = true;
-  copyLater();
-  return true;
-}
-
-const addedValues = {};
-
-function facetValues(name) {
-  const facet = DECLARED_FACETS.find(one => one.name === name);
-  if (!facet || !facet.values) return [];
-  const byFacet = (counted || {}).counted_distribution_by_facet || {};
-  const stored = facet.pick === "one" ? Object.keys(byFacet[name] || {}) : [];
-  return [...new Set([...facet.values, ...stored, ...(addedValues[name] || [])])];
-}
-
-function paintGuideFacets() {
-  $("guide-facets").innerHTML = DECLARED_FACETS.map(facet =>
-    `<div class="facet"><b>${esc(facet.name)}</b>`
-    + `<span class="pick">${esc(PICK_SAID[facet.pick])}</span>`
-    + (facet.values ? `<span class="values">${esc(facetValues(facet.name).join("  ·  "))}</span>` : "")
-    + `<div class="note">${esc(facet.said)}</div></div>`).join("");
-}
-
-const tickInput = facet =>
-  facet.pick === "yes"
-    ? `<label class="inline"><input type="checkbox" name="f-${facet.name}"> yes</label>`
-    : facetValues(facet.name).map(value =>
-        `<label class="inline"><input type="${facet.pick === "one" ? "radio" : "checkbox"}"`
-        + ` name="f-${facet.name}" value="${esc(value)}"> ${esc(value)}</label>`).join("");
-
-function paintFacetTicks() {
-  paintDomainTicks();
-  $("facet-ticks").innerHTML = DECLARED_FACETS.filter(facet => facet.name !== "domain").map(facet =>
-    `<div class="lab">${esc(facet.name)}</div>`
-    + `<div class="tickbox">${tickInput(facet)}</div>`
-    + `<div class="note">${esc(facet.said)}</div>`).join("");
-}
-
-let domainsDrawn = null;
-
-function paintDomainTicks() {
-  const facet = DECLARED_FACETS.find(one => one.name === "domain");
-  const values = facetValues("domain");
-  const drawing = values.join("\u0000");
-  if (drawing === domainsDrawn) return;
-  domainsDrawn = drawing;
-  const was = readTick("f-domain");
-  $("domain-ticks").innerHTML = tickInput(facet);
-  $("domain-said").textContent = facet.said;
-  tickDomain(was);
-}
-
-function tickDomain(value) {
-  for (const box of ticksNamed("f-domain")) {
-    box.checked = !!value && box.value === value;
-  }
-}
-
-function addDomain() {
-  const said = $("domain-new").value.trim();
-  if (!said) return say("domain-note", "type a domain first", "bad");
-  if (facetValues("domain").includes(said)) {
-    return say("domain-note", `${said} is already offered`, "bad");
-  }
-  addedValues.domain = [...(addedValues.domain || []), said];
-  paintDomainTicks();
-  tickDomain(said);
-
-  composeRecord();
-  $("domain-new").value = "";
-  say("domain-note", `${said} added and ticked — it stays offered once a sample carries it`);
-}
-
-function readDeclaredFacets() {
-  const answered = { language: $("language").value };
-  for (const facet of DECLARED_FACETS) {
-    const boxes = ticksNamed(`f-${facet.name}`);
-    if (facet.pick === "yes") answered[facet.name] = boxes[0].checked;
-    else if (facet.pick === "any") answered[facet.name] = boxes.filter(box => box.checked).map(box => box.value);
-    else {
-      const one = boxes.find(box => box.checked);
-      if (one) answered[facet.name] = one.value;
-    }
-  }
-  return answered;
 }
 
 function composeRecord() {
@@ -695,8 +503,6 @@ async function openStored(key) {
 const openSheet = id => { $(id).hidden = false; };
 const shutSheet = id => { $(id).hidden = true; };
 
-let counted = null;
-
 async function askStore() {
   const answer = await ask("/store", {});
   if (!answer.ok) {
@@ -722,7 +528,7 @@ async function askStore() {
 async function askStatistics() {
   const answer = await ask("/records/stats", {});
   if (!answer.ok) return sayNoStatistics(answer.detail);
-  counted = answer.data;
+  held.counted = answer.data;
   try {
     paintDomainTicks();
     paintStrip();
@@ -733,7 +539,7 @@ async function askStatistics() {
 }
 
 function sayNoStatistics(said) {
-  counted = null;
+  held.counted = null;
   $("strip").className = "strip none";
   $("strip").textContent = said;
   $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
@@ -778,12 +584,12 @@ function paintStrip() {
     if (left.done) bits.push(`<b>${esc(left.done)}</b> done`);
     if (left.skipped) bits.push(`<b>${esc(left.skipped)}</b> skipped`);
   }
-  if (counted) {
-    const totals = Object.values(counted.sample_totals || {});
+  if (held.counted) {
+    const totals = Object.values(held.counted.sample_totals || {});
     const stored = totals.length ? Math.min(...totals) : 0;
     bits.push(`<b>${esc(stored)}</b> ${wordFor(stored, "row", "rows")} stored`
       + (new Set(totals).size > 1 ? " — the two tables disagree" : ""));
-    const grid = counted.counted_distribution_by_domain_and_call_trigger || {};
+    const grid = held.counted.counted_distribution_by_domain_and_call_trigger || {};
     const empty = listEmptyCells(grid).length;
     const cells = facetValues("domain").length * facetValues("call_trigger").length;
     bits.push(`<b>${esc(empty)}</b> of ${esc(cells)} cells still empty`);
@@ -793,12 +599,12 @@ function paintStrip() {
 }
 
 function paintStatistics() {
-  const grid = counted.counted_distribution_by_domain_and_call_trigger || {};
-  const label = counted.label_summary || {};
-  const calls = counted.tool_call_counts || {};
-  const groups = counted.duplicate_groups || {};
+  const grid = held.counted.counted_distribution_by_domain_and_call_trigger || {};
+  const label = held.counted.label_summary || {};
+  const calls = held.counted.tool_call_counts || {};
+  const groups = held.counted.duplicate_groups || {};
   const empty = listEmptyCells(grid);
-  const byFacet = counted.counted_distribution_by_facet || {};
+  const byFacet = held.counted.counted_distribution_by_facet || {};
   $("stats").innerHTML = '<div class="lab">What the corpus holds</div>'
     + '<div class="lab">Domain against call trigger</div>'
     + buildMatrixTable(grid)
@@ -810,7 +616,7 @@ function paintStatistics() {
     + `<div><b>${esc(label.total ?? 0)}</b> ${wordFor(label.total ?? 0, "row", "rows")}</div>`
     + `<div><b>${esc(label.number_not_null_label ?? 0)}</b> answered with a call</div>`
     + `<div><b>${esc(label.number_diff_label ?? 0)}</b> distinct ${wordFor(label.number_diff_label ?? 0, "answer", "answers")}</div>`
-    + `<div><b>${esc(counted.number_tools_offered ?? 0)}</b> ${wordFor(counted.number_tools_offered ?? 0, "tool", "tools")} the catalogs put in front of the model</div>`
+    + `<div><b>${esc(held.counted.number_tools_offered ?? 0)}</b> ${wordFor(held.counted.number_tools_offered ?? 0, "tool", "tools")} the catalogs put in front of the model</div>`
     + '</div>'
     + '<div class="lab">Tools called</div>'
     + (Object.keys(calls).length
@@ -910,11 +716,12 @@ $("drop").ondrop = event => {
 
 $("language").onchange = () => { forgetEverything(); if (held.sample) fillEditor(); };
 
-$("domain-add").onclick = addDomain;
+$("domain-add").onclick = () => { addDomain(); composeRecord(); };
 $("domain-new").onkeydown = event => {
   if (event.key !== "Enter") return;
   event.preventDefault();
   addDomain();
+  composeRecord();
 };
 
 for (const id of ["v-correct", "v-modify"]) {
@@ -939,7 +746,7 @@ $("keep-table").onchange = event => {
 $("auto").onchange = () => { copyLater(); paintKeepTable(); };
 for (const id of ["facet-ticks", "domain-ticks"]) $(id).onchange = composeRecord;
 $("label-text").oninput = copyLater;
-$("take-consensus").onclick = takeConsensus;
+$("take-consensus").onclick = () => { if (takeConsensus()) copyLater(); };
 
 onKey(steer);
 onReturn(paintTicks);

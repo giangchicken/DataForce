@@ -178,3 +178,15 @@ export function paintReviewText() {
     shown.textContent = "Nothing has been read for personal data yet.";
   }
 }
+
+export function forgetPersonalData() {
+  paintReviewText();
+  for (const id of ["span-table", "keep-table"]) $(id).querySelector("tbody").innerHTML = "";
+  say("span-note", "");
+  sayVerdict("data-verdict", "no scan yet", "");
+}
+
+export function hideDataRefusal() {
+  $("data-refusal").hidden = true;
+  $("data-refusal").textContent = "";
+}

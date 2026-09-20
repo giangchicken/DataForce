@@ -13,7 +13,8 @@ export const held = {
   faults: null,     // what the catalog says is wrong with the label on the screen
   shipped: null,    // the record as it ships, the text it reads as, and how far redacting got
   copyNote: null,   // why there is no such copy, where something refused to make one
-  record: null      // what will be posted
+  record: null,     // what will be posted
+  counted: null     // what the statistics answered
 };
 
 export const ticked = { verifier: null, jury: [], sft: null };

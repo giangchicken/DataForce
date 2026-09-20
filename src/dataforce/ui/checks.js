@@ -1,6 +1,6 @@
 // adapter · the two checks, and the row each one reports on. Owns said-2, said-6.
 
-import { $ } from "./screen.js";
+import { $, say, sayVerdict } from "./screen.js";
 import { call } from "./wire.js";
 
 export const CHECKS = [
@@ -8,7 +8,7 @@ export const CHECKS = [
   { step: 6, what: "Label", said: "said-6" }
 ];
 
-export const checked = {};
+const checked = {};
 
 export function mark(step, state, text) {
   checked[step] = { state, text };
@@ -35,4 +35,11 @@ export async function asking(step, body, path) {
   const answer = await call(path, body);
   if (!answer.ok) mark(step, "bad", answer.detail);
   return answer;
+}
+
+export function forgetChecks() {
+  for (const step of CHECKS.map(one => one.step)) delete checked[step];
+  paintChecks();
+  say("checks-note", "Two calls: the personal-data scan, then the reviewers.");
+  sayVerdict("checks-verdict", "not run", "");
 }
