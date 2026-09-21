@@ -42,6 +42,15 @@ const ONE = {
         kenh: { type: "string", description: "Kênh khách liên hệ: app, hotline hay zalo." }
       },
       required: ["ma"]
+    } } },
+  { type: "function", function: { name: "Ping", description: "gọi lại khách",
+    parameters: {
+      type: "object",
+      properties: {
+        sdt: { type: "string", description: "Số máy để gọi lại." },
+        luc: { type: "string", description: "Khi nào thì gọi." }
+      },
+      required: ["luc"]
     } } }],
   label: [{ name: "Lookup", arguments: { ma: PHONE } }]
 };
@@ -882,8 +891,10 @@ async function main() {
     written.includes("1 of 1 value replaced, in 2 places"));
   claims("what the catalog said about the label is on the row that will carry it",
     written.includes('<td class="ok">yes</td>'));
-  claims("**and the raw JSON is under it and not instead of it**",
-    page.byId.get("record").textContent.includes("new_label"));
+  claims("**and the raw JSON is under it and not instead of it** — the table is words, the box"
+    + " under it is the payload, and neither is doing the other's job",
+    page.byId.get("record").textContent.includes('"new_label"')
+    && !written.includes("new_label") && !written.includes("{"));
 
   const level = page.inputsNamed("f-ambiguous")[0];
   level.checked = true;
@@ -1051,16 +1062,31 @@ async function main() {
   claims("and the one the tool requires is marked, the optional one left unmarked",
     (form.match(/class="needed"/g) || []).length === 1
     && form.indexOf('class="needed"') < form.indexOf('data-arg="ma"'));
+
+  // **Picking the other tool**, which is what the picker is for. Re-picking the tool a call
+  // already has proves nothing: `pickedTool` could return without doing anything and pass it.
+  await pickTool(page, "Ping");
+  const swapped = page.el("call-form").markup();
+  claims("**picking another tool draws that tool's arguments** and none of the last one's",
+    swapped.includes('data-arg="sdt"') && swapped.includes('data-arg="luc"')
+    && !swapped.includes('data-arg="ma"') && !swapped.includes('data-arg="kenh"'));
+  claims("**and the values go with them** — one tool's argument under another tool's name is a"
+    + " call nobody wrote",
+    !swapped.includes(`value="${PHONE}"`) && !swapped.includes('value="app"'));
+  claims("**and *required* is what the tool requires**, not whichever argument it lists first",
+    swapped.indexOf('class="needed"') > swapped.indexOf('data-arg="sdt"')
+    && swapped.indexOf('class="needed"') < swapped.indexOf('data-arg="luc"'));
+  await pickTool(page, "Lookup");
+  await typeArgument(page, "ma", "KH-9");
   claims("**nothing on the form is JSON** — no braces, no quoted keys, nothing to parse by eye",
     !shown(form).includes('"ma":') && !shown(form).includes("{"));
 
-  await typeArgument(page, "ma", "KH-9");
   await waited(400);
   await settle(10);
   claims("**what the form composes is a call**, argument by argument, and no text was parsed to"
     + " get it",
     same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label,
-      [{ name: "Lookup", arguments: { kenh: "app", ma: "KH-9" } }]));
+      [{ name: "Lookup", arguments: { ma: "KH-9" } }]));
   await typeArgument(page, "kenh", "");
   await waited(400);
   await settle(10);
@@ -1072,9 +1098,14 @@ async function main() {
   page.el("call-add").onclick();
   claims("**a label makes more than one call**, so a second is a second block on the form",
     blocksOn(page) === 2);
-  await pickTool(page, "Lookup", "1");
+  await typeArgument(page, "ma", "KEEP-ME", "0");
+  await pickTool(page, "Ping", "1");
   await dropCall(page, "1");
-  claims("and one written by mistake can be taken off again", blocksOn(page) === 1);
+  claims("**and the one whose button was pressed is the one that goes** — a count of the blocks"
+    + " left cannot tell which of two was dropped",
+    blocksOn(page) === 1
+    && page.el("call-form").markup().includes('value="KEEP-ME"')
+    && !page.el("call-form").markup().includes('data-arg="luc"'));
 
   page.el("call-none").checked = true;
   await page.el("call-none").onchange();
@@ -1170,6 +1201,25 @@ async function main() {
     JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
       .label[0].arguments.khong_co === undefined);
 
+  // A call whose `arguments` are not an object at all. The store settles what it supplies:
+  // `read_call_arguments` answers `{}` for anything that is not a mapping and `check_label_calls`
+  // refuses the call — so both drawings have to say *no arguments*, and the table and the one-line
+  // reading had disagreed, one inventing a row the other did not see.
+  page = await start({ ...ANSWERS(),
+    queue: [{ ...ONE, label: [{ name: "Lookup", arguments: ["ma", PHONE] }] }],
+    redacted: { ...REDACTED,
+      sample: { ...REDACTED.sample, label: [{ name: "Lookup", arguments: ["ma", "<PHONE_1>"] }] } },
+    labelChecked: NOT_A_CALL });
+  claims("**a call supplying nothing readable is drawn as supplying nothing**",
+    page.el("arrived-call").innerHTML.includes("no arguments")
+    && !shown(page.el("arrived-call").innerHTML).includes(PHONE));
+  await page.byId.get("run-detect").onclick();
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  claims("**and the row that reads it back says the same**, because one call is read once",
+    page.el("record-table").markup().includes("Lookup()"));
+
   // ------------------------------------- a label that is not a list of calls at all
   //
   // `Sample.label` is `Any` and `/samples/named` answers each line as it arrived, so a corpus that
@@ -1210,7 +1260,8 @@ async function main() {
       start: REVIEW_TEXT.indexOf("vâng"), end: REVIEW_TEXT.indexOf("vâng") + 4,
       personal_data_class: "NAME", placeholder: "<NAME_1>", reason: null }]
   };
-  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NAMED_TOO] });
+  const NAME_ONLY = { ...NAMED_TOO, spans: NAMED_TOO.spans.slice(PHONE_SPANS.length) };
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NAMED_TOO, NAME_ONLY] });
   await page.byId.get("run-detect").onclick();
   await settle(12);
   await waited(400);
@@ -1225,6 +1276,15 @@ async function main() {
     + " them and the two boxes cannot say different numbers about one thing",
     page.el("said-2").textContent.includes("2 values found")
     && page.el("record-table").markup().includes("2 of 2 values replaced"));
+  // And one of the two unticked, so the count and what it is counted against differ. Equal, they
+  // cannot tell a denominator from a numerator, which is how the wrong one went unnoticed.
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  claims("**and a value left in the text is one of them that did not come out**",
+    page.el("said-2").textContent.includes("2 values found")
+    && page.el("record-table").markup().includes("1 of 2 values replaced, in 1 place"));
 
   // The catalog's answer lands on its own clock. The check and the copy go out together and the
   // copy usually wins, so the row that says whether the label validates would go on saying what
@@ -1382,9 +1442,10 @@ async function main() {
   for (let n = 0; n < 8; n += 1) await settled();
   claims("opening the corpus asks the store for a page of it",
     posted(page, "/records").some(one => one.method === "GET"));
-  claims("**the sheet opens on which database these rows are in**, so a page of rows is not a page"
-    + " of rows about nowhere",
-    page.el("dataset-store").textContent.includes("store.sqlite3"));
+  claims("**the sheet opens on which database these rows are in**, as the sentence the header's"
+    + " pill has no room for — one reading, said twice, so the two cannot come to disagree",
+    page.el("dataset-store").textContent === "records land in store.sqlite3"
+    && page.el("store").textContent === "store.sqlite3");
   claims("and never the DSN there either, which would carry a password",
     !page.el("dataset-store").textContent.includes("://"));
   claims("**the counts and the grid are in the same sheet as the rows**, which is what makes the"

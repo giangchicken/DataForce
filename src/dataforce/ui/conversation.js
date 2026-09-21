@@ -96,17 +96,19 @@ export function readCall(one) {
   };
 }
 
+// Through `readCall` and not beside it. Drawn on its own it grew a second reading: a call whose
+// `arguments` are a list drew a row holding that list, while the record table one box below read
+// `Lookup()`. The store settles it — `read_call_arguments` answers `{}` for anything that is not
+// a mapping, and `check_label_calls` refuses such a call — so *no arguments* is what it supplies,
+// and `label-fault` is what says why.
 function drawOneCall(one) {
-  const spec = typeof one === "string" ? { name: one } : (one && one.function) || one || {};
-  const args = readArguments(spec.arguments);
-  const rows = args && typeof args === "object" && !Array.isArray(args)
-    ? Object.entries(args)
-    : args === undefined ? [] : [["", args]];
+  const read = readCall(one);
+  const rows = Object.entries(read.arguments);
   return `<table class="calltable"><thead><tr>
-    <th colspan="2">${esc(spec.name ?? "(unnamed)")}</th>
+    <th colspan="2">${esc(read.name || "(unnamed)")}</th>
   </tr></thead><tbody>${rows.length
-    ? rows.map(([named, value]) => `<tr><th scope="row">${esc(named)}</th>`
-      + `<td>${esc(typeof value === "string" ? value : json(value))}</td></tr>`).join("")
+    ? rows.map(([named, said]) => `<tr><th scope="row">${esc(named)}</th>`
+      + `<td>${esc(said)}</td></tr>`).join("")
     : '<tr><td colspan="2" class="empty">no arguments</td></tr>'}</tbody></table>`;
 }
 

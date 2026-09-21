@@ -1095,6 +1095,28 @@ phase's own.
 a list; the message naming the deleted box again; counting against the scan's own claims; drawing
 only the catalog's fields; and dropping the repaint after the check.
 
+**A sixth: one call, read twice.** `drawOneCall` and `readCall` repeated the same destructuring and
+then disagreed — a call whose `arguments` are a list drew a row holding that list while the record
+table one box below read `Lookup()`. The module's own header forbids exactly this. The store
+settles which is right: `read_call_arguments` answers `{}` for anything that is not a mapping and
+`check_label_calls` refuses the call, so *no arguments* is what it supplies and `label-fault` says
+why. `drawOneCall` goes through `readCall` now.
+
+**And five checks that were green against a broken page.** The review mutated the source and ran
+the suite; these passed anyway, which means they were not checks:
+
+| mutation | why it passed | what it takes now |
+|---|---|---|
+| `pickedTool` returns without doing anything | the only `pickTool` call re-picked the tool the call already had | picking the **other** tool, and proving its arguments arrive and the last one's go |
+| `droppedCall` always drops index 0 | the claim counted the blocks left | typing into call 0, dropping call 1, and proving call 0 is what survived |
+| the denominator is its own numerator | the fixture had one value, so *1 of 1* could not separate three candidates | a second value typed in, then one of the two unticked, so the two numbers differ |
+| `required` is whichever argument is listed first | the fixture's required argument was its first | a second tool whose required argument is its **second** |
+| the sheet's line is the pill's short text | the claim asked only that the name was in it | the sheet's whole sentence, and the pill's name, asserted separately |
+
+**One claim was asserting something other than what it said.** *the raw JSON is under it and not
+instead of it* re-asserted the expression a claim eighteen lines above already made. It now says
+the table holds no JSON and the box under it does — which is the sentence.
+
 ---
 
 ## Phase 4 · The screen says what kind of thing each thing is
