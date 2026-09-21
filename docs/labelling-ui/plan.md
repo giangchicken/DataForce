@@ -1054,6 +1054,49 @@ put back on the table; and the statistics put back under the guide.
 
 ---
 
+### What the review of `T22`–`T24` measured, and what it cost
+
+Five findings, every one reproduced here before it was agreed with, and every one of them this
+phase's own.
+
+- **A label that is not a list of calls took the page down.** `Sample.label` is `Any` and
+  `/samples/named` answers each line as it arrived, so a corpus that stored a tool's name arrives
+  carrying `"Lookup"`. `saidLabel` read it as a list — a string has a length and no `map` — so
+  *Find the personal data* threw out of `composeRecord`, the record table was left reading
+  *Nothing yet* while the JSON under it was filled in, and **Submit** stayed live to throw the same
+  way with `posting…` on the bar and nothing said. Driven, all three. `saidLabel` asks
+  `Array.isArray` now and says *not a list of calls, so nothing here can read it as one*.
+- **And the message about that label named a control this phase deleted.** `drawLabel`'s non-array
+  branch said *the box below says what is wrong*; the box was `label-note`, which `T22` removed and
+  `test_page.py` now asserts is gone. It points at `label-fault` above it instead — which does
+  fire, measured: `check_label_calls("Lookup", tools)` answers `schema_valid=False` with the
+  service's own sentence.
+- **The `values replaced` row divided by a number nothing keeps current.** It counted
+  `personal_data.claims`, which `handedBack` fills from `held.scanned` — the raw scan's list, which
+  `addValue` never touches. A value typed in by hand gave *2 of 1 value replaced* one box below a
+  card saying *2 values found*. The denominator is `held.claimed.size` now, which is the same
+  source card 1 counts from, so the two cannot disagree.
+- **The form shipped arguments it never drew.** `writtenCalls` shipped everything in
+  `one.arguments`; `drawCallForm` drew only the catalog's `parameters.properties`. So an argument
+  the catalog does not declare — reachable from the arrived label and from `consensus_calls` — went
+  out with nothing on the screen saying it was there, and the reviewer could neither see it nor
+  take it off. Worse than it first looked: `check_label_calls` answers `schema_valid=True` over
+  one, measured, so nothing else on the page was going to say it either. The form draws a field for
+  every argument the call carries, and the ones the catalog does not declare are marked **not in
+  the catalog**. Clearing one takes it off, the way clearing any other field does.
+- **`schema_valid` was read once and never redrawn.** `refreshBoth` starts the check and the copy
+  together and the copy usually wins, so the row went on saying *yes* in green while the warning
+  directly above it said the label names a tool without calling it. Reproduced by making
+  `/data-quality/label` slower than the redact route and flipping its answer mid-run. `record.js`
+  exports `paintRecord`, and `app.js` — the module allowed to know both — wires the check's landing
+  to it through one `askCatalog`.
+
+**Five more defects were re-injected and each turned its new check red**: reading a string label as
+a list; the message naming the deleted box again; counting against the scan's own claims; drawing
+only the catalog's fields; and dropping the repaint after the check.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

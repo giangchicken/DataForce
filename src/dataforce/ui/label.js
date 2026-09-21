@@ -183,8 +183,23 @@ function paintForm() {
         + ' that the turn needs none.</div>';
 }
 
+// The catalog's parameters, then anything else the call already carries. An argument the catalog
+// does not declare is still an argument that ships, and `check_label_calls` says nothing about one
+// -- measured: it answers `schema_valid: true` over a call carrying a name no tool declares. Drawn
+// only from the catalog, it would go out with nothing on the screen saying it was there, and the
+// reviewer could neither see it nor take it off.
+function fieldsOn(tool, one) {
+  const declared = tool.fields.map(field => field.name);
+  return [
+    ...tool.fields,
+    ...Object.keys(one.arguments).filter(named => !declared.includes(named))
+      .map(named => ({ name: named, said: "", needed: false, offlist: true }))
+  ];
+}
+
 function drawCallForm(one, at, tools) {
   const tool = tools.find(each => each.name === one.name) || { said: "", fields: [] };
+  const fields = fieldsOn(tool, one);
   return `<div class="callform">
     <div class="runline">
       <select data-tool="${at}">${tools.map(each =>
@@ -193,9 +208,10 @@ function drawCallForm(one, at, tools) {
       <button class="quiet" data-drop="${at}">Remove this call</button>
     </div>
     ${tool.said ? `<div class="note">${esc(tool.said)}</div>` : ""}
-    ${tool.fields.length
-      ? tool.fields.map(field => `<div class="fieldname">${esc(field.name)}`
-        + (field.needed ? '<span class="needed">required</span>' : "")
+    ${fields.length
+      ? fields.map(field => `<div class="fieldname">${esc(field.name)}`
+        + (field.offlist ? '<span class="offlist">not in the catalog</span>'
+          : field.needed ? '<span class="needed">required</span>' : "")
         + `</div><input data-call="${at}" data-arg="${esc(field.name)}" spellcheck="false"`
         + ` value="${esc(one.arguments[field.name] ?? "")}">`
         + (field.said ? `<div class="note">${esc(field.said)}</div>` : "")).join("")

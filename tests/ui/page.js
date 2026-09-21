@@ -160,6 +160,15 @@ const STORED_ONE = {
 // What the rule answers about a label that names a tool and stops there. The sentence is the
 // service's own, copied here verbatim, because what the page is checked for is passing it through
 // -- a fixture worded like the page's own summary could not tell the two apart.
+// What the rule answers about a label that is not a list of calls at all. `Sample.label` is `Any`
+// on the way in, so a corpus line carrying a bare string arrives as one -- and the string is read
+// as a list of its characters, which is the service's own reading and is copied here rather than
+// summarised.
+const NOT_A_CALL = {
+  schema_valid: false,
+  faults: ['call 1 does not read as a tool call: it has to be {"name": ..., "arguments": {...}}']
+};
+
 const BARE_NAME_FAULT = {
   schema_valid: false,
   faults: ['call 1 is the bare name Lookup -- a label says which tool fires *and with what*,'
@@ -1141,6 +1150,108 @@ async function main() {
   claims("**an act taken with no sample on screen answers nothing**, rather than throwing out of"
     + " a form it has no catalog to build",
     page.el("v-write").checked === false && page.el("call-form").hidden === true);
+
+  // An argument the call carries that the catalog never declared. `check_label_calls` answers
+  // `schema_valid: true` over one -- measured -- so nothing else on the screen says it is there,
+  // and a form drawn from the catalog alone would ship it with nobody able to see or remove it.
+  page = await start({ ...ANSWERS(),
+    queue: [{ ...ONE, label: [{ name: "Lookup", arguments: { ma: PHONE, khong_co: "trong catalog" } }] }] });
+  await writeItMyself(page);
+  const offlist = page.el("call-form").markup();
+  claims("**an argument the catalog does not declare is still a field**, marked as one it does not"
+    + " know — undrawn, it would ship with nothing on the screen saying it was there",
+    offlist.includes('data-arg="khong_co"') && offlist.includes("not in the catalog"));
+  await page.byId.get("run-detect").onclick();
+  await settle(12);
+  await typeArgument(page, "khong_co", "");
+  await waited(400);
+  await settle(12);
+  claims("and clearing it takes it off the call, the way clearing any other field does",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .label[0].arguments.khong_co === undefined);
+
+  // ------------------------------------- a label that is not a list of calls at all
+  //
+  // `Sample.label` is `Any` and `/samples/named` answers each line as it arrived, so a corpus that
+  // stored a tool's name arrives carrying `"Lookup"`. Read as a list it has a length and no `map`:
+  // the page threw out of the record it was composing, left the table saying nothing had been
+  // made while the JSON under it was filled in, and left **Submit** live to throw the same way
+  // with `posting…` on the bar and nothing said.
+  page = await start({ ...ANSWERS(),
+    queue: [{ ...ONE, label: "Lookup" }],
+    redacted: { ...REDACTED, sample: { ...REDACTED.sample, label: "Lookup" } },
+    labelChecked: NOT_A_CALL });
+  claims("**a label that is not a list of calls is said to be one**, and points at the warning"
+    + " that is on the screen rather than at a box this page no longer has",
+    page.el("arrived-call").innerHTML.includes("not a list of calls")
+    && !page.el("arrived-call").innerHTML.includes("box below"));
+  await page.byId.get("run-detect").onclick();
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  claims("**and the record is still composed over it**, rather than the page throwing and leaving"
+    + " the table saying nothing has been made while the JSON under it is filled in",
+    page.el("record-table").markup().includes(`<th scope="row">label</th>`)
+    && !page.el("record-table").markup().includes("Nothing yet"));
+  page.inputsNamed("f-domain")[0].checked = true;
+  await page.byId.get("submit").onclick();
+  await settle(12);
+  claims("**and submit posts it**, rather than stopping on `posting…` with nothing said and"
+    + " nothing written",
+    posted(page, "/records").length === 1);
+
+  // A value the scan missed, typed in by hand. The record hands back the **scan's** own claims --
+  // what it claimed before anybody ticked -- so a count against those put a different denominator
+  // one box below the same number the moment a reviewer added a value.
+  const NAMED_TOO = {
+    review_text: REVIEW_TEXT,
+    claims: [["PHONE", PHONE], ["NAME", "vâng"]],
+    spans: [...PHONE_SPANS, { id: PHONE_SPANS.length + 1,
+      start: REVIEW_TEXT.indexOf("vâng"), end: REVIEW_TEXT.indexOf("vâng") + 4,
+      personal_data_class: "NAME", placeholder: "<NAME_1>", reason: null }]
+  };
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NAMED_TOO] });
+  await page.byId.get("run-detect").onclick();
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  page.el("value-new").value = "vâng";
+  page.el("value-class").value = "NAME";
+  await page.el("value-add").onclick();
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  claims("**the table counts the values on the table**, so a value the reviewer typed in is one of"
+    + " them and the two boxes cannot say different numbers about one thing",
+    page.el("said-2").textContent.includes("2 values found")
+    && page.el("record-table").markup().includes("2 of 2 values replaced"));
+
+  // The catalog's answer lands on its own clock. The check and the copy go out together and the
+  // copy usually wins, so the row that says whether the label validates would go on saying what
+  // the last check said while the warning directly above it said the opposite — and that row is
+  // the one on this table worth reading twice.
+  page = await start({ ...ANSWERS(), slow: { "/data-quality/label": [0, 600, 600, 600] } });
+  await page.byId.get("run-detect").onclick();
+  await settle(12);
+  await waited(400);
+  await settle(12);
+  claims("the row reads what the catalog answered when the record was made",
+    page.el("record-table").markup().includes('<td class="ok">yes</td>'));
+  page.answers.labelChecked = BARE_NAME_FAULT;
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
+  await waited(350);
+  await settle(12);
+  claims("**a copy that lands before the check leaves the old answer on the row**, which is the"
+    + " window this exists for",
+    page.el("record-table").markup().includes('<td class="ok">yes</td>')
+    && page.el("label-fault").hidden);
+  await waited(900);
+  await settle(12);
+  claims("**and the row is redrawn when the catalog's answer lands**, rather than going on saying"
+    + " yes under a warning that says the label names a tool without calling it",
+    page.el("record-table").markup().includes('<td class="bad">no</td>')
+    && !page.el("label-fault").hidden);
 
   // A value unticked after the label was settled. What is on screen is then a copy of spans nobody
   // is ticking any more, which is the same staleness the replacement has and gets the same answer.

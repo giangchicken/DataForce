@@ -22,7 +22,7 @@ import {
 import {
   askDataset, askStatistics, askStore, openStored, paintDataset, paintStrip
 } from "./corpus.js";
-import { composeRecord, forgetRecord } from "./record.js";
+import { composeRecord, forgetRecord, paintRecord } from "./record.js";
 import {
   addDomain, forgetDomainNote, paintFacetTicks, paintGuideFacets, readDeclaredFacets
 } from "./facets.js";
@@ -114,7 +114,7 @@ function openSample(sample, key) {
   paintCatalog();
   paintArrived();
   paintShipped();
-  checkLabel();
+  askCatalog();
   for (const facet of DECLARED_FACETS) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
   }
@@ -202,8 +202,15 @@ function copyLater() {
 }
 
 function refreshBoth() {
-  checkLabel();
+  askCatalog();
   return refreshCopy();
+}
+
+// The catalog's answer is what the record table's `schema_valid` row reads, and it lands on its
+// own clock: the check and the copy go out together and the copy usually wins, so the row would go
+// on saying what the last check said while the warning above it said the opposite.
+function askCatalog() {
+  return checkLabel().then(paintRecord);
 }
 
 async function refreshCopy() {
@@ -237,7 +244,7 @@ async function assemble() {
 
   clearTimeout(copySoon);
   paintShipped();
-  checkLabel();
+  askCatalog();
   if (!await refreshCopy()) {
     sayDataRefusal(held.copyNote || "the copy that ships could not be made");
     return false;

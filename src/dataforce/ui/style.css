@@ -464,6 +464,9 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 .callform .fieldname { margin-top: var(--space-3); }
 .callform .note { margin-top: var(--space-1); }
 .needed { margin-left: var(--space-2); font-weight: 400; color: var(--accent); }
+/* an argument the call carries that the catalog never declared. Drawn, because it ships either
+   way and the catalog's own check says nothing about one. */
+.offlist { margin-left: var(--space-2); font-weight: 400; color: var(--warn); }
 
 /* card 2 -- the facets, and the box that adds a domain beside the list it adds to */
 

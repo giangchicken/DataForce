@@ -66,7 +66,13 @@ export const drawCalls = calls => calls.map(one => {
 
 export function drawLabel(label) {
   if (label === null || label === undefined) return NO_CALL;
-  if (!Array.isArray(label)) return '<div class="nocall">Not JSON yet — the box below says what is wrong.</div>';
+  // Not a list of calls at all, which a corpus line may well be: `label` is `Any` on the way in,
+  // so whatever somebody wrote is what arrives. The catalog's own check refuses it in its own
+  // words on `label-fault` above, and that is where this points — there is no box below.
+  if (!Array.isArray(label)) {
+    return '<div class="nocall">This is not a list of calls, so nothing here can draw it as one.'
+      + " The catalog's warning above says what is wrong with it.</div>";
+  }
   if (!label.length) return NO_CALL;
   return label.map(drawOneCall).join("");
 }

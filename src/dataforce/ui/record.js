@@ -27,10 +27,11 @@ export function composeRecord(facets) {
   paintRecord();
 }
 
-// Every key that lands in a row, in the words the catalog and the facets use. Read and confirmed,
-// never typed: what is on this table came from the two cards above it, and the JSON under it is
-// there for whoever wants it rather than instead of it.
-function paintRecord() {
+// Separately callable, because one of its rows lands on its own clock: the catalog's answer about
+// the label arrives after the copy that composed the record as often as not, and a row nobody
+// redrew goes on saying what the last answer said while the warning above it says otherwise.
+export function paintRecord() {
+  if (!held.record) return;
   $("record-table").querySelector("tbody").innerHTML = readBack().map(([named, said, kind]) =>
     `<tr><th scope="row">${esc(named)}</th>`
     + `<td${kind ? ` class="${kind}"` : ""}>${esc(said)}</td></tr>`).join("");
@@ -46,7 +47,7 @@ function readBack() {
     // looking at the sample rather than found days later by somebody reading the corpus.
     ["schema_valid", valid === null ? "nothing could check it" : valid ? "yes" : "no",
       valid === false ? "bad" : valid ? "ok" : ""],
-    ["values replaced", saidReplaced(held.record.personal_data), ""]
+    ["values replaced", saidReplaced(), ""]
   ];
 }
 
@@ -61,19 +62,27 @@ function facetRows() {
   return named.map(one => [one, saidFacet(answered[one]), ""]);
 }
 
-const saidLabel = calls => (calls && calls.length
-  ? calls.map(saidCall).join("   ·   ")
-  : "no call — the turn needs none, which is an answer");
+// A label is a list of calls or it is nothing this can read. `label` is `Any` on the way in, so a
+// corpus line carrying a bare string arrives as one, and `"Lookup"` has a length and no `map`.
+const saidLabel = calls => (Array.isArray(calls)
+  ? (calls.length ? calls.map(saidCall).join("   ·   ")
+    : "no call — the turn needs none, which is an answer")
+  : calls === null || calls === undefined
+    ? "no call — the turn needs none, which is an answer"
+    : "not a list of calls, so nothing here can read it as one");
 
 const saidFacet = said => (Array.isArray(said) ? said.join(", ") || "nothing ticked"
   : typeof said === "boolean" ? (said ? "yes" : "no")
   : String(said ?? "") || "nothing ticked");
 
-function saidReplaced(found) {
-  if (!found) return "nothing has been read for personal data";
-  const values = (found.claims || []).length;
+function saidReplaced() {
+  if (!held.record.personal_data) return "nothing has been read for personal data";
+  // **The values on the table**, which is what card 1 counts too. The record hands back the scan's
+  // own `claims` -- what it claimed before anybody ticked -- so counting those would put a
+  // different denominator one box below the same number, the moment a reviewer adds a value.
+  const values = held.claimed.size;
   if (!values) return "nothing was found";
-  const spans = found.spans || [];
+  const spans = held.record.personal_data.spans || [];
   // One placeholder per distinct value, which is what `find_and_number_spans` numbers by -- so
   // counting them is counting the values that came out, not the occurrences they came out of.
   const replaced = new Set(spans.map(span => span.placeholder)).size;
