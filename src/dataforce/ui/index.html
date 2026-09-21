@@ -283,7 +283,6 @@
           confirmed is still in what ships; a facet above that nobody ticked. Each names itself on
           the panel it belongs to, nothing is written, and you stay on the sample.</p>
       </div>
-      <div class="stats" id="stats"></div>
     </div>
   </div>
 </div>
@@ -312,9 +311,13 @@
   </div>
 </div>
 
-<!-- What is already stored, read back. **The redacted table and not the record table**: the
-     record keeps what arrived so a review can be audited, and a corpus browser that served it
-     would put a person's number on the screen of anyone who opens the page.
+<!-- What the database holds, in one place: which database it is, what the whole comes to, and a
+     page of the rows. The statistics are here and not in the guide — the guide explains the work,
+     and what the corpus holds is a reading of the database this sheet is about.
+
+     **The redacted table and not the record table**: the record keeps what arrived so a review can
+     be audited, and a corpus browser that served it would put a person's number on the screen of
+     anyone who opens the page. There is no route to it and this sheet asks for none.
 
      `valid` is the column worth scanning. A label that names a tool the catalog does not offer,
      or leaves out an argument the tool requires, reads `no` — and `no` beside `calls 0` is a
@@ -326,11 +329,20 @@
       <button class="close" data-close="sheet-dataset">Close</button>
     </div>
     <div class="sheetbody">
+      <div class="fieldname tight">Where these rows are</div>
+      <div class="note" id="dataset-store"></div>
+      <p class="note">Only the redacted half of the corpus is served here — the half that keeps
+        what arrived is not readable from this page, because it holds what a customer said before
+        any value was replaced.</p>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="fieldname">The rows</div>
       <div class="runline">
         <label class="inline"><input type="checkbox" id="dataset-bad"> Only rows nothing could validate</label>
         <button id="dataset-more" class="quiet">Show more</button>
       </div>
-      <div class="tablewrap"><table class="rows" id="dataset-rows"><thead><tr>
+      <div class="tablewrap"><table id="dataset-rows"><thead><tr>
         <th>Sample</th><th>Domain</th><th>Arguable</th><th>Turns</th>
         <th>Calls</th><th>Offered</th><th>Redacted</th><th>Valid</th>
       </tr></thead><tbody></tbody></table></div>

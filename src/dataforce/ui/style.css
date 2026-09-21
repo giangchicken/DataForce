@@ -536,6 +536,10 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
   z-index: 5;
   background: rgba(16, 19, 25, .38);
   display: grid;
+  /* `minmax(0, 1fr)` and not the implicit track: an implicit one is sized by its content, so the
+     eight-column table of stored rows widened the track, `min(760px, 100%)` resolved against the
+     wider track, and the whole sheet scrolled sideways on a phone instead of the table doing it. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: start center;
   padding: var(--space-5) var(--space-4);
   overflow-y: auto;
@@ -549,7 +553,8 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 }
 .sheethead {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -585,6 +590,7 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
    pane uses, so it takes the same styles; this only gives it a box and a ceiling, because a sheet
    that grows with the sample scrolls the table off the top. */
 
+#dataset-store { margin-bottom: var(--space-2); }
 .storedone { margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
 .storedone .turns { max-height: 320px; overflow: auto; }
 #dataset-rows td { vertical-align: top; }

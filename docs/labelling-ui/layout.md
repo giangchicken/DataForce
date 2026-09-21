@@ -356,7 +356,7 @@ thing its name promises.
 
 | sheet | holds | acts |
 |---|---|---|
-| **Guide** | what a sample is, what makes a label right, what each facet means, what gets one refused. No route name, no file path | Close |
+| **Guide** | what a sample is, what makes a label right, what each facet means, what gets one refused. No route name, no file path, and no statistics — those are a reading of the database, so they open in the sheet the database is about | Close |
 | **Import** | a `.jsonl` file, one sample per line. The answer says how many were read, new, already held and unreadable — an unreadable line is named by its number | **Import**, Close |
 | **Samples** | every queue row in walk order with its state and its opening turn. Clicking one opens it; ticking rows walks just those, in the order they arrived | **Label the selected**, **Clear selection**, Close |
 | **Dataset** | **what the database holds right now**: which database it is, the counts, the statistics grid with its empty cells, and a page of stored rows — the facets, not the samples. Narrowable to the rows nothing could validate. One row opens whole. **Only `tool_decision_dataset`, the redacted half** — there is no route to `tool_decision_record` and this sheet does not ask for one, because that table keeps what arrived un-redacted | **Show more**, *only invalid*, Close |
@@ -434,20 +434,22 @@ tests/ui/
 | `record.js` | `logic` | the one thing this page composes, read back as a table, and which panel a refusal belongs to | `record`, `record-table`, `submit`, `skip`, `submit-note` |
 | `queue.js` | `adapter` | which sample is on screen, how much of the corpus is left, and the rows a reviewer picked to walk | `sheet-list`, `list-walk`, `list-none`, `list-rows`, `list-note`, `sample-name` |
 | `importing.js` | `adapter` | how a corpus gets in: one sample pasted, or a file of lines | `pasting`, `paste-open`, `paste-text`, `paste-now`, `paste-queue`, `paste-cancel`, `paste-note`, `sheet-import`, `file`, `drop`, `drop-said`, `import-run`, `import-note`, `import-said` |
-| `corpus.js` | `adapter` | what is already stored: the dataset sheet, the statistics grid, and which database a record lands in | `sheet-dataset`, `dataset-rows`, `dataset-bad`, `dataset-one`, `dataset-more`, `dataset-note`, `stats`, `strip`, `store` |
+| `corpus.js` | `adapter` | what is already stored: the dataset sheet, the statistics grid, and which database a record lands in — said twice, once as the header's pill and once as the sheet's line, from one reading | `sheet-dataset`, `dataset-rows`, `dataset-bad`, `dataset-one`, `dataset-more`, `dataset-note`, `dataset-store`, `stats`, `strip`, `store` |
 
 **Every id is named exactly once in that column.** What the flow adds: `run-detect` and `run-review`
 in place of `run-checks`, `run-note` in place of `checks-note`, the value box (`value-new`,
 `value-class`, `value-add`), `proposed-call` and `arrived-call` with a note each in place of `calls`
-and `calls-which`, `jury-said`, the three verdict ticks, the form, and `record-table`. What it
-removes: `span-table`, `span-check`, `span-add`, `span-note`, `auto`, `checks-verdict`, `v-correct`,
+and `calls-which`, `jury-said`, the three verdict ticks, the form, `record-table`, and
+`dataset-store`. What it removes: `span-table`, `span-check`, `span-add`, `span-note`, `auto`, `checks-verdict`, `v-correct`,
 `v-modify`, `take-consensus`, `consensus-line`, `consensus-note`, `label-text`, `label-check`,
 `label-note`, `label-editor`, `calls`, `calls-which` — seventeen ids, because seventeen controls
 stopped existing. That is
 Requirement 4 read as a table, and it is what the sweep extending `test_page.py` will check. The guide sheet is
 the one place two modules paint into one sheet — `facets.js` writes what each facet means and
 `corpus.js` writes the statistics under it — because both are already drawn elsewhere on the
-screen and a second spelling would let the two disagree.
+screen and a second spelling would let the two disagree. The statistics left it in `T24`: the
+guide explains the work, and what the corpus holds is a reading of the database, so it opens in the
+sheet the database is about. The guide sheet is `facets.js` alone now.
 
 **Two seams named but not cut.** `personal-data.js` holds two decisions — which spans are real, and
 what the copy is — and stays one file while the copy has no consumer but that card and the record.

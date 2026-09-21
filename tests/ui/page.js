@@ -146,7 +146,11 @@ const STORED = {
 
 const STORED_ONE = {
   key: "d2",
-  input: { messages: [{ role: "user", content: "anh muốn kiểm tra email" }], tools: [] },
+  input: {
+    messages: [{ role: "user", content: "anh muốn kiểm tra email" }],
+    tools: [{ type: "function", function: { name: "VerifyEmail_15d",
+      description: "kiểm tra tính hợp lệ của một địa chỉ email" } }]
+  },
   label: ["VerifyEmail_15d"],
   facets: { schema_valid: false, domain: "telesale" },
   created_time: "2026-09-18T00:00:00",
@@ -1236,6 +1240,15 @@ async function main() {
   for (let n = 0; n < 8; n += 1) await settled();
   claims("opening the corpus asks the store for a page of it",
     posted(page, "/records").some(one => one.method === "GET"));
+  claims("**the sheet opens on which database these rows are in**, so a page of rows is not a page"
+    + " of rows about nowhere",
+    page.el("dataset-store").textContent.includes("store.sqlite3"));
+  claims("and never the DSN there either, which would carry a password",
+    !page.el("dataset-store").textContent.includes("://"));
+  claims("**the counts and the grid are in the same sheet as the rows**, which is what makes the"
+    + " button worth pressing",
+    page.el("stats").innerHTML.includes('<table class="matrix"')
+    && page.el("stats").innerHTML.includes("Still empty"));
   const drawn = page.el("dataset-rows").querySelector("tbody").innerHTML;
   claims("every stored row is a line, with the facets it was filed under",
     drawn.includes("debt_collection") && drawn.includes("telesale") && drawn.includes("HIGH"));
@@ -1264,6 +1277,13 @@ async function main() {
     one.includes("VerifyEmail_15d") && !one.includes("(unnamed)"));
   claims("**and the row says why nothing could validate it**",
     one.includes("never offered") || one.includes("requires"));
+  claims("**the catalog that row was labelled against opens with it**, drawn as the sample pane"
+    + " draws one — a label is only right or wrong against the tools it was offered",
+    one.includes('class="tool"') && one.includes("VerifyEmail_15d")
+    && one.includes("kiểm tra tính hợp lệ"));
+  claims("**and its label is drawn by the code card 2 draws one with**, so a stored row and a live"
+    + " one cannot come to look like different things",
+    one.includes('class="calltable"'));
 
   // ------------------------------------------------------------------ the keyboard
   page = await start();
@@ -1547,7 +1567,7 @@ async function main() {
   page = await start({ ...ANSWERS(), refuse: { "/records/stats": { status: 503, detail: "no database attached: set DATAFORCE_DATABASE_URL" } } });
   claims("with no store the strip says so in the service's own words",
     page.byId.get("strip").textContent.includes("DATAFORCE_DATABASE_URL"));
-  claims("with no store the guide shows the guide and no statistics",
+  claims("with no store the dataset sheet says so where the statistics would be",
     page.byId.get("stats").innerHTML.includes("DATAFORCE_DATABASE_URL")
     && !page.byId.get("stats").innerHTML.includes("matrix"));
 

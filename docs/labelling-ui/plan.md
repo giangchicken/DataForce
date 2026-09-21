@@ -1000,6 +1000,43 @@ can be read back, and only the redacted half of it*.
 
 **Verify.** `make check`
 
+**What landed.** The sheet opens on *Where these rows are* — one line naming the database, from the
+same reading the header's pill is drawn from and **never the DSN** in either place — then one
+sentence saying only the redacted half is served, then the statistics grid with its empty cells
+named, then the page of rows. `#stats` moved out of the guide to get there, which also ends the one
+place two modules painted into one sheet: the guide is `facets.js` alone now.
+
+**A row opens whole, by the code the sample pane draws with.** `conversation.js` gained
+`readTools` and `drawCatalog` beside `offeredTools` — the pane, the form `T22` built and a stored
+row now read and draw one catalog three ways from one definition. The stored row's label moved from
+`drawCalls` to `drawLabel`, so it is the same call table card 2 draws; `VerifyEmail_15d` over *no
+arguments* is what a label that names a tool and never calls it looks like, and the refusal under
+it says why nothing could validate it. The catalog is there because **a label is only right or
+wrong against the tools it was offered**, and the row had been shown without it.
+
+**`class="rows"` off `#dataset-rows`, and what it was hiding.** `.rows` is the sample list —
+`display: flex; flex-direction: column`, which blockifies a `<table>` — so the stored rows had
+never been drawn as a table at all. Taking it off turned them into one, and that uncovered a second
+defect the blockification had been covering: `.sheet` is a grid whose column track was implicit,
+so a track sized by an eight-column table let `.sheetbox`'s `min(760px, 100%)` resolve against the
+wider track and **the whole sheet scrolled sideways on a phone**. The track is
+`minmax(0, 1fr)` now and the `.tablewrap` scrolls instead, which is what it is for.
+
+**Two things found by looking, both older than this task.** `.sheethead` was `display: flex` with
+no `gap`, so the head read *Dataset3 of 3 rows*; it has one now, and `align-items: baseline` like
+every other head on the page. And the store line needed air under it before the sentence about the
+un-redacted half, or the two facts read as one paragraph.
+
+**What is **not** fixed, and belongs to whoever gets there.** `GET /store` answers
+`attached: true` for a database it cannot reach — `db.open_engine()` is `create_engine`, which is
+lazy and connects to nothing. So both the pill and this sheet's line can name a database that is
+down. Fixing it means an actual connection attempt per request, which is a behaviour change on a
+route and is in none of this task's criteria.
+
+**Five defects were re-injected and each turned its check red**: the sheet never saying which
+database; a stored row's label drawn some other way; the catalog left out of an opened row; `.rows`
+put back on the table; and the statistics put back under the guide.
+
 ---
 
 ## Phase 4 · The screen says what kind of thing each thing is

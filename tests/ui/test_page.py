@@ -137,12 +137,46 @@ def test_the_guide_says_what_to_do_and_nothing_about_wiring() -> None:
     assert 'id="guide-facets"' in GUIDE
 
 
-def test_the_guide_and_the_statistics_open_over_the_sample() -> None:
+def test_the_guide_opens_over_the_sample_and_explains_only_the_work() -> None:
     """A panel the reviewer opens, not a card they pass through: a reviewer who needs the guide
-    needs it in the middle of a sample, and the statistics are what say which cells are short."""
+    needs it in the middle of a sample.
+
+    The statistics used to be under it, which made the guide two things at once. They are a
+    reading of the database, so they open in the sheet that is about the database.
+    """
     assert 'id="sheet-guide" hidden' in PAGE
-    assert 'id="stats"' in GUIDE
+    assert 'id="stats"' not in GUIDE
     assert 'id="open-guide"' in PAGE[PAGE.index("<header") : PAGE.index("</header>")]
+
+
+def test_the_dataset_sheet_says_what_the_database_holds() -> None:
+    """Requirement 26: which database, the counts, the empty cells, and the rows — in one place.
+
+    The sheet already answered `GET /records`; the statistics and the store line were drawn
+    elsewhere on the screen, so opening it gave a page of rows about nowhere. Gathering the three
+    is what makes the button worth pressing.
+
+    **The limit is a requirement, not an omission.** There is no route to `tool_decision_record`
+    and this screen asks for none: that table keeps what arrived un-redacted, and serving it would
+    put a customer's address on the screen of anyone who can open the page.
+    """
+    sheet = PAGE[PAGE.index('id="sheet-dataset"') : PAGE.index('id="sheet-list"')]
+    for named in ("dataset-store", "stats", "dataset-rows", "dataset-one"):
+        assert f'id="{named}"' in sheet, named
+        assert PAGE.count(f'id="{named}"') == 1, named
+    # Which database, then what the whole comes to, then the page of rows.
+    assert sheet.index('id="dataset-store"') < sheet.index('id="stats"')
+    assert sheet.index('id="stats"') < sheet.index('id="dataset-rows"')
+    assert "Only the redacted half" in sheet
+    # And the un-redacted table is named nowhere the page could reach for it.
+    assert "tool_decision_record" not in PAGE
+    assert "tool_decision_record" not in SCRIPTS
+    # `.rows` is the **sample list**: `display: flex; flex-direction: column`, which blockifies a
+    # `<table>`. One name doing two jobs, and the stored rows are a table.
+    assert 'class="rows" id="dataset-rows"' not in PAGE
+    assert re.search(r'<div class="rows" id="list-rows">', PAGE), (
+        "`.rows` is the sample list, and it is the only thing that wears it"
+    )
 
 
 def test_the_strip_and_the_store_are_in_the_bar_that_does_not_scroll() -> None:

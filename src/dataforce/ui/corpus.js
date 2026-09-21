@@ -1,8 +1,8 @@
 // adapter · what is already stored: the dataset sheet, the statistics grid, the strip, and
 // which database a record lands in. Owns dataset-rows, dataset-bad, dataset-one,
-// dataset-more, dataset-note, stats, strip, store.
+// dataset-more, dataset-note, dataset-store, stats, strip, store.
 
-import { drawCalls, drawTurns } from "./conversation.js";
+import { drawCatalog, drawLabel, drawTurns, readTools } from "./conversation.js";
 import { facetValues, paintDomainTicks } from "./facets.js";
 import { held } from "./held.js";
 import { waiting } from "./queue.js";
@@ -51,6 +51,9 @@ export function paintDataset() {
   </tr>`).join("");
 }
 
+// Whole, and drawn by the code the sample pane draws with -- the same call table, the same turns,
+// the same catalog. A second drawing here would be a second idea of what a stored row looks like,
+// and the one a reviewer never sees beside the original is the one that goes wrong quietly.
 export async function openStored(key) {
   say("dataset-note", "reading…");
   const answer = await ask(`/records/${encodeURIComponent(key)}`);
@@ -59,35 +62,41 @@ export async function openStored(key) {
   const valid = one.facets.schema_valid;
   say("dataset-note", `#${key}`);
   $("dataset-one").innerHTML = `<div class="storedone">`
-    + `<div class="fieldname">Label as it ships</div>`
-    + `<div class="calls">${drawCalls(one.label || [])}</div>`
+    + `<div class="fieldname tight">Label as it ships</div>`
+    + drawLabel(one.label ?? null)
     + (valid ? "" : `<p class="refusal">Nothing could validate this label against the catalog`
       + ` — a call names a tool that was never offered, or leaves out an argument it requires.</p>`)
     + `<div class="fieldname">The conversation</div>`
     + `<div class="turns">${drawTurns(one.input.messages || [])}</div>`
+    + `<div class="fieldname">Tools offered</div>`
+    + `<div class="catalog">${drawCatalog(readTools(one.input.tools))}</div>`
     + `</div>`;
 }
 
+// **Never the DSN**, in either place it is said: a connection string carries a password, and what
+// both of these answer is *am I writing where I think I am* without one.
 export async function askStore() {
   const answer = await ask("/store", {});
-  if (!answer.ok) {
-    $("store").className = "store none";
-    $("store").textContent = "";
-    return;
-  }
+  if (!answer.ok) return sayStore("store none", "", "nothing answered which database is attached");
   const said = answer.data;
   if (!said || typeof said !== "object" || typeof said.attached !== "boolean") {
-    $("store").className = "store";
-    $("store").textContent = "";
-    return;
+    return sayStore("store", "", "nothing answered which database is attached");
   }
-  $("store").className = said.attached ? "store" : "store none";
-  $("store").textContent = said.attached
-    ? said.describes
-    : `no database — set ${said.variable}`;
-  $("store").title = said.attached
-    ? `records land in ${said.describes}`
-    : "the review works with nothing attached; nothing will be stored";
+  if (!said.attached) {
+    return sayStore("store none", `no database — set ${said.variable}`,
+      `nothing is attached, so nothing will be stored — set ${said.variable}`, "bad");
+  }
+  sayStore("store", said.describes, `records land in ${said.describes}`);
+}
+
+// The header says which, in as few words as a pill holds; the sheet that opens the corpus says it
+// as a sentence, because a page of rows with no line saying where they came from is a page of rows
+// about nowhere. One reading, said twice, so the two cannot come to disagree.
+function sayStore(kind, named, why, said = "") {
+  $("store").className = kind;
+  $("store").textContent = named;
+  $("store").title = why;
+  say("dataset-store", why, said);
 }
 
 export async function askStatistics() {

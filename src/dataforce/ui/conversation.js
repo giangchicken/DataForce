@@ -23,38 +23,38 @@ export const drawTurns = turns => turns.map(turn => {
     + `<div class="said">${esc(said)}${calls}</div></div>`;
 }).join("");
 
-// The catalog this sample offers, read once: the pane draws it, and the form that writes a label
-// is built out of it. A second reading would be a second idea of what a tool's parameters are.
-export function offeredTools() {
-  return (held.sample.tools || []).map(tool => {
-    const spec = tool.function || tool;
-    const taken = (spec.parameters || {}).properties || {};
-    const needed = (spec.parameters || {}).required || [];
-    return {
-      name: spec.name ?? "(unnamed)",
-      said: spec.description || "",
-      fields: Object.entries(taken).map(([named, field]) => ({
-        name: named,
-        said: (field || {}).description || "",
-        needed: needed.includes(named)
-      }))
-    };
-  });
-}
+// A catalog, read once: the pane draws it, the form that writes a label is built out of it, and a
+// stored row opened out of the corpus draws its own. A second reading would be a second idea of
+// what a tool's parameters are.
+export const readTools = tools => (tools || []).map(tool => {
+  const spec = tool.function || tool;
+  const taken = (spec.parameters || {}).properties || {};
+  const needed = (spec.parameters || {}).required || [];
+  return {
+    name: spec.name ?? "(unnamed)",
+    said: spec.description || "",
+    fields: Object.entries(taken).map(([named, field]) => ({
+      name: named,
+      said: (field || {}).description || "",
+      needed: needed.includes(named)
+    }))
+  };
+});
+
+export const offeredTools = () => readTools(held.sample.tools);
+
+export const drawCatalog = read => (read.length
+  ? read.map(tool => `<div class="tool"><b>${esc(tool.name)}</b>`
+    + (tool.fields.length
+      ? `<span class="args"> (${esc(tool.fields.map(field => field.name).join(", "))})</span>` : "")
+    + (tool.said ? `<div class="note">${esc(tool.said)}</div>` : "")
+    + "</div>").join("")
+  : '<div class="empty">No tools were offered.</div>');
 
 export function paintCatalog() {
   const tools = offeredTools();
   $("tool-count").textContent = `${tools.length} ${wordFor(tools.length, "tool", "tools")}`;
-  if (!tools.length) {
-    $("catalog").innerHTML = '<div class="empty">No tools were offered.</div>';
-    return;
-  }
-  $("catalog").innerHTML = tools.map(tool =>
-    `<div class="tool"><b>${esc(tool.name)}</b>`
-    + (tool.fields.length
-      ? `<span class="args"> (${esc(tool.fields.map(field => field.name).join(", "))})</span>` : "")
-    + (tool.said ? `<div class="note">${esc(tool.said)}</div>` : "")
-    + "</div>").join("");
+  $("catalog").innerHTML = drawCatalog(tools);
 }
 
 export const drawCalls = calls => calls.map(one => {
