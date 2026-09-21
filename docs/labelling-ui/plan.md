@@ -862,6 +862,29 @@ check is whether anything else overflows, which is decided by looking rather tha
 - Each model picker wraps under its own button and stays with it — there is no longer a row of
   three tick columns to fit, which is what `layout.md` § *Narrow* used to be about.
 
+**One thing already broken, measured while `T25` was being read in a browser.** The header is
+the defect, and it starts at **900px** rather than at phone width — a laptop in a split window.
+`.top` is `--top` tall, which is 56px, and its content is not: the strip is a flex item that
+squeezes to nothing and wraps one word per line, so it grows down through the panes under it.
+Measured at 1440 / 900 / 640 / 390 with the sample on screen:
+
+| viewport | `.top` box | what the strip needs | `#store` width |
+|---|---|---|---|
+| 1440 | 56px | 19px | 222px |
+| 900 | 56px | **80px** | 117px |
+| 640 | 56px | **270px** | 45px |
+| 390 | 56px | **368px** | **18px** |
+
+So at phone width 312px of counts is drawn over the sample pane, and `#store` — *which database a
+record lands in*, the one line `spec.md` says a reviewer needs before writing four hundred rows —
+is squeezed from the 220px it wants to an 18px dot with no text in it. `.topacts` also ends 2px
+past the viewport, which is the page's only sideways overflow. Nothing on the page scrolls
+sideways otherwise: `document.scrollWidth` is 390 at 390.
+
+Three things to decide, and this is the task that decides them: whether the header wraps to a
+second row or the strip goes behind something at narrow widths; whether `--top` stops being one
+number; and where *which database* goes when the bar cannot hold it.
+
 **Source.** `spec.md` § *Open*; `layout.md` § *Narrow*.
 
 **Verify.** `make check`, then read <http://localhost:8000/ui/> at phone width.
