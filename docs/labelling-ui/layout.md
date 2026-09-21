@@ -337,7 +337,7 @@ that takes the panel's full call hidden behind the button.
 | **label** | the call that ships, written the way the catalog writes it: `VerifyEmail_15d(email=<EMAIL_1>)` |
 | **the facets** | one row each, in words, exactly as ticked |
 | **schema_valid** | yes or no, and this is the row worth reading twice: it is the store's own rule, asked before the row is written rather than found by somebody reading the corpus days later |
-| **spans kept** | how many of what was found is replaced, so the redaction is visible as a number |
+| **values replaced** | how many of the values found came out, and in how many places, so the redaction is visible as a number. Values and not spans: `<CLASS_N>` is numbered per distinct value, so that is what a count of placeholders counts |
 | ▸ **the raw record** | the JSON, for whoever wants it. Collapsed, and never the first thing |
 
 Read and confirmed, never typed. It is remade whenever anything above it changes, and it is on the
@@ -463,7 +463,7 @@ held.js ─┐                                        ┌─► nothing
 screen.js┼─► nothing                     wire.js ─┘
          │
 conversation.js ─► held, screen          checks.js ─► screen, wire
-record.js       ─► held, screen          models.js, queue.js, importing.js ─► held, screen, wire
+record.js       ─► conversation, held, screen   models.js, queue.js, importing.js ─► held, screen, wire
          ▲
 facets.js        ─► conversation, held, screen
 personal-data.js ─► checks, conversation, held, screen, wire
@@ -474,8 +474,10 @@ app.js (wiring)  ─► everything · nothing imports it
 ```
 
 `record.js` is the only `logic`. It imports `held.js` and `screen.js` — `show` is how the record
-reaches `#record`, which the plan's `T8` allows and which is the one place a `logic` module touches
-the page.
+reaches `#record`, which the plan's `T8` allows — and `conversation.js`, for the one line that says
+how a call is written. Those are the two places a `logic` module touches the page, and the second
+is there rather than inlined because the alternative is a second spelling of a call: one in the
+file that draws one, one in the file that composes the record.
 
 An adapter importing another adapter is allowed and happens **eight** times, all in the same
 direction and none of them a cycle: the two cards and the facets read `conversation.js`, the two

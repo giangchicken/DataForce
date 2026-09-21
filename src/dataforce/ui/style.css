@@ -471,6 +471,30 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 .facetwrap .runline { margin: var(--space-2) 0 0; }
 #domain-new, #value-new { flex: 1 1 200px; min-width: 0; }
 
+/* what will be written, read back before it is. **Not a card**: the two cards are the two
+   questions a reviewer answers, and this is those answers read back — so it carries no numbered
+   head and no question. */
+
+.written {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  margin-bottom: var(--space-4);
+}
+#record-table { table-layout: fixed; }
+#record-table th[scope=row] {
+  width: 34%;
+  font-size: var(--text-2);
+  font-weight: 400;
+  color: var(--dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#record-table td { overflow-wrap: anywhere; }
+#record-table td.ok { color: var(--ok); }
+#record-table td.bad { color: var(--warn); font-weight: 600; }
+
 /* the conversation the reviewers are handed. The one text on this page meant to be *read* rather
    than inspected: every other `pre` holds a route's JSON, which is a thing you scan for a key, so
    this one is set in the page's own face at the size the rest of the prose is, and it keeps the

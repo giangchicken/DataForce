@@ -104,6 +104,15 @@ function drawOneCall(one) {
     : '<tr><td colspan="2" class="empty">no arguments</td></tr>'}</tbody></table>`;
 }
 
+// One call on one line, the way the catalog writes one: the tool named once, then one
+// `argument=value` for each it was given. A label that names a tool and never calls it reads as
+// empty brackets, which is that said in words.
+export function saidCall(one) {
+  const read = readCall(one);
+  return `${read.name || "(unnamed)"}(${Object.entries(read.arguments)
+    .map(([named, said]) => `${named}=${said}`).join(", ")})`;
+}
+
 export function sayNoSample(said) {
   $("turns").innerHTML = `<div class="empty">${esc(said)}</div>`;
   $("catalog").innerHTML = "";

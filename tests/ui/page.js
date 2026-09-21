@@ -261,6 +261,8 @@ async function main() {
     && page.byId.get("catalog").innerHTML.includes("tra cứu"));
   claims("the label that arrived is drawn as a call",
     page.byId.get("arrived-call").innerHTML.includes("Lookup"));
+  claims("**before there is a record to confirm the table says so**, rather than sitting blank",
+    page.el("record-table").markup().includes("Nothing yet"));
   claims("the sample's name is on the pane", page.byId.get("sample-name").textContent.includes("s1"));
 
   // ------------------------------------------------------------------ which model answers what
@@ -850,11 +852,34 @@ async function main() {
   claims("**the record the page will post is on the screen before it is posted**",
     page.byId.get("record").textContent.includes("new_label")
     && posted(page, "/records").length === 0);
+
+  // ------------------------------------------------- and it is read back as a table, in words
+  const written = page.el("record-table").markup();
+  claims("**every key that lands in a row is a row**, named as the store names it",
+    ["key", "label", "language", "schema_valid", "values replaced"]
+      .every(named => written.includes(`<th scope="row">${named}</th>`)));
+  claims("**and every declared facet has one too, ticked or not** — a facet nobody answered is the"
+    + " one thing on this table worth seeing, and a row that is simply absent says nothing",
+    ["domain", "call_trigger", "direction", "ambiguous", "have_conversation_flow"]
+      .every(named => written.includes(`<th scope="row">${named}</th>`))
+    && written.includes("nothing ticked"));
+  claims("**the label is the call as the catalog writes it**, and it carries the placeholder",
+    shown(written).includes("Lookup(ma=<PHONE_1>)"));
+  claims("**the redaction is a number**, so what came out can be read rather than counted",
+    written.includes("1 of 1 value replaced, in 2 places"));
+  claims("what the catalog said about the label is on the row that will carry it",
+    written.includes('<td class="ok">yes</td>'));
+  claims("**and the raw JSON is under it and not instead of it**",
+    page.byId.get("record").textContent.includes("new_label"));
+
   const level = page.inputsNamed("f-ambiguous")[0];
   level.checked = true;
   page.el("facet-ticks").onchange();
   claims("and a facet ticked reaches it too, which nothing else on the page does",
     JSON.parse(page.byId.get("record").textContent).class.ambiguous === level.value);
+  claims("**the table is remade with it**, because it is a read-back and not a snapshot",
+    page.el("record-table").markup().includes(`<th scope="row">ambiguous</th>`)
+    && page.el("record-table").markup().includes(level.value));
 
   // The other half of the same rule: what gets redacted is the label the reviewer wrote.
   page = await start();
@@ -911,6 +936,24 @@ async function main() {
   claims("**a check that could not be made is said**, not read as a label with nothing wrong",
     !page.el("label-fault").hidden
     && page.el("label-fault").textContent.includes("the catalog will not read"));
+
+  // The row worth reading twice, in the case it exists for: the store's own rule, said while the
+  // reviewer is still looking at the sample rather than found days later by somebody reading the
+  // corpus.
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT });
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  await waited(320);
+  await settle(6);
+  claims("**a label nothing could validate says so on the row that will carry it**",
+    page.el("record-table").markup().includes('<td class="bad">no</td>'));
+  page.answers.redacted = { ...REDACTED, sample: { ...REDACTED.sample, label: [] } };
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
+  await waited(400);
+  await settle(10);
+  claims("**and a turn that needs no tool reads as an answer on that table**, not as a gap",
+    page.el("record-table").markup().includes("the turn needs none"));
 
   // -------------------------------------------------- the panel's answer is the proposal
   // Two models spelled the call out in full, agreed with each other, and the page put it on the
@@ -1124,6 +1167,10 @@ async function main() {
   claims("the language declared on the pane rides along", sent.class.language === "en");
   claims("**submit opens the next sample in one motion**",
     page.byId.get("turns").innerHTML.includes("cảm ơn"));
+  claims("**and nothing of the last one's record is left on the table**, which would read as this"
+    + " sample's until the values were settled again",
+    page.el("record-table").markup().includes("Nothing yet")
+    && !page.el("record-table").markup().includes("Lookup(ma="));
   claims("the statistics are asked again once a row is written",
     posted(page, "/records/stats").length === 2);
   claims("a sample with no call says so, rather than reading as a skipped row",

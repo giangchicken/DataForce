@@ -227,10 +227,19 @@
       </div>
     </article>
 
-    <details class="raw last">
-      <summary>The record this page will post</summary>
-      <pre id="record"></pre>
-    </details>
+    <!-- What will be written, read back in the words the catalog and the facets use. It is
+         remade whenever anything above it changes and it is on the screen **before** the post — a
+         box that only fills in at the moment of posting never shows the one thing its name
+         promises. Read and confirmed, never typed: every value on it came from the two cards
+         above. The JSON stays under it for whoever wants it, and is never the first thing. -->
+    <div class="written">
+      <div class="fieldname tight">What will be written</div>
+      <div class="tablewrap"><table id="record-table"><tbody></tbody></table></div>
+      <details class="raw last">
+        <summary>The raw record</summary>
+        <pre id="record"></pre>
+      </details>
+    </div>
 
   </section>
 </main>

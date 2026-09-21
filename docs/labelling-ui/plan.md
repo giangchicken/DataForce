@@ -935,6 +935,41 @@ anything changes and already shown before the post — both of those stay; what 
 
 **Verify.** `make check`
 
+**What landed.** `record-table`, drawn by `record.js` beside the `show("record", …)` it already
+did, and the `<pre>` moved under it into a disclosure called *the raw record*. Ten rows: the key,
+the label as `OpenTicket(ma_khach=<PHONE_1>)`, every declared facet, `language`, `schema_valid`
+and how much of what the scan found came out.
+
+**Three readings the table had to get right.**
+
+- **A facet nobody ticked still has a row.** `readDeclaredFacets` leaves a *tick one* facet out of
+  the object entirely until one is ticked, so drawing the object's own keys would have left
+  `domain` — a column a record is refused without — simply absent, which reads as nothing to say.
+  The rows are the **declared** facets in declared order, then whatever else `class` carries.
+- **The count is of values, not of spans.** `<CLASS_N>` is numbered per distinct value, so the
+  distinct placeholders are the values that came out; the spans are the places they came out of.
+  *3 of 3 values replaced, in 4 places* says both, and neither number stands for the other.
+- **`schema_valid` is read off the check, not off the record.** The store computes that column at
+  write time and the record posted carries no such key, so the row reads what
+  `POST /data-quality/label` answered — the same rule, asked early. A check nobody could make
+  reads *nothing could check it*, which is not the same as a label with nothing wrong.
+
+**One import edge this adds, named.** `record.js` is the only `logic` and it now imports
+`conversation.js` for `saidCall`. The alternative was a second spelling of a call — one in the file
+that draws one, one in the file that composes the record — and `layout.md` § *The import direction*
+says so rather than leaving it to be discovered.
+
+**What a reader sees change.** Under the two cards, a box that is not a card: *What will be
+written*, then key over label over the facets over `schema_valid` over *values replaced*, and *the
+raw record* collapsed at the foot of it. Before any scan it reads *Nothing yet — the record is made
+as soon as the values you kept are replaced*. Checked in a browser at 1440×900 and 390×844: no
+console errors, and the only page overflow at 390 is the header defect `T18` already holds.
+
+**Seven defects were re-injected and each turned its check red**: never drawing the table;
+stringifying the label back into the row; counting spans where values were meant; never reading
+what the catalog said; leaving the facets out; drawing no call as an empty cell; and leaving the
+last sample's record on the table when the next one opens.
+
 ### T24 · The dataset sheet says what the database holds
 
 **Goal.** One button opens what is stored: which database, the counts, the empty cells, and the

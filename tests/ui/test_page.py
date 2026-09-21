@@ -715,6 +715,28 @@ def test_a_label_is_written_on_a_form_built_from_the_sample_s_catalog() -> None:
     )
 
 
+def test_the_record_is_confirmed_as_a_table_with_the_json_under_it() -> None:
+    """Requirement 25: every key that will land in a row, in words, before anything is written.
+
+    It was a `<pre>` of JSON behind a disclosure — which is what a payload is for, not what a
+    confirmation is. The table is not collapsed and the JSON under it is, because a verdict nobody
+    can check is worse than a payload nobody reads, and neither is the first thing.
+
+    Not a card either: the two cards are the two questions a reviewer answers, and this is those
+    answers read back, so it carries no numbered head and asks nothing.
+    """
+    pane = PAGE[PAGE.index('id="pane-review"') : PAGE.index('<footer class="actions">')]
+    written = pane[pane.index('class="written"') :]
+    assert 'id="record-table"' in written
+    assert "What will be written" in written
+    # The raw record stays, under the table and collapsed — a `<details>` and not a second table.
+    assert written.index('id="record-table"') < written.index('id="record"')
+    assert '<details class="raw last">' in written
+    assert '<pre id="record">' in written
+    assert 'class="panel"' not in written
+    assert "<h2" not in written
+
+
 def test_nothing_in_the_page_reads_a_call_out_of_free_text() -> None:
     """Requirement 24, last line: the page builds a call and never parses one.
 
