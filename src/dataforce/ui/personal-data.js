@@ -95,6 +95,10 @@ function occurrences(found) {
 }
 
 const kept = value => held.keeps.get(value) !== false;
+
+export const unreplaced = () => (!held.detected || !held.shipped ? []
+  : [...held.claimed.keys()].filter(value =>
+    kept(value) && (held.shipped.review_text || "").includes(value)));
 const placed = value => held.detected.claims.some(([, said]) => said === value);
 
 const pickClass = (value, named) => `<select data-class="${esc(value)}">${
@@ -163,6 +167,11 @@ export function sayPersonalData() {
   const found = held.claimed.size;
   const scan = found ? `${found} ${wordFor(found, "value", "values")} found` : "nothing found";
   if (!held.shipped) return mark(2, "wait", `${scan} · replacing…`);
+  const left = unreplaced().length;
+  if (left) {
+    return mark(2, "bad",
+      `${scan} · the copy still holds ${left} ${wordFor(left, "value", "values")} you kept`);
+  }
   const replaced = new Set(valuesIn(held.handed)).size;
   mark(2, "answered", `${scan} · ${replaced
     ? `${replaced} ${wordFor(replaced, "value", "values")} replaced`
@@ -172,22 +181,16 @@ export function sayPersonalData() {
 export function paintReviewText() {
   const which = $("text-which");
   const shown = $("review-text");
-  if (held.settled && held.shipped) {
-    which.textContent = "The text as it ships — every value you kept replaced, the label with it";
-    shown.textContent = held.shipped.review_text;
-  } else if (held.settled && held.copyNote) {
-    which.textContent = "The text as it ships";
-    shown.textContent = held.copyNote;
-  } else if (held.settled) {
-    which.textContent = "The text as it ships";
-    shown.textContent = "replacing…";
-  } else if (held.detected) {
-    which.textContent = "The text the scan read";
-    shown.textContent = held.detected.review_text;
-  } else {
+  if (!held.detected) {
     which.textContent = "The text the scan reads";
     shown.textContent = "Nothing has been read for personal data yet.";
+    return;
   }
+  which.textContent = held.settled
+    ? "The text as it ships — every value you kept replaced, the label with it"
+    : "The conversation the reviewers will be handed — every value you kept replaced";
+  if (held.shipped) shown.textContent = held.shipped.review_text;
+  else shown.textContent = held.copyNote || "replacing…";
 }
 
 export function forgetPersonalData() {

@@ -684,6 +684,70 @@ order and the button, not the route.
 
 **Out of scope.** Drawing the answer. `T21` does that.
 
+**What landed.** Two buttons, `run-detect` at the head of card 1 and `run-review` at its foot,
+each with the pickers it spends. `RUNS` and the `for (const { step } of CHECKS)` loop are gone —
+there is no longer a run that has an order — and with them `checks-verdict` and `checks-note`, which
+were a head word and a commentary about a single run. The checks panel is now two verdict words and
+the Model column is off it, which is what `T14` said it would inherit.
+
+**One sentence that turned out to be false already.** `index.html` said *the shipping copy cannot be
+shown earlier, because the label is part of this text: a copy made before the label is settled is a
+copy of a label about to change.* Measured: `refreshCopy` has run on every tick since `T12` — the
+copy was always being **made**, it was only being **withheld from the screen**, and the gate was
+`held.settled`, which is a fact about card 2. So the reviewer approved the spans, the page redacted
+the record, and then showed them the unredacted text. `paintReviewText` now shows the replaced copy
+from the moment there is one, and the label above it says which copy: *the conversation the
+reviewers will be handed* before the label is settled, *the text as it ships* after. **The
+unreplaced text is never drawn into that block at any point** — the raw sample is the left pane's
+job, and it is never redrawn.
+
+**What disables the second act, in the order a reviewer meets it**: no sample · no scan · the copy
+refused, in the service's own sentence · the copy still being made. That last one is what makes the
+gate correct rather than decorative — `copyLater` nulls `held.shipped` the instant a tick lands, so
+there is no window in which *Ask the reviewers* is live over a record that does not match the table
+above it. `app.js` decides all four, because `layout.md` § *The import direction* says it is the only
+module allowed to know both cards.
+
+**What a reader sees change.** *Find personal data* fills the table under it. The redacted
+conversation is on the screen with `<NAME_1>`, `<PHONE_1>`, `<EMAIL_1>` in it **before** anything is
+confirmed, and *Ask the reviewers* sits under that text with the jury beside it. Checked in a
+browser at 1440×900 and 390×844: no console errors, and the juror's body carries the placeholder.
+
+**Three defects were re-injected and each turned its check red**: sending `held.sample` instead of
+`held.shipped.sample`; gating the redacted text on `held.settled` again; and never disabling
+`run-review`.
+
+**What the review caught.** The sentence above about there being no window was wrong when it was
+written, and two of the three findings are why.
+
+- **A value typed in went to the jurors in the clear.** `valuesChanged` called `copyLater()` only
+  *after* the renumber came back, while the tick path called it *before*. So for the whole round
+  trip of `POST …/spans` the copy on screen was the one made before the reviewer said the value was
+  personal data, and **Ask the reviewers** stayed live over it. Reclassing had the same window, at
+  lower cost — the value is already replaced there, under the class the old count numbered. Fixed
+  with a counter of renumbers in flight, not by nulling `held.shipped`: nulling would leave the
+  button dead with a false note when a renumber *fails*, and `numbered` commits nothing on failure,
+  so the copy that is already there is still the right one.
+- **`outcome: "withheld"` was never read, and reading it would have been wrong.** The reviewer
+  proposed gating on it; measured, that stops the ordinary path — `handedBack()` sends
+  `held.scanned.claims`, all of them, while only ticked values earn spans, so **any untick answers
+  `withheld`**, which is a value left in the text on purpose. Their narrower form is the one that
+  holds and is what landed: every value still ticked must be absent from the copy.
+- **The reviewer's own trigger for it did not reproduce.** Their stub answered `withheld` with the
+  raw number intact; the real service does not do that for their input. Two kept values overlapping
+  *in part* — `"Tran Van"` and `"Van Minh"` — answer `withheld` with neither value whole:
+  `user: anh <NAME_1> Minh goi nhe`, a fragment. What does reproduce is a kept value that is not a
+  contiguous substring of any *field*: `build_review_text` joins turns with `\n`, so a value
+  crossing that join stands in the text and in no field, and replacement by value can never place
+  it. Measured — claimed `"0912345678\nassistant"`, outcome `withheld`, copy
+  `user: so 0912345678\nassistant: vang a`, the number in the clear. `POST /records` already
+  refuses to *store* such a record; what was unguarded was the model call in front of it.
+- **The handler is guarded by the same sentence as the button**, because a disabled button is a
+  browser's courtesy and not the page's rule.
+- **One check caught an unfaithful fixture on its first run**, which is the best evidence it works:
+  the stub replaced the phone and not the value the test had just added, so the copy still held it
+  and the gate refused — correctly. The fixture was the thing that was wrong.
+
 ### T21 · The panel's call is the proposal, and it is a table
 
 **Goal.** Card 2 leads with what the reviewers propose, drawn as a call; what arrived sits beside

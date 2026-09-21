@@ -570,11 +570,16 @@ is somewhere else. Two panes fix the fault rather than the symptom. What a seque
 showing where the work has got to, is handed back by the panels being open at once: every step's
 state is readable without going anywhere.
 
-**Why the machine steps are one button.** Five of the eight steps are calls the reviewer cannot
+**Why the machine steps are two buttons.** Five of the eight steps are calls the reviewer cannot
 influence — they read the sample and answer. Their being separate was a fact about the service's
-routes leaking onto the screen. One button is the honest shape, and it is not automatic on load
-for one reason only: the reviewers' vote spends a model call, and a corpus is walked by people who
-skip. Free work could run on load; work that costs money waits to be asked.
+routes leaking onto the screen, and for as long as nothing was decided between them one button was
+the honest shape. Something is decided between them now: **which values are personal data is a
+human answer, and the panel is handed the record as it reads once those values are out.** A single
+button would run the vote against spans nobody had approved, and would show a model the customer's
+number — so the scan is one act and the vote is another, each at the foot or the head of the card
+it fills, with the picker that spends it. Neither is automatic on load, for the reason one button
+was not: the vote spends a model call, and a corpus is walked by people who skip. Free work could
+run on load; work that costs money waits to be asked.
 
 **Why the verdict and not the payload.** A route answers JSON and the old page showed it, which
 made every step's panel the same size whatever it said. A reviewer needs *nothing was found* in one

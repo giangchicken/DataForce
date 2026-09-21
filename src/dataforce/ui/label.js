@@ -10,10 +10,10 @@ import { $, esc, json, say, sayVerdict, show } from "./screen.js";
 export const rewriting = () => $("v-modify").checked;
 import { call } from "./wire.js";
 
-export async function review() {
+export async function review(handed) {
   if (!held.sample) return cannotAsk(6, "no sample");
   const answer = await asking(6, {
-    ...held.sample,
+    ...handed,
     language: saidLanguage(),
     jury_models: ticked.jury,
     sft_model: ticked.sft

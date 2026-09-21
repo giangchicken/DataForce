@@ -171,6 +171,12 @@ const shown = markup => markup
 
 const paths = page => page.asked.map(one => one.path.split("?")[0]);
 
+const settle = async (times = 8) => { for (let n = 0; n < times; n += 1) await settled(); };
+const askPanel = async page => {
+  await page.byId.get("run-review").onclick();
+  await settle();
+};
+
 // A call that spends something: a model, or a row. Three routes under `/data-quality` spend
 // neither, so they are the ones the page may ask for without a reviewer having asked for
 // anything: `label` is the store's `schema_valid` rule over two fields already in the browser,
@@ -290,16 +296,30 @@ async function main() {
     page.el("verifier-ticks").innerHTML.includes("m1")
     && !page.el("verifier-ticks").innerHTML.includes("no model is configured"));
 
-  // ------------------------------------------------------------------ one button, two checks
+  // ----------------------------------------- two acts, and a human decision in between them
   page = await start();
   const before = page.byId.get("turns").innerHTML;
-  await page.byId.get("run-checks").onclick();
-  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**the panel cannot be asked before the spans have been approved**, and the button says so",
+    page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("find the personal data first"));
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  const scanned = paths(page);
+  claims("**finding the personal data spends no vote** — the scan and the copy, and nothing else",
+    JSON.stringify(scanned.filter(machine))
+    === JSON.stringify(["/data-quality/personal-data", "/data-quality/personal-data/redact"]));
+  claims("**and only then can the reviewers be asked**, with nothing left in the way",
+    !page.byId.get("run-review").disabled && page.el("run-note").textContent.includes("replaced"));
+  await askPanel(page);
   const ran = paths(page);
-  claims("one button runs both checks, in flow order",
+  claims("asking the reviewers is what spends the vote",
     JSON.stringify(ran.filter(machine))
     === JSON.stringify(["/data-quality/personal-data", "/data-quality/personal-data/redact",
       "/ai-review"]));
+  claims("**the panel is handed the redacted record**, so a juror reads the placeholder rather than"
+    + " the number and writes what it read",
+    JSON.parse(posted(page, "/ai-review").at(-1).body).messages[0].content.includes("<PHONE_1>")
+    && !JSON.stringify(JSON.parse(posted(page, "/ai-review").at(-1).body)).includes(PHONE));
   claims("**the duplicate and abnormal scans are off the screen** and nothing asks for them",
     !ran.includes("/data-quality/duplicate") && !ran.includes("/data-quality/abnormal"));
   claims("**the sample never leaves the screen** — running the checks does not rewrite the left pane",
@@ -311,19 +331,20 @@ async function main() {
   claims("the reviewers' verdict reads as agreement with the label",
     page.el("said-6").textContent.includes("75%")
     && page.byId.get("label-verdict").textContent.includes("75%"));
-  claims("**a check's cell and the panel's word are painted by one hand** — both say `verdict`",
+  claims("**both checks' cells are painted by one hand** — both say `verdict`",
     page.el("said-2").className.split(" ")[0] === "verdict"
-    && page.byId.get("checks-verdict").className.split(" ")[0] === "verdict");
+    && page.el("said-6").className.split(" ")[0] === "verdict");
   claims("**the text is shown as a text** — the sample as one string, not a route's JSON about it",
-    page.el("review-text").textContent === REVIEW_TEXT);
+    page.el("review-text").textContent === REDACTED_TEXT);
   claims("**and its line breaks are line breaks**, not `\\n` printed into a payload",
     page.el("review-text").textContent.split("\n").length === 5
     && !page.el("review-text").textContent.includes("\\n"));
   claims("**nothing on the panel prints what the scan keyed or how it decided**",
     !page.el("review-text").textContent.includes('"spans"')
     && !page.el("review-text").textContent.includes('"outcome"'));
-  claims("the text on screen is the one the scan read, while the label is still open",
-    page.el("text-which").textContent.includes("scan read"));
+  claims("**the text on screen is the one the reviewers will be handed**, said so before the"
+    + " button that hands it over",
+    page.el("text-which").textContent.includes("reviewers will be handed"));
   claims("a scan that found something opens its own working unasked",
     page.byId.get("scan-raw").open === true);
   claims("the data panel says how many values there are to confirm",
@@ -335,17 +356,16 @@ async function main() {
     !kept().includes(`value="${PHONE_SPANS[0].start}"`));
   claims("the spans it made are shown read-only, each with what it stands in for",
     shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
-  claims("the checks verdict says both answered",
-    page.byId.get("checks-verdict").textContent.includes("both"));
 
   // ------------------------------------------------------------------ a step that fails
   page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data": { status: 500, detail: "the service fell over" } } });
-  await page.byId.get("run-checks").onclick();
-  for (let n = 0; n < 8; n += 1) await settled();
-  claims("a step that fails names itself",
-    page.byId.get("checks-verdict").textContent.includes("personal data"));
-  claims("**a step that fails stops the ones after it** — the later calls are never made",
-    !paths(page).includes("/data-quality/personal-data/redact") && !paths(page).includes("/ai-review"));
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  claims("**a scan that fails leaves the panel unaskable**, rather than spending a vote on a"
+    + " record nothing redacted",
+    page.byId.get("run-review").disabled
+    && !paths(page).includes("/data-quality/personal-data/redact")
+    && !paths(page).includes("/ai-review"));
   claims("the refusal is the service's own sentence, not a paraphrase, on the row that was refused",
     page.el("said-2").textContent.includes("the service fell over")
     && page.el("said-6").textContent === "not run");
@@ -353,18 +373,108 @@ async function main() {
   // A refusal from the *replacement* lands on the scan's row too, and must not write over the
   // scan's payload — which is the thing a reviewer opens to check a verdict they doubt.
   page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data/redact": { status: 500, detail: "the copier fell over" } } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("a replacement that fails says so on the scan's row",
     page.el("said-2").textContent.includes("the copier fell over"));
-  claims("**and it does not write over the text the scan read**, which is what a doubted verdict is checked against",
-    page.el("review-text").textContent === REVIEW_TEXT);
-  claims("and the vote is not spent on a sample whose copy could not be made",
+  claims("**and the text says why rather than showing a copy nothing made**",
+    page.el("review-text").textContent.includes("the copier fell over"));
+  claims("**and the vote cannot be spent on a sample whose copy could not be made**, with the"
+    + " service's own sentence on the button that would spend it",
+    page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("the copier fell over"));
+  await askPanel(page);
+  claims("and pressing it anyway asks nothing", !paths(page).includes("/ai-review"));
+
+  // --------------------------------- the window between a value being typed and the copy remade
+  //
+  // Every edit to the table takes a round trip to be numbered, and for its whole length the copy
+  // on screen is the one made *before* the edit. The tick path took the copy down before asking;
+  // the add and reclass paths took it down after the answer came back, which left **Ask the
+  // reviewers** live over a record that does not hold what the reviewer has just said is personal
+  // data. A value typed in and handed straight to a model in the clear is the exact thing this
+  // card exists to prevent.
+  const MISSED_EARLY = "vâng ạ";
+  const NUMBERED_LATE = {
+    review_text: REVIEW_TEXT,
+    claims: [["PHONE", PHONE], ["NAME", MISSED_EARLY]],
+    spans: [...PHONE_SPANS, {
+      id: PHONE_SPANS.length + 1,
+      start: REVIEW_TEXT.indexOf(MISSED_EARLY),
+      end: REVIEW_TEXT.indexOf(MISSED_EARLY) + MISSED_EARLY.length,
+      personal_data_class: "NAME",
+      placeholder: "<NAME_1>",
+      reason: null
+    }]
+  };
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NUMBERED_LATE],
+    // The second copy has the added value replaced too. A stub that answered the first copy twice
+    // would be a service that ignored what the reviewer just typed, and the gate below is exactly
+    // the thing that would catch it -- so the fixture has to be the honest one.
+    redacted: [REDACTED, { ...REDACTED,
+      review_text: REDACTED_TEXT.split(MISSED_EARLY).join("<NAME_1>") }],
+    slow: { "/data-quality/personal-data/spans": [0, 500] } });
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  page.el("value-new").value = MISSED_EARLY;
+  page.el("value-class").value = "NAME";
+  const adding = page.el("value-add").onclick();
+  await settle(4);
+  claims("**a value being numbered takes the panel out of reach**, because the copy on screen is"
+    + " the one made before the reviewer said it was personal data",
+    page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("numbering"));
+  await page.byId.get("run-review").onclick();
+  await settle(4);
+  claims("and pressing it in that window hands nothing to a model",
     !paths(page).includes("/ai-review"));
+  await adding;
+  await waited(600);
+  await settle(10);
+  claims("**once the copy has caught up the panel is in reach again**",
+    !page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("replaced"));
+
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, ANSWERS().numbered],
+    slow: { "/data-quality/personal-data/spans": [0, 500] } });
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  const reclassing = hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "OTP" });
+  await settle(4);
+  claims("**and so does saying a value is a different kind** — the placeholder in the copy is the"
+    + " one the old class counted, so it is not what the reviewers would be reading",
+    page.byId.get("run-review").disabled);
+  await reclassing;
+  await waited(600);
+  await settle(10);
+
+  // ------------------------------- a copy the service could not finish making
+  //
+  // `/redact` replaces **by value over the record's own fields**, and a claimed value that is not
+  // a contiguous substring of any of them -- one that stands in the rendered text only because of
+  // how the turns are joined -- can never be placed. The route answers 200 and says `withheld`,
+  // and the copy still holds the value. Read off the copy rather than off `outcome`, because
+  // `outcome` is `withheld` on the ordinary path too: an unticked value is a claim left in the
+  // text on purpose, and gating on the word would stop the flow every time somebody unticks one.
+  page = await start({ ...ANSWERS(),
+    redacted: { sample: ONE, review_text: REVIEW_TEXT, outcome: "withheld" } });
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  await waited(320);
+  await settle(6);
+  claims("**a copy that still holds a value the reviewer kept is not a text a model may read**",
+    page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("still holds"));
+  claims("and the scan's row says so rather than counting it replaced",
+    page.el("said-2").textContent.includes("still holds")
+    && !page.el("said-2").textContent.includes("1 value replaced"));
+  await page.byId.get("run-review").onclick();
+  await settle(6);
+  claims("**and no vote is spent on it**", !paths(page).includes("/ai-review"));
 
   // ------------------------------------------------- the copy follows the ticking, with no button
   page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const copies = () => posted(page, "/data-quality/personal-data/redact").length;
   const numbering = () => posted(page, "/data-quality/personal-data/spans");
@@ -413,7 +523,7 @@ async function main() {
   page = await start({ ...ANSWERS(),
     numbered: [ANSWERS().numbered, WITH_MISSED, RECLASSED, { ...RECLASSED,
       spans: RECLASSED.spans.filter(span => span.personal_data_class !== "OTP") }] });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const made = copies();
   const numberings = () => posted(page, "/data-quality/personal-data/spans");
@@ -442,7 +552,7 @@ async function main() {
       .detected.spans.length === WITH_MISSED.spans.length);
 
   const noKinds = await start({ ...ANSWERS(), classes: [] });
-  await noKinds.byId.get("run-checks").onclick();
+  await noKinds.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   noKinds.el("value-new").value = MISSED;
   await noKinds.el("value-add").onclick();
@@ -486,7 +596,7 @@ async function main() {
   ];
   page = await start({ ...ANSWERS(), numbered: twoNumbered,
     slow: { "/data-quality/personal-data/spans": [0, 400, 0] } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
   await waited(60);
@@ -500,7 +610,7 @@ async function main() {
 
   page = await start({ ...ANSWERS(),
     refuse: { "/data-quality/personal-data/spans": { status: 503, detail: "service restarting" } } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
@@ -519,7 +629,7 @@ async function main() {
     copies() === madeBefore);
 
   page = await start({ ...ANSWERS(), slow: { "/data-quality/personal-data/spans": [0, 400] } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "OTP" });
   await page.byId.get("skip").onclick();
@@ -537,7 +647,7 @@ async function main() {
     JSON.parse(posted(page, "/records").at(-1).body).personal_data === null);
 
   page = await start();
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
@@ -560,7 +670,7 @@ async function main() {
   };
   page = await start({ ...ANSWERS(),
     detected: nested, numbered: { ...nested, spans: PHONE_SPANS } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a value the service placed but numbered nothing for is not called missing**",
     page.el("keep-table").markup().includes("inside something longer")
@@ -584,7 +694,7 @@ async function main() {
       spans: [{ id: 1, start: AWKWARD_TEXT.indexOf(AWKWARD), end: AWKWARD_TEXT.length,
                 personal_data_class: "NAME", placeholder: "<NAME_1>", reason: null }]
     } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a row keys itself by the value, escaped into the attribute a browser reads back**",
     page.el("keep-table").markup().includes(`data-keep="${esc(AWKWARD)}"`)
@@ -602,7 +712,7 @@ async function main() {
       { redacted_text: "the copy of what is on the screen", outcome: "redacted" }
     ],
     slow: { "/data-quality/personal-data/redact": [0, 400, 0] } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
   await waited(240);
@@ -616,32 +726,35 @@ async function main() {
 
   // ------------------------------- the copy that ships, and the moment a reviewer may see it
   //
-  // **The label is rendered into this text.** So the redacted copy cannot be made before the
-  // label is settled -- it would be a copy of a label about to change -- and the moment it is
-  // settled, the number in the turn and the number in the call have to carry the *same*
-  // placeholder. That co-reference is the whole reason the label goes through the scan: a label
-  // redacted on its own would say `<PHONE_1>` about nobody.
+  // **The label is rendered into this text**, so the number in the turn and the number in the
+  // call have to carry the *same* placeholder. That co-reference is the whole reason the label
+  // goes through the scan: a label redacted on its own would say `<PHONE_1>` about nobody. What
+  // the reviewer is shown is the replaced copy from the moment there is one -- the vote below it
+  // is spent on that text, and a text nobody was shown is a vote nobody can check.
   page = await start();
-  await page.byId.get("run-checks").onclick();
-  for (let n = 0; n < 8; n += 1) await settled();
+  await page.byId.get("run-detect").onclick();
+  await settle();
   // Past the debounce, not straight after the run: asserted on the next tick, *nothing has been
   // shown yet* would be true of a page whose timer simply had not fired.
   await waited(320);
-  for (let n = 0; n < 6; n += 1) await settled();
+  await settle(6);
   claims("**the copy is made as the reviewer ticks** — the scan's own row reports on it",
     posted(page, "/data-quality/personal-data/redact").length === 1);
-  claims("**but it is not shown while the label is still open**: the scan's text stays up",
-    page.el("review-text").textContent === REVIEW_TEXT
-    && page.el("text-which").textContent.includes("scan read"));
+  claims("**and it is on the screen before anything is confirmed**, which is the text the vote"
+    + " below it will be spent on",
+    page.el("review-text").textContent === REDACTED_TEXT
+    && page.el("text-which").textContent.includes("reviewers will be handed"));
+  claims("**the unreplaced text is never drawn into that block**, at any point in the flow",
+    !page.el("review-text").textContent.includes(PHONE));
   claims("and neither verdict is ticked for the reviewer",
     !page.el("v-correct").checked && !page.el("v-modify").checked);
   page.el("v-correct").checked = true;
   await page.el("v-correct").onchange();
-  claims("saying the label is right says at once that the copy is being made",
+  claims("saying the label is right says at once that the copy is being made again",
     page.el("review-text").textContent.includes("replacing…"));
   await waited(400);
-  for (let n = 0; n < 10; n += 1) await settled();
-  claims("**confirming the label is what puts the redacted text on the screen**",
+  await settle(10);
+  claims("**and confirming it is what makes the block say the text ships**",
     page.el("review-text").textContent === REDACTED_TEXT
     && page.el("text-which").textContent.includes("ships"));
   const halves = page.el("review-text").textContent.split("label: ");
@@ -672,7 +785,7 @@ async function main() {
 
   // The other half of the same rule: what gets redacted is the label the reviewer wrote.
   page = await start();
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-modify").checked = true;
   await page.el("v-modify").onchange();
@@ -738,8 +851,11 @@ async function main() {
   page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT,
     reviewed: { llm: { label_agreement: 0, consensus: CONSENSUS }, sft: null } });
   claims("**nothing is offered before a panel has answered**", page.el("consensus-line").hidden);
-  await page.byId.get("run-checks").onclick();
-  for (let n = 0; n < 10; n += 1) await settled();
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  claims("and finding the personal data does not offer one either, because no panel has spoken",
+    page.el("consensus-line").hidden);
+  await askPanel(page);
   claims("**the panel having answered is what offers its label**", !page.el("consensus-line").hidden);
   await page.el("take-consensus").onclick();
   claims("taking it ticks *modify* and opens the editor, so they can see what they took",
@@ -767,8 +883,9 @@ async function main() {
   claims("on opening, the block says it is drawing the label that arrived",
     page.el("calls-which").textContent.includes("arrived")
     && page.el("calls").innerHTML.includes("Lookup"));
-  await page.byId.get("run-checks").onclick();
-  for (let n = 0; n < 10; n += 1) await settled();
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  await askPanel(page);
   await page.el("take-consensus").onclick();
   claims("**taking the panel's answer redraws the label above the tick**, arguments and all",
     page.el("calls").innerHTML.includes("kenh")
@@ -794,7 +911,7 @@ async function main() {
   claims("**nothing on the page can retype the turns or the catalog**",
     offered === false);
   page = await start();
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-modify").checked = true;
   await page.el("v-modify").onchange();
@@ -810,7 +927,7 @@ async function main() {
   // A value unticked after the label was settled. What is on screen is then a copy of spans nobody
   // is ticking any more, which is the same staleness the replacement has and gets the same answer.
   page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-correct").checked = true;
   await page.el("v-correct").onchange();
@@ -836,7 +953,7 @@ async function main() {
       { sample: REDACTED.sample, review_text: "the copy of what is on the screen" }
     ],
     slow: { "/data-quality/personal-data/redact": [400, 0] } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-modify").checked = true;
   await page.el("v-modify").onchange();
@@ -897,7 +1014,7 @@ async function main() {
   page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data": { status: 422,
     detail: [{ type: "missing", loc: ["body", "id"], msg: "Field required",
                input: { messages: [{ role: "user", content: SAID }] } }] } } });
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a body the service could not read names the field and what was wrong with it**",
     page.el("said-2").textContent.includes("id: Field required"));
@@ -1146,7 +1263,7 @@ async function main() {
   claims("the sample is on the screen, not an error where it should be",
     page.byId.get("turns").innerHTML.includes("quản trị"));
 
-  await page.byId.get("run-checks").onclick();
+  await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 10; n += 1) await settled();
   claims("**the checks run on it** rather than being refused for a field it never had",
     JSON.parse(posted(page, "/data-quality/personal-data")[0].body).id
@@ -1239,7 +1356,7 @@ async function main() {
   claims("an empty queue is said in words, not left blank",
     page.byId.get("turns").innerHTML.includes("Nothing is waiting"));
   claims("an empty queue disables the acts that need a sample",
-    page.byId.get("submit").disabled && page.byId.get("run-checks").disabled);
+    page.byId.get("submit").disabled && page.byId.get("run-detect").disabled);
 
   // ------------------------------------------------------------------ no database
   page = await start({ ...ANSWERS(), refuse: { "/records/stats": { status: 503, detail: "no database attached: set DATAFORCE_DATABASE_URL" } } });

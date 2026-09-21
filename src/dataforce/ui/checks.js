@@ -1,10 +1,10 @@
-// adapter · the two checks, and the row each one reports on. Owns said-2, said-6,
-// checks-note, checks-verdict.
+// adapter · the two checks, the button that spends each one, and the row it reports on.
+// Owns run-detect, run-review, run-note, said-2, said-6.
 
-import { say, sayVerdict } from "./screen.js";
+import { $, say, sayVerdict } from "./screen.js";
 import { call } from "./wire.js";
 
-export const CHECKS = [
+const CHECKS = [
   { step: 2, what: "Personal data", said: "said-2" },
   { step: 6, what: "Label", said: "said-6" }
 ];
@@ -36,13 +36,12 @@ export async function asking(step, body, path) {
   return answer;
 }
 
+export function askable(can, why, kind = "") {
+  $("run-review").disabled = !can;
+  say("run-note", why, kind);
+}
+
 export function forgetChecks() {
   for (const step of CHECKS.map(one => one.step)) delete checked[step];
   paintChecks();
-  sayChecking("Two calls: the personal-data scan, then the reviewers.");
-  sayChecksVerdict("not run", "");
 }
-
-export const sayChecking = (said, kind = "") => say("checks-note", said, kind);
-
-export const sayChecksVerdict = (said, kind) => sayVerdict("checks-verdict", said, kind);

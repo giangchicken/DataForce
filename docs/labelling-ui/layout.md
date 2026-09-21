@@ -426,7 +426,7 @@ tests/ui/
 | `screen.js` | `adapter` | that the page is a DOM: `$`, `show`, `say`, `esc`, the tick boxes, and the code-point slicing the offsets need | none |
 | `held.js` | `shape` | what the page holds between one sample and the next, and the two constants that say what a check and a facet are | none |
 | `conversation.js` | `adapter` | what a turn, a tool call and a label look like drawn — read by the sample pane **and** by a stored row opened out of the corpus | `turns`, `catalog`, `tool-count`, `raw-sample`, `calls`, `calls-which` |
-| `checks.js` | `adapter` | the two-check run, in order, and the row each one reports on | `run-detect`, `run-review`, `run-note`, `said-detect`, `said-review` |
+| `checks.js` | `adapter` | the two checks, the button that spends each one, and the row it reports on | `run-detect`, `run-review`, `run-note`, `said-2`, `said-6` |
 | `models.js` | `adapter` | which models answer, and that `config/model/` is a directory a deployment edits while the service is up | `verifier-ticks`, `jury-ticks`, `sft-ticks` |
 | `personal-data.js` | `adapter` | the values the reviewer keeps, the ones they add, and the copy that ships. **Not** where a value stands in the text — that is answered | `panel-data`, `keep-table`, `value-new`, `value-class`, `value-add`, `value-note`, `scan-raw`, `review-text`, `text-which`, `data-verdict`, `data-refusal` |
 | `label.js` | `adapter` | which of two calls ships, and the form that writes a third — the panel's proposal, what arrived, the three acts, and the catalog-built editor | `panel-label`, `proposed-call`, `arrived-call`, `v-take`, `v-keep`, `v-write`, `call-form`, `call-add`, `call-none`, `label-fault`, `label-verdict`, `out-6`, `label-refusal` |
@@ -437,11 +437,12 @@ tests/ui/
 | `corpus.js` | `adapter` | what is already stored: the dataset sheet, the statistics grid, and which database a record lands in | `sheet-dataset`, `dataset-rows`, `dataset-bad`, `dataset-one`, `dataset-more`, `dataset-note`, `stats`, `strip`, `store` |
 
 **Every id is named exactly once in that column.** What the flow adds: `run-detect` and `run-review`
-in place of `run-checks`, the value box (`value-new`, `value-class`, `value-add`), `proposed-call`,
-`arrived-call`, the three verdict ticks, the form, and `record-table`. What it removes: `span-table`,
-`span-check`, `span-add`, `span-note`, `auto`, `v-correct`, `v-modify`, `take-consensus`,
-`consensus-line`, `consensus-note`, `label-text`, `label-check`, `label-note`, `label-editor`,
-`calls`, `calls-which` — sixteen ids, because sixteen controls stopped existing. That is
+in place of `run-checks`, `run-note` in place of `checks-note`, the value box (`value-new`,
+`value-class`, `value-add`), `proposed-call`, `arrived-call`, the three verdict ticks, the form, and
+`record-table`. What it removes: `span-table`, `span-check`, `span-add`, `span-note`, `auto`,
+`checks-verdict`, `v-correct`, `v-modify`, `take-consensus`, `consensus-line`, `consensus-note`,
+`label-text`, `label-check`, `label-note`, `label-editor`, `calls`, `calls-which` — seventeen ids,
+because seventeen controls stopped existing. That is
 Requirement 4 read as a table, and it is what the sweep extending `test_page.py` will check. The guide sheet is
 the one place two modules paint into one sheet — `facets.js` writes what each facet means and
 `corpus.js` writes the statistics under it — because both are already drawn elsewhere on the
@@ -481,8 +482,9 @@ cards report on their check through `checks.js`, and `corpus.js` reads the conve
 stored row, the facets to know what a value is, and the queue to know how much is left.
 
 **`checks.js` does not call the panels.** The panels call `mark` on the copy path, not only when a
-run starts, so the direction is panel → `checks.js`. What runs the two checks in order is `RUNS` in
-`app.js`, which is the only module allowed to know both.
+run starts, so the direction is panel → `checks.js`. It owns the two buttons and says whether the
+second one may be pressed; **what decides that is `app.js`**, which is the only module allowed to
+know both — that the record a juror is handed is card 1's product and the vote is card 2's.
 
 ### `style.css`, in four bands
 

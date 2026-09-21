@@ -410,8 +410,8 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 }
 #pane-review { background: transparent; border: 0; padding: 0; }
 
-/* the checks. Three columns: which check, which model answers it, and what it said. The model sits
-   on the row of the check that spends it -- a picker anywhere else is one nobody finds. */
+/* the checks. Two columns: which check, and the word it came back with. The button that spends one
+   and the picker it spends sit on the card that check fills, not here. */
 
 .checks { margin-top: var(--space-3); table-layout: fixed; }
 .checks th[scope=row] {
@@ -427,6 +427,12 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 .checks .fieldname { margin: 0 0 var(--space-1); }
 .checks .fieldname + .tickbox + .fieldname { margin-top: var(--space-2); }
 .checks .tickbox { gap: var(--space-1) var(--space-3); }
+
+/* the act at the foot of a card: what it unlocks is the card below it, so it is ruled off rather
+   than run in with the work above */
+
+.askline { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.askline .runline { margin-top: 0; }
 
 /* card 2 -- the facets, and the box that adds a domain beside the list it adds to */
 

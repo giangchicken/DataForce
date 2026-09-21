@@ -64,38 +64,20 @@
 
   <section class="pane" id="pane-review">
 
-    <!-- Calls the reviewer cannot influence. Their being separate was a fact about the service's
-         routes leaking onto the screen.
-
-         Three columns, and the middle one is the point: **the model that answers a check sits on
-         that check's own row**. A picker somewhere further down the page is a picker nobody finds,
-         and a run that stops on `tick a verifier first` with no tick box in sight is a dead end. -->
     <article class="panel" id="panel-checks">
       <div class="panelhead">
         <h2>Checks</h2>
-        <span class="verdict" id="checks-verdict">not run</span>
       </div>
       <div class="panelbody">
-        <div class="runline">
-          <button id="run-checks" class="accent">Run all checks</button>
-          <span class="note" id="checks-note">Two calls: the personal-data scan, then the reviewers.</span>
-        </div>
         <div class="tablewrap"><table class="checks"><thead><tr>
-          <th>Check</th><th>Model</th><th>What it said</th>
+          <th>Check</th><th>What it said</th>
         </tr></thead><tbody>
           <tr>
             <th scope="row">Personal data</th>
-            <td><div class="tickbox" id="verifier-ticks"></div></td>
             <td class="verdict" id="said-2">not run</td>
           </tr>
           <tr>
             <th scope="row">Label</th>
-            <td>
-              <div class="fieldname tight">Jury</div>
-              <div class="tickbox" id="jury-ticks"></div>
-              <div class="fieldname">Finetuned</div>
-              <div class="tickbox" id="sft-ticks"></div>
-            </td>
             <td class="verdict" id="said-6">not run</td>
           </tr>
         </tbody></table></div>
@@ -108,6 +90,10 @@
         <span class="verdict" id="data-verdict"></span>
       </div>
       <div class="panelbody">
+        <div class="runline">
+          <button id="run-detect" class="accent">Find personal data</button>
+          <div class="tickbox" id="verifier-ticks"></div>
+        </div>
         <p class="note">Tick the values that really are personal data. What you untick is left in
           the text exactly as it arrived. <b>Every value you keep is replaced as you tick</b> — there
           is no second button, and the copy on the Checks panel says what it did.</p>
@@ -127,9 +113,9 @@
              answers are JSON *about* a conversation, and a person checking a conversation should
              be reading the conversation. What the scan keyed and how it decided is its business.
 
-             Two versions of it, and which one is up says where the sample has got to. The
-             shipping copy cannot be shown earlier, because **the label is part of this text**: a
-             copy made before the label is settled is a copy of a label about to change. -->
+             Two versions of it, and the line above says which. The replaced one is up from the
+             moment there is one — it is what the reviewers below will be handed, and a model call
+             spent on a text nobody was shown is the thing this card exists to prevent. -->
         <div>
           <div class="fieldname" id="text-which">The text the scan reads</div>
           <pre class="reviewtext" id="review-text"></pre>
@@ -141,6 +127,17 @@
           </tr></thead><tbody></tbody></table></div>
         </details>
         <p class="refusal" id="data-refusal" hidden></p>
+
+        <div class="askline">
+          <div class="runline">
+            <button id="run-review" class="accent" disabled>Ask the reviewers</button>
+            <span class="note" id="run-note"></span>
+          </div>
+          <div class="fieldname tight">Jury</div>
+          <div class="tickbox" id="jury-ticks"></div>
+          <div class="fieldname">Finetuned</div>
+          <div class="tickbox" id="sft-ticks"></div>
+        </div>
       </div>
     </article>
 
@@ -160,15 +157,14 @@
         <div class="faults" id="label-fault" hidden></div>
         <!-- Neither is ticked to begin with, and that is the point: *correct* is a thing a
              person says about a label, not a thing a page assumes while they are still reading
-             it. Saying either one is also what makes the shipping copy on the panel above
-             possible — the label is rendered into that text, so there is nothing to redact
-             until somebody has settled what the label is. -->
+             it. -->
         <div class="choice">
           <label class="inline"><input type="radio" name="verdict" id="v-correct"> Correct — it ships as it arrived</label>
           <label class="inline"><input type="radio" name="verdict" id="v-modify"> Modify — edit it below</label>
         </div>
-        <p class="note">Say which, and <b>the data</b> above swaps to the copy that ships — the
-          label redacted along with the turns, in the same placeholders.</p>
+        <p class="note">The label is part of the text <b>the data</b> above shows, so saying which
+          one ships makes that copy again — the label redacted along with the turns, in the same
+          placeholders.</p>
         <!-- The panel's own answer is already on the screen as JSON nobody can act on. A reviewer
              who agrees with it had to retype the whole call by hand; this puts it in the box.
              Outside the editor because pressing it is what opens the editor. -->

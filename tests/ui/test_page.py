@@ -23,7 +23,6 @@ from fastapi.testclient import TestClient
 from dataforce.edge.database import db
 from dataforce.edge.main import create_app
 from dataforce.profile.tool_decision.sample_building import create_tables
-from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.tables import Base
 from tests.edge.test_endpoints import BASE, POSTED_PHONE, build_review
 
@@ -122,8 +121,6 @@ def test_the_review_pane_is_the_checks_and_two_decisions() -> None:
     assert review.count('<article class="panel"') == 3
     for panel in ("panel-checks", "panel-data", "panel-label"):
         assert f'id="{panel}"' in review
-    # One button for the machine work, and it is in the checks panel rather than beside a step.
-    assert review.count('id="run-checks"') == 1
     assert 'id="facet-ticks"' in review[review.index('id="panel-label"') :]
 
 
@@ -385,7 +382,7 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
     assert [what for _, what, _ in rows] == ["Personal data", "Label"]
 
     panel = PAGE[PAGE.index('id="panel-checks"') : PAGE.index('id="panel-data"')]
-    assert panel.count("<th>") == 3
+    assert panel.count("<th>") == 2
     # And each answer cell carries the state word's own class. `dom.js` mints an element on first
     # reach with no class at all, so no check driving the page can see what the markup says here:
     # a cell left spelled `said` would render unstyled from load until the first paint, and every
@@ -395,11 +392,16 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
         assert re.search(rf'<td class="verdict" id="{said}">', panel), (
             f"{said} is the cell a check answers in, so it is a state word like the others"
         )
-    # And each picker is in that panel, once: a second copy anywhere else is a second control for
-    # the same choice, and the reviewer cannot tell which one the run reads.
-    for picker in ("verifier-ticks", "jury-ticks", "sft-ticks"):
-        assert f'id="{picker}"' in panel
-        assert PAGE.count(f'id="{picker}"') == 1
+    # And nothing is spent from here: the button that runs a check and the picker it spends both
+    # sit on the card that check fills, which is the whole of Requirement 21.
+    for moved in (
+        "run-detect",
+        "run-review",
+        "verifier-ticks",
+        "jury-ticks",
+        "sft-ticks",
+    ):
+        assert f'id="{moved}"' not in panel, moved
 
 
 def test_the_page_answers_no_question_about_where_a_value_stands() -> None:
@@ -525,30 +527,23 @@ def test_the_page_reads_what_the_routes_actually_answer(
     queued = attached_client.get(f"{BASE}/queue/next")
     assert queued.status_code == 200, queued.text
 
+    # What the scan answers, from the route that numbers a value -- which takes no model, so the
+    # spans a reviewer is shown here are the service's own and not three keys written out by hand.
+    detected = attached_client.post(
+        f"{BASE}/data-quality/personal-data/spans",
+        json={**queued.json()["sample"], "claimed": [["PHONE", POSTED_PHONE]]},
+    )
+    assert detected.status_code == 200, detected.text
+    assert detected.json()["spans"], (
+        "the fixture claims a value the text does not carry"
+    )
+
     # The shipping copy, from the route that makes one. Two halves the page reads by name -- the
     # record under `sample`, the text under `review_text` -- and a stub cannot catch either being
     # renamed, because a stub answers whatever shape the page was written against.
-    scanned = build_review_text(queued.json()["sample"])
-    at = scanned.index(POSTED_PHONE)
     redacted = attached_client.post(
         f"{BASE}/data-quality/personal-data/redact",
-        json={
-            **queued.json()["sample"],
-            "detected": {
-                "review_text": scanned,
-                "claims": [["PHONE", POSTED_PHONE]],
-                "spans": [
-                    {
-                        "id": 1,
-                        "start": at,
-                        "end": at + len(POSTED_PHONE),
-                        "personal_data_class": "PHONE",
-                        "placeholder": "<PHONE_1>",
-                        "reason": None,
-                    }
-                ],
-            },
-        },
+        json={**queued.json()["sample"], "detected": detected.json()},
     )
     assert redacted.status_code == 200, redacted.text
     # The turn and the label both, which is what the reach is for.
@@ -599,5 +594,52 @@ def test_the_page_reads_what_the_routes_actually_answer(
     (tmp_path / "named.json").write_text(named.text, encoding="utf-8")
     (tmp_path / "anonymous.json").write_text(anonymous, encoding="utf-8")
     (tmp_path / "redacted.json").write_text(redacted.text, encoding="utf-8")
+    (tmp_path / "detected.json").write_text(detected.text, encoding="utf-8")
 
     run_node(str(READING), str(tmp_path))
+
+
+def test_the_two_acts_sit_at_the_ends_of_the_card_they_fill() -> None:
+    """Requirements 20 and 21: the scan fills card 1, the vote is spent on what card 1 produced.
+
+    *Find personal data* heads the card because what it claims is the table under it. *Ask the
+    reviewers* is at the foot, directly above the card it fills, so a reviewer who has just
+    finished ticking does not go back to a band at the top of the pane to spend what they ticked.
+    Each picker is in the same block as the button that spends it, and neither exists twice.
+    """
+    card = PAGE[PAGE.index('id="panel-data"') : PAGE.index('id="panel-label"')]
+    for picker, button in (
+        ("verifier-ticks", "run-detect"),
+        ("jury-ticks", "run-review"),
+        ("sft-ticks", "run-review"),
+    ):
+        assert PAGE.count(f'id="{picker}"') == 1, picker
+        assert f'id="{picker}"' in card, picker
+        assert f'id="{button}"' in card, button
+    assert PAGE.count('id="run-detect"') == 1
+    assert PAGE.count('id="run-review"') == 1
+    assert card.index('id="run-detect"') < card.index('id="keep-table"')
+    assert card.index('id="run-review"') > card.index('id="review-text"')
+    # Disabled in the markup and not only once a script has run: the page is served before
+    # `app.js` is fetched, and a live button in that window is a vote spent on nothing.
+    assert re.search(r'<button id="run-review"[^>]*\bdisabled\b', card)
+    # The two ids the split replaced, gone from the page and from every module in it.
+    for gone in ("run-checks", "checks-verdict", "checks-note"):
+        assert gone not in PAGE, gone
+        assert gone not in SCRIPTS, gone
+
+
+def test_the_panel_is_asked_with_the_redacted_record_and_nothing_else() -> None:
+    """Requirement 20: a juror reads `<EMAIL_1>` and writes `<EMAIL_1>`.
+
+    Read off the source because it is a claim about which object is sent, and the behavioural
+    check beside it proves the placeholder arrives -- but a page that sent `held.sample` while a
+    stub happened to answer the same shape would pass that and still hand a customer's number to
+    a model. `held.shipped` is the route's own redacted record; nothing else may be posted there.
+    """
+    body = re.search(r'asking\(\s*6,\s*\{(.*?)\},\s*"/ai-review"\)', SCRIPTS, re.S)
+    assert body, 'the panel is asked through one `asking(6, …, "/ai-review")`'
+    assert "...handed" in body.group(1)
+    assert "held." not in body.group(1), body.group(1)
+    assert SCRIPTS.count('"/ai-review"') == 1
+    assert re.search(r"review\(held\.shipped\.sample\)", SCRIPTS)

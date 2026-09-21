@@ -38,8 +38,11 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
     statistics: real,
     // The queue answer as the route gave it, sample and all.
     queue: [queued.sample],
+    // The scan's own answer, from the route that numbers a value -- the spans a reviewer ticks
+    // and the text every offset in them indexes, as the service really spells them.
+    detected: read("detected.json"),
     // The redact route's own answer, both halves of it: the record the page composes `new_*`
-    // out of, and the text it puts on the screen once the label is settled.
+    // out of, and the text it puts on the screen once the values are settled.
     redacted: read("redacted.json")
   }, APP);
   for (let n = 0; n < 8; n += 1) await settled();
@@ -100,10 +103,17 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
   claims("every facet the table carries has its own count", stats.includes("number_label_tools"));
 
   // ------------------------------------------- the shipping copy, as the route really answers it
-  // A reviewer says the label is right; the page asks for the record redacted and shows the text
+  // The reviewer finds the personal data; the page asks for the record redacted and shows the text
   // that record now reads as. Both field names are the route's, and a renamed one here is a panel
   // that says `replacing…` for ever.
+  const found = read("detected.json");
   const copy = read("redacted.json");
+  await page.byId.get("run-detect").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("the values the scan claimed are on the table, read by the names the route writes",
+    found.claims.every(([, value]) => page.el("keep-table").markup().includes(value)));
+  claims("**the panel cannot be asked until there is a redacted record to hand it**",
+    page.byId.get("run-review").disabled === false);
   page.el("v-correct").checked = true;
   await page.el("v-correct").onchange();
   await waited(400);

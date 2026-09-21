@@ -70,7 +70,8 @@ not say which module owns which ids is one in which fourteen files can each reac
   all: it is five machine calls the reviewer cannot influence, which the store spec collapsed into
   one button for exactly that reason. It looks identical to the two panels that ask the reviewer
   something. That is the screen's central defect: the form does not say what kind of thing a thing
-  is.
+  is. `T20` took its two acts and its three pickers onto the cards they fill; what is still an
+  `<article class="panel">` is two verdict words, which `T14` is what removes.
 - **What is still unanswered is said only after the attempt.** A missing facet, an unsettled label
   and an unrun scan are refusals that land when submit is pressed (store spec, § *The page*). Before
   that, nothing on the screen counts what is left. Zeigarnik and Goal-Gradient both point at the
@@ -96,16 +97,16 @@ Three findings, read off the routes rather than off the screen.
   exactly the defect `docs/tool-decision-store/spec.md` names as the reason `schema_valid` exists. A
   screen that puts that at the head of the card and hides the panel's full call behind a button is
   optimised for the wrong one of the two.
-- **Redacting before the vote costs no route change.** `ReviewRequest` extends `Sample`, so the body
-  the page already holds after `POST /data-quality/personal-data/redact` — the whole record with
-  every confirmed value replaced — is a valid `POST /ai-review` body as it stands. A juror then
+- **Redacting before the vote cost no route change.** `ReviewRequest` extends `Sample`, so the body
+  the page already held after `POST /data-quality/personal-data/redact` — the whole record with
+  every confirmed value replaced — was a valid `POST /ai-review` body as it stood. A juror now
   reads `<EMAIL_1>` in the turn and writes `<EMAIL_1>` in the argument, because that is the only
-  thing the conversation contains. Today the raw address goes to the model and the label is redacted
-  after the fact, which means the model is shown the personal data, and the placeholder in the
-  argument is this service's substitution rather than the model's own reading.
-- **The next act is at the top and the work that unlocks it is at the bottom of a card.** A
-  reviewer who has just finished ticking spans at the foot of card 1 would have to scroll back up to
-  a band to press the button that uses them. Fitts's Law is the short version; the longer one is
+  thing the conversation contains. Before `T20` the raw address went to the model and the label was
+  redacted after the fact, which meant the model was shown the personal data, and the placeholder in
+  the argument was this service's substitution rather than the model's own reading.
+- **The next act was at the top and the work that unlocks it at the bottom of a card.** A
+  reviewer who had just finished ticking spans at the foot of card 1 had to scroll back up to
+  a band to press the button that used them. Fitts's Law is the short version; the longer one is
   that a button placed away from the work it follows is a button that reads as unrelated to it.
 - **The containment rule lives in one language again.** `find_and_number_spans` drops a span
   inside a longer one with `other.start <= span.start and span.end <= other.end and other.end -
@@ -437,15 +438,18 @@ that makes them untrue, not added to.
 - The same section, **the action bar holds exactly two acts** — still two acts, and it gains the line
   that says what is unanswered. A line of text is not an act, and the refusal on the owning panel
   stays where it is.
-- The same section, **one button runs both checks** — it becomes two, and the reason the sentence
-  gave for one is the reason there are now two: nothing was decided between them, and now the spans
-  are. *Never on load* stands, and so does *one that fails names itself and stops the one after it*.
+- ~~The same section, **one button runs both checks**~~ — done in `T20`: two, and the reason the
+  sentence gave for one is the reason there are now two — nothing was decided between them, and the
+  spans now are. *Never on load* stands. *Stops the one after it* stands as a stronger thing: the
+  second act is **disabled** until there is a redacted record to hand over, and says which of four
+  things is in the way.
 - The same section, **saying *correct* or *modify* is an act** — three acts, not two, and what
   *correct* is said about is the panel's proposal rather than what arrived. The sentence's own
   reason is untouched: neither is ticked for them, because it is a thing a person says.
 - The same section, **the label is redacted with the turns, in the same placeholder** — still true
-  of the label that *arrived*, and no longer the mechanism for the label that *ships*: that one is
-  written against a redacted conversation, so it carries the placeholder because the juror read one.
+  of the label that *arrived*, and no longer the mechanism for the label that *ships*: since `T20`
+  that one is written against a redacted conversation, so it carries the placeholder because the
+  juror read one. What is left for `T21` is drawing the call the juror wrote.
 - The same section, **the record the page will post is on the screen while it is being made** — it
   stays on the screen and stops being JSON.
 - `docs/tool-decision-pipeline/spec.md` Requirement 46 — unchanged and worth citing in the change:
