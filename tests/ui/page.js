@@ -1448,8 +1448,10 @@ async function main() {
     && page.el("store").textContent === "store.sqlite3");
   claims("and never the DSN there either, which would carry a password",
     !page.el("dataset-store").textContent.includes("://"));
-  claims("**the counts and the grid are in the same sheet as the rows**, which is what makes the"
-    + " button worth pressing",
+  // **Which sheet `#stats` is in is markup**, and `test_page.py` is where that is read — an id
+  // lookup here would be equally true of the sheet it used to be in. What this says is that
+  // opening the corpus finds the grid already drawn, which is the other half of the same sentence.
+  claims("the grid and its empty cells are drawn by the time the corpus is opened",
     page.el("stats").innerHTML.includes('<table class="matrix"')
     && page.el("stats").innerHTML.includes("Still empty"));
   const drawn = page.el("dataset-rows").querySelector("tbody").innerHTML;
@@ -1770,7 +1772,7 @@ async function main() {
   page = await start({ ...ANSWERS(), refuse: { "/records/stats": { status: 503, detail: "no database attached: set DATAFORCE_DATABASE_URL" } } });
   claims("with no store the strip says so in the service's own words",
     page.byId.get("strip").textContent.includes("DATAFORCE_DATABASE_URL"));
-  claims("with no store the dataset sheet says so where the statistics would be",
+  claims("with no store the statistics say so where the grid would be",
     page.byId.get("stats").innerHTML.includes("DATAFORCE_DATABASE_URL")
     && !page.byId.get("stats").innerHTML.includes("matrix"));
 

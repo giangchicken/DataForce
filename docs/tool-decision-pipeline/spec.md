@@ -439,7 +439,10 @@ drawn in.
     arrived with the sample — both as a call, the tool named once and one row per argument, so
     neither is read as JSON. Painted once on opening and never again, it showed the bare name that
     arrived above a tick that would confirm something else, which is a panel lying about what the
-    tick does.
+    tick does. **Something that is not a list of calls at all is said to be that rather than drawn
+    as one** — `label` arrives as `Any`, so a corpus that stored a tool's name arrives carrying a
+    string — and what says what is wrong with it is the catalog's own warning above, in Requirement
+    56, rather than a box of its own.
 56. **The label panel says what is wrong with the label before it asks whether it is right.** The
     check (Requirement 33) is asked when a sample opens, and again whenever the label is rewritten,
     over the label as it stands rather than as it arrived; its sentences are shown above the three

@@ -1113,9 +1113,36 @@ the suite; these passed anyway, which means they were not checks:
 | `required` is whichever argument is listed first | the fixture's required argument was its first | a second tool whose required argument is its **second** |
 | the sheet's line is the pill's short text | the claim asked only that the name was in it | the sheet's whole sentence, and the pill's name, asserted separately |
 
-**One claim was asserting something other than what it said.** *the raw JSON is under it and not
-instead of it* re-asserted the expression a claim eighteen lines above already made. It now says
-the table holds no JSON and the box under it does — which is the sentence.
+**Three claims were asserting something other than what they said.** *the raw JSON is under it and
+not instead of it* re-asserted the expression a claim eighteen lines above already made; it now says
+the table holds no JSON and the box under it does. The other two claimed a **location** — *in the
+same sheet as the rows*, *the dataset sheet says so* — off an `$("stats")` lookup, which is equally
+true of the sheet `#stats` used to be in. A stub has no document tree, so where an element sits is a
+markup fact and `test_page.py` is where it is read: both sentences now say what their expression
+proves, and `test_the_dataset_sheet_says_what_the_database_holds` and
+`test_the_guide_opens_over_the_sample_and_explains_only_the_work` are what hold the move.
+
+**Two things the review named that have no check, said rather than faked.** The `.sheet` grid track
+and the `.sheethead` gap are layout, and this repository has no rendering engine: `test_page.py`'s
+CSS work is a two-way name sweep. A text assertion that the declaration is present would prove the
+declaration is present and nothing about the page, which is the kind of green `page.js`'s own header
+refuses. Both were measured in a browser instead — `#sheet-dataset` scrolling `390 → 695` before and
+`390 → 390` after, with the two `.tablewrap`s taking the overflow — and the measurement is what is
+written above.
+
+**Three passages the review found saying two things at once.**
+
+- `layout.md` § *What each module is for* gave `record.js` the ids `submit`, `skip` and
+  `submit-note`, which are `app.js`'s in the tree, while the paragraph under the table claims every
+  id is named exactly once. The row says what `record.js` owns; the three are named in `app.js`'s
+  row and nowhere else, and the paragraph says the move is `T14`'s and why.
+- The same document said both *the guide sheet is the one place two modules paint into one sheet*
+  and *the guide sheet is `facets.js` alone now*, because `T24` annotated the sentence instead of
+  rewriting it. Rewritten.
+- `docs/tool-decision-pipeline/spec.md` Requirement 55 dropped *something in the box that is not a
+  list of calls is said as that rather than drawn as one* while `conversation.js` still implements
+  it — and implements it better than the clause described, since it now points at the catalog's own
+  warning. The clause is back, with the box taken out of it.
 
 ---
 

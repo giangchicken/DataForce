@@ -431,7 +431,7 @@ tests/ui/
 | `personal-data.js` | `adapter` | the values the reviewer keeps, the ones they add, and the copy that ships. **Not** where a value stands in the text — that is answered | `panel-data`, `keep-table`, `value-new`, `value-class`, `value-add`, `value-note`, `scan-raw`, `review-text`, `text-which`, `data-verdict`, `data-refusal` |
 | `label.js` | `adapter` | which of two calls ships, and the form that writes a third — the panel's proposal, what arrived, the three acts, and the catalog-built editor | `panel-label`, `proposed-call`, `proposed-note`, `arrived-call`, `arrived-note`, `jury-said`, `v-take`, `v-keep`, `v-write`, `call-form`, `call-add`, `call-none`, `label-fault`, `label-verdict`, `out-6`, `label-refusal` |
 | `facets.js` | `adapter` | which facets a person ticks, and where a value that is not declared comes from | `facet-ticks`, `domain-ticks`, `domain-new`, `domain-add`, `domain-note`, `domain-said`, `guide-facets` |
-| `record.js` | `logic` | the one thing this page composes, read back as a table, and which panel a refusal belongs to | `record`, `record-table`, `submit`, `skip`, `submit-note` |
+| `record.js` | `logic` | the one thing this page composes, read back as a table | `record`, `record-table` |
 | `queue.js` | `adapter` | which sample is on screen, how much of the corpus is left, and the rows a reviewer picked to walk | `sheet-list`, `list-walk`, `list-none`, `list-rows`, `list-note`, `sample-name` |
 | `importing.js` | `adapter` | how a corpus gets in: one sample pasted, or a file of lines | `pasting`, `paste-open`, `paste-text`, `paste-now`, `paste-queue`, `paste-cancel`, `paste-note`, `sheet-import`, `file`, `drop`, `drop-said`, `import-run`, `import-note`, `import-said` |
 | `corpus.js` | `adapter` | what is already stored: the dataset sheet, the statistics grid, and which database a record lands in — said twice, once as the header's pill and once as the sheet's line, from one reading | `sheet-dataset`, `dataset-rows`, `dataset-bad`, `dataset-one`, `dataset-more`, `dataset-note`, `dataset-store`, `stats`, `strip`, `store` |
@@ -444,12 +444,18 @@ and `calls-which`, `jury-said`, the three verdict ticks, the form, `record-table
 `v-modify`, `take-consensus`, `consensus-line`, `consensus-note`, `label-text`, `label-check`,
 `label-note`, `label-editor`, `calls`, `calls-which` — seventeen ids, because seventeen controls
 stopped existing. That is
-Requirement 4 read as a table, and it is what the sweep extending `test_page.py` will check. The guide sheet is
-the one place two modules paint into one sheet — `facets.js` writes what each facet means and
-`corpus.js` writes the statistics under it — because both are already drawn elsewhere on the
-screen and a second spelling would let the two disagree. The statistics left it in `T24`: the
-guide explains the work, and what the corpus holds is a reading of the database, so it opens in the
-sheet the database is about. The guide sheet is `facets.js` alone now.
+Requirement 4 read as a table, and it is what the sweep extending `test_page.py` will check.
+
+**No sheet has two modules painting into it.** The guide had two — `facets.js` writing what each
+facet means and `corpus.js` writing the statistics under them — and `T24` ended it: the guide
+explains the work, and what the corpus holds is a reading of the database, so it opens in the sheet
+the database is about. The guide sheet is `facets.js` alone.
+
+**Three ids this table does not give `record.js`, and why.** `submit`, `skip` and `submit-note` are
+`app.js`'s in the tree — its header claims two of them and `actsChanged` writes all three — so they
+are named in its row and nowhere else, because a register that named an id twice would be a
+register nothing could check. Moving them to `record.js` is `T14`'s, and `T14` holds the reason:
+`wiring` attaches handlers to controls other modules own and writes none of them.
 
 **Two seams named but not cut.** `personal-data.js` holds two decisions — which spans are real, and
 what the copy is — and stays one file while the copy has no consumer but that card and the record.
