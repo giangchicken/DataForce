@@ -287,7 +287,7 @@ because a reviewer who needs the guide needs it in the middle of a sample and no
 | **Find personal data** | head of card 1 | the scan, on the sample as it arrived. **Never on load.** What it claims fills the table under it |
 | `verifier-ticks` *(one of)* | beside that button | which model confirms the claimed values |
 | **Ask the reviewers** | **foot of card 1** | the panel, on the **redacted** record — so a juror reads `<EMAIL_1>` and writes `<EMAIL_1>`. **Disabled until the scan has run and the values are settled**, and says so while it is. Never on load: the vote costs a model call, so a sample opened and skipped costs nothing |
-| `jury-ticks` *(any of)* · `sft-ticks` *(one of)* | beside that button | which models vote, and which finetuned model answers beside them |
+| `jury-ticks` *(any of)* · `sft-ticks` *(one of)* | **under that button**, in the same block | which models vote, and which finetuned model answers beside them. Under and not beside, unlike the verifier: two groups that each need naming do not fit on a button's row, and a *Jury* with no word saying so is worse than a row of its own |
 | the state word in each card's head | — | what that check said: *2 found · 1 kept*, *2 of 3 agree*. One place, not two |
 
 The three lists are drawn from `GET /models`, which is `config/model/` read as a directory. A model

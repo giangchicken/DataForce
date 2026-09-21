@@ -38,7 +38,7 @@ export async function asking(step, body, path) {
   return answer;
 }
 
-export function acts(canFind, why, kind = "") {
+export function paintActs(canFind, why, kind = "") {
   $("run-detect").disabled = !canFind;
   $("run-review").disabled = why !== "";
   say("run-note", why || NOTHING_IN_THE_WAY, kind);

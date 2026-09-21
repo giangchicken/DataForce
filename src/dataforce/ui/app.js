@@ -10,7 +10,7 @@ import {
 import {
   COPY_AFTER, DECLARED_FACETS, held
 } from "./held.js";
-import { acts, forgetChecks, mark, paintChecks } from "./checks.js";
+import { forgetChecks, mark, paintActs, paintChecks } from "./checks.js";
 import {
   importBusy, labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting,
   tookFile
@@ -73,7 +73,7 @@ function sayNoQueue(said) {
   sayNoSample(said);
   sayQueueName("");
   paintStrip();
-  paintActs();
+  actsChanged();
   showPasting(true);
 }
 
@@ -95,11 +95,11 @@ function whatIsInTheWay() {
   return ["", false];
 }
 
-function paintActs() {
+function actsChanged() {
   const off = busy || !held.sample;
   for (const id of ["skip", "submit"]) $(id).disabled = off;
   const [why, bad] = whatIsInTheWay();
-  acts(!off, why, bad ? "bad" : "");
+  paintActs(!off, why, bad ? "bad" : "");
 }
 
 function openSample(sample, key) {
@@ -141,7 +141,7 @@ function forgetEverything() {
   forgetChecks();
   forgetRecord();
   hideRefusals();
-  paintActs();
+  actsChanged();
 }
 
 function hideRefusals() {
@@ -152,13 +152,13 @@ function hideRefusals() {
 async function findData() {
   if (!held.sample) return false;
   busy = true;
-  paintActs();
+  actsChanged();
   hideRefusals();
   try {
     return await detect() && await refreshCopy();
   } finally {
     busy = false;
-    paintActs();
+    actsChanged();
   }
 }
 
@@ -166,12 +166,12 @@ async function askReviewers() {
   const [why] = whatIsInTheWay();
   if (why) return false;
   busy = true;
-  paintActs();
+  actsChanged();
   try {
     return await review(held.shipped.sample);
   } finally {
     busy = false;
-    paintActs();
+    actsChanged();
   }
 }
 
@@ -193,7 +193,7 @@ function copyLater() {
   clearTimeout(copySoon);
   copyAt += 1;
   copySoon = setTimeout(refreshBoth, COPY_AFTER);
-  paintActs();
+  actsChanged();
 }
 
 function refreshBoth() {
@@ -215,7 +215,7 @@ async function refreshCopy() {
   paintReviewText();
   paintCalls(rewriting());
   composeRecord(readDeclaredFacets());
-  paintActs();
+  actsChanged();
   return true;
 }
 
@@ -223,7 +223,7 @@ function copyBroke(why) {
   mark(2, "bad", why);
   held.copyNote = why;
   paintReviewText();
-  paintActs();
+  actsChanged();
   return false;
 }
 
@@ -252,7 +252,7 @@ function sayOnItsPanel(detail) {
 async function submit() {
   if (!held.sample) return;
   busy = true;
-  paintActs();
+  actsChanged();
   hideRefusals();
   say("submit-note", "posting…");
   try {
@@ -272,14 +272,14 @@ async function submit() {
     await askNext();
   } finally {
     busy = false;
-    paintActs();
+    actsChanged();
   }
 }
 
 async function skip() {
   if (!held.key) return;
   busy = true;
-  paintActs();
+  actsChanged();
   say("submit-note", "skipping…");
   try {
     const answer = await skipQueued(held.key);
@@ -289,7 +289,7 @@ async function skip() {
     paintStrip();
   } finally {
     busy = false;
-    paintActs();
+    actsChanged();
   }
 }
 
@@ -315,7 +315,7 @@ function steer(event) {
 paintGuideFacets();
 paintFacetTicks();
 paintChecks();
-paintActs();
+actsChanged();
 
 $("run-detect").onclick = findData;
 $("run-review").onclick = askReviewers;
@@ -403,12 +403,12 @@ for (const id of TICK_LISTS) $(id).onchange = readTicked;
 
 async function valuesChanged(pending) {
   numbering += 1;
-  paintActs();
+  actsChanged();
   try {
     if (await pending) copyLater();
   } finally {
     numbering -= 1;
-    paintActs();
+    actsChanged();
   }
   paintCard();
 }

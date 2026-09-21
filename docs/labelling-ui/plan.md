@@ -769,6 +769,21 @@ invalidator: settling the label. Two things were fixed with it.
 the reason the middle one existed is kept and strengthened — the row a picker sat on was standing
 in for a button that was somewhere else entirely.
 
+**And a third round, which was prose the move left behind.** One check's sentence was the negation
+of its own assertion — *the panel cannot be asked until there is a redacted record* over
+`disabled === false` — so a green line told a reader the reverse of what it proved. A test's name,
+its docstring and its body disagreed three ways about how many columns the checks table has. The
+review-text block called itself two versions of a text it draws one of. Three `.checks` rules styled
+pickers that had left the table.
+
+**One thing was measured and kept rather than fixed.** Deleting `.checks .tickbox` and the two
+`.checks .fieldname` rules took away spacing the pickers had; at the foot of the card they fall
+through to the generic `.tickbox`. Measured in a browser with the old spacing re-added as
+`.askline`-scoped rules: 177px against 161px at 1440, 237px against 213px at 390 — a tenth of the
+block. Kept loose, and for a reason: those rules were tight because the pickers were in a table cell
+34% wide, and re-adding them here would put one-off spacing back into the file `T13` exists to take
+it out of.
+
 ### T21 · The panel's call is the proposal, and it is a table
 
 **Goal.** Card 2 leads with what the reviewers propose, drawn as a call; what arrived sits beside
