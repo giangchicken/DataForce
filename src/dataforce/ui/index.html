@@ -148,31 +148,34 @@
         <span class="verdict" id="label-verdict"></span>
       </div>
       <div class="panelbody">
-        <div class="fieldname tight" id="calls-which">The label as it arrived</div>
-        <div class="calls" id="calls"></div>
-        <!-- Above the question, because it is about the thing the question is asked of. The same
-             rule the store writes `schema_valid` from, asked here rather than read off a row
-             afterwards: a label naming a tool without calling it used to be found days later by
-             somebody reading the corpus, and the reviewer who ticked *correct* on it was never
-             told. It warns and never blocks — what a label ought to be is theirs to say. -->
+        <div class="fieldname tight">What the reviewers propose
+          <span class="note" id="proposed-note"></span>
+        </div>
+        <div id="proposed-call"></div>
+
+        <div class="fieldname">What arrived
+          <span class="note" id="arrived-note"></span>
+        </div>
+        <div id="arrived-call"></div>
+
+        <!-- Above the acts, because it is about the thing they are asked of. The same rule the
+             store writes `schema_valid` from, asked here rather than read off a row afterwards: a
+             label naming a tool without calling it used to be found days later by somebody reading
+             the corpus, and the reviewer who ticked *correct* on it was never told. It warns and
+             never blocks — what a label ought to be is theirs to say. -->
         <div class="faults" id="label-fault" hidden></div>
-        <!-- Neither is ticked to begin with, and that is the point: *correct* is a thing a
-             person says about a label, not a thing a page assumes while they are still reading
-             it. -->
+
+        <!-- Three acts, and none is ticked to begin with: which label ships is a thing a person
+             says, not a thing a page assumes while they are still reading it. -->
         <div class="choice">
-          <label class="inline"><input type="radio" name="verdict" id="v-correct"> Correct — it ships as it arrived</label>
-          <label class="inline"><input type="radio" name="verdict" id="v-modify"> Modify — edit it below</label>
+          <label class="inline"><input type="radio" name="verdict" id="v-take"> Take the reviewers' answer</label>
+          <label class="inline"><input type="radio" name="verdict" id="v-keep"> Keep what arrived</label>
+          <label class="inline"><input type="radio" name="verdict" id="v-write"> Write it myself</label>
         </div>
         <p class="note">The label is part of the text <b>the data</b> above shows, so saying which
           one ships makes that copy again — the label redacted along with the turns, in the same
           placeholders.</p>
-        <!-- The panel's own answer is already on the screen as JSON nobody can act on. A reviewer
-             who agrees with it had to retype the whole call by hand; this puts it in the box.
-             Outside the editor because pressing it is what opens the editor. -->
-        <div class="runline" id="consensus-line" hidden>
-          <button id="take-consensus" class="quiet">Rewrite it as the reviewers did</button>
-          <span class="note" id="consensus-note"></span>
-        </div>
+
         <!-- **The label, and nothing else.** The turns are what a customer said and the catalog
              is what the assistant was offered; a page that let a reviewer retype either is a page
              that can quietly make the sample agree with the label. What they are here to decide
@@ -186,8 +189,12 @@
             <span class="note" id="label-note"></span>
           </div>
         </div>
+
         <details class="raw">
-          <summary>What the reviewers said</summary>
+          <summary>What each reviewer said</summary>
+          <div class="tablewrap"><table id="jury-said"><thead><tr>
+            <th>Reviewer</th><th>What it answered</th><th>Why</th>
+          </tr></thead><tbody></tbody></table></div>
           <pre id="out-6"></pre>
         </details>
 

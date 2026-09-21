@@ -212,6 +212,8 @@ p.note { margin: 0 0 var(--space-3); }
 
 .fieldname { font-size: var(--text-1); font-weight: 600; color: var(--dim); margin: var(--space-4) 0 var(--space-2); }
 .fieldname.tight { margin-top: 0; }
+/* a field's name and what it is worth knowing about it, on one line and not as one sentence */
+.fieldname .note { margin-left: var(--space-3); font-weight: 400; color: var(--faint); }
 
 /* the refusal, and a label that will not call. The same warm red, because it is the same kind of
    news: something on this screen will not do what it says. The faults are a list and not a
@@ -430,6 +432,20 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 
 .askline { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--line); }
 .askline .runline { margin-top: 0; }
+
+/* a tool call, drawn as what it is: the tool named once, then one row per argument. Never JSON --
+   a reviewer confirming a call should not have to read a payload to find the value in it. */
+
+.calltable { margin: 0 0 var(--space-2); width: 100%; table-layout: fixed; }
+.calltable thead th { font-size: var(--text-2); color: var(--ink); text-align: left; }
+.calltable th[scope=row] {
+  width: 34%;
+  font-weight: 400;
+  color: var(--dim);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.calltable td { overflow-wrap: anywhere; }
 
 /* card 2 -- the facets, and the box that adds a domain beside the list it adds to */
 

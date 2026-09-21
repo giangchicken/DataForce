@@ -114,8 +114,8 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
     found.claims.every(([, value]) => page.el("keep-table").markup().includes(value)));
   claims("**and the redacted record the real route made is what puts the panel in reach**",
     page.byId.get("run-review").disabled === false);
-  page.el("v-correct").checked = true;
-  await page.el("v-correct").onchange();
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
   await waited(400);
   for (let n = 0; n < 8; n += 1) await settled();
   claims("confirming the label puts the route's own redacted text on the screen",

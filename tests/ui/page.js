@@ -160,6 +160,14 @@ const BARE_NAME_FAULT = {
 // has to leave in the same placeholder the turn does.
 const CONSENSUS = `[{"name": "Lookup", "arguments": {"ma": "${PHONE}", "kenh": "app"}}]`;
 
+// What `/ai-review` answers beside `consensus`: the same sentence read as calls by
+// `parse_text_to_tools` -- arguments as the JSON text under one key ordering, which is the format
+// the store already treats as one spelling of a call.
+const CONSENSUS_CALLS = [{
+  type: "function",
+  function: { name: "Lookup", arguments: `{"kenh":"app","ma":"${PHONE}"}` }
+}];
+
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const esc = said => String(said)
@@ -234,7 +242,7 @@ async function main() {
     page.byId.get("catalog").innerHTML.includes("Lookup")
     && page.byId.get("catalog").innerHTML.includes("tra cứu"));
   claims("the label that arrived is drawn as a call",
-    page.byId.get("calls").innerHTML.includes("Lookup"));
+    page.byId.get("arrived-call").innerHTML.includes("Lookup"));
   claims("the sample's name is on the pane", page.byId.get("sample-name").textContent.includes("s1"));
 
   // ------------------------------------------------------------------ which model answers what
@@ -328,9 +336,13 @@ async function main() {
     page.el("said-2").textContent.includes("1 value found"));
   claims("**the replacement reports on the scan's own row**, because it is not a step to run",
     page.el("said-2").textContent.includes("1 value replaced"));
-  claims("the reviewers' verdict reads as agreement with the label",
+  claims("**the reviewers' verdict is a number on the check's row and a state word on the card**",
     page.el("said-6").textContent.includes("75%")
-    && page.byId.get("label-verdict").textContent.includes("75%"));
+    && page.byId.get("label-verdict").textContent === "reviewed");
+  claims("**and the number is said once, beside the label it is about** — it counts the jurors"
+    + " whose own answer matches the one that *arrived*, so it belongs nowhere else",
+    page.el("arrived-note").textContent.includes("75%")
+    && !page.el("proposed-note").textContent.includes("75%"));
   claims("**both checks' cells are painted by one hand** — both say `verdict`",
     page.el("said-2").className.split(" ")[0] === "verdict"
     && page.el("said-6").className.split(" ")[0] === "verdict");
@@ -398,8 +410,8 @@ async function main() {
   await waited(320);
   await settle(6);
   claims("the panel is in reach once there is a copy to hand it", !page.byId.get("run-review").disabled);
-  page.el("v-correct").checked = true;
-  await page.el("v-correct").onchange();
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
   claims("**settling the label takes it back out of reach at once** — the label is in that text,"
     + " so the copy the panel would have been handed is the one being remade",
     page.byId.get("run-review").disabled
@@ -790,9 +802,9 @@ async function main() {
   claims("**the unreplaced text is never drawn into that block**, at any point in the flow",
     !page.el("review-text").textContent.includes(PHONE));
   claims("and neither verdict is ticked for the reviewer",
-    !page.el("v-correct").checked && !page.el("v-modify").checked);
-  page.el("v-correct").checked = true;
-  await page.el("v-correct").onchange();
+    !page.el("v-keep").checked && !page.el("v-write").checked);
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
   claims("saying the label is right says at once that the copy is being made again",
     page.el("review-text").textContent.includes("replacing…"));
   await waited(400);
@@ -830,8 +842,8 @@ async function main() {
   page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-modify").checked = true;
-  await page.el("v-modify").onchange();
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
   page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
@@ -863,8 +875,8 @@ async function main() {
     posted(page, "/records").length === 1);
 
   page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT });
-  page.el("v-modify").checked = true;
-  await page.el("v-modify").onchange();
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
   page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
   await page.el("label-text").oninput();
   await waited(400);
@@ -887,62 +899,96 @@ async function main() {
     !page.el("label-fault").hidden
     && page.el("label-fault").textContent.includes("the catalog will not read"));
 
-  // -------------------------------------------------- the panel's own answer, into the box
+  // -------------------------------------------------- the panel's answer is the proposal
   // Two models spelled the call out in full, agreed with each other, and the page put it on the
-  // screen as JSON in a disclosure. A reviewer who agreed had to retype it by hand -- which is
-  // how a label two models had written out shipped as a bare name.
-  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT,
-    reviewed: { llm: { label_agreement: 0, consensus: CONSENSUS }, sft: null } });
-  claims("**nothing is offered before a panel has answered**", page.el("consensus-line").hidden);
+  // screen as JSON in a disclosure under the bare name that arrived. A reviewer who agreed had to
+  // retype it by hand -- which is how a label two models had written out shipped as a bare name.
+  const PANEL = {
+    llm: {
+      label_agreement: 0,
+      consensus: CONSENSUS,
+      votes: [
+        { model_name: "m1", reason: "Khách đã cho số.", label: CONSENSUS },
+        { model_name: "m2", reason: "Đủ thông tin.", label: CONSENSUS }
+      ]
+    },
+    sft: null,
+    consensus_calls: CONSENSUS_CALLS
+  };
+  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT, reviewed: PANEL });
+  claims("**before anybody is asked the proposal says so**, rather than sitting empty",
+    page.el("proposed-call").innerHTML.includes("Nobody has been asked"));
+  claims("and there is nothing to take, so the act that takes it cannot be picked",
+    page.el("v-take").disabled === true);
+  claims("**none of the three acts is ticked for the reviewer**",
+    !page.el("v-take").checked && !page.el("v-keep").checked && !page.el("v-write").checked);
+  claims("what arrived is drawn from the moment the sample opens",
+    page.el("arrived-call").innerHTML.includes("Lookup"));
   await page.byId.get("run-detect").onclick();
   await settle(10);
-  claims("and finding the personal data does not offer one either, because no panel has spoken",
-    page.el("consensus-line").hidden);
+  claims("finding the personal data proposes nothing, because no panel has spoken",
+    page.el("v-take").disabled === true);
   await askPanel(page);
-  claims("**the panel having answered is what offers its label**", !page.el("consensus-line").hidden);
-  await page.el("take-consensus").onclick();
-  claims("taking it ticks *modify* and opens the editor, so they can see what they took",
-    page.el("v-modify").checked && !page.el("v-correct").checked
-    && !page.el("label-editor").hidden);
-  claims("**the call arrives with its arguments** — which is the whole of what a bare name was missing",
-    (JSON.parse(page.el("label-text").value)[0].arguments || {}).ma === PHONE);
-  claims("and it is the panel's answer verbatim, laid out and not reworded",
-    JSON.stringify(JSON.parse(page.el("label-text").value)) === JSON.stringify(JSON.parse(CONSENSUS)));
-  await waited(400);
-  for (let n = 0; n < 10; n += 1) await settled();
-  const took = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
-  const shippedCall = took.label[0].arguments || {};
-  claims("**what ships is then the label the panel wrote**, and not the one that arrived",
-    shippedCall.kenh === "app");
-  claims("and the number that came with it goes to be redacted like any other",
-    shippedCall.ma === PHONE);
 
-  // -------------------------------------------------- the label block says the label it means
-  // It was painted once, when the sample opened, and never again — so a reviewer who took the
-  // panel's answer went on reading the bare name that arrived, above a tick that would confirm
-  // something else. Whichever label is drawn, the line above it says which one it is.
-  page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT,
-    reviewed: { llm: { label_agreement: 0, consensus: CONSENSUS }, sft: null } });
-  claims("on opening, the block says it is drawing the label that arrived",
-    page.el("calls-which").textContent.includes("arrived")
-    && page.el("calls").innerHTML.includes("Lookup"));
-  await page.byId.get("run-detect").onclick();
-  await settle(10);
-  await askPanel(page);
-  await page.el("take-consensus").onclick();
-  claims("**taking the panel's answer redraws the label above the tick**, arguments and all",
-    page.el("calls").innerHTML.includes("kenh")
-    && page.el("calls-which").textContent.includes("rewriting"));
+  const proposal = page.el("proposed-call").innerHTML;
+  claims("**the proposal is a table: the tool once, then one row per argument**",
+    proposal.includes('class="calltable"') && proposal.includes("Lookup")
+    && proposal.includes("<th scope=\"row\">ma</th>")
+    && proposal.includes("<th scope=\"row\">kenh</th>"));
+  claims("**and it is not JSON** — no braces, no quoted keys, nothing to parse by eye",
+    !shown(proposal).includes('"ma":') && !shown(proposal).includes("{"));
+  claims("the heading says how the panel came to it, over how many reviewers",
+    page.el("proposed-note").textContent.includes("more than half of 2"));
+  claims("**what arrived is drawn the same way**, so the two compare without either being read as JSON",
+    page.el("arrived-call").innerHTML.includes('class="calltable"'));
+  claims("and how much of the panel agreed with *what arrived* is said beside it, where it is true",
+    page.el("arrived-note").textContent.includes("0%"));
+  claims("**the panel having answered is what offers its answer to be taken**",
+    page.el("v-take").disabled === false);
+
+  const jury = page.el("jury-said").markup();
+  claims("**each reviewer's own answer is a row**, drawn as a call like the other two",
+    jury.includes("m1") && jury.includes("m2") && jury.includes('class="calltable"'));
+  claims("and its reason with it, which is what a disagreement is read from",
+    jury.includes("Khách đã cho số") && jury.includes("Đủ thông tin"));
+  claims("**the raw JSON is under that and not instead of it**",
+    page.byId.get("out-6").textContent.includes("consensus"));
+
+  page.el("v-take").checked = true;
+  await page.el("v-take").onchange();
+  claims("taking it is one click — it does not open an editor to be retyped in",
+    page.el("label-editor").hidden === true);
   await waited(400);
-  for (let n = 0; n < 10; n += 1) await settled();
-  claims("**and once the copy exists the block draws the label that ships**, which is what is stored",
-    page.el("calls-which").textContent.includes("ships")
-    && page.el("calls").innerHTML.includes("&lt;PHONE_1&gt;"));
+  await settle(10);
+  const took = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
+  claims("**and it lands in the record**, as the service read it rather than as the page re-read it",
+    same(took.label, CONSENSUS_CALLS));
+  claims("the number that came with it goes to be redacted like any other",
+    JSON.stringify(took.label).includes(PHONE));
+
+  page.el("v-write").checked = true;
+  page.el("v-take").checked = false;
+  await page.el("v-write").onchange();
+  claims("**writing it yourself starts from the panel's answer**, because the label that arrived"
+    + " is the weak half and retyping theirs is the thing this card exists to stop",
+    same(JSON.parse(page.el("label-text").value), CONSENSUS_CALLS));
   page.el("label-text").value = "[{not json";
   await page.el("label-text").oninput();
   claims("a box holding something that is not a label says so, rather than drawing `(unnamed)`",
-    page.el("calls").innerHTML.includes("Not JSON yet")
-    && !page.el("calls").innerHTML.includes("(unnamed)"));
+    page.el("label-note").textContent.includes("not JSON"));
+
+  // A panel that could not agree. `consensus` is null and `consensus_calls` empty, which is not
+  // the same as a panel that said *no tool is needed* -- and the act that takes it has to say so
+  // rather than being a live button that puts nothing in the record.
+  page = await start({ ...ANSWERS(),
+    reviewed: { llm: { label_agreement: 0, consensus: null, votes: [] }, sft: null,
+      consensus_calls: [] } });
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  await askPanel(page);
+  claims("**a panel that agreed on nothing offers nothing to take**, and says which",
+    page.el("v-take").disabled === true
+    && page.el("proposed-note").textContent.includes("agreed on nothing"));
 
   // **The label, and nothing else.** The turns are what a customer said and the catalog is what
   // the assistant was offered; a page that let either be retyped is a page that can make the
@@ -956,8 +1002,8 @@ async function main() {
   page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-modify").checked = true;
-  await page.el("v-modify").onchange();
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
   page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
   await page.el("label-text").oninput();
   await waited(400);
@@ -972,8 +1018,8 @@ async function main() {
   page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-correct").checked = true;
-  await page.el("v-correct").onchange();
+  page.el("v-keep").checked = true;
+  await page.el("v-keep").onchange();
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
   const shipped = () => posted(page, "/data-quality/personal-data/redact").length;
@@ -998,8 +1044,8 @@ async function main() {
     slow: { "/data-quality/personal-data/redact": [400, 0] } });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-modify").checked = true;
-  await page.el("v-modify").onchange();
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
   await waited(240);
   page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
   await page.el("label-text").oninput();
@@ -1032,7 +1078,7 @@ async function main() {
   claims("the statistics are asked again once a row is written",
     posted(page, "/records/stats").length === 2);
   claims("a sample with no call says so, rather than reading as a skipped row",
-    page.byId.get("calls").innerHTML.includes("No call"));
+    page.byId.get("arrived-call").innerHTML.includes("No call"));
   // The facets describe *this* sample. One carried over from the last is a row nobody ticked,
   // stored as though somebody had, and nothing downstream can tell the difference.
   claims("**the next sample starts with no facet ticked**, the domain included",
@@ -1332,8 +1378,8 @@ async function main() {
   // fires* holds. Drawn as the names they are: `(unnamed)` reads as a call that lost its name.
   page = await start({ ...ANSWERS(), queue: [{ ...UNNAMED, label: ["VerifyEmail_15d"] }] });
   claims("**a label written as bare tool names is drawn as those names**",
-    page.byId.get("calls").innerHTML.includes("VerifyEmail_15d")
-    && !page.byId.get("calls").innerHTML.includes("(unnamed)"));
+    page.byId.get("arrived-call").innerHTML.includes("VerifyEmail_15d")
+    && !page.byId.get("arrived-call").innerHTML.includes("(unnamed)"));
 
   page = await start();
   page.el("paste-text").value = '{"messages": []}\nnot json';

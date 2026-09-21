@@ -27,15 +27,15 @@ import {
   addDomain, forgetDomainNote, paintFacetTicks, paintGuideFacets, readDeclaredFacets
 } from "./facets.js";
 import {
-  checkLabel, fillEditor, forgetLabel, forgetVerdict, paintShipped, review, rewriting,
-  sayLabelRefusal, takeConsensus, tookVerdict
+  checkLabel, fillEditor, forgetLabel, forgetVerdict, paintArrived, paintShipped, review,
+  sayLabelRefusal, tookVerdict
 } from "./label.js";
 import {
   addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
   numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, unreplaced
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
-import { paintCalls, paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
+import { paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
 
 async function askNext() {
   const { answer, gone } = await nextQueued();
@@ -112,7 +112,7 @@ function openSample(sample, key) {
   sayQueueName(sample.id ? `#${sample.id}` : "");
   paintTurns();
   paintCatalog();
-  paintCalls(rewriting());
+  paintArrived();
   fillEditor();
   forgetVerdict();
   checkLabel();
@@ -213,7 +213,7 @@ async function refreshCopy() {
   held.copyNote = null;
   sayPersonalData();
   paintReviewText();
-  paintCalls(rewriting());
+  paintArrived();
   composeRecord(readDeclaredFacets());
   actsChanged();
   return true;
@@ -391,7 +391,7 @@ $("domain-new").onkeydown = event => {
   if (addDomain()) composeRecord(readDeclaredFacets());
 };
 
-for (const id of ["v-correct", "v-modify"]) {
+for (const id of ["v-take", "v-keep", "v-write"]) {
   $(id).onchange = () => {
     tookVerdict();
     paintShipped();
@@ -433,7 +433,6 @@ for (const id of ["facet-ticks", "domain-ticks"]) {
   $(id).onchange = () => composeRecord(readDeclaredFacets());
 }
 $("label-text").oninput = copyLater;
-$("take-consensus").onclick = () => { if (takeConsensus()) copyLater(); };
 
 onKey(steer);
 onReturn(paintTicks);

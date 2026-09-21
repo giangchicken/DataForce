@@ -88,15 +88,17 @@ Three findings, read off the routes rather than off the screen.
   `profile/tool_decision/ai_review.py` says so in its first paragraph: each juror is handed the
   catalog, the conversation *and nothing else — not the sample's label, because a model shown a
   label answers about the label*. What comes back under `consensus` is what the panel thinks the
-  call should be, arrived at independently. The page today draws the label that **arrived** at the
-  top of the card and puts the panel's answer behind a button called *Rewrite it as the reviewers
-  did*. That is the wrong way round: the thing worth confirming is the prediction.
+  call should be, arrived at independently. The page drew the label that **arrived** at the top of
+  the card and put the panel's answer behind a button called *Rewrite it as the reviewers did*.
+  That was the wrong way round: the thing worth confirming is the prediction, and since `T21` it
+  leads.
 - **And the arriving labels are the weak half.** A real corpus line reads
   `"label": ["VerifyEmail_15d"]` — a tool **named** and never called, with no `email` argument at
   all, against a conversation whose last turn is a customer reading out their address. That is
   exactly the defect `docs/tool-decision-store/spec.md` names as the reason `schema_valid` exists. A
-  screen that puts that at the head of the card and hides the panel's full call behind a button is
-  optimised for the wrong one of the two.
+  screen that puts that at the head of the card and hides the panel's full call behind a button was
+  optimised for the wrong one of the two. It is also why *write it myself* starts from the panel's
+  answer where there is one: seeding the box from the weak half is how the retyping comes back.
 - **Redacting before the vote cost no route change.** `ReviewRequest` extends `Sample`, so the body
   the page already held after `POST /data-quality/personal-data/redact` — the whole record with
   every confirmed value replaced — was a valid `POST /ai-review` body as it stood. A juror now
@@ -443,9 +445,11 @@ that makes them untrue, not added to.
   spans now are. *Never on load* stands. *Stops the one after it* stands as a stronger thing: the
   second act is **disabled** until there is a redacted record to hand over, and says which of four
   things is in the way.
-- The same section, **saying *correct* or *modify* is an act** — three acts, not two, and what
-  *correct* is said about is the panel's proposal rather than what arrived. The sentence's own
-  reason is untouched: neither is ticked for them, because it is a thing a person says.
+- ~~The same section, **saying *correct* or *modify* is an act**~~ — done in `T21`: three acts,
+  not two, and what *correct* is said about is the panel's proposal rather than what arrived. The
+  sentence's own reason is untouched — none is ticked for them, because it is a thing a person
+  says — and what stopped being true is that the redacted copy waits for this answer. `T20` put it
+  on the screen when the values settle, because that copy is what the panel is handed.
 - The same section, **the label is redacted with the turns, in the same placeholder** — still true
   of the label that *arrived*, and no longer the mechanism for the label that *ships*: since `T20`
   that one is written against a redacted conversation, so it carries the placeholder because the

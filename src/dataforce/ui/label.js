@@ -1,14 +1,16 @@
-// adapter · card 2 above the facets: what the panel agreed, what arrived, and the label
-// being written. Owns label-editor, label-text, label-fault, label-note,
-// label-verdict, label-refusal, out-6, v-correct, v-modify, consensus-line, consensus-note.
+// adapter · card 2 above the facets: what the panel proposes, what arrived, and which of the
+// three a reviewer takes. Owns proposed-call, proposed-note, arrived-call, arrived-note,
+// jury-said, v-take, v-keep, v-write, label-editor, label-text, label-check, label-note,
+// label-fault, label-verdict, out-6, label-refusal.
 
 import { asking, cannotAsk, mark } from "./checks.js";
-import { paintCalls, saidLanguage } from "./conversation.js";
+import { drawLabel, saidLanguage } from "./conversation.js";
 import { held, ticked } from "./held.js";
-import { $, esc, json, say, sayVerdict, show } from "./screen.js";
-
-export const rewriting = () => $("v-modify").checked;
+import { $, esc, json, say, sayVerdict, show, wordFor } from "./screen.js";
 import { call } from "./wire.js";
+
+export const rewriting = () => $("v-write").checked;
+const taking = () => $("v-take").checked;
 
 export async function review(handed) {
   if (!held.sample) return cannotAsk(6, "no sample");
@@ -20,17 +22,21 @@ export async function review(handed) {
   }, "/ai-review");
   if (!answer.ok) return false;
   held.review = answer.data;
-  mark(6, "answered", sayAgreement(answer.data));
+  mark(6, "answered", sayAgreement(answer.data) || "reviewed");
   show("out-6", answer.data);
-  sayVerdict("label-verdict", sayAgreement(answer.data), "");
-  paintConsensus();
+  sayVerdict("label-verdict", "reviewed", "");
+  paintProposal();
+  paintArrived();
   return true;
 }
 
+// What `label_agreement` measures: the share of jurors whose own answer matches the label that
+// **arrived**. So it belongs beside what arrived, and nowhere near the panel's proposal — a
+// proposal captioned *33% agreed* would read as a third of them agreeing with the proposal.
 function sayAgreement(reviewed) {
   const agreed = ((reviewed || {}).llm || {}).label_agreement;
-  if (typeof agreed !== "number") return "reviewed";
-  return `${Math.round(agreed * 100)}% agreement with the label`;
+  if (typeof agreed !== "number") return "";
+  return `${Math.round(agreed * 100)}% of the reviewers gave this answer too`;
 }
 
 export function fillEditor() {
@@ -39,9 +45,11 @@ export function fillEditor() {
   paintShipped();
 }
 
+const proposed = () => (held.review || {}).consensus_calls || [];
+
 function typedLabel() {
-  const arrived = held.sample.label ?? null;
-  if (!rewriting()) return arrived;
+  if (taking()) return proposed();
+  if (!rewriting()) return held.sample.label ?? null;
   try { return JSON.parse($("label-text").value); } catch { return { unparsed: $("label-text").value }; }
 }
 
@@ -57,7 +65,7 @@ export function paintShipped() {
     ? "not JSON, carried as {unparsed: …}"
     : "re-parsed as a label", unparsed ? "bad" : "");
   held.record = null;
-  paintCalls(rewriting());
+  paintArrived();
 }
 
 let faultAt = 0;
@@ -91,34 +99,38 @@ function paintFaults() {
     : "";
 }
 
-function paintConsensus() {
-  const offered = agreedLabel() !== "";
-  $("consensus-line").hidden = !offered;
-  if (offered) say("consensus-note", "the one label the panel agreed on, into the box below");
+export function paintProposal() {
+  const calls = proposed();
+  const votes = ((held.review || {}).llm || {}).votes || [];
+  $("v-take").disabled = calls.length === 0;
+  $("proposed-call").innerHTML = held.review
+    ? drawLabel(calls)
+    : '<div class="empty">Nobody has been asked yet.</div>';
+  say("proposed-note", !held.review ? ""
+    : calls.length
+      ? `what more than half of ${votes.length} ${wordFor(votes.length, "reviewer", "reviewers")} gave`
+      : "the panel agreed on nothing, so there is nothing to take");
+  $("jury-said").querySelector("tbody").innerHTML = votes.map(vote => `<tr>
+    <th scope="row">${esc(vote.model_name)}</th>
+    <td>${drawLabel(readVote(vote.label))}</td>
+    <td class="note">${esc(vote.reason)}</td>
+  </tr>`).join("");
 }
 
-const agreedLabel = () => {
-  const agreed = ((held.review || {}).llm || {}).consensus;
-  return typeof agreed === "string" ? agreed.trim() : "";
+const readVote = said => {
+  try { const read = JSON.parse(said); return Array.isArray(read) ? read : null; } catch { return null; }
 };
 
-export function takeConsensus() {
-  const agreed = agreedLabel();
-  if (!agreed) return false;
-  let laid = agreed;
-  try { laid = json(JSON.parse(agreed)); } catch { laid = agreed; }
-  $("label-text").value = laid;
-  $("v-modify").checked = true;
-  $("v-correct").checked = false;
-  $("label-editor").hidden = false;
-  held.settled = true;
-  return true;
+export function paintArrived() {
+  if (!held.sample) return;
+  $("arrived-call").innerHTML = drawLabel(held.sample.label ?? null);
+  say("arrived-note", sayAgreement(held.review));
 }
 
 export function forgetLabel() {
   faultAt += 1;
   paintFaults();
-  paintConsensus();
+  paintProposal();
   show("out-6", undefined);
   sayVerdict("label-verdict", "", "");
 }
@@ -129,12 +141,19 @@ export function sayLabelRefusal(detail) {
 }
 
 export function forgetVerdict() {
-  $("v-correct").checked = false;
-  $("v-modify").checked = false;
+  for (const id of ["v-take", "v-keep", "v-write"]) $(id).checked = false;
   $("label-editor").hidden = true;
 }
 
 export function tookVerdict() {
+  if (rewriting() && $("label-editor").hidden) seedEditor();
   $("label-editor").hidden = !rewriting();
-  held.settled = $("v-correct").checked || rewriting();
+  held.settled = taking() || $("v-keep").checked || rewriting();
+}
+
+// The panel's answer where there is one: the finding this card is built on is that the arriving
+// label is the weak half, so seeding from it is how a call two models spelled out is retyped.
+function seedEditor() {
+  const calls = proposed();
+  $("label-text").value = json(calls.length ? calls : held.sample.label ?? null);
 }

@@ -645,3 +645,57 @@ def test_the_panel_is_asked_with_the_redacted_record_and_nothing_else() -> None:
     assert "held." not in body.group(1), body.group(1)
     assert SCRIPTS.count('"/ai-review"') == 1
     assert re.search(r"review\(held\.shipped\.sample\)", SCRIPTS)
+
+
+def test_card_two_leads_with_the_proposal_and_offers_three_acts() -> None:
+    """Requirement 22: the thing worth confirming is the prediction, not what arrived.
+
+    Each juror is handed the conversation and the catalog and *not* the label, so `consensus` is a
+    prediction rather than an opinion about what arrived -- and what arrives is often a tool named
+    and never called. The card that led with that and hid the panel's full call behind a button was
+    optimised for the weaker of the two.
+    """
+    card = PAGE[PAGE.index('id="panel-label"') :]
+    card = card[: card.index("</article>")]
+    assert card.index('id="proposed-call"') < card.index('id="arrived-call"')
+    for act in ("v-take", "v-keep", "v-write"):
+        assert f'id="{act}"' in card, act
+        assert PAGE.count(f'id="{act}"') == 1, act
+    # None of the three is ticked in the markup either: which label ships is a thing a person says,
+    # and a page that ticks one before it is read has answered for them.
+    acts = card[
+        card.index('class="choice"') : card.index(
+            "</div>", card.index('class="choice"')
+        )
+    ]
+    assert "checked" not in acts
+    # What the three replaced, gone from the page and from every module in it.
+    for gone in (
+        "v-correct",
+        "v-modify",
+        "take-consensus",
+        "consensus-line",
+        "consensus-note",
+    ):
+        assert gone not in PAGE, gone
+        assert gone not in SCRIPTS, gone
+    # And the two ids that drew one label into one block, which is now two blocks.
+    for gone in ('id="calls"', 'id="calls-which"'):
+        assert gone not in PAGE, gone
+
+
+def test_the_page_draws_the_panel_s_calls_and_parses_none() -> None:
+    """Requirement 23 and Decision 9: a call is read by the service, drawn by the page.
+
+    `consensus` is the text a juror wrote; `consensus_calls` is that text read as calls by
+    `parse_text_to_tools`. The page draws the second and never reads the first, because a client
+    that turned prose into a call would be a second definition of what a call is, in another
+    language -- which is the whole reason `T19` added the field.
+    """
+    assert "consensus_calls" in SCRIPTS
+    # The juror's own sentence is never read into a call: it is drawn per vote, and a vote's label
+    # that is not already a JSON array is drawn as no call rather than mined for one.
+    assert "extract_json" not in SCRIPTS
+    # `consensus` itself -- the juror's sentence -- is never reached for. Only `consensus_calls`,
+    # which is the service's reading of it.
+    assert not re.search(r"\.consensus\b(?!_calls)", SCRIPTS)

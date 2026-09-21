@@ -808,6 +808,48 @@ with. The thing worth confirming is the prediction, and taking it should be one 
 
 **Verify.** `make check`
 
+**What landed.** `proposed-call` and `arrived-call`, drawn by one `drawLabel` in
+`conversation.js` so the two cannot disagree about what a call looks like, and three radios where
+two plus a button were. The proposal comes from **`consensus_calls`** and never from `consensus`:
+that is the field `T19` exists for, and `test_page.py` asserts the page never reaches for
+`consensus` itself.
+
+**What `Take the reviewers' answer` stores, and why it is the parsed form.** `consensus_calls` is
+what the service read out of the juror's sentence — `{"type": "function", "function": {"name": …,
+"arguments": "<json text>"}}` — while a label that arrives usually reads `{"name": …, "arguments":
+{…}}`. Storing the parsed one puts two spellings in the label column, so it was worth checking
+whether the repository minds: it does not, in writing. `read_call_arguments` says *whether it wrote
+its arguments as an object or as JSON text*, and `parse_text_to_tools` says *a corpus writing the
+object and a provider writing the text wrote one call*. Measured as well as read —
+`check_label_calls` answers `schema_valid=True` for both shapes over the same catalog. The
+alternative was the page re-parsing the juror's text into an array, which is a second reading of
+one sentence and the thing `T19` was written to stop.
+
+**One number that had to move.** `label_agreement` is *the share of votes that say what the label
+says*, and the label it is measured against is the one that **arrived** — `reach_verdict` sets
+`wanted = normalize_prediction(label)` from the sample. `layout.md` said to put it beside the
+proposal's heading; there it would read as a third of the panel agreeing with the proposal, which
+is not a thing the service answered. It sits beside **what arrived**, where it is true, and the
+proposal's heading says how it was reached instead — *what more than half of N reviewers gave*,
+which is `find_exact_match_consensus`'s own definition. It was also in the card head and beside
+what arrived at once, 400px apart in identical words; the head is a state word now.
+
+**One seam, named.** `drawLabel` reads a call's `arguments` when they arrive as JSON text, so it
+can list one row per argument. That is not a second definition of what a call is — it decides no
+validity, no containment and no numbering — but it is the page knowing that both spellings exist,
+which the store says in `read_call_arguments`. It is drawing, and it is the only way to put an
+argument on its own row.
+
+**What a reader sees change.** Card 2 leads with `OpenTicket · kenh: app · ma_khach: <PHONE_1>` as
+a table, with what arrived — `ma_khach: 0912345678`, one argument and the raw number — in the same
+form underneath, so the comparison is immediate and neither is JSON. Then three named acts, none
+ticked. Checked in a browser at 1440×900 and 390×844: no console errors, no page overflow.
+
+**Five defects were re-injected and each turned its check red**: drawing the call as a name over
+its arguments as JSON; never disabling the act that takes a proposal that does not exist; storing
+what arrived when the reviewer took the panel's answer; seeding the editor from what arrived; and
+putting the percentage back into the card head.
+
 ### T22 · A label is written on a form, not in JSON
 
 **Goal.** *Write it myself* opens a form built from the sample's own catalog.
@@ -896,8 +938,22 @@ reverse — things that are not alike must not look alike.)*
 **Acceptance criteria.**
 - Two cards in the review pane, and the checks panel is gone rather than restyled.
 - What each check said is the state word in the head of the card it filled, said once.
-- `docs/tool-decision-store/spec.md` § *The page*, **the checks are three columns**, is rewritten:
-  the table goes and its reason is kept — a picker travels with the button that spends it.
+- ~~`docs/tool-decision-store/spec.md` § *The page*, **the checks are three columns**~~ — done in
+  `T20`, which is what took the pickers off the table: it is two columns now, and the reason the
+  middle one existed is kept as the reason it outgrew the table.
+
+**Two things `T20`'s review found and left here, because both predate it.**
+
+- **`app.js` writes `.disabled` on controls `record.js` owns.** `layout.md` § *What each module is
+  for* gives `submit`, `skip` and `submit-note` to `record.js`; `app.js`'s header claims two of
+  them and `actsChanged` writes all three. `T20` fixed the same shape for the two run buttons —
+  `paintActs` in `checks.js` writes both — so this is the last place the rule is broken, and the
+  task that deletes the checks panel is the one holding the pen.
+- **Skip is live on a sample that cannot be skipped.** `skip()` returns at once when `held.key` is
+  null, and a pasted sample has no key, so the button is enabled and does nothing. The old
+  `frozen()` behaved identically, so this is not a regression — but *the bar says what is
+  unanswered* is `T16`'s sentence and a button that answers nothing is the same defect one control
+  over. Whichever of `T14` or `T16` gets there first should take it.
 
 **Source.** `spec.md` Requirements 9 and 11.
 

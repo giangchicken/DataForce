@@ -361,24 +361,31 @@ result and is the only table anything is ever exported from.
 37. **The reviewer's own two answers are the only required input.** The data panel lists the
     claimed **values** with a keep tick each — and a box to type one the scan missed, which is the
     one field on that panel: where a value stands, how many times and which `<CLASS_N>` it gets are
-    the service's answers, so there is no offset to type; the label panel carries *correct* or *modify*, the three
-    editable texts behind *modify*, and a tick for every declared facet. Nothing else on the screen
-    is a field.
+    the service's answers, so there is no offset to type; the label panel carries which of three
+    acts they take, the label behind *write it myself*, and a tick for every declared facet.
+    Nothing else on the screen is a field.
     - **What the data panel shows is the review text, as a text**: one string, with the line breaks
       the service wrote into it. A reviewer is judging a conversation, and a conversation printed
       as `{"review_text": "user: …\n…", "outcome": "withheld"}` is one they have to decode before
       they can judge it. Which keys the scan answered under, and how it decided, are the service's
       business.
-    - **Saying *correct* or *modify* is an act, and neither is ticked for them.** *Correct* is a
-      thing a person says about a label, not a thing a page assumes while they are still reading
-      it. Saying either is also what puts the redacted copy on the panel above: the label is
-      rendered into the review text (pipeline spec, Requirement 6), so a copy made while the label
-      is still open is a copy of a label about to change. From that moment the text shown is the
-      redacted one, made from the record **as it will ship** — a reviewer who rewrote the label
-      reads the label they wrote — and it follows a span unticked, an offset moved or a character
-      typed, with an answer that lands after a newer one dropped rather than painted. Saying
-      neither is not refused: the record is redacted and posted either way, and the cost is stated
-      — that reviewer never saw the copy that shipped.
+    - **Which of three acts they take is an act, and none is ticked for them.** They were two,
+      *correct* and *modify*, and the reason they were two was that there were two labels to
+      choose between — what arrived and what the reviewer typed. There are three: **take the
+      reviewers' answer**, **keep what arrived**, **write it myself**. The panel is a prediction
+      arrived at from the conversation alone, and it is usually the better of the two that already
+      exist, so a screen that made taking it mean *retype it into the box* is how a call two
+      models had spelled out shipped as a bare name. The reason the two had stands unchanged:
+      *correct* is a thing a person says about a label, not a thing a page assumes while they are
+      still reading it.
+      Saying which also remakes the copy on the panel above, because the label is rendered into the
+      review text (pipeline spec, Requirement 6) — so the text shown is made from the record **as
+      it will ship**, and a reviewer who rewrote the label reads the label they wrote. It follows a
+      span unticked or a character typed, with an answer that lands after a newer one dropped
+      rather than painted. Saying nothing is not refused: the record is redacted and posted either
+      way. What is no longer true is that the redacted copy waits for this answer — it is on the
+      screen from the moment the values are settled, because the panel is handed that copy and a
+      vote spent on a text nobody was shown is a vote nobody can check.
     - **The record the page will post is on the screen while it is being made.** It is composed
       out of the copy above, so it is remade whenever that is, and a facet ticked reaches it too
       — a facet is the one part of a record nothing computes. Shown *before* the post and not

@@ -1,5 +1,5 @@
 // adapter · a turn, a tool call and a label, drawn. Owns turns, catalog, tool-count,
-// raw-sample, calls, calls-which, language.
+// raw-sample, language.
 
 import { held, NO_CALL } from "./held.js";
 import { $, esc, json, show, wordFor } from "./screen.js";
@@ -47,24 +47,30 @@ export const drawCalls = calls => calls.map(one => {
     + (args ? `<div class="args">${esc(args)}</div>` : "") + "</div>";
 }).join("");
 
-export function paintCalls(rewriting) {
-  if (!held.sample) return;
-  const ships = held.settled && held.shipped;
-  const label = ships
-    ? held.shipped.sample.label
-    : (held.edited ? held.edited.label : held.sample.label);
-  $("calls-which").textContent = ships
-    ? "The label as it ships — this is what is stored"
-    : rewriting
-      ? "The label as you are rewriting it"
-      : "The label as it arrived";
-  $("calls").innerHTML = drawLabel(label);
-}
-
-function drawLabel(label) {
+export function drawLabel(label) {
   if (label === null || label === undefined) return NO_CALL;
   if (!Array.isArray(label)) return '<div class="nocall">Not JSON yet — the box below says what is wrong.</div>';
-  return label.length ? drawCalls(label) : NO_CALL;
+  if (!label.length) return NO_CALL;
+  return label.map(drawOneCall).join("");
+}
+
+const readArguments = given => {
+  if (typeof given !== "string") return given;
+  try { return JSON.parse(given); } catch { return given; }
+};
+
+function drawOneCall(one) {
+  const spec = typeof one === "string" ? { name: one } : (one && one.function) || one || {};
+  const args = readArguments(spec.arguments);
+  const rows = args && typeof args === "object" && !Array.isArray(args)
+    ? Object.entries(args)
+    : args === undefined ? [] : [["", args]];
+  return `<table class="calltable"><thead><tr>
+    <th colspan="2">${esc(spec.name ?? "(unnamed)")}</th>
+  </tr></thead><tbody>${rows.length
+    ? rows.map(([named, value]) => `<tr><th scope="row">${esc(named)}</th>`
+      + `<td>${esc(typeof value === "string" ? value : json(value))}</td></tr>`).join("")
+    : '<tr><td colspan="2" class="empty">no arguments</td></tr>'}</tbody></table>`;
 }
 
 export function sayNoSample(said) {

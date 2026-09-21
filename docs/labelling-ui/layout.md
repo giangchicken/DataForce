@@ -313,8 +313,8 @@ pure functions and nothing else.
 
 | control | what it does |
 |---|---|
-| **what the reviewers propose** *(table)* | the panel's own answer, as a call: the tool, then one row per argument with its value. Beside the heading, how much of the panel agreed. The arguments carry placeholders because the jurors read a redacted conversation |
-| **what arrived with the sample** *(table)* | the corpus's label, in the same form, so the two can be compared without reading either as JSON. A label that names a tool and never calls it says so here in words |
+| **what the reviewers propose** *(table)* | the panel's own answer, as a call: the tool, then one row per argument with its value. Beside the heading, how it was arrived at — what more than half of N reviewers gave. The arguments carry placeholders because the jurors read a redacted conversation. Drawn from `consensus_calls`, never from `consensus`: a page that read a call out of prose would be a second definition of one |
+| **what arrived with the sample** *(table)* | the corpus's label, in the same form, so the two can be compared without reading either as JSON. A label that names a tool and never calls it says so here in words. **`label_agreement` belongs beside this one** — it counts the jurors whose own answer matches the label that *arrived*, so printed beside the proposal it would read as a third of them agreeing with the proposal |
 | `label-fault` | a warning, never a gate: the call names a tool the catalog does not offer, or leaves out an argument it requires. What the label ought to be is the reviewer's to say |
 | **Take the reviewers' answer** | the proposal becomes what ships, in one click. This is the act the panel exists for, and it is why a full call is drawn instead of a bare name |
 | **Keep what arrived** | the corpus's label ships as it is. Still an act a person performs; nothing is ticked for them |
@@ -325,9 +325,9 @@ pure functions and nothing else.
 | `facet-ticks` | one tick group per declared facet — `call_trigger`, `direction`, `ambiguous`, `have_conversation_flow` — each with what it means beside it. Nothing is pre-ticked: a default would be a claim nobody made |
 | `label-refusal` | a declared facet nobody ticked, named |
 
-**The three acts are what the screen already asks for, spelled honestly.** Today it is two radios
-plus a button called *Rewrite it as the reviewers did*, which is three acts wearing two shapes — and
-the one that takes the panel's full call is the one hidden behind the button.
+**The three acts are what the screen already asked for, spelled honestly.** It was two radios plus
+a button called *Rewrite it as the reviewers did* — three acts wearing two shapes, with the one
+that takes the panel's full call hidden behind the button.
 
 ### What will be written
 
@@ -425,11 +425,11 @@ tests/ui/
 | `wire.js` | `adapter` | one call and one reading of a refusal — including that FastAPI's 422 echoes the whole sample back, so the field and the message are read and the echo is not | none |
 | `screen.js` | `adapter` | that the page is a DOM: `$`, `show`, `say`, `esc`, the tick boxes, and the code-point slicing the offsets need | none |
 | `held.js` | `shape` | what the page holds between one sample and the next, and the two constants that say what a check and a facet are | none |
-| `conversation.js` | `adapter` | what a turn, a tool call and a label look like drawn — read by the sample pane **and** by a stored row opened out of the corpus | `turns`, `catalog`, `tool-count`, `raw-sample`, `calls`, `calls-which` |
+| `conversation.js` | `adapter` | what a turn, a tool call and a label look like drawn — read by the sample pane, by **both** of card 2's tables and by a stored row opened out of the corpus | `turns`, `catalog`, `tool-count`, `raw-sample`, `language` |
 | `checks.js` | `adapter` | the two checks, the button that spends each one, and the row it reports on | `run-detect`, `run-review`, `run-note`, `said-2`, `said-6` |
 | `models.js` | `adapter` | which models answer, and that `config/model/` is a directory a deployment edits while the service is up | `verifier-ticks`, `jury-ticks`, `sft-ticks` |
 | `personal-data.js` | `adapter` | the values the reviewer keeps, the ones they add, and the copy that ships. **Not** where a value stands in the text — that is answered | `panel-data`, `keep-table`, `value-new`, `value-class`, `value-add`, `value-note`, `scan-raw`, `review-text`, `text-which`, `data-verdict`, `data-refusal` |
-| `label.js` | `adapter` | which of two calls ships, and the form that writes a third — the panel's proposal, what arrived, the three acts, and the catalog-built editor | `panel-label`, `proposed-call`, `arrived-call`, `v-take`, `v-keep`, `v-write`, `call-form`, `call-add`, `call-none`, `label-fault`, `label-verdict`, `out-6`, `label-refusal` |
+| `label.js` | `adapter` | which of two calls ships, and the form that writes a third — the panel's proposal, what arrived, the three acts, and the catalog-built editor | `panel-label`, `proposed-call`, `proposed-note`, `arrived-call`, `arrived-note`, `jury-said`, `v-take`, `v-keep`, `v-write`, `call-form`, `call-add`, `call-none`, `label-fault`, `label-verdict`, `out-6`, `label-refusal` |
 | `facets.js` | `adapter` | which facets a person ticks, and where a value that is not declared comes from | `facet-ticks`, `domain-ticks`, `domain-new`, `domain-add`, `domain-note`, `domain-said`, `guide-facets` |
 | `record.js` | `logic` | the one thing this page composes, read back as a table, and which panel a refusal belongs to | `record`, `record-table`, `submit`, `skip`, `submit-note` |
 | `queue.js` | `adapter` | which sample is on screen, how much of the corpus is left, and the rows a reviewer picked to walk | `sheet-list`, `list-walk`, `list-none`, `list-rows`, `list-note`, `sample-name` |
@@ -438,11 +438,12 @@ tests/ui/
 
 **Every id is named exactly once in that column.** What the flow adds: `run-detect` and `run-review`
 in place of `run-checks`, `run-note` in place of `checks-note`, the value box (`value-new`,
-`value-class`, `value-add`), `proposed-call`, `arrived-call`, the three verdict ticks, the form, and
-`record-table`. What it removes: `span-table`, `span-check`, `span-add`, `span-note`, `auto`,
-`checks-verdict`, `v-correct`, `v-modify`, `take-consensus`, `consensus-line`, `consensus-note`,
-`label-text`, `label-check`, `label-note`, `label-editor`, `calls`, `calls-which` — seventeen ids,
-because seventeen controls stopped existing. That is
+`value-class`, `value-add`), `proposed-call` and `arrived-call` with a note each in place of `calls`
+and `calls-which`, `jury-said`, the three verdict ticks, the form, and `record-table`. What it
+removes: `span-table`, `span-check`, `span-add`, `span-note`, `auto`, `checks-verdict`, `v-correct`,
+`v-modify`, `take-consensus`, `consensus-line`, `consensus-note`, `label-text`, `label-check`,
+`label-note`, `label-editor`, `calls`, `calls-which` — seventeen ids, because seventeen controls
+stopped existing. That is
 Requirement 4 read as a table, and it is what the sweep extending `test_page.py` will check. The guide sheet is
 the one place two modules paint into one sheet — `facets.js` writes what each facet means and
 `corpus.js` writes the statistics under it — because both are already drawn elsewhere on the
