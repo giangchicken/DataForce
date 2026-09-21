@@ -748,6 +748,27 @@ written, and two of the three findings are why.
   the stub replaced the phone and not the value the test had just added, so the copy still held it
   and the gate refused — correctly. The fixture was the thing that was wrong.
 
+**And the round after that, which was about the checks rather than the code.** The reviewer copied
+`ui/` aside, deleted `paintActs()` from `copyLater` and ran the suite against the copy: **all
+green**. Every `run-review` assertion written up to that point sat on a path where the button had
+**never been enabled** — before a scan, after a refused scan, after a refused copy — so the
+`disabled` in the markup satisfied all of them, and a page that never took the button back would
+have passed. The transition is now driven on the one path where `copyLater` is the sole
+invalidator: settling the label. Two things were fixed with it.
+
+- **A dead button said it was ready.** The state came from `off || why` and the note from `why`
+  alone, so for the whole of an in-flight `/ai-review` — the longest wait on the page — the button
+  was dead under *they read the text above*. One reason string now, empty meaning askable, with
+  `busy` and no-sample inside it, so the two cannot drift. And `paintActs` is among the first
+  paints, so the note is not blank until `/queue/next` answers.
+- **The two acts followed opposite rules.** `run-review`'s disabled was written by its owner and
+  `run-detect`'s directly from `app.js`. One `acts()` in `checks.js` writes both. The `skip` and
+  `submit` mismatch is older than this task and belongs to `T14`.
+
+`docs/tool-decision-store/spec.md` Requirement 36 is rewritten in the same commit: two columns, and
+the reason the middle one existed is kept and strengthened — the row a picker sat on was standing
+in for a button that was somewhere else entirely.
+
 ### T21 · The panel's call is the proposal, and it is a table
 
 **Goal.** Card 2 leads with what the reviewers propose, drawn as a call; what arrived sits beside

@@ -11,6 +11,8 @@ const CHECKS = [
 
 const checked = {};
 
+const NOTHING_IN_THE_WAY = "they read the text above, with every value you kept replaced";
+
 export function mark(step, state, text) {
   checked[step] = { state, text };
   paintChecks();
@@ -36,9 +38,10 @@ export async function asking(step, body, path) {
   return answer;
 }
 
-export function askable(can, why, kind = "") {
-  $("run-review").disabled = !can;
-  say("run-note", why, kind);
+export function acts(canFind, why, kind = "") {
+  $("run-detect").disabled = !canFind;
+  $("run-review").disabled = why !== "";
+  say("run-note", why || NOTHING_IN_THE_WAY, kind);
 }
 
 export function forgetChecks() {

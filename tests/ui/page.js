@@ -386,6 +386,49 @@ async function main() {
   await askPanel(page);
   claims("and pressing it anyway asks nothing", !paths(page).includes("/ai-review"));
 
+  // ----------------------------------------- the panel goes back out of reach, and says so
+  //
+  // Every other claim about this button sits on a path where it was **never enabled** — before a
+  // scan, after a refused scan, after a refused copy — so the `disabled` in the markup satisfies
+  // them and a page that never takes the button back would pass all of them. This is the
+  // transition, on the one path where `copyLater` is the only thing that invalidates the copy.
+  page = await start();
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  await waited(320);
+  await settle(6);
+  claims("the panel is in reach once there is a copy to hand it", !page.byId.get("run-review").disabled);
+  page.el("v-correct").checked = true;
+  await page.el("v-correct").onchange();
+  claims("**settling the label takes it back out of reach at once** — the label is in that text,"
+    + " so the copy the panel would have been handed is the one being remade",
+    page.byId.get("run-review").disabled
+    && page.el("run-note").textContent.includes("replacing"));
+  await page.byId.get("run-review").onclick();
+  await settle(4);
+  claims("and nothing is asked in that window", !paths(page).includes("/ai-review"));
+  await waited(400);
+  await settle(10);
+  claims("**and it comes back once the copy has**", !page.byId.get("run-review").disabled);
+
+  // While the vote itself is in flight the button is dead, and a note still reading *they read
+  // the text above* is a page saying it is ready to do the thing it is already doing.
+  page = await start({ ...ANSWERS(), slow: { "/ai-review": [500] } });
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  await waited(320);
+  await settle(6);
+  const asking = page.byId.get("run-review").onclick();
+  await settle(4);
+  claims("**a button that is dead says why, whatever made it dead** — including its own answer"
+    + " being in flight, which is the longest wait on the page",
+    page.byId.get("run-review").disabled
+    && !page.el("run-note").textContent.includes("they read the text above"));
+  await asking;
+  await settle(8);
+  claims("and it is live again once that answer lands",
+    !page.byId.get("run-review").disabled && page.el("said-6").textContent.includes("75%"));
+
   // --------------------------------- the window between a value being typed and the copy remade
   //
   // Every edit to the table takes a round trip to be numbered, and for its whole length the copy

@@ -10,7 +10,7 @@ import {
 import {
   COPY_AFTER, DECLARED_FACETS, held
 } from "./held.js";
-import { askable, forgetChecks, mark, paintChecks } from "./checks.js";
+import { acts, forgetChecks, mark, paintChecks } from "./checks.js";
 import {
   importBusy, labelPasted, markDrop, pastingOpen, queuePasted, runImport, showPasting,
   tookFile
@@ -80,9 +80,8 @@ function sayNoQueue(said) {
 let busy = false;
 let numbering = 0;
 
-const NOTHING_IN_THE_WAY = "they read the text above, with every value you kept replaced";
-
 function whatIsInTheWay() {
+  if (busy) return ["waiting for the last answer…", false];
   if (!held.sample) return ["open a sample first", false];
   if (!held.detected) return ["find the personal data first", false];
   if (numbering > 0) return ["numbering the values you left…", false];
@@ -98,9 +97,9 @@ function whatIsInTheWay() {
 
 function paintActs() {
   const off = busy || !held.sample;
-  for (const id of ["run-detect", "skip", "submit"]) $(id).disabled = off;
+  for (const id of ["skip", "submit"]) $(id).disabled = off;
   const [why, bad] = whatIsInTheWay();
-  askable(!off && !why, why || NOTHING_IN_THE_WAY, bad ? "bad" : "");
+  acts(!off, why, bad ? "bad" : "");
 }
 
 function openSample(sample, key) {
@@ -316,6 +315,7 @@ function steer(event) {
 paintGuideFacets();
 paintFacetTicks();
 paintChecks();
+paintActs();
 
 $("run-detect").onclick = findData;
 $("run-review").onclick = askReviewers;

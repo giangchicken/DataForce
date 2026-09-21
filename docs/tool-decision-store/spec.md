@@ -347,10 +347,13 @@ result and is the only table anything is ever exported from.
       presses a button is a copy that ships wrong. An answer that arrives after a newer one is
       dropped rather than painted, because it is the copy of values that are no longer on the
       screen.
-36. **The checks are three columns: the check, the model that answers it, and what it said.** The
-    middle one is the point — the model a check spends sits on that check's own row. A picker
-    somewhere further down the page is one nobody finds, and a run that stops on *tick a verifier
-    first* with no tick box in sight is a dead end.
+36. **The checks are two columns: the check, and what it said.** They were three, and the middle
+    one — the model that answers — was the point: a picker somewhere further down the page is one
+    nobody finds, and a run that stops on *tick a verifier first* with no tick box in sight is a
+    dead end. That reason outgrew the table. Since the machine work is two acts rather than one
+    run, **each picker travels with the button that spends it**, which is the same rule read at
+    the only granularity that now exists — the row a picker sat on was standing in for a button
+    that was somewhere else entirely.
     - **Each answer is a verdict and not a payload**: what was found, or that nothing was, in one
       cell. The reviewers' own JSON stays reachable behind a disclosure, because *what did the
       panel actually say* is the question that panel exists to answer. The personal-data routes'
