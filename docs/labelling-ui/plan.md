@@ -918,6 +918,21 @@ call; not removing one; putting the juror's `JSON.parse` back; and leaving `labe
 **One thing found and left.** `screen.js` still exports `sliced`, which nothing imports — `T25`
 took the page's last reader of an offset away. It is one line in a file this task does not touch.
 
+**Two defects the review of the finished diff measured, both this task's own.**
+
+- **A wipe the form did not show.** `forgetEverything` dropped `held.written` without touching the
+  three acts, so changing the language while *Write it myself* was open left the form on screen
+  with a call in it while `[]` was what shipped. Measured by driving it: the block still read
+  `Lookup(ma=0912345678)` and the redact route was posted `label: []`. `forgetVerdict` is part of
+  `forgetEverything` now, and `openSample` drops its own call to it. The draft still goes on a
+  language change — everything else computed under the old language does — but it goes **visibly**:
+  the acts untick and the form closes, and what ships is what arrived, which is what three unticked
+  acts say. It also fixes an older one the same way: an emptying queue used to leave the last
+  sample's verdict ticked over a pane saying nothing was waiting.
+- **An act taken with no sample threw.** *Write it myself* is live whatever is on screen, and
+  `seedForm` reads `held.sample.tools` — `TypeError: Cannot read properties of null` on an empty
+  queue. `tookVerdict` puts the tick back instead.
+
 ### T23 · The record is confirmed as a table
 
 **Goal.** What will be written is read back in words before it is written.

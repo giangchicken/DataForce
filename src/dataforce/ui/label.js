@@ -147,6 +147,9 @@ export function forgetVerdict() {
 }
 
 export function tookVerdict() {
+  // With nothing on screen there is nothing to say this about, and the form cannot be built out
+  // of a catalog that is not there. The tick goes back rather than standing over an empty pane.
+  if (!held.sample) return forgetVerdict();
   if (rewriting() && held.written === null) seedForm();
   $("call-form").hidden = !rewriting();
   if (rewriting()) paintForm();

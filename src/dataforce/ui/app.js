@@ -114,7 +114,6 @@ function openSample(sample, key) {
   paintCatalog();
   paintArrived();
   paintShipped();
-  forgetVerdict();
   checkLabel();
   for (const facet of DECLARED_FACETS) {
     for (const box of ticksNamed(`f-${facet.name}`)) box.checked = false;
@@ -138,6 +137,11 @@ function forgetEverything() {
   clearTimeout(copySoon);
   copyAt += 1;
   forgetPersonalData();
+  // With the draft on the form, because the draft is computed too — it is seeded from a panel
+  // that answered in the language this may just have changed. Everything else `forgetEverything`
+  // drops goes silently; this one has to go **visibly**, or the form keeps showing a call that no
+  // longer ships.
+  forgetVerdict();
   forgetLabel();
   forgetChecks();
   forgetRecord();

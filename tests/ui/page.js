@@ -1111,6 +1111,37 @@ async function main() {
     same(shipping.messages, ONE.messages) && same(shipping.tools, ONE.tools)
     && shipping.label[0].arguments.ma === "KH-9");
 
+  // The language is a declaration about the sample, and `forgetEverything` drops everything
+  // computed under the old one. The draft on the form is computed too — it is seeded from a panel
+  // that answered in that language — so it goes with them, and it has to go **visibly**: wiped
+  // silently, the form went on showing a call while `[]` was what shipped.
+  page = await start();
+  await writeItMyself(page);
+  await typeArgument(page, "ma", "KH-9");
+  page.el("language").value = "en";
+  await page.el("language").onchange();
+  await settle(6);
+  claims("**changing the language closes the form it just wiped**, rather than leaving a call on"
+    + " the screen that is no longer the one shipping",
+    page.el("call-form").hidden === true
+    && !["v-take", "v-keep", "v-write"].some(id => page.el(id).checked));
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  await waited(400);
+  await settle(10);
+  claims("**and what ships is what arrived**, which is what the three unticked acts say it is",
+    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label,
+      ONE.label));
+
+  // An empty queue leaves the three acts live over a pane that says nothing is waiting, and the
+  // form is built out of a catalog that is not there.
+  page = await start({ ...ANSWERS(), queue: [] });
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
+  claims("**an act taken with no sample on screen answers nothing**, rather than throwing out of"
+    + " a form it has no catalog to build",
+    page.el("v-write").checked === false && page.el("call-form").hidden === true);
+
   // A value unticked after the label was settled. What is on screen is then a copy of spans nobody
   // is ticking any more, which is the same staleness the replacement has and gets the same answer.
   page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
