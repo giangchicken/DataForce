@@ -1021,6 +1021,31 @@ def test_an_install_nobody_configured_takes_the_first_record(
     assert (tmp_path / DEFAULT_STORE_FILE).exists()
 
 
+def test_a_database_that_cannot_be_reached_does_not_take_the_page_down(
+    monkeypatch: pytest.MonkeyPatch, no_endpoints: None
+) -> None:
+    """A DSN with a typo in it used to stop the process, so the page that would say so never came up.
+
+    `create_engine` does not connect, so the lifespan's `create_all` is the first thing that
+    touches the database and the only thing that can fail on a name that does not resolve. Letting
+    it out ended the startup -- and the labelling flow is written to work with nowhere to put the
+    result, so the one screen able to report the problem was the one the problem took away.
+
+    Nothing is lost quietly for it: the write still refuses, because every route that stores
+    something opens its own session and finds the same thing.
+    """
+    monkeypatch.setenv(
+        "DATAFORCE_DATABASE_URL", "postgresql+psycopg://user:pw@nosuchhost.invalid/db"
+    )
+
+    with TestClient(create_app(), raise_server_exceptions=False) as unreachable:
+        assert unreachable.get("/health").status_code == 200
+        assert unreachable.get("/ui/").status_code == 200
+        assert (
+            unreachable.post(f"{BASE}/records", json=build_review()).status_code == 500
+        )
+
+
 def test_a_record_says_where_to_attach_a_database_rather_than_dropping_it(
     client: TestClient,
 ) -> None:

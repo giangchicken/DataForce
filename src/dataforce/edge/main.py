@@ -17,10 +17,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from agent_toolkit.logging import configure_logging
+from agent_toolkit.logging import configure_logging, get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 
 from dataforce.tables import Base
 
@@ -28,6 +29,8 @@ from .database import db
 from .events import install_structured_events
 from .routers import tool_decision_router
 from .served_models import register_resolver
+
+logger = get_logger(__name__)
 
 # Inside the package, because `[tool.hatch.build.targets.wheel]` ships every file under
 # `src/dataforce` and nothing beside it -- a UI at `src/ui/` would be missing from an install.
@@ -41,10 +44,32 @@ async def make_tables(app: FastAPI) -> AsyncIterator[None]:
     Nothing happens where the store is turned off, which is the state the review runs in: the
     labelling flow works with nowhere to put the result, so a startup that cannot reach a database
     is not a startup that should fail.
+
+    **A database that is named and cannot be reached is that same state, reached by accident.**
+    `create_engine` builds an engine without connecting, so the first thing that touches the
+    database is this, and letting it out of the lifespan stops the process: a DSN with a typo in
+    it takes down the page a person would have opened to find out what was wrong. It is logged
+    and the app starts. Nothing is lost quietly by that -- every route that writes opens a session
+    of its own and refuses in the service's own words when it cannot, so a reviewer is told the
+    first time they ask the store for anything rather than at the end of the day.
+
+    The cost, stated: the tables were not made. A database that becomes reachable after this will
+    refuse every write until the process is restarted, because nothing makes them on the way to a
+    session -- `edge/database.py` says why, and this is the price of that.
     """
     engine = db.open_engine()
     if engine is not None:
-        Base.metadata.create_all(engine)
+        try:
+            Base.metadata.create_all(engine)
+        except SQLAlchemyError as unreachable:
+            logger.error(
+                "store_unreachable",
+                extra={
+                    "describes": db.describe(),
+                    "variable": db.variable,
+                    "error": f"{type(unreachable).__name__}: {unreachable}",
+                },
+            )
     yield
 
 
