@@ -640,6 +640,19 @@ the modality learning the word *tool*.
 
 **Verify.** `make check`
 
+**What landed.** `consensus_calls` on `ReviewerVerdicts`, as a `@computed_field` reading
+`llm.consensus` rather than a field the route fills. The plan said *one field*; what it did not say
+is whether that field is **stored or derived**, and stored is the version that can go wrong: two
+places holding one sentence's meaning drift the moment anything constructs the model by hand, and
+nothing would say which of the two was right. Derived, the invalid state has no spelling.
+
+The leniency is `parse_text_to_tools`'s own and is not re-stated here: prose comes back as no calls
+with `consensus` untouched beside it, which is the case the second test drives with a juror writing
+*Chưa đủ thông tin để gọi tool nào.* Both tests were proved red — once by answering `()`
+unconditionally, once by answering the unparsed text as a named call.
+
+**What a reader sees change.** Nothing yet. `T21` is what draws it.
+
 ### T20 · The spans are approved, and only then are the reviewers asked
 
 **Goal.** Two buttons. The panel is handed the **redacted** record.

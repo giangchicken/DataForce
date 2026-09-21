@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlalchemy.orm import Session
 
 from dataforce.edge.database import db
@@ -61,6 +61,7 @@ from dataforce.profile.tool_decision.schema import (
     ToolDecisionDatasetStatistics,
     ToolDecisionSample,
 )
+from dataforce.profile.tool_decision.utils import parse_text_to_tools
 from dataforce.services.tool_decision import (
     build_dataset_statistics,
     check_label_calls,
@@ -236,6 +237,27 @@ class ReviewerVerdicts(BaseModel):
 
     llm: LLMReviewerVerdict | None = Field(default=None)
     sft: SFTReviewerVerdict | None = Field(default=None)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def consensus_calls(self) -> tuple[Mapping[str, Any], ...]:
+        """`llm.consensus` read as calls, so nothing downstream has to parse one itself.
+
+        Derived and not stored, because a stored copy is one that can disagree with the text it
+        came from. `consensus` is untouched beside it: this is a second reading of the same
+        sentence, and the sentence is what a juror actually wrote.
+
+        Here rather than on `LLMReviewerVerdict` because that is
+        `modalities/text2text/ai_review/`, which serves every text2text task and may not name this
+        one's nouns -- a *tool call* is a thing `tool_decision` knows about. A router is an adapter
+        and may import the logic that defines one, which `parse_text_to_tools` already does.
+
+        Empty where the panel agreed on nothing, and equally where it wrote prose that holds no
+        call: the leniency is `parse_text_to_tools`'s own, so unreadable text is no calls with the
+        text still there rather than a refusal.
+        """
+        agreed = None if self.llm is None else self.llm.consensus
+        return () if agreed is None else parse_text_to_tools(agreed)
 
 
 class StoreAttached(BaseModel):

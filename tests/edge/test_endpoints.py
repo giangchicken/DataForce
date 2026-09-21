@@ -723,6 +723,60 @@ def test_ai_review_answers_the_panel_and_no_finetuned_reviewer(
     assert answer["sft"] is None
 
 
+def test_what_the_panel_agreed_comes_back_as_calls_beside_the_text_it_was(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`consensus_calls` is the same sentence read as calls, and `consensus` is untouched.
+
+    Two answers, so there is a panel to agree. The calls come back in the format a corpus stores
+    one in -- arguments as the JSON text, under one key ordering -- which is what makes a call the
+    panel proposed and a call that arrived two spellings of one thing rather than two strings.
+    """
+    install_model_answers(
+        monkeypatch,
+        **{
+            JUROR: {"reason": "Khách đã cho mã.", "label": OPEN_TICKET},
+            SECOND: {"reason": "Đủ thông tin.", "label": OPEN_TICKET},
+        },
+    )
+
+    resp = client.post(
+        f"{BASE}/ai-review",
+        json={**SAMPLE, "jury_models": [JUROR, SECOND]},
+    )
+
+    assert resp.status_code == 200
+    answer = resp.json()
+    assert json.loads(answer["llm"]["consensus"]) == OPEN_TICKET
+    assert answer["consensus_calls"] == [
+        {
+            "type": "function",
+            "function": {"name": "OpenTicket", "arguments": '{"ma_khach":"KH-1"}'},
+        }
+    ]
+
+
+def test_a_consensus_holding_no_call_answers_no_calls_and_keeps_every_word_of_it(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prose is no calls with the prose still there -- the leniency, not a refusal.
+
+    A juror saying no tool is needed is an answer about this sample and the reviewer has to read
+    it. Dropping the text because nothing parsed out of it would lose the only thing it said.
+    """
+    said = "Chưa đủ thông tin để gọi tool nào."
+    install_model_answers(
+        monkeypatch, **{JUROR: {"reason": "Thiếu mã.", "label": said}}
+    )
+
+    resp = client.post(f"{BASE}/ai-review", json={**SAMPLE, "jury_models": [JUROR]})
+
+    assert resp.status_code == 200
+    answer = resp.json()
+    assert answer["llm"]["consensus"] == said
+    assert answer["consensus_calls"] == []
+
+
 def test_a_panel_of_none_asks_nothing_and_answers_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -732,7 +786,7 @@ def test_a_panel_of_none_asks_nothing_and_answers_nothing(
     resp = client.post(f"{BASE}/ai-review", json=dict(SAMPLE))
 
     assert resp.status_code == 200
-    assert resp.json() == {"llm": None, "sft": None}
+    assert resp.json() == {"llm": None, "sft": None, "consensus_calls": []}
 
 
 def test_the_review_s_declarations_are_not_keys_of_the_record(

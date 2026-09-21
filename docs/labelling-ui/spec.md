@@ -123,11 +123,11 @@ Three findings, read off the routes rather than off the screen.
   takes a plain `{value: class}` map, which is the whole of what a reviewer types.
   Requirement 12 of the pipeline spec already says the replacement runs **by value and not by
   offset** — so values are the vocabulary the rest of this already speaks.
-- **One thing the page may not do, so one field is added.** `consensus` is a **string** — the text a
-  juror wrote. Drawing it as a table means parsing a tool call out of it, and pipeline Requirement
+- **One thing the page may not do, so one field was added.** `consensus` is a **string** — the text
+  a juror wrote. Drawing it as a table means parsing a tool call out of it, and pipeline Requirement
   46 says the page computes no answer of its own: a client that parsed a call would be a second
-  definition of what a call is, in another language. `profile/tool_decision/utils.py` already holds
-  `parse_text_to_tools`. So the parsed calls are added to what `/ai-review` answers, on
+  definition of what a call is, in another language. `profile/tool_decision/utils.py` already held
+  `parse_text_to_tools`. So `/ai-review` answers the parsed calls too, as `consensus_calls` on
   `ReviewerVerdicts`, which is declared in the router — an `adapter`, and the layer allowed to know
   what a tool call is. It may **not** go on `LLMReviewerVerdict`: that lives in
   `modalities/text2text/ai_review/`, which serves every text2text task and may not name this one's
@@ -408,12 +408,14 @@ is.
    nine files and make *what is on the screen right now* unanswerable from any one of them. It moves
    to `held.js` as `shape`, the smallest change that gives those 116 references one home.
 9. **The parsed consensus is answered by the edge, not by the modality and not by the page.**
-   `parse_text_to_tools` already exists in `profile/tool_decision/utils.py`; what is added is a field
-   on `ReviewerVerdicts`, declared in the router. The two alternatives are both worse in a way the
-   repository has already been bitten by: parsing in JavaScript makes a second definition of what a
-   tool call is, and putting the field on `LLMReviewerVerdict` teaches
+   `parse_text_to_tools` already exists in `profile/tool_decision/utils.py`; what it gained is
+   `consensus_calls` on `ReviewerVerdicts`, declared in the router. The two alternatives are both
+   worse in a way the repository has already been bitten by: parsing in JavaScript makes a second
+   definition of what a tool call is, and putting the field on `LLMReviewerVerdict` teaches
    `modalities/text2text/ai_review/` the word *tool*, which is the one thing a layer serving every
-   text2text task may not learn.
+   text2text task may not learn. **Derived and not stored**: a field holding a copy of what
+   `consensus` parses to is a field that can disagree with it, and the two would then be two
+   answers about one sentence. It is computed off `consensus` on the way out, so it cannot.
 10. **The redesign keeps every panel the store spec put on the screen.** Nothing is merged, split,
    moved between panes or taken away. What changes is the form each one wears, its heading,
     what the bar says while it is unanswered, and — in card 2 alone — which of two labels is the one
