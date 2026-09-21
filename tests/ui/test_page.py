@@ -368,11 +368,13 @@ def test_no_module_calls_a_name_it_did_not_import() -> None:
     assert not reached, "\n".join(reached)
 
 
-def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
-    """Three columns: which check, which model answers it, and what it said.
+def test_each_check_names_the_cell_it_answers_in() -> None:
+    """Two columns: which check, and what it said.
 
-    The middle one is the whole point. A model picked further down the page is a picker nobody
-    finds, and a run that stops on *tick a verifier first* with no tick box in sight is a dead end.
+    They were three, and the middle one -- which model answers -- was the whole point: a picker
+    further down the page is one nobody finds, and a run that stops on *tick a verifier first*
+    with no tick box in sight is a dead end. `T20` kept that reason and outgrew the table, because
+    a picker now travels with the button that spends it rather than with a row standing in for one.
 
     The answer cells are reached with a built-up id, which the sweep above cannot see -- that
     regex reads literal `$("...")` calls. So the declaration is read here instead, and a row
@@ -393,7 +395,7 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
             f"{said} is the cell a check answers in, so it is a state word like the others"
         )
     # And nothing is spent from here: the button that runs a check and the picker it spends both
-    # sit on the card that check fills, which is the whole of Requirement 21.
+    # sit on the card that check fills -- `layout.md` § *The two acts, and where each one sits*.
     for moved in (
         "run-detect",
         "run-review",

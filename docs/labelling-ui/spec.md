@@ -70,8 +70,8 @@ not say which module owns which ids is one in which fourteen files can each reac
   all: it is five machine calls the reviewer cannot influence, which the store spec collapsed into
   one button for exactly that reason. It looks identical to the two panels that ask the reviewer
   something. That is the screen's central defect: the form does not say what kind of thing a thing
-  is. `T20` took its two acts and its three pickers onto the cards they fill; what is still an
-  `<article class="panel">` is two verdict words, which `T14` is what removes.
+  is. `T20` took its two acts and its three pickers onto the cards they fill, so what is still an
+  `<article class="panel">` is two verdict words. `T14` is what removes it.
 - **What is still unanswered is said only after the attempt.** A missing facet, an unsettled label
   and an unrun scan are refusals that land when submit is pressed (store spec, § *The page*). Before
   that, nothing on the screen counts what is left. Zeigarnik and Goal-Gradient both point at the

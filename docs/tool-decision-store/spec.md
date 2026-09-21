@@ -579,8 +579,9 @@ routes leaking onto the screen, and for as long as nothing was decided between t
 the honest shape. Something is decided between them now: **which values are personal data is a
 human answer, and the panel is handed the record as it reads once those values are out.** A single
 button would run the vote against spans nobody had approved, and would show a model the customer's
-number — so the scan is one act and the vote is another, each at the foot or the head of the card
-it fills, with the picker that spends it. Neither is automatic on load, for the reason one button
+number — so the scan is one act and the vote is another, each with the picker that spends it and
+each where its work is: the scan at the head of the card it fills, the vote at the foot of the card
+that feeds it and directly above the card it fills. Neither is automatic on load, for the reason one button
 was not: the vote spends a model call, and a corpus is walked by people who skip. Free work could
 run on load; work that costs money waits to be asked.
 

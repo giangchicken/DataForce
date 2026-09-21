@@ -300,7 +300,7 @@ picked and still served keeps its tick when the list is redrawn.
 | `keep-table` *(tick per row)* | one row per claimed **value**: keep it or leave it, what kind it is, and how many times it occurs. What you untick stays in the text exactly as it arrived, and says so where the count would be |
 | the class picker on a row | what a value is, where the scan guessed wrong. Changing it renumbers, because `<CLASS_N>` counts per class |
 | **the value box + class + Add it** | a value the scan missed. Type it once; **every occurrence is found for you**, because that is what `find_and_number_spans` does with any value handed to it |
-| `review-text` *(text)* | the sample as one string, with its own line breaks. Two versions, and the label above says which: *the text the scan reads* before anything is kept, and **the conversation the reviewers will be handed** after — which is the thing a person most needs to see before spending a model call on it |
+| `review-text` *(text)* | the sample as one string, with its own line breaks. **One text, and the label above says what it is**: *the text the scan reads* while nothing has been read, then **the conversation the reviewers will be handed** — which is the thing a person most needs to see before spending a model call on it — and *the text as it ships* once the label is settled. The unreplaced text is never drawn here |
 | ▸ **the spans this made, and what they replace** | read-only: each occurrence, its placeholder, and the text it stands in for. For checking a redaction, not for editing one |
 | `data-refusal` | why a submit was refused, in the service's own words, on the card that owns it |
 

@@ -419,14 +419,11 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
   font-weight: 600;
   color: var(--ink);
   white-space: normal;
-  width: 27%;
+  width: 40%;
 }
 .checks thead th { width: auto; }
 .checks td { vertical-align: top; }
-.checks .verdict { width: 34%; overflow-wrap: anywhere; }
-.checks .fieldname { margin: 0 0 var(--space-1); }
-.checks .fieldname + .tickbox + .fieldname { margin-top: var(--space-2); }
-.checks .tickbox { gap: var(--space-1) var(--space-3); }
+.checks .verdict { width: 60%; overflow-wrap: anywhere; }
 
 /* the act at the foot of a card: what it unlocks is the card below it, so it is ruled off rather
    than run in with the work above */

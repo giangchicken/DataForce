@@ -95,8 +95,8 @@
           <div class="tickbox" id="verifier-ticks"></div>
         </div>
         <p class="note">Tick the values that really are personal data. What you untick is left in
-          the text exactly as it arrived. <b>Every value you keep is replaced as you tick</b> — there
-          is no second button, and the copy on the Checks panel says what it did.</p>
+          the text exactly as it arrived. <b>Every value you keep is replaced as you tick</b> — you
+          never ask for the replacement, and the Checks panel says what it did.</p>
         <div class="tablewrap"><table id="keep-table"><thead><tr>
           <th>Keep</th><th>What it is</th><th>The value</th><th>Occurs</th>
         </tr></thead><tbody></tbody></table></div>
@@ -113,9 +113,10 @@
              answers are JSON *about* a conversation, and a person checking a conversation should
              be reading the conversation. What the scan keyed and how it decided is its business.
 
-             Two versions of it, and the line above says which. The replaced one is up from the
-             moment there is one — it is what the reviewers below will be handed, and a model call
-             spent on a text nobody was shown is the thing this card exists to prevent. -->
+             **One text, and the line above says what it is**: the replaced copy, from the moment
+             there is one. The unreplaced text is never drawn here — a model call spent on a text
+             nobody was shown is the thing this card exists to prevent, and the sample as it
+             arrived is the left pane's job. -->
         <div>
           <div class="fieldname" id="text-which">The text the scan reads</div>
           <pre class="reviewtext" id="review-text"></pre>
