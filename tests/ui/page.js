@@ -35,7 +35,14 @@ const ONE = {
   id: "s1",
   messages: [{ role: "user", content: SAID }, { role: "assistant", content: "vâng ạ" }],
   tools: [{ type: "function", function: { name: "Lookup", description: "tra cứu khách hàng",
-    parameters: { type: "object", properties: { ma: { type: "string" } } } } }],
+    parameters: {
+      type: "object",
+      properties: {
+        ma: { type: "string", description: "Mã khách hàng, hoặc số điện thoại họ gọi từ." },
+        kenh: { type: "string", description: "Kênh khách liên hệ: app, hotline hay zalo." }
+      },
+      required: ["ma"]
+    } } }],
   label: [{ name: "Lookup", arguments: { ma: PHONE } }]
 };
 
@@ -202,6 +209,17 @@ const hit = (el, named, dataset, said = {}) =>
       closest: asked => (asked === named ? { dataset, checked: dataset.on, ...said } : null)
     }
   });
+const writeItMyself = async page => {
+  page.el("v-write").checked = true;
+  await page.el("v-write").onchange();
+};
+const pickTool = (page, named, at = "0") =>
+  hit(page.el("call-form").onchange, "[data-tool]", { tool: at }, { value: named });
+const typeArgument = (page, arg, said, at = "0") =>
+  hit(page.el("call-form").oninput, "[data-arg]", { call: at, arg }, { value: said });
+const dropCall = (page, at = "0") => hit(page.el("call-form").onclick, "[data-drop]", { drop: at });
+const blocksOn = page => (page.el("call-form").markup().match(/class="callform"/g) || []).length;
+
 const clickRow = (page, key) => hit(page.el("list-rows").onclick, "[data-open]", { open: key });
 const tickRow = (page, key, on) =>
   hit(page.el("list-rows").onchange, "[data-pick]", { pick: key, on });
@@ -842,12 +860,10 @@ async function main() {
   page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-write").checked = true;
-  await page.el("v-write").onchange();
+  await writeItMyself(page);
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
-  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
-  await page.el("label-text").oninput();
+  await typeArgument(page, "ma", "KH-9");
   claims("typing in the label takes the shipping copy down with it",
     page.el("review-text").textContent.includes("replacing…"));
   await waited(400);
@@ -875,17 +891,14 @@ async function main() {
     posted(page, "/records").length === 1);
 
   page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT });
-  page.el("v-write").checked = true;
-  await page.el("v-write").onchange();
-  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
-  await page.el("label-text").oninput();
+  await writeItMyself(page);
+  await typeArgument(page, "ma", "KH-9");
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
   claims("**rewriting the label asks the catalog about the label as it now stands**",
     JSON.parse(posted(page, "/data-quality/label").at(-1).body).label[0].arguments.ma === "KH-9");
   page.answers.labelChecked = { schema_valid: true, faults: [] };
-  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-8"}}]';
-  await page.el("label-text").oninput();
+  await typeArgument(page, "ma", "KH-8");
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
   claims("and a label that now validates takes the warning back down",
@@ -947,8 +960,8 @@ async function main() {
     page.el("v-take").disabled === false);
 
   const jury = page.el("jury-said").markup();
-  claims("**each reviewer's own answer is a row**, drawn as a call like the other two",
-    jury.includes("m1") && jury.includes("m2") && jury.includes('class="calltable"'));
+  claims("**each reviewer's own answer is a row**, in the words that reviewer wrote",
+    jury.includes("m1") && jury.includes("m2") && shown(jury).includes(CONSENSUS));
   claims("and its reason with it, which is what a disagreement is read from",
     jury.includes("Khách đã cho số") && jury.includes("Đủ thông tin"));
   claims("**the raw JSON is under that and not instead of it**",
@@ -956,8 +969,8 @@ async function main() {
 
   page.el("v-take").checked = true;
   await page.el("v-take").onchange();
-  claims("taking it is one click — it does not open an editor to be retyped in",
-    page.el("label-editor").hidden === true);
+  claims("taking it is one click — it does not open a form to be retyped on",
+    page.el("call-form").hidden === true);
   await waited(400);
   await settle(10);
   const took = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
@@ -966,16 +979,56 @@ async function main() {
   claims("the number that came with it goes to be redacted like any other",
     JSON.stringify(took.label).includes(PHONE));
 
-  page.el("v-write").checked = true;
+  // ------------------------------------------- a label is written on a form, not in JSON
   page.el("v-take").checked = false;
-  await page.el("v-write").onchange();
+  await writeItMyself(page);
+  const form = page.el("call-form").markup();
   claims("**writing it yourself starts from the panel's answer**, because the label that arrived"
     + " is the weak half and retyping theirs is the thing this card exists to stop",
-    same(JSON.parse(page.el("label-text").value), CONSENSUS_CALLS));
-  page.el("label-text").value = "[{not json";
-  await page.el("label-text").oninput();
-  claims("a box holding something that is not a label says so, rather than drawing `(unnamed)`",
-    page.el("label-note").textContent.includes("not JSON"));
+    form.includes(`value="${PHONE}"`) && form.includes('value="app"'));
+  claims("**the tool is picked from the tools this sample offers**, and nothing else can be picked",
+    form.includes('<option value="Lookup" selected>')
+    && (form.match(/<option /g) || []).length === ONE.tools.length);
+  claims("**each argument is a field the catalog names**, and its own description is under it",
+    form.includes('data-arg="ma"') && form.includes('data-arg="kenh"')
+    && form.includes("Mã khách hàng") && form.includes("Kênh khách liên hệ"));
+  claims("and the one the tool requires is marked, the optional one left unmarked",
+    (form.match(/class="needed"/g) || []).length === 1
+    && form.indexOf('class="needed"') < form.indexOf('data-arg="ma"'));
+  claims("**nothing on the form is JSON** — no braces, no quoted keys, nothing to parse by eye",
+    !shown(form).includes('"ma":') && !shown(form).includes("{"));
+
+  await typeArgument(page, "ma", "KH-9");
+  await waited(400);
+  await settle(10);
+  claims("**what the form composes is a call**, argument by argument, and no text was parsed to"
+    + " get it",
+    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label,
+      [{ name: "Lookup", arguments: { kenh: "app", ma: "KH-9" } }]));
+  await typeArgument(page, "kenh", "");
+  await waited(400);
+  await settle(10);
+  claims("**a field nobody filled in is an argument nobody stated**, so the call does not make"
+    + " one — and what that costs the label is the catalog's to say, not this page's",
+    same(JSON.parse(posted(page, "/data-quality/label").at(-1).body).label,
+      [{ name: "Lookup", arguments: { ma: "KH-9" } }]));
+
+  page.el("call-add").onclick();
+  claims("**a label makes more than one call**, so a second is a second block on the form",
+    blocksOn(page) === 2);
+  await pickTool(page, "Lookup", "1");
+  await dropCall(page, "1");
+  claims("and one written by mistake can be taken off again", blocksOn(page) === 1);
+
+  page.el("call-none").checked = true;
+  await page.el("call-none").onchange();
+  claims("**no call is a box**, not something achieved by emptying a text area",
+    page.el("call-add").hidden === true
+    && page.el("call-form").markup().includes("needs no tool"));
+  await waited(400);
+  await settle(10);
+  claims("**and what ships is the empty list**, which the guide already calls an answer",
+    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label, []));
 
   // A panel that could not agree. `consensus` is null and `consensus_calls` empty, which is not
   // the same as a panel that said *no tool is needed* -- and the act that takes it has to say so
@@ -1002,10 +1055,8 @@ async function main() {
   page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-write").checked = true;
-  await page.el("v-write").onchange();
-  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
-  await page.el("label-text").oninput();
+  await writeItMyself(page);
+  await typeArgument(page, "ma", "KH-9");
   await waited(400);
   for (let n = 0; n < 10; n += 1) await settled();
   const shipping = JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body);
@@ -1044,11 +1095,9 @@ async function main() {
     slow: { "/data-quality/personal-data/redact": [400, 0] } });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  page.el("v-write").checked = true;
-  await page.el("v-write").onchange();
+  await writeItMyself(page);
   await waited(240);
-  page.el("label-text").value = '[{"name": "Lookup", "arguments": {"ma": "KH-9"}}]';
-  await page.el("label-text").oninput();
+  await typeArgument(page, "ma", "KH-9");
   await waited(800);
   for (let n = 0; n < 10; n += 1) await settled();
   claims("**a shipping copy that lands after a newer one is dropped**, not painted over it",

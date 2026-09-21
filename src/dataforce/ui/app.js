@@ -27,8 +27,8 @@ import {
   addDomain, forgetDomainNote, paintFacetTicks, paintGuideFacets, readDeclaredFacets
 } from "./facets.js";
 import {
-  checkLabel, fillEditor, forgetLabel, forgetVerdict, paintArrived, paintShipped, review,
-  sayLabelRefusal, tookVerdict
+  addCall, checkLabel, droppedCall, forgetLabel, forgetVerdict, paintArrived, paintShipped,
+  pickedTool, review, sayLabelRefusal, tookNoCall, tookVerdict, typedArgument
 } from "./label.js";
 import {
   addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
@@ -113,7 +113,7 @@ function openSample(sample, key) {
   paintTurns();
   paintCatalog();
   paintArrived();
-  fillEditor();
+  paintShipped();
   forgetVerdict();
   checkLabel();
   for (const facet of DECLARED_FACETS) {
@@ -129,6 +129,7 @@ function forgetEverything() {
   held.keeps = new Map();
   held.review = null;
   held.record = null;
+  held.written = null;
   held.handed = null;
   held.shipped = null;
   held.copyNote = null;
@@ -321,7 +322,6 @@ $("run-detect").onclick = findData;
 $("run-review").onclick = askReviewers;
 $("submit").onclick = submit;
 $("skip").onclick = skip;
-$("label-check").onclick = paintShipped;
 
 const SHEETS = ["sheet-guide", "sheet-import", "sheet-list", "sheet-dataset"];
 
@@ -382,7 +382,7 @@ $("drop").ondrop = event => {
   tookFile(event.dataTransfer.files[0]);
 };
 
-$("language").onchange = () => { forgetEverything(); if (held.sample) fillEditor(); };
+$("language").onchange = () => { forgetEverything(); if (held.sample) paintShipped(); };
 
 $("domain-add").onclick = () => { if (addDomain()) composeRecord(readDeclaredFacets()); };
 $("domain-new").onkeydown = event => {
@@ -400,6 +400,12 @@ for (const id of ["v-take", "v-keep", "v-write"]) {
 }
 
 for (const id of TICK_LISTS) $(id).onchange = readTicked;
+
+$("call-form").onchange = event => { if (pickedTool(event)) copyLater(); };
+$("call-form").oninput = event => { if (typedArgument(event)) copyLater(); };
+$("call-form").onclick = event => { if (droppedCall(event)) copyLater(); };
+$("call-add").onclick = () => { if (addCall()) copyLater(); };
+$("call-none").onchange = () => { tookNoCall(); copyLater(); };
 
 async function valuesChanged(pending) {
   numbering += 1;
@@ -432,7 +438,6 @@ $("keep-table").onchange = event => {
 for (const id of ["facet-ticks", "domain-ticks"]) {
   $(id).onchange = () => composeRecord(readDeclaredFacets());
 }
-$("label-text").oninput = copyLater;
 
 onKey(steer);
 onReturn(paintTicks);

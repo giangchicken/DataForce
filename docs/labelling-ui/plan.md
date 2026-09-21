@@ -872,6 +872,52 @@ each tool's `parameters.properties`, its `description` and its `required`.
 
 **Verify.** `make check`
 
+**What landed.** `call-form`, and `conversation.js` reading the catalog once for both the pane that
+draws it and the form built out of it — `offeredTools()` answers each tool's name, its description,
+and one entry per parameter with that parameter's own description and whether the tool requires it.
+`label.js` holds the form; `held.written` holds the calls being written, as a list of
+`{name, arguments}` whose every argument value is **text**, because a field on a form holds text
+and a second type in there would be a shape the page has to guess at.
+
+**Four things the form decides, and why each way.**
+
+- **An empty field is not an argument.** What ships is the fields that were filled in, so a call
+  missing one the tool requires is a call missing it — and `POST /data-quality/label` says so, in
+  the sentence it already had. The alternative is shipping `""`, which validates and means nothing.
+- **Changing the tool clears the arguments**, because a different tool has different parameters and
+  carrying a value across would put one tool's argument under another's name.
+- **A seeded call naming a tool the sample never offered is dropped**, because *the tool is picked
+  from the tools that sample offers* is the requirement, and a `<select>` cannot hold a name that is
+  not in it without quietly answering something else.
+- **Typing in a field does not redraw the form.** Every other change does. Markup written over a
+  field with the caret in it takes the caret with it, and this is the one control on the page a
+  person types into character by character.
+
+**One parse that had to go with the editor.** `T21` drew each juror's vote through a `JSON.parse`
+of the sentence that juror wrote — so a juror answering in prose was drawn as **No call**, which is
+a different answer from the one it gave. Requirement 24's last line is *nothing in `ui/` parses or
+composes a call from free text*, and that was the last one. The votes are drawn as the sentences
+they are, behind the disclosure already called *what each reviewer said*; the reading of one into
+calls stays where `T19` put it, on the service. `test_page.py` now names the three modules allowed
+to hold a `JSON.parse` and what each of them reads: a response body, a pasted `.jsonl` line, and a
+call's own `arguments` field — which the store says is *an object or JSON text*.
+
+**What a reader sees change.** *Write it myself* opens a block with the tool in a picker, its
+description under it, and `ma_khach` and `kenh` as two fields, each with the catalog's own sentence
+beneath and `required` beside the one the tool demands — seeded from the panel's answer, so the
+field reads `<PHONE_1>` because the juror read `<PHONE_1>`. *Another call* adds a second block,
+*Remove this call* takes one off, and *This turn needs no tool at all* is a box that ships `[]`.
+Checked in a browser at 1440×900 and 390×844: no console errors, and the only page overflow at 390
+is the header defect `T18` already holds.
+
+**Nine defects were re-injected and each turned its check red**: filling the picker from something
+other than the catalog; not marking the required argument; seeding the form blank instead of from
+the panel; ignoring the no-tool box; keeping an empty field as an argument; not adding a second
+call; not removing one; putting the juror's `JSON.parse` back; and leaving `label-text` on the page.
+
+**One thing found and left.** `screen.js` still exports `sliced`, which nothing imports — `T25`
+took the page's last reader of an offset away. It is one line in a file this task does not touch.
+
 ### T23 · The record is confirmed as a table
 
 **Goal.** What will be written is read back in words before it is written.

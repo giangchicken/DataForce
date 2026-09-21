@@ -1,15 +1,15 @@
-// adapter · card 2 above the facets: what the panel proposes, what arrived, and which of the
-// three a reviewer takes. Owns proposed-call, proposed-note, arrived-call, arrived-note,
-// jury-said, v-take, v-keep, v-write, label-editor, label-text, label-check, label-note,
+// adapter · card 2 above the facets: what the panel proposes, what arrived, which of the three a
+// reviewer takes, and the form the third one writes on. Owns proposed-call, proposed-note,
+// arrived-call, arrived-note, jury-said, v-take, v-keep, v-write, call-form, call-add, call-none,
 // label-fault, label-verdict, out-6, label-refusal.
 
 import { asking, cannotAsk, mark } from "./checks.js";
-import { drawLabel, saidLanguage } from "./conversation.js";
+import { drawLabel, offeredTools, readCall, saidLanguage } from "./conversation.js";
 import { held, ticked } from "./held.js";
-import { $, esc, json, say, sayVerdict, show, wordFor } from "./screen.js";
+import { $, esc, say, sayVerdict, show, wordFor } from "./screen.js";
 import { call } from "./wire.js";
 
-export const rewriting = () => $("v-write").checked;
+const rewriting = () => $("v-write").checked;
 const taking = () => $("v-take").checked;
 
 export async function review(handed) {
@@ -39,18 +39,22 @@ function sayAgreement(reviewed) {
   return `${Math.round(agreed * 100)}% of the reviewers gave this answer too`;
 }
 
-export function fillEditor() {
-  if (!held.sample) return;
-  $("label-text").value = json(held.sample.label ?? null);
-  paintShipped();
-}
-
 const proposed = () => (held.review || {}).consensus_calls || [];
+
+const writtenCalls = () => (held.written || [])
+  .filter(one => one.name)
+  .map(one => ({
+    name: one.name,
+    // A field nobody filled in is an argument nobody stated, so it is not one the call makes.
+    // What that costs the label is the catalog's to say, and it says it in `label-fault`.
+    arguments: Object.fromEntries(
+      Object.entries(one.arguments).filter(([, said]) => said !== ""))
+  }));
 
 function typedLabel() {
   if (taking()) return proposed();
   if (!rewriting()) return held.sample.label ?? null;
-  try { return JSON.parse($("label-text").value); } catch { return { unparsed: $("label-text").value }; }
+  return $("call-none").checked ? [] : writtenCalls();
 }
 
 export function paintShipped() {
@@ -60,10 +64,6 @@ export function paintShipped() {
     tools: held.sample.tools ?? [],
     label: typedLabel()
   };
-  const unparsed = held.edited.label && held.edited.label.unparsed !== undefined;
-  say("label-note", unparsed
-    ? "not JSON, carried as {unparsed: …}"
-    : "re-parsed as a label", unparsed ? "bad" : "");
   held.record = null;
   paintArrived();
 }
@@ -99,7 +99,7 @@ function paintFaults() {
     : "";
 }
 
-export function paintProposal() {
+function paintProposal() {
   const calls = proposed();
   const votes = ((held.review || {}).llm || {}).votes || [];
   $("v-take").disabled = calls.length === 0;
@@ -110,16 +110,16 @@ export function paintProposal() {
     : calls.length
       ? `what more than half of ${votes.length} ${wordFor(votes.length, "reviewer", "reviewers")} gave`
       : "the panel agreed on nothing, so there is nothing to take");
+  // **A juror's own answer, in the juror's own words.** Read as a call it would be this page
+  // deciding what a sentence a model wrote holds, which is the reading `consensus_calls` exists to
+  // keep on the service's side — and a juror that answered in prose would be drawn as *no call*,
+  // which is a different answer from the one it gave.
   $("jury-said").querySelector("tbody").innerHTML = votes.map(vote => `<tr>
     <th scope="row">${esc(vote.model_name)}</th>
-    <td>${drawLabel(readVote(vote.label))}</td>
+    <td class="value">${esc(vote.label)}</td>
     <td class="note">${esc(vote.reason)}</td>
   </tr>`).join("");
 }
-
-const readVote = said => {
-  try { const read = JSON.parse(said); return Array.isArray(read) ? read : null; } catch { return null; }
-};
 
 export function paintArrived() {
   if (!held.sample) return;
@@ -142,18 +142,98 @@ export function sayLabelRefusal(detail) {
 
 export function forgetVerdict() {
   for (const id of ["v-take", "v-keep", "v-write"]) $(id).checked = false;
-  $("label-editor").hidden = true;
+  $("call-none").checked = false;
+  $("call-form").hidden = true;
 }
 
 export function tookVerdict() {
-  if (rewriting() && $("label-editor").hidden) seedEditor();
-  $("label-editor").hidden = !rewriting();
+  if (rewriting() && held.written === null) seedForm();
+  $("call-form").hidden = !rewriting();
+  if (rewriting()) paintForm();
   held.settled = taking() || $("v-keep").checked || rewriting();
 }
 
 // The panel's answer where there is one: the finding this card is built on is that the arriving
-// label is the weak half, so seeding from it is how a call two models spelled out is retyped.
-function seedEditor() {
-  const calls = proposed();
-  $("label-text").value = json(calls.length ? calls : held.sample.label ?? null);
+// label is the weak half, so seeding from it is how a call two models spelled out is retyped. A
+// seeded call naming a tool this sample never offered is dropped rather than carried, because the
+// only thing pickable here is what the catalog offers.
+function seedForm() {
+  const offered = offeredTools().map(tool => tool.name);
+  const from = proposed().length ? proposed() : held.sample.label;
+  const calls = (Array.isArray(from) ? from : [])
+    .map(readCall)
+    .filter(one => offered.includes(one.name));
+  held.written = calls.length ? calls : offered.slice(0, 1).map(blankCall);
 }
+
+const blankCall = named => ({ name: named, arguments: {} });
+
+function paintForm() {
+  const tools = held.sample ? offeredTools() : [];
+  const none = $("call-none").checked;
+  $("call-add").hidden = none || !tools.length;
+  $("call-form").querySelector(".callforms").innerHTML = none
+    ? '<div class="nocall">No call ships. The turn needs no tool, and that is an answer.</div>'
+    : tools.length
+      ? (held.written || []).map((one, at) => drawCallForm(one, at, tools)).join("")
+      : '<div class="empty">This sample offers no tool, so the only answer it can be given is'
+        + ' that the turn needs none.</div>';
+}
+
+function drawCallForm(one, at, tools) {
+  const tool = tools.find(each => each.name === one.name) || { said: "", fields: [] };
+  return `<div class="callform">
+    <div class="runline">
+      <select data-tool="${at}">${tools.map(each =>
+        `<option value="${esc(each.name)}"${each.name === one.name ? " selected" : ""}>`
+        + `${esc(each.name)}</option>`).join("")}</select>
+      <button class="quiet" data-drop="${at}">Remove this call</button>
+    </div>
+    ${tool.said ? `<div class="note">${esc(tool.said)}</div>` : ""}
+    ${tool.fields.length
+      ? tool.fields.map(field => `<div class="fieldname">${esc(field.name)}`
+        + (field.needed ? '<span class="needed">required</span>' : "")
+        + `</div><input data-call="${at}" data-arg="${esc(field.name)}" spellcheck="false"`
+        + ` value="${esc(one.arguments[field.name] ?? "")}">`
+        + (field.said ? `<div class="note">${esc(field.said)}</div>` : "")).join("")
+      : '<div class="note">This tool takes no argument.</div>'}
+  </div>`;
+}
+
+export function pickedTool(event) {
+  const picked = event.target.closest("[data-tool]");
+  if (!picked || !held.written) return false;
+  const at = Number(picked.dataset.tool);
+  held.written = held.written.map((one, n) => (n === at ? blankCall(picked.value) : one));
+  paintForm();
+  return true;
+}
+
+// The one thing on this form that does not redraw it: a field being typed in is a field with the
+// caret in it, and markup written over it takes the caret with it.
+export function typedArgument(event) {
+  const typed = event.target.closest("[data-arg]");
+  if (!typed) return false;
+  const one = (held.written || [])[Number(typed.dataset.call)];
+  if (!one) return false;
+  one.arguments = { ...one.arguments, [typed.dataset.arg]: typed.value };
+  return true;
+}
+
+export function droppedCall(event) {
+  const dropped = event.target.closest("[data-drop]");
+  if (!dropped || !held.written) return false;
+  held.written = held.written.filter((one, n) => n !== Number(dropped.dataset.drop));
+  paintForm();
+  return true;
+}
+
+export function addCall() {
+  const offered = offeredTools().map(tool => tool.name);
+  if (!offered.length) return false;
+  held.written = [...(held.written || []), blankCall(offered[0])];
+  paintForm();
+  return true;
+}
+
+export const tookNoCall = () => paintForm();

@@ -180,13 +180,18 @@
              is what the assistant was offered; a page that let a reviewer retype either is a page
              that can quietly make the sample agree with the label. What they are here to decide
              is which calls that conversation should have produced. Redaction still rewrites the
-             turns and the catalog — that is a value coming out, not a reviewer rewriting one. -->
-        <div id="label-editor" hidden>
-          <div class="fieldname tight">Label</div>
-          <textarea id="label-text" spellcheck="false"></textarea>
+             turns and the catalog — that is a value coming out, not a reviewer rewriting one.
+
+             **A form and not a text area.** The tool is picked from the tools this sample offers
+             and each argument is a field the catalog names and describes, so a reviewer who does
+             not write software can write a call and the one who does need not retype one the
+             panel already spelled out. *This turn needs no tool at all* is a box, because no call
+             is an answer and an answer is a thing you give rather than a box you empty. -->
+        <div id="call-form" hidden>
+          <div class="callforms"></div>
           <div class="runline">
-            <button id="label-check" class="quiet">Check it is JSON</button>
-            <span class="note" id="label-note"></span>
+            <button id="call-add" class="quiet">Another call</button>
+            <label class="inline"><input type="checkbox" id="call-none"> This turn needs no tool at all</label>
           </div>
         </div>
 

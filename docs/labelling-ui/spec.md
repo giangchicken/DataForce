@@ -456,6 +456,11 @@ that makes them untrue, not added to.
   juror read one. What is left for `T21` is drawing the call the juror wrote.
 - The same section, **the record the page will post is on the screen while it is being made** — it
   stays on the screen and stops being JSON.
+- ~~`docs/tool-decision-pipeline/spec.md` Requirements 55 and 56, where they describe the label as a
+  box~~ — done in `T22`: the panel draws two calls side by side rather than three versions of one,
+  and the panel's answer is taken in one click rather than pasted into an editor. What writes a
+  third is a form built from that sample's catalog. Both requirements keep their reasons — what a
+  panel must not lie about, and what retyping a call by hand costs a corpus.
 - `docs/tool-decision-pipeline/spec.md` Requirement 46 — unchanged and worth citing in the change:
   the parsed consensus is added to what the route answers *because* of it.
 - `docs/tool-decision-store/spec.md` § *The page*, **the checks are three columns** — the table goes

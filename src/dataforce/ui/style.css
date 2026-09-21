@@ -447,6 +447,24 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 }
 .calltable td { overflow-wrap: anywhere; }
 
+/* the label, written on a form built out of the sample's own catalog. One block per call, keyed
+   the same way a call is drawn above it -- the accent rule down the left, so the thing being
+   written and the thing being compared to read as the same kind of object. */
+
+.callforms { margin-top: var(--space-2); }
+.callform {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.callform .runline { margin: 0; }
+.callform select { flex: 1 1 200px; min-width: 0; }
+.callform .fieldname { margin-top: var(--space-3); }
+.callform .note { margin-top: var(--space-1); }
+.needed { margin-left: var(--space-2); font-weight: 400; color: var(--accent); }
+
 /* card 2 -- the facets, and the box that adds a domain beside the list it adds to */
 
 .facetwrap { margin-top: var(--space-4); padding-top: var(--space-1); border-top: 1px solid var(--line-soft); }

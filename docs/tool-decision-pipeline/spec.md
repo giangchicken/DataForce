@@ -435,24 +435,25 @@ drawn in.
     that it landed, or which step did not run, or which variable to set where no database is
     attached. That route is what Requirement 36 had been holding open.
 55. **The label panel draws the label it is asking about, and redraws it whenever it changes.**
-    Three versions, and a line above says which is up: what arrived, what the reviewer is
-    rewriting it to, and what ships once the redacted copy exists — the last being what becomes
-    `new_label`. Painted once on opening and never again, it showed the bare name that arrived
-    above a tick that would confirm something else, which is a panel lying about what the tick
-    does. Something in the box that is not a list of calls is said as that rather than drawn as
-    one.
+    Two of them, side by side and each headed by what it is: what the panel proposes, and what
+    arrived with the sample — both as a call, the tool named once and one row per argument, so
+    neither is read as JSON. Painted once on opening and never again, it showed the bare name that
+    arrived above a tick that would confirm something else, which is a panel lying about what the
+    tick does.
 56. **The label panel says what is wrong with the label before it asks whether it is right.** The
     check (Requirement 33) is asked when a sample opens, and again whenever the label is rewritten,
-    over the label as it stands rather than as it arrived; its sentences are shown above the two
-    verdicts, in the service's own words. A page that worded the fault itself would be a second
+    over the label as it stands rather than as it arrived; its sentences are shown above the three
+    acts, in the service's own words. A page that worded the fault itself would be a second
     opinion about what a callable label is. It warns and never blocks — the reviewer may still say
     the label is correct, and a corpus of hard rows is the corpus worth labelling — and a check
     that could not be made is said as that, because a warning nobody could compute is not a label
-    with nothing wrong. The panel's own answer (Requirement 35) is offered into the label box
-    beside it, verbatim: a consensus a reviewer agreed with was already on the screen as JSON, and
+    with nothing wrong. The panel's own answer (Requirement 35) is one of the three acts and is
+    taken in one click: a consensus a reviewer agreed with was already on the screen as JSON, and
     retyping a call by hand is how a label two models had spelled out in full shipped as a bare
-    name. Taking it is saying the label is being rewritten, so it ticks *modify* and opens the
-    editor rather than filling a box nobody can see.
+    name. **Writing one is a form built from that sample's own catalog** — the tool picked from
+    the tools it offers, each argument a field the catalog names and describes, and *this turn
+    needs no tool at all* a box rather than an emptied text area. It opens seeded from the panel's
+    answer, for the same reason taking that answer is one click.
 57. The drawing and the UI are two files and neither is generated from the other. `index.html`
     explains the flow — its rectangles carry prose about why each step is shaped as it is — and
     `ui/` labels with it. The cost, stated: a change to the flow is drawn in one and driven in the

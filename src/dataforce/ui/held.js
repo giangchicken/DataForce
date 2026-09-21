@@ -10,6 +10,7 @@ export const held = {
   handed: null,     // the detect shape with the spans as they left it
   review: null,     // what the reviewers said
   edited: null,     // the three, as they ship before redaction
+  written: null,    // the calls being written on the form; null until one is opened
   settled: false,   // has the reviewer said what the label is?
   faults: null,     // what the catalog says is wrong with the label on the screen
   shipped: null,    // the record as it ships, the text it reads as, and how far redacting got

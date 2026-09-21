@@ -23,21 +23,38 @@ export const drawTurns = turns => turns.map(turn => {
     + `<div class="said">${esc(said)}${calls}</div></div>`;
 }).join("");
 
+// The catalog this sample offers, read once: the pane draws it, and the form that writes a label
+// is built out of it. A second reading would be a second idea of what a tool's parameters are.
+export function offeredTools() {
+  return (held.sample.tools || []).map(tool => {
+    const spec = tool.function || tool;
+    const taken = (spec.parameters || {}).properties || {};
+    const needed = (spec.parameters || {}).required || [];
+    return {
+      name: spec.name ?? "(unnamed)",
+      said: spec.description || "",
+      fields: Object.entries(taken).map(([named, field]) => ({
+        name: named,
+        said: (field || {}).description || "",
+        needed: needed.includes(named)
+      }))
+    };
+  });
+}
+
 export function paintCatalog() {
-  const tools = held.sample.tools || [];
+  const tools = offeredTools();
   $("tool-count").textContent = `${tools.length} ${wordFor(tools.length, "tool", "tools")}`;
   if (!tools.length) {
     $("catalog").innerHTML = '<div class="empty">No tools were offered.</div>';
     return;
   }
-  $("catalog").innerHTML = tools.map(tool => {
-    const spec = tool.function || tool;
-    const args = Object.keys((spec.parameters || {}).properties || {});
-    return `<div class="tool"><b>${esc(spec.name ?? "(unnamed)")}</b>`
-      + (args.length ? `<span class="args"> (${esc(args.join(", "))})</span>` : "")
-      + (spec.description ? `<div class="note">${esc(spec.description)}</div>` : "")
-      + "</div>";
-  }).join("");
+  $("catalog").innerHTML = tools.map(tool =>
+    `<div class="tool"><b>${esc(tool.name)}</b>`
+    + (tool.fields.length
+      ? `<span class="args"> (${esc(tool.fields.map(field => field.name).join(", "))})</span>` : "")
+    + (tool.said ? `<div class="note">${esc(tool.said)}</div>` : "")
+    + "</div>").join("");
 }
 
 export const drawCalls = calls => calls.map(one => {
@@ -58,6 +75,20 @@ const readArguments = given => {
   if (typeof given !== "string") return given;
   try { return JSON.parse(given); } catch { return given; }
 };
+
+// One call, in the two spellings the store says are one: `{name, arguments: {...}}` as a corpus
+// writes it, and `{function: {name, arguments: "<json text>"}}` as a provider does. Every argument
+// comes back as text, because a field on a form holds text and nothing else.
+export function readCall(one) {
+  const spec = typeof one === "string" ? { name: one } : (one && one.function) || one || {};
+  const args = readArguments(spec.arguments);
+  const taken = args && typeof args === "object" && !Array.isArray(args) ? Object.entries(args) : [];
+  return {
+    name: spec.name ?? "",
+    arguments: Object.fromEntries(taken.map(([named, value]) =>
+      [named, typeof value === "string" ? value : json(value)]))
+  };
+}
 
 function drawOneCall(one) {
   const spec = typeof one === "string" ? { name: one } : (one && one.function) || one || {};

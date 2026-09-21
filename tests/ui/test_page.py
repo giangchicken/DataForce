@@ -684,6 +684,57 @@ def test_card_two_leads_with_the_proposal_and_offers_three_acts() -> None:
         assert gone not in PAGE, gone
 
 
+def test_a_label_is_written_on_a_form_built_from_the_sample_s_catalog() -> None:
+    """Requirement 24: the tool is picked from the tools that sample offers.
+
+    It was a `<textarea>` of JSON with a button that said *Check it is JSON*. A reviewer who does
+    not write software could not use it at all, and the one who could still had to retype a call
+    the panel had already spelled out. Everything the form needs was on the page already --
+    `tools` carries each tool's `parameters.properties`, its `description` and its `required`.
+
+    *This turn needs no tool at all* is a box rather than an emptied field, because **no call is an
+    answer** and an answer is a thing somebody gives.
+    """
+    card = PAGE[PAGE.index('id="panel-label"') :]
+    card = card[: card.index("</article>")]
+    for named in ("call-form", "call-add", "call-none"):
+        assert f'id="{named}"' in card, named
+        assert PAGE.count(f'id="{named}"') == 1, named
+    assert re.search(r'<div id="call-form"[^>]*\bhidden\b', card), (
+        "the form opens on *write it myself* and not before"
+    )
+    assert '<input type="checkbox" id="call-none">' in card
+    # The four the form replaced, gone from the page and from every module in it.
+    for gone in ("label-text", "label-check", "label-note", "label-editor"):
+        assert gone not in PAGE, gone
+        assert gone not in SCRIPTS, gone
+    # And the one textarea left on the page is the paste box, which takes a sample and not a call.
+    assert PAGE.count("<textarea") == 1
+    assert (
+        'id="paste-text"' in PAGE[PAGE.index("<textarea") : PAGE.index("</textarea>")]
+    )
+
+
+def test_nothing_in_the_page_reads_a_call_out_of_free_text() -> None:
+    """Requirement 24, last line: the page builds a call and never parses one.
+
+    Three modules read JSON, and each reads something that is JSON by declaration: `wire.js` a
+    response body, `importing.js` a `.jsonl` line somebody pasted, and `conversation.js` a call's
+    own `arguments` field -- which the store says is *an object or JSON text* in
+    `read_call_arguments`, so reading both spellings is not a second definition of a call.
+
+    `label.js` is the one that had to stop. It parsed the editor's text into a label and each
+    juror's sentence into a call, and the second of those drew a juror that answered in prose as
+    *no call* -- a different answer from the one it gave.
+    """
+    reads = {
+        path.name
+        for path in sorted(UI.glob("*.js"))
+        if "JSON.parse" in path.read_text(encoding="utf-8")
+    }
+    assert reads == {"wire.js", "importing.js", "conversation.js"}, reads
+
+
 def test_the_page_draws_the_panel_s_calls_and_parses_none() -> None:
     """Requirement 23 and Decision 9: a call is read by the service, drawn by the page.
 
@@ -693,8 +744,8 @@ def test_the_page_draws_the_panel_s_calls_and_parses_none() -> None:
     language -- which is the whole reason `T19` added the field.
     """
     assert "consensus_calls" in SCRIPTS
-    # The juror's own sentence is never read into a call: it is drawn per vote, and a vote's label
-    # that is not already a JSON array is drawn as no call rather than mined for one.
+    # The juror's own sentence is never read into a call at all -- it is drawn as the sentence it
+    # is, which is what the disclosure it sits behind is called.
     assert "extract_json" not in SCRIPTS
     # `consensus` itself -- the juror's sentence -- is never reached for. Only `consensus_calls`,
     # which is the service's reading of it.
