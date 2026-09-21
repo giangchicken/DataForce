@@ -108,13 +108,19 @@
         <span class="verdict" id="data-verdict"></span>
       </div>
       <div class="panelbody">
-        <p class="note">Tick the spans that really are personal data. What you untick is left in
-          the text exactly as it arrived. <b>Every span you keep is replaced as you tick</b> — there
+        <p class="note">Tick the values that really are personal data. What you untick is left in
+          the text exactly as it arrived. <b>Every value you keep is replaced as you tick</b> — there
           is no second button, and the copy on the Checks panel says what it did.</p>
         <div class="tablewrap"><table id="keep-table"><thead><tr>
-          <th>Keep</th><th>Class</th><th>Placeholder</th><th>Value</th><th></th>
+          <th>Keep</th><th>What it is</th><th>The value</th><th>Occurs</th>
         </tr></thead><tbody></tbody></table></div>
-        <label class="inline"><input type="checkbox" id="auto" checked> Drop any span inside a longer one</label>
+        <div class="fieldname">A value the scan missed</div>
+        <div class="runline">
+          <input id="value-new" placeholder="paste the value here" spellcheck="false">
+          <select id="value-class"></select>
+          <button id="value-add" class="quiet">Add it</button>
+          <span class="note" id="value-note">Type it once — every occurrence is found for you.</span>
+        </div>
 
         <!-- The one thing on this panel that is not a control, and the only text a reviewer is
              asked to read: the sample as one string, with its own line breaks. The routes'
@@ -128,17 +134,11 @@
           <div class="fieldname" id="text-which">The text the scan reads</div>
           <pre class="reviewtext" id="review-text"></pre>
         </div>
-
         <details class="raw" id="scan-raw">
-          <summary>The spans, by offset</summary>
-          <div class="tablewrap"><table id="span-table"><thead><tr>
-            <th>id</th><th>start</th><th>end</th><th>class</th><th>placeholder</th><th>value it reads</th>
+          <summary>The spans this made, and what they replace</summary>
+          <div class="tablewrap"><table><thead><tr>
+            <th>id</th><th>class</th><th>stands in for</th><th>the value</th>
           </tr></thead><tbody></tbody></table></div>
-          <div class="runline">
-            <button id="span-check" class="quiet">Re-read the rows</button>
-            <button id="span-add" class="quiet">Add a span</button>
-            <span class="note" id="span-note"></span>
-          </div>
         </details>
         <p class="refusal" id="data-refusal" hidden></p>
       </div>
@@ -251,9 +251,10 @@
           and that is a finished sample — not a row somebody skipped.</p>
 
         <h3>What you tick, and when</h3>
-        <p>On <b>the data</b>: which detected spans really are personal data. A span you untick
-          stays in the text as it arrived. You never ask for the replacement — every span still
-          ticked is replaced as you tick, and the Checks panel says how many.</p>
+        <p>On <b>the data</b>: which of the values found really are personal data. A value you
+          untick stays in the text as it arrived, and one the scan missed you can type in yourself
+          — every place it occurs is found for you. You never ask for the replacement: every value
+          still ticked is replaced as you tick, and the Checks panel says how many.</p>
         <p>On <b>the label</b>: whether it ships as it is, and what kind of sample it is. The facets
           are the only thing here nothing can compute, and nothing can fill one in later — a sample
           stored without one is stored without it for good.</p>

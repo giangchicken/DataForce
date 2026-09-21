@@ -107,21 +107,20 @@ Three findings, read off the routes rather than off the screen.
   reviewer who has just finished ticking spans at the foot of card 1 would have to scroll back up to
   a band to press the button that uses them. Fitts's Law is the short version; the longer one is
   that a button placed away from the work it follows is a button that reads as unrelated to it.
-- **The containment rule lives in two languages, character for character.**
-  `find_and_number_spans` drops a span inside a longer one with
-  `other.start <= span.start and span.end <= other.end and other.end - other.start > span.end -
-  span.start`; `app.js`'s `inside` is that same predicate in JavaScript. `docs/tool-decision-pipeline/spec.md`
-  already names this as a known cost and says why it was paid: *"that is the cost of a reviewer
-  being able to edit an offset at all — a row they typed has to be resolved against the rows beside
-  it, and only the page knows which rows those are."* Take away the editable offset and the reason
-  goes with it. `T-6` is the rule: two definitions of one rule rot apart, and the copy is the one
-  that will be wrong.
-- **And the function that would replace it is already written.** `find_and_number_spans(text,
+- **The containment rule lives in one language again.** `find_and_number_spans` drops a span
+  inside a longer one with `other.start <= span.start and span.end <= other.end and other.end -
+  other.start > span.end - span.start`, and that predicate stood in `app.js` as `inside`, character
+  for character. `docs/tool-decision-pipeline/spec.md` named it as a known cost and said why it was
+  paid: *"that is the cost of a reviewer being able to edit an offset at all — a row they typed has
+  to be resolved against the rows beside it, and only the page knows which rows those are."* The
+  editable offset went in `T25` and the reason went with it. `T-6` is the rule: two definitions of
+  one rule rot apart, and the copy is the one that will be wrong.
+- **And the function that replaces it was already written.** `find_and_number_spans(text,
   [(class, value)])` finds **every** occurrence of a value, numbers `<CLASS_N>` once per distinct
   value so a value said twice stays co-referent, skips an occurrence with a word character against
   it, and drops the nested ones. That is exactly *"I noticed one it missed — here is the value"*,
   answered by the same function the detector itself runs. `order_claims_by_class` in front of it
-  takes a plain `{value: class}` map, which is the whole of what a reviewer would be typing.
+  takes a plain `{value: class}` map, which is the whole of what a reviewer types.
   Requirement 12 of the pipeline spec already says the replacement runs **by value and not by
   offset** — so values are the vocabulary the rest of this already speaks.
 - **One thing the page may not do, so one field is added.** `consensus` is a **string** — the text a
@@ -299,7 +298,12 @@ already knows is a labelling tool, not a CMS.
     which existed to re-slice what somebody typed; and the **`auto` tick box**, because dropping a
     span inside a longer one is what `find_and_number_spans` does unconditionally. With them goes
     `app.js`'s `inside` — the JavaScript copy of the containment rule — and the pipeline spec's
-    admission that one rule lives in three places becomes two.
+    admission that one rule lives in three places becomes two. **The rule is still measured over
+    the values still ticked**, which is what the toggle's own sentence gave as its reason: untick a
+    street and the name inside it is what is left to hand back. It falls out of what is asked
+    rather than out of a box — only the ticked values are sent to be numbered — and the price is
+    that a placeholder moves when a value before it is unticked, which is a number changing under a
+    reviewer's eye against a value they kept going out un-redacted.
 29. **A value typed once is replaced everywhere it occurs.** That is not a new rule; it is
     Requirement 12 of the pipeline spec, which already replaces by value and not by offset. What is
     new is that the reviewer can see it: the row says how many occurrences that value has, and the
@@ -344,7 +348,7 @@ the dataset sheet and the statistics; they stay one while both are read off `/re
 |---|---|---|
 | **machine work** | the two checks, the models that answer them, what they said | **no region of its own**: each act is a row at the point in a card where it is needed, and what it said is the state word in that card's head |
 | **a decision** | which spans are real · which call this should be, and what kind of sample is this | a card, headed by the question, carrying its own unanswered state. Card 2 holds the panel's proposal as a table, what arrived beside it, and the form that edits either |
-| **something to inspect** | the raw sample, the spans by offset, each juror's own text, the record's raw JSON | a disclosure, closed, one treatment for all four. Never the first way to read something, and never the only way to do something |
+| **something to inspect** | the raw sample, the spans a value earned, each juror's own text, the record's raw JSON | a disclosure, closed, one treatment for all four. Never the first way to read something, and never the only way to do something |
 | **where things stand** | the corpus counts, which database, what is left on this sample | the strip at the top, and one line in the action bar |
 
 The skeleton does not move: the header, two panes, the action bar, the four sheets. What changes is
@@ -448,24 +452,25 @@ that makes them untrue, not added to.
   and its reason is kept: each model picker travels with the button that spends it, which is a
   stronger reading of *a picker somewhere further down the page is a picker nobody finds* than a
   panel of its own was.
-- `docs/tool-decision-pipeline/spec.md` Requirement 41 and its § *Invariants* note that **one rule
-  lives in three places** — it lives in two once the offsets stop being editable, and the page holds
-  neither. That passage says the duplication is the price of an editable offset; this is that price
-  being refunded, and the note is rewritten rather than deleted, because the scan and the drawing
-  still hold it twice.
-- The same spec's § *The labelling UI* sentence about the reviewer resolving a typed row against the
-  rows beside it — nothing is resolved on the page any more.
+- ~~`docs/tool-decision-pipeline/spec.md` Requirement 41 and its § *Invariants* note that **one rule
+  lives in three places**~~ — done in `T25`: it lives in two, and the labelling page holds neither.
+  That passage said the duplication was the price of an editable offset; the price is refunded and
+  the note is rewritten rather than deleted, because the scan and the drawing still hold it twice.
+- ~~The same spec's § *The labelling UI* sentence about the reviewer resolving a typed row against
+  the rows beside it~~ — done in `T25`: nothing is resolved on the page any more.
 
 ## Out of scope
 
-- **Which routes exist, and what each one computes.** Two additions, both for the reason Requirement
-  46 gives: one field on what `/ai-review` answers, and one route that renumbers claims with the two
-  functions the detector already runs. Neither decides anything new — the second **removes** a rule
-  the page was keeping a second copy of. No rule about a span, a vote or an outcome is re-decided
-  here.
+- **Which routes exist, and what each one computes.** Three additions, all for the reason
+  Requirement 46 gives: one field on what `/ai-review` answers, one route that renumbers claims with
+  the two functions the detector already runs, and — landed with it in `T25` — one that answers the
+  classes those scans declare, because a picker of kinds filled from a list written into the page
+  would offer a class no scan declares and put the rest in another order, and the order is the one
+  `<CLASS_N>` counts in. None decides anything new; the second **removes** a rule the page was
+  keeping a second copy of. No rule about a span, a vote or an outcome is re-decided here.
 - **Any second opinion about whether a label is right.** The warning from `POST /data-quality/label`
   is what it was, and it still warns rather than blocks.
-- **Splitting `tests/ui/page.js`.** It is 1015 lines and mirrors `app.js`, so the same argument
+- **Splitting `tests/ui/page.js`.** It is 1251 lines and mirrors `app.js`, so the same argument
   reaches it — but the split *forced* by this change is the loader, and a test file cut up in the
   same commit would make a green suite prove less, not more.
 - **An import-direction check for `ui/`.** `tests/guards/test_import_direction.py` walks Python with

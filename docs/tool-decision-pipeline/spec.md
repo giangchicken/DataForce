@@ -319,14 +319,21 @@ answer in it is recomputed in its own script over a sample written into the file
     `placeholder` — beside the value `review_text[start:end]` currently reads. A **check** button
     re-reads every row and re-slices. An unreadable edit says why: not an integer, end not past
     start, or outside the text.
-41. Step 5 carries an `auto` toggle. On, it keeps the outermost *kept* span and drops any span
-    inside one — measured over the rows still ticked, because a span is inside a kept longer one or
-    it is inside nothing: untick an email and the phone number inside it is what is left to hand
-    back. Off, every span stands. What the step holds is the `PersonalDataDetected` it hands on
-    with the spans that survived — its input, on Requirement 47's terms, since it is the body of
-    the call the step makes — badged `unchanged` where the spans leaving equal the spans step 2
-    produced and `modified` otherwise; its output is the `PersonalDataRedacted` the redaction
-    endpoint answers with over those spans.
+41. Step 5 carries an `auto` toggle, **and this drawing is the only page that has one**. On, it
+    keeps the outermost *kept* span and drops any span inside one — measured over the rows still
+    ticked, because a span is inside a kept longer one or it is inside nothing: untick an email and
+    the phone number inside it is what is left to hand back. Off, every span stands. What the step
+    holds is the `PersonalDataDetected` it hands on with the spans that survived — its input, on
+    Requirement 47's terms, since it is the body of the call the step makes — badged `unchanged`
+    where the spans leaving equal the spans step 2 produced and `modified` otherwise; its output is
+    the `PersonalDataRedacted` the redaction endpoint answers with over those spans. The toggle is
+    here because this page computes every answer in it and the offsets above are editable
+    (Requirement 40). The labelling UI has neither, and no toggle: a reviewer there keeps a
+    **value**, and where it stands and which nested span is dropped come back from
+    `POST .../data-quality/personal-data/spans`. *Measured over the rows still ticked* holds there
+    too, and for the reason this requirement gives — it sends the values still ticked and nothing
+    else, so the rule falls out of what is asked rather than out of a box somebody may have turned
+    off.
 42. Step 6 reads the sample, not step 5. It is a check on the label, and no data-quality answer is an
     argument to it.
 43. Step 7 offers `correct` and `modify`. `correct` returns the label as it arrived. `modify` opens
@@ -610,12 +617,14 @@ refused anything, and someone reading *refused* would go looking through a servi
 request that was never made. A refusal is a 422's own `detail`, in the rectangle that asked, with
 every other rectangle's answer left standing.
 
-One rule does live in three places, and it is the containment Requirement 11 states: the scan
-applies it to what it detects, the drawing draws it, and the UI's `auto` toggle applies it to the
-rows the reviewer moved (Requirement 41). That is the cost of a reviewer being able to edit an
-offset at all — a row they typed has to be resolved against the rows beside it, and only the page
-knows which rows those are. It is the one rule two sides hold, and it is stated here so the next
-person reading § *Invariants* knows what the claim does not cover.
+One rule does live in two places, and it is the containment Requirement 11 states: the scan applies
+it to what it detects, and the drawing applies it to the rows the reviewer moved (Requirement 41).
+That is the cost of a reviewer being able to edit an offset at all — a row they typed has to be
+resolved against the rows beside it, and only the page knows which rows those are. **It was three.**
+The labelling UI held the same predicate in JavaScript for as long as a reviewer could type an
+offset into it; that page now sends values and is answered with spans, so nothing on it resolves a
+row against another one. It is the one rule two sides hold, and it is stated here so the next person
+reading § *Invariants* knows what the claim does not cover.
 
 **No store yet, and the record therefore stops at the page.** Where a reviewed record is kept is
 one decision with several halves -- the table, the route that takes it, and which records are

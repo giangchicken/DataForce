@@ -86,6 +86,12 @@ class El {
     this.html = said;
     if (El.focused && [...this.children.values()].includes(El.focused)) El.focused = null;
     this.children.clear();
+    const options = this.tagName === "SELECT"
+      ? [...said.matchAll(/<option value="([^"]*)"([^>]*)>/g)] : [];
+    if (options.length) {
+      const picked = options.find(one => one[2].includes("selected")) || options[0];
+      this.value = unescaped(picked[1]);
+    }
   }
   get innerHTML() { return this.html; }
   focus() { El.focused = this; }
@@ -180,9 +186,12 @@ function readPageIds(app) {
   const page = path.join(path.dirname(app), "index.html");
   const html = fs.readFileSync(page, "utf8");
   const declared = new Map();
-  for (const tag of html.matchAll(/<[a-z][^>]*>/gi)) {
+  for (const tag of html.matchAll(/<([a-z][a-z0-9]*)[^>]*>/gi)) {
     const named = tag[0].match(/ id="([^"]+)"/);
-    if (named) declared.set(named[1], { hidden: / hidden(?=[ >])/.test(tag[0]), value: "" });
+    if (named) {
+      declared.set(named[1],
+        { tag: tag[1], hidden: / hidden(?=[ >])/.test(tag[0]), value: "" });
+    }
   }
   // **A `<select>` answers its first option before anybody picks one.** A stub whose selects start
   // empty disagrees with the markup about the opening screen, and the page reads that value the
@@ -230,7 +239,7 @@ async function build(answers, app) {
         );
       }
       if (!byId.has(id)) {
-        const made = new El("div", id);
+        const made = new El(declared.get(id).tag, id);
         made.hidden = declared.get(id).hidden;
         made.value = declared.get(id).value;
         byId.set(id, made);
@@ -324,6 +333,10 @@ async function build(answers, app) {
       : named.startsWith("/records/") ? (answers.datasetOne || null)
       : named.startsWith("/queue/") && named.endsWith("/skip") ? nextQueued()
       : named === "/data-quality/personal-data" ? answers.detected
+      : named === "/data-quality/personal-data/classes"
+        ? (answers.classes || ["EMAIL", "PHONE", "OTP", "NAME"])
+      : named === "/data-quality/personal-data/spans"
+        ? answering(named, answers.numbered || answers.detected)
       // Canned, and on purpose: what a callable label is belongs to `label_statistics.py`, and a
       // second reading of that rule here would let this file and the service disagree about the
       // fixture while every check stayed green. What is under test is what the page does with

@@ -51,6 +51,28 @@ const REVIEW_TEXT = [
 
 const REDACTED_TEXT = REVIEW_TEXT.split(PHONE).join("<PHONE_1>");
 
+const occurrencesOf = (text, value) => {
+  const found = [];
+  for (let at = text.indexOf(value); at >= 0; at = text.indexOf(value, at + value.length)) {
+    found.push(at);
+  }
+  return found;
+};
+
+const PHONE_SPANS = occurrencesOf(REVIEW_TEXT, PHONE).map((at, n) => ({
+  id: n + 1,
+  start: at,
+  end: at + PHONE.length,
+  personal_data_class: "PHONE",
+  placeholder: "<PHONE_1>",
+  reason: null
+}));
+
+const WHY = "khách tự cho số của mình";
+const CONFIRMED_SPANS = PHONE_SPANS.map(span => ({ ...span, reason: WHY }));
+
+const NOTHING_NUMBERED = { review_text: REVIEW_TEXT, claims: [], spans: [] };
+
 // What `/redact` answers: the record with every confirmed value replaced, and that same record
 // rendered again. Both halves, because the record is what a corpus stores and the text is the
 // only thing a person can read the redaction off.
@@ -91,9 +113,9 @@ const ANSWERS = () => ({
   detected: {
     review_text: REVIEW_TEXT,
     claims: [["PHONE", PHONE]],
-    spans: [{ id: 1, start: REVIEW_TEXT.indexOf(PHONE), end: REVIEW_TEXT.indexOf(PHONE) + PHONE.length,
-              personal_data_class: "PHONE", placeholder: "<PHONE_1>", reason: null }]
+    spans: CONFIRMED_SPANS
   },
+  numbered: { review_text: REVIEW_TEXT, claims: [["PHONE", PHONE]], spans: PHONE_SPANS },
   reviewed: { llm: { label_agreement: 0.75 }, sft: null },
   redacted: REDACTED,
   imported: { read: 4, imported: 2, already_held: 1, unreadable: [3] }
@@ -140,18 +162,32 @@ const CONSENSUS = `[{"name": "Lookup", "arguments": {"ma": "${PHONE}", "kenh": "
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+const esc = said => String(said)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const shown = markup => markup
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
 const paths = page => page.asked.map(one => one.path.split("?")[0]);
 
-// A call that spends something: a model, or a row. `/data-quality/label` is neither -- it is the
-// store's `schema_valid` rule over two fields already in the browser -- so it is the one check
-// the page may ask for without a reviewer having asked for anything.
+// A call that spends something: a model, or a row. Three routes under `/data-quality` spend
+// neither, so they are the ones the page may ask for without a reviewer having asked for
+// anything: `label` is the store's `schema_valid` rule over two fields already in the browser,
+// `classes` is a list this deployment declares, and `spans` is two pure functions over a text.
+const FREE = ["/data-quality/label", "/data-quality/personal-data/classes",
+  "/data-quality/personal-data/spans"];
 const machine = one =>
-  one === "/ai-review" || (one.startsWith("/data-quality") && one !== "/data-quality/label");
+  one === "/ai-review" || (one.startsWith("/data-quality") && !FREE.includes(one));
 
 // A click and a tick as the page receives them: an event whose target answers `closest`, which is
 // how both handlers find the row that was acted on.
-const hit = (el, named, dataset) =>
-  el({ target: { closest: asked => (asked === named ? { dataset, checked: dataset.on } : null) } });
+const hit = (el, named, dataset, said = {}) =>
+  el({
+    target: {
+      closest: asked => (asked === named ? { dataset, checked: dataset.on, ...said } : null)
+    }
+  });
 const clickRow = (page, key) => hit(page.el("list-rows").onclick, "[data-open]", { open: key });
 const tickRow = (page, key, on) =>
   hit(page.el("list-rows").onchange, "[data-pick]", { pick: key, on });
@@ -269,7 +305,7 @@ async function main() {
   claims("**the sample never leaves the screen** — running the checks does not rewrite the left pane",
     page.byId.get("turns").innerHTML === before);
   claims("the scan's answer is one cell, not a payload",
-    page.el("said-2").textContent.includes("1 span found"));
+    page.el("said-2").textContent.includes("1 value found"));
   claims("**the replacement reports on the scan's own row**, because it is not a step to run",
     page.el("said-2").textContent.includes("1 value replaced"));
   claims("the reviewers' verdict reads as agreement with the label",
@@ -290,8 +326,15 @@ async function main() {
     page.el("text-which").textContent.includes("scan read"));
   claims("a scan that found something opens its own working unasked",
     page.byId.get("scan-raw").open === true);
-  claims("the data panel says how many spans there are to confirm",
+  claims("the data panel says how many values there are to confirm",
     page.byId.get("data-verdict").textContent.includes("1"));
+  const kept = () => page.el("keep-table").markup();
+  claims("**a row is a value, and how many times it occurs is answered beside it**",
+    kept().includes(PHONE) && kept().includes(`×${PHONE_SPANS.length}`));
+  claims("**and no offset is on the screen**: the row carries the value, not two numbers",
+    !kept().includes(`value="${PHONE_SPANS[0].start}"`));
+  claims("the spans it made are shown read-only, each with what it stands in for",
+    shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
   claims("the checks verdict says both answered",
     page.byId.get("checks-verdict").textContent.includes("both"));
 
@@ -320,37 +363,234 @@ async function main() {
     !paths(page).includes("/ai-review"));
 
   // ------------------------------------------------- the copy follows the ticking, with no button
-  page = await start();
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const copies = () => posted(page, "/data-quality/personal-data/redact").length;
+  const numbering = () => posted(page, "/data-quality/personal-data/spans");
   const first = copies();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
-  claims("unticking a span says at once that the copy is being made again",
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  claims("unticking a value says at once that the copy is being made again",
     page.el("said-2").textContent.includes("replacing…"));
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
-  claims("**the copy is made again when a span is unticked** — nothing is asked for",
+  claims("**the copy is made again when a value is unticked** — nothing is asked for",
     copies() === first + 1);
-  claims("and the span left out of it is gone from what was sent",
+  claims("**and every occurrence of it is out of what was sent**, not just the first",
     JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 0);
+  claims("**a value unticked is left out of what is numbered** — so a value the reviewer keeps that"
+    + " sat inside it is free to earn a span of its own",
+    numbering().length === 2
+    && JSON.parse(numbering().at(-1).body).claimed.every(([, said]) => said !== PHONE));
+  claims("**but it is still a claim the record is measured against**, because a rewrite asked for"
+    + " and not done is not a clean record",
+    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.claims, [["PHONE", PHONE]]));
   claims("the row then says nothing was left to replace",
     page.el("said-2").textContent.includes("nothing to replace"));
+  claims("and the row says the value was left in the text, rather than counting nothing",
+    page.el("keep-table").markup().includes("left in the text"));
 
-  // The other way the spans move: an offset typed over. It is the one a reviewer does most, and
-  // it changes what comes out of the text rather than only whether something does.
-  page = await start();
+  const MISSED = "vâng ạ";
+  const WITH_MISSED = {
+    review_text: REVIEW_TEXT,
+    claims: [["PHONE", PHONE], ["NAME", MISSED]],
+    spans: [...PHONE_SPANS, {
+      id: PHONE_SPANS.length + 1,
+      start: REVIEW_TEXT.indexOf(MISSED),
+      end: REVIEW_TEXT.indexOf(MISSED) + MISSED.length,
+      personal_data_class: "NAME",
+      placeholder: "<NAME_1>",
+      reason: null
+    }]
+  };
+  const RECLASSED = {
+    ...WITH_MISSED,
+    claims: [["OTP", PHONE], ["NAME", MISSED]],
+    spans: WITH_MISSED.spans.map(span => (span.personal_data_class === "PHONE"
+      ? { ...span, personal_data_class: "OTP", placeholder: "<OTP_1>" } : span))
+  };
+  page = await start({ ...ANSWERS(),
+    numbered: [ANSWERS().numbered, WITH_MISSED, RECLASSED, { ...RECLASSED,
+      spans: RECLASSED.spans.filter(span => span.personal_data_class !== "OTP") }] });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const made = copies();
-  const shorter = String(REVIEW_TEXT.indexOf(PHONE) + 5);
-  page.el("span-table").querySelector('[data-f="end"][data-i="0"]').value = shorter;
-  page.el("span-table").oninput();
+  const numberings = () => posted(page, "/data-quality/personal-data/spans");
+  claims("the class picker offers what the service says a value may be, not a list the page holds",
+    page.el("value-class").innerHTML.includes("EMAIL")
+    && page.el("value-class").innerHTML.includes("NAME"));
+  page.el("value-new").value = MISSED;
+  page.el("value-class").value = "NAME";
+  await page.el("value-add").onclick();
+  for (let n = 0; n < 6; n += 1) await settled();
+  const sentValues = JSON.parse(numberings().at(-1).body).claimed;
+  claims("**a value the scan missed is sent as a value and a class**, and no offset with it",
+    same(sentValues.at(-1), ["NAME", MISSED]) && !JSON.stringify(sentValues).includes("start"));
+  claims("**and the value the scan claimed goes with it**, so nothing already numbered is renumbered",
+    same(sentValues[0], ["PHONE", PHONE]));
+  claims("**the values go as an ordered list**, because where two start at one offset the order is"
+    + " what settles which is numbered first",
+    same(sentValues, [["PHONE", PHONE], ["NAME", MISSED]]));
+  claims("what comes back is what is drawn: the occurrences are the service's answer",
+    kept().includes(MISSED) && shown(page.el("scan-raw").markup()).includes("<NAME_1>"));
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
-  claims("**an offset typed over remakes the copy too**, and over the offset as it now reads",
+  claims("**a value added remakes the copy too**, over the spans that value earned",
     copies() === made + 1
-    && JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans[0].end === Number(shorter));
+    && JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.spans.length === WITH_MISSED.spans.length);
+
+  const noKinds = await start({ ...ANSWERS(), classes: [] });
+  await noKinds.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  noKinds.el("value-new").value = MISSED;
+  await noKinds.el("value-add").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  claims("**a deployment that says nothing about the kinds says so where a value is added**",
+    noKinds.el("value-note").textContent.includes("no kind")
+    && !posted(noKinds, "/data-quality/personal-data/spans").some(one =>
+      JSON.parse(one.body).claimed.some(([, value]) => value === MISSED)));
+  claims("**and it asks again rather than staying empty for the rest of the shift** — a page opened"
+    + " while the service was restarting is not a page that can never add a value",
+    posted(noKinds, "/data-quality/personal-data/classes").length === 2);
+
+  const before6 = numberings().length;
+  hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "OTP" });
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**saying a value is a different kind asks for it to be numbered again**",
+    numberings().length === before6 + 1
+    && JSON.parse(numberings().at(-1).body).claimed.some(pair => same(pair, ["OTP", PHONE])));
+  claims("**and what stands in the text for it is drawn as it came back**, because `<CLASS_N>`"
+    + " counts per class and the page counts nothing",
+    shown(page.el("scan-raw").markup()).includes("<OTP_1>")
+    && !shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
+
+  const before7 = numberings().length;
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  await waited(320);
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**unticking one value asks for the rest to be numbered again**, because what is dropped"
+    + " for being inside a longer span is measured over what is still ticked",
+    numberings().length === before7 + 1
+    && JSON.parse(numberings().at(-1).body).claimed.every(([, value]) => value !== PHONE));
+  claims("and neither occurrence of it is handed back to be replaced",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.spans.length === WITH_MISSED.spans.length - PHONE_SPANS.length);
+
+  const twoNumbered = [
+    ANSWERS().numbered,
+    { review_text: REVIEW_TEXT, claims: [["NAME", "the numbering of an edit already undone"]],
+      spans: [] },
+    { review_text: REVIEW_TEXT, claims: [["PHONE", PHONE]], spans: PHONE_SPANS }
+  ];
+  page = await start({ ...ANSWERS(), numbered: twoNumbered,
+    slow: { "/data-quality/personal-data/spans": [0, 400, 0] } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  await waited(60);
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: true });
+  await waited(700);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**a numbering that lands after a newer one is dropped**, not read as the answer to what"
+    + " is on the screen",
+    page.el("keep-table").markup().includes(`×${PHONE_SPANS.length}`)
+    && shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
+
+  page = await start({ ...ANSWERS(),
+    refuse: { "/data-quality/personal-data/spans": { status: 503, detail: "service restarting" } } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  await waited(320);
+  for (let n = 0; n < 6; n += 1) await settled();
+  const madeBefore = copies();
+  page.el("value-new").value = MISSED;
+  await page.el("value-add").onclick();
+  await waited(400);
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**a value the service could not number does not go on the table**",
+    !page.el("keep-table").markup().includes(MISSED));
+  claims("and what was typed is still in the box, so it is not retyped from memory",
+    page.el("value-new").value === MISSED);
+  claims("it says why, where the value was typed",
+    page.el("value-note").textContent.includes("could not be numbered"));
+  claims("**and no copy that ships is made from a claim the page could not place**",
+    copies() === madeBefore);
+
+  page = await start({ ...ANSWERS(), slow: { "/data-quality/personal-data/spans": [0, 400] } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "OTP" });
+  await page.byId.get("skip").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  await waited(700);
+  for (let n = 0; n < 10; n += 1) await settled();
+  claims("**a numbering that lands after the sample changed is dropped**, not painted onto the next",
+    page.byId.get("sample-name").textContent.includes("s2")
+    && !page.el("keep-table").markup().includes(PHONE)
+    && !page.el("scan-raw").markup().includes(PHONE));
+  page.inputsNamed("f-domain")[0].checked = true;
+  await page.byId.get("submit").onclick();
+  for (let n = 0; n < 12; n += 1) await settled();
+  claims("**and the record posted for the next sample carries no scan of the one before it**",
+    JSON.parse(posted(page, "/records").at(-1).body).personal_data === null);
+
+  page = await start();
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  await waited(320);
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**why the confirmation said a value is personal data reaches the record**",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.spans.every(span => span.reason === WHY));
+
+  const INSIDE = "Lookup";
+  const nested = {
+    review_text: REVIEW_TEXT,
+    claims: [["PHONE", PHONE], ["NAME", INSIDE]],
+    spans: [...CONFIRMED_SPANS, {
+      id: CONFIRMED_SPANS.length + 1,
+      start: REVIEW_TEXT.indexOf(INSIDE),
+      end: REVIEW_TEXT.indexOf(INSIDE) + INSIDE.length,
+      personal_data_class: "NAME",
+      placeholder: "<NAME_1>",
+      reason: WHY
+    }]
+  };
+  page = await start({ ...ANSWERS(),
+    detected: nested, numbered: { ...nested, spans: PHONE_SPANS } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**a value the service placed but numbered nothing for is not called missing**",
+    page.el("keep-table").markup().includes("inside something longer")
+    && !page.el("keep-table").markup().includes("not in the text"));
+
+  const stray = page.el("keep-table").onchange;
+  const rowsDrawn = page.el("keep-table").markup();
+  hit(stray, "[data-class]", { class: "a value no row carries" }, { value: "OTP" });
+  for (let n = 0; n < 4; n += 1) await settled();
+  claims("**a row the page does not hold changes nothing** — an attribute that did not survive"
+    + " being read back would otherwise put a second row on the table",
+    page.el("keep-table").markup() === rowsDrawn
+    && !page.el("keep-table").markup().includes("a value no row carries"));
+
+  const AWKWARD = '<b>Trần "Minh" & Co</b>';
+  const AWKWARD_TEXT = `user: ${AWKWARD}`;
+  page = await start({ ...ANSWERS(),
+    detected: {
+      review_text: AWKWARD_TEXT,
+      claims: [["NAME", AWKWARD]],
+      spans: [{ id: 1, start: AWKWARD_TEXT.indexOf(AWKWARD), end: AWKWARD_TEXT.length,
+                personal_data_class: "NAME", placeholder: "<NAME_1>", reason: null }]
+    } });
+  await page.byId.get("run-checks").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**a row keys itself by the value, escaped into the attribute a browser reads back**",
+    page.el("keep-table").markup().includes(`data-keep="${esc(AWKWARD)}"`)
+    && shown(page.el("keep-table").markup()).includes(`data-keep="${AWKWARD}"`));
+  claims("and the value on it is the corpus\'s own text, not markup the page let through",
+    page.el("keep-table").markup().includes("&lt;b&gt;"));
 
   // Two edits close together, the first copy slow. It lands last and is about spans that are no
   // longer on the screen, so the page must not paint it -- a reviewer who untickes a span and
@@ -364,9 +604,9 @@ async function main() {
     slow: { "/data-quality/personal-data/redact": [0, 400, 0] } });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
   await waited(240);
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: true });
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: true });
   await waited(600);
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a copy that lands after a newer one is dropped**, not read as the answer to what is on the screen",
@@ -409,15 +649,12 @@ async function main() {
     !halves[1].includes(PHONE) && halves[1].includes("<PHONE_1>"));
   claims("**and in the placeholder the turn carries**, so the two still read as one person's number",
     halves[0].includes("<PHONE_1>"));
-  claims("the copy is made from the spans the reviewer kept",
-    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 1);
-  // Both of these were found by running the page against a live service, and neither could be
-  // found here before: the page writes a value into markup escaped -- it has to, a corpus that
-  // says `<b>` is a corpus -- and reads it back through a field, which is where a browser
-  // reverses the escaping. A value that makes that round trip has to come out as it went in.
-  claims("**a placeholder goes back as it reads, not as it was escaped into markup**",
+  claims("the copy is made from every occurrence of the values the reviewer kept",
     JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
-      .detected.spans[0].placeholder === "<PHONE_1>");
+      .detected.spans.length === PHONE_SPANS.length);
+  claims("**why the scan's confirmation said a value is personal data goes back with it**",
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
+      .detected.spans.every(span => span.reason === WHY));
   claims("**the language the scan is asked in is the one the markup selects**, nobody having picked",
     JSON.parse(posted(page, "/data-quality/personal-data").at(-1).body).language === "vi");
 
@@ -570,9 +807,9 @@ async function main() {
     same(shipping.messages, ONE.messages) && same(shipping.tools, ONE.tools)
     && shipping.label[0].arguments.ma === "KH-9");
 
-  // A span moved after the label was settled. What is on screen is then a copy of spans nobody is
-  // ticking any more, which is the same staleness the replacement has and gets the same answer.
-  page = await start();
+  // A value unticked after the label was settled. What is on screen is then a copy of spans nobody
+  // is ticking any more, which is the same staleness the replacement has and gets the same answer.
+  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
   await page.byId.get("run-checks").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-correct").checked = true;
@@ -581,8 +818,8 @@ async function main() {
   for (let n = 0; n < 10; n += 1) await settled();
   const shipped = () => posted(page, "/data-quality/personal-data/redact").length;
   const madeOnce = shipped();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: "0", on: false });
-  claims("unticking a span takes the shipping copy down with it too",
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  claims("unticking a value takes the shipping copy down with it too",
     page.el("review-text").textContent.includes("replacing…"));
   await waited(600);
   for (let n = 0; n < 10; n += 1) await settled();
@@ -914,7 +1151,7 @@ async function main() {
   claims("**the checks run on it** rather than being refused for a field it never had",
     JSON.parse(posted(page, "/data-quality/personal-data")[0].body).id
       === "named-by-the-service-1"
-    && page.el("said-2").textContent.includes("span"));
+    && page.el("said-2").textContent.includes("value"));
 
   page.inputsNamed("f-domain")[0].checked = true;
   await page.byId.get("submit").onclick();

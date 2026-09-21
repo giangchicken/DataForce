@@ -11,6 +11,12 @@ answers the redacted record, the text that record now reads as, and how far the 
 copied `review_text` alone and answered a text nothing read and an outcome measured against the
 scan's own copy rather than against what ships. Both halves are here now, over the record.
 
+`number_personal_data_spans` is the one asked between them, and asked often: a reviewer keeps a
+value or types one the scan missed, and where it stands, how many times and which `<CLASS_N>` it
+gets are answered by the two functions `detect` ends with. No model and no database, so it costs
+what a function call costs -- which is what lets the page ask on every tick and hold no rule of
+its own about where a value stands.
+
 `check_label_calls` is the one check here with no model behind it at all: the store's own
 `schema_valid` rule, asked while the sample is still on the screen, so that a reviewer is told a
 label names a tool without calling it *before* they say the label is correct.
@@ -27,15 +33,19 @@ from pydantic import ValidationError
 
 from dataforce.errors import ConfigError
 from dataforce.modalities.text2text.data_quality import (
+    SCANS,
     PersonalDataCheckingConfig,
     PersonalDataCheckingInput,
     PersonalDataDetected,
     PersonalDataRedacted,
+    PiiRuleDetector,
 )
 from dataforce.modalities.text2text.data_quality.schema import Language
 from dataforce.profile.tool_decision.data_quality import (
     ToolDecisionPersonalChecking,
     decide_replacement_outcome,
+    find_and_number_spans,
+    order_claims_by_class,
     read_span_values,
     replace_node,
 )
@@ -65,6 +75,58 @@ async def detect_personal_data(
     except ValidationError as error:
         raise ConfigError(f"the scan cannot read this record: {error}") from error
     return await ToolDecisionPersonalChecking(config).detect(checking_input)
+
+
+def list_personal_data_classes() -> tuple[str, ...]:
+    """What a value may be said to be, in the order `<CLASS_N>` counts them.
+
+    A reviewer says what kind a value they typed is, and the kinds are the scans' own. A caller
+    holding its own list would offer a class no scan declares, and order the rest differently --
+    which renumbers what the reviewer was already reading.
+
+    `SCANS` and not a parameter, because there is nowhere for one to come from: this answers a
+    `GET` with no body, and a scan is a Python callable that no request can carry. The limit that
+    leaves, stated: a deployment that hands its checker a `list_scan_functions` of its own has
+    given the scan a class this does not know about, and the picker will not offer it while the
+    rows the scan claimed show it. Changing `SCANS` is what keeps the two together, which is the
+    one way a deployment can add a scan and have every route agree.
+    """
+    return PiiRuleDetector(SCANS).classes
+
+
+def number_personal_data_spans(
+    sample: Mapping[str, Any],
+    claimed: Mapping[str, str],
+) -> PersonalDataDetected:
+    """Every offset the reviewer's values carry, numbered by the rule that numbered the scan's.
+
+    The reviewer answers *which values are personal data*; this answers everything that follows
+    from it -- where each one stands, how many occurrences count, which nested span is dropped and
+    which `<CLASS_N>` it gets. It is the two functions `ToolDecisionPersonalChecking.detect` ends
+    with and nothing else: no model is asked and nothing is opened, so it is cheap enough to run
+    every time a tick moves, and a value somebody typed is numbered by the rule that numbered the
+    rest rather than by a second one written for people who add things.
+
+    The declared order `<CLASS_N>` counts in is `SCANS`, on the terms
+    `list_personal_data_classes` states: a class only that deployment's checker knows about is
+    one this orders after the declared ones rather than among them, which moves the `id` a span
+    carries without moving its placeholder.
+
+    A value that is empty, or that the text does not hold, is left out rather than refused. It can
+    carry no offset -- `PiiRuleDetector.detect` drops one for the same reason -- and a reviewer
+    halfway through typing a value is not an error. What comes back names the values that were
+    placed, so a caller can see which of its own were not.
+    """
+    text = build_review_text(sample)
+    placed = {
+        value: personal_data_class
+        for value, personal_data_class in claimed.items()
+        if value and value in text
+    }
+    claims = order_claims_by_class(text, placed, list_personal_data_classes())
+    return PersonalDataDetected(
+        review_text=text, claims=claims, spans=find_and_number_spans(text, claims)
+    )
 
 
 def redact_personal_data(

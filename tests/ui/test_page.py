@@ -402,6 +402,40 @@ def test_each_check_names_its_model_and_the_cell_it_answers_in() -> None:
         assert PAGE.count(f'id="{picker}"') == 1
 
 
+def test_the_page_answers_no_question_about_where_a_value_stands() -> None:
+    """A span is a value and a class. Offsets are answered, never typed.
+
+    The containment rule -- *a span inside a longer span is dropped* -- was written twice, once in
+    `find_and_number_spans` and once in this page's JavaScript, character for character. The
+    pipeline spec paid for that in writing: *the cost of a reviewer being able to edit an offset
+    at all*. This is what says the offset stayed gone, because nothing else would notice a second
+    copy of the rule creeping back in beside a table of numbers.
+
+    Reading a span is not holding a rule: the page still slices the review text to show what a
+    span stands in for, which is what `read_span_values` does on the other side of the call.
+    """
+    assert "other.end - other.start" not in SCRIPTS
+    for gone in ("span-table", "span-check", "span-add", "span-note", '"auto"'):
+        assert gone not in SCRIPTS, gone
+        assert gone not in PAGE, gone
+    card = PAGE[PAGE.index('id="panel-data"') : PAGE.index('id="panel-label"')]
+    assert card.count("<input") == 1
+    assert 'id="value-new"' in card
+
+
+def test_what_a_value_may_be_said_to_be_is_asked_for_and_not_declared_here() -> None:
+    """The class picker is filled from the route that declares the scans.
+
+    A list written into this page would offer a class no scan declares and put the rest in another
+    order -- and the order is the one `<CLASS_N>` counts in, so a page with its own list would
+    renumber what a reviewer was already reading.
+    """
+    assert "/data-quality/personal-data/classes" in SCRIPTS
+    for named in ("EMAIL", "PHONE", "OTP", "NAME"):
+        assert named not in PAGE, named
+        assert named not in SCRIPTS, named
+
+
 def test_a_domain_can_be_added_beside_the_domains() -> None:
     """The box that adds a domain sits with the list it adds to, inside the panel that holds the
     facets -- a control for one facet, filed under another, is one nobody connects to it."""

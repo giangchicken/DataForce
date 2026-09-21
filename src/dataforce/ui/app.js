@@ -33,8 +33,8 @@ import {
   sayLabelRefusal, takeConsensus, tookVerdict
 } from "./label.js";
 import {
-  addSpan, checkSpans, detect, editedSpans, forgetPersonalData, handedBack,
-  paintKeepTable, paintReviewText, paintValues, sayDataRefusal, sayPersonalData
+  addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
+  numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { paintCalls, paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
@@ -105,9 +105,10 @@ function openSample(sample, key) {
 }
 
 function forgetEverything() {
+  held.scanned = null;
   held.detected = null;
-  held.rows = [];
-  held.keeps = {};
+  held.claimed = new Map();
+  held.keeps = new Map();
   held.review = null;
   held.record = null;
   held.handed = null;
@@ -179,9 +180,6 @@ function refreshBoth() {
 
 async function refreshCopy() {
   if (!held.sample) return false;
-  if (held.detected && editedSpans().some(row => row.broke)) {
-    return copyBroke("a span row is unreadable, so nothing was replaced");
-  }
   const body = shippingBody();
   const mine = (copyAt += 1);
   const answer = await call("/data-quality/personal-data/redact", body);
@@ -292,8 +290,6 @@ paintChecks();
 $("run-checks").onclick = runChecks;
 $("submit").onclick = submit;
 $("skip").onclick = skip;
-$("span-check").onclick = () => { if (checkSpans()) copyLater(); };
-$("span-add").onclick = () => { if (addSpan()) copyLater(); };
 $("label-check").onclick = paintShipped;
 
 const SHEETS = ["sheet-guide", "sheet-import", "sheet-list", "sheet-dataset"];
@@ -374,15 +370,27 @@ for (const id of ["v-correct", "v-modify"]) {
 
 for (const id of TICK_LISTS) $(id).onchange = readTicked;
 
-$("span-table").oninput = () => { paintValues(); copyLater(); };
-$("keep-table").onchange = event => {
-  const box = event.target.closest("[data-keep]");
-  if (!box) return;
-  held.keeps[Number(box.dataset.keep)] = box.checked;
-  copyLater();
-  paintKeepTable();
+async function valuesChanged(numbering) {
+  if (await numbering) copyLater();
+  paintCard();
+}
+
+$("value-add").onclick = () => valuesChanged(addValue());
+$("value-new").onkeydown = event => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  valuesChanged(addValue());
 };
-$("auto").onchange = () => { copyLater(); paintKeepTable(); };
+$("keep-table").onchange = event => {
+  const said = event.target.closest("[data-class]");
+  const box = said || event.target.closest("[data-keep]");
+  if (!box) return;
+  const value = said ? said.dataset.class : box.dataset.keep;
+  if (!held.claimed.has(value)) return paintCard();
+  if (said) return valuesChanged(numbered(claimedWith(value, said.value), held.keeps));
+  copyLater();
+  return valuesChanged(numbered(held.claimed, keptWith(value, box.checked)));
+};
 for (const id of ["facet-ticks", "domain-ticks"]) {
   $(id).onchange = () => composeRecord(readDeclaredFacets());
 }
@@ -393,6 +401,7 @@ onKey(steer);
 onReturn(paintTicks);
 
 paintTicks();
+askClasses();
 askStore();
 askStatistics();
 askNext();

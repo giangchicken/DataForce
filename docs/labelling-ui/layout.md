@@ -165,7 +165,8 @@ rest, rather than by a second rule written for people who add things.
 which existed only to re-slice what somebody typed; and the **`auto` tick box** — *drop any span
 inside a longer one* is what `find_and_number_spans` does unconditionally, so the tick box was the
 page holding a second copy of that rule. `app.js`'s `inside` is that copy, character for character,
-and it goes too.
+and it goes too. What the toggle was *for* stays: the rule is measured over the values still
+ticked, because those are the only ones sent to be numbered.
 
 What is left as a disclosure is *the spans this made, and what they replace* — read-only, for
 somebody checking the redaction rather than editing it.
@@ -296,7 +297,7 @@ picked and still served keeps its tick when the list is redrawn.
 
 | control | what it does |
 |---|---|
-| `keep-table` *(tick per row)* | one row per claimed **value**: keep it or leave it, what kind it is, and how many times it occurs. What you untick stays in the text exactly as it arrived |
+| `keep-table` *(tick per row)* | one row per claimed **value**: keep it or leave it, what kind it is, and how many times it occurs. What you untick stays in the text exactly as it arrived, and says so where the count would be |
 | the class picker on a row | what a value is, where the scan guessed wrong. Changing it renumbers, because `<CLASS_N>` counts per class |
 | **the value box + class + Add it** | a value the scan missed. Type it once; **every occurrence is found for you**, because that is what `find_and_number_spans` does with any value handed to it |
 | `review-text` *(text)* | the sample as one string, with its own line breaks. Two versions, and the label above says which: *the text the scan reads* before anything is kept, and **the conversation the reviewers will be handed** after — which is the thing a person most needs to see before spending a model call on it |
@@ -463,7 +464,7 @@ conversation.js ─► held, screen          checks.js ─► screen, wire
 record.js       ─► held, screen          models.js, queue.js, importing.js ─► held, screen, wire
          ▲
 facets.js        ─► conversation, held, screen
-personal-data.js ─► checks, conversation, held, screen
+personal-data.js ─► checks, conversation, held, screen, wire
 label.js         ─► checks, conversation, held, screen, wire
 corpus.js        ─► conversation, facets, held, queue, screen, wire
          ▲

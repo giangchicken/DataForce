@@ -432,7 +432,7 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 
 .facetwrap { margin-top: var(--space-4); padding-top: var(--space-1); border-top: 1px solid var(--line-soft); }
 .facetwrap .runline { margin: var(--space-2) 0 0; }
-#domain-new { flex: 1 1 200px; min-width: 0; }
+#domain-new, #value-new { flex: 1 1 200px; min-width: 0; }
 
 /* the conversation the reviewers are handed. The one text on this page meant to be *read* rather
    than inspected: every other `pre` holds a route's JSON, which is a thing you scan for a key, so

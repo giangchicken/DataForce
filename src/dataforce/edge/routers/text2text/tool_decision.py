@@ -65,6 +65,8 @@ from dataforce.services.tool_decision import (
     build_dataset_statistics,
     check_label_calls,
     detect_personal_data,
+    list_personal_data_classes,
+    number_personal_data_spans,
     predict_tool_decision_by_llm,
     predict_tool_decision_by_sft,
     read_queued_samples,
@@ -118,6 +120,21 @@ class PersonalDataScanRequest(Sample):
     )
     verifier_model: str = Field(
         ..., description="Which served model confirms layer one's candidates."
+    )
+
+
+class SpanRequest(Sample):
+    claimed: tuple[tuple[str, str], ...] = Field(
+        default=(),
+        description=(
+            "`(class, value)` for every value the reviewer left on the table -- the ones they "
+            "kept and the ones they typed -- in the order they are read in, which is the shape "
+            "`PersonalDataDetected.claims` comes back in. **Ordered, and not an object**: where "
+            "two values start at one offset the order settles which is numbered first, and a "
+            "JSON object of them is one a client can reorder without meaning to. **No offset is "
+            "sent** -- where each value stands, how many times and which `<CLASS_N>` it gets are "
+            "what this route answers."
+        ),
     )
 
 
@@ -261,6 +278,32 @@ async def post_personal_data(request: PersonalDataScanRequest) -> PersonalDataDe
         )
     except ConfigError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get(
+    "/data-quality/personal-data/classes",
+    summary="what a value may be said to be",
+)
+def get_personal_data_classes() -> tuple[str, ...]:
+    """The scans' own classes, so a caller picking one picks from the list that numbers them."""
+    return list_personal_data_classes()
+
+
+@router.post(
+    "/data-quality/personal-data/spans",
+    summary="where these values stand in the text, numbered as the scan numbers them",
+)
+def post_personal_data_spans(request: SpanRequest) -> PersonalDataDetected:
+    """The same answer the scan gives, over the values a reviewer left rather than a model's.
+
+    No model and no database: the two pure functions the scan ends with, so a page may ask on
+    every tick. `claimed` is a declaration about this request and not a key of the record, so the
+    sample handed on is what the corpus carries.
+    """
+    return number_personal_data_spans(
+        request.model_dump(exclude={"claimed"}),
+        {value: personal_data_class for personal_data_class, value in request.claimed},
+    )
 
 
 @router.post(

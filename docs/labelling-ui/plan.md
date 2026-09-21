@@ -507,6 +507,106 @@ run on every tick. The page sends the map; it computes nothing.
 - `docs/tool-decision-pipeline/spec.md` Requirement 41 and its § *Invariants* note that one rule
   lives in three places are rewritten to two, with the page holding neither.
 
+**What landed instead, and why.** Four things.
+
+**One route was three answers short of enough, so there are two.** The reviewer says *what kind* a
+value they typed is, and the kinds have to come from the scans: a list written into the page would
+offer a class no scan declares and put the rest in another order, and that order is the one
+`<CLASS_N>` counts in. So `GET .../data-quality/personal-data/classes` answers
+`PiiRuleDetector(list_scan_functions).classes`, the way `GET /models` answers a directory. It spends
+no model and no row, which is why `page.js` counts it among the calls that may be made on load.
+
+**The body carries no language, and the route runs two functions rather than three.** Nothing in
+numbering reads a language — `find_and_number_spans` matches `\w` and `order_claims_by_class` sorts
+by position — so a `language` field would have been one nothing read. `read_span_values` is not run
+either: the answer is the `PersonalDataDetected` the scan gives, and what a span reads is `sliced`
+on the page, which is reading a span rather than holding a rule about one.
+
+**The rows are the claims, and the confirmation arrives as the ticking.** `claims` is what both
+detectors claimed; `spans` is what the confirmation kept. So every claim is a row, and a claim the
+model rejected is a row that starts unticked — something a reviewer can put back, rather than
+something that silently never appeared.
+
+**Only the ticked values are numbered, and that decides one thing at the cost of another.**
+Containment is measured over what is still ticked, which is what Requirement 41 of the pipeline
+spec says in words: *untick an email and the phone number inside it is what is left to hand back*.
+The other way round — numbering every row, ticked or not — was written first and is wrong: untick a
+street address and the name inside it that the reviewer **kept** earns no span, is not replaced, and
+nothing downstream refuses the record, because `find_surviving_spans` only looks for values that
+carry a confirmed span. What it cost: `<CLASS_N>` counts over the claims that are sent, so a
+placeholder moves when a value before it is unticked. That is a number changing under a reviewer's
+eye, against a value they keep going out un-redacted, and it is not close.
+
+**What is handed back keeps `claims` and `reason` from the scan.** `claims` is what the *detectors*
+claimed and it is what `outcome` is measured against, so a value unticked has to stay in it —
+otherwise unticking turns every record from `withheld` to `redacted` and the audit signal goes.
+`reason` is the confirmation's own words about a value, and the numbering route has never been told
+it, so it is added back where the record is composed rather than by the page editing an answer the
+service gave it.
+
+**The scan is followed by one numbering, before anything is drawn.** So the table, the disclosure
+and what is handed back are always read off one answer, rather than off the scan's narrowed spans
+until the first tick and off a numbering afterwards. It costs no model and no database, which is
+Requirement 30.
+
+**What the review caught.** Five, and the worst of them is the one above about numbering the
+unticked rows. The rest:
+
+- **The staleness guard counted numberings and not samples.** `forgetEverything` bumps `copyAt` so
+  a redaction cannot land on the sample after the one it was made for; the numbering had no such
+  bump, so skipping a sample — or changing the language mid-scan — put the previous sample's
+  `review_text` and spans into the next sample's record, stamped `redacted`, with nothing
+  downstream able to catch it. `forgetPersonalData` bumps the counter now.
+- **The claim was committed to the page before it was numbered.** A numbering that refused left a
+  row nothing could place and a shipping copy nobody invalidated. The proposed maps are passed in
+  and committed only on success, so the page never holds a claim it has not been given spans for.
+- **`Object.fromEntries` put the map back into a plain object at the wire**, and a plain object
+  sorts integer-like keys first. The order is not decoration: within a class the numbering sorts by
+  first appearance and the sort is stable, so two values starting at one offset — a value and a
+  prefix of it — are ordered by the order they arrived in, and `<OTP_1>` and `<OTP_2>` swap. The
+  body carries an ordered list of `(class, value)`, the shape `claims` already comes back in.
+- **One cell said *not in the text* for three different situations.** A value the reviewer left in
+  the text now says so; a ticked value every occurrence of which is inside a longer span says that;
+  and only a value the text does not hold is called missing.
+- **The card was repainted in time `rows × spans × text`.** Every cell re-split the whole review
+  text to read one span, on every tick. The text is split once per answer and the occurrences
+  counted once per paint.
+- **A row the page does not hold now changes nothing.** The table keys a row by its value, and a
+  value is escaped into a `data-` attribute and read back out of it; a value carrying a carriage
+  return does not survive that, and setting a key nothing matched would have added a second row
+  rather than changing one.
+- **The classes were asked for once and never again.** A page opened while the service was
+  restarting could not add a value for the rest of the shift. `detect` asks again where it has
+  none, which is where a reviewer is about to need them.
+- **Two checks proved less than they read as.** *Changing a value's class renumbers* was asserted
+  at the request and never at what the page drew, so a page that sent the right body and drew the
+  stale placeholder passed; and the placeholder round trip it replaced had stopped meaning
+  anything once nothing went out through a field and came back. `dom.js` also gave every element
+  it minted a `<select>`'s reading of its own markup; it knows the tags `index.html` declares now.
+
+**One seam that looked like a choice, and one limit that is real.** Both new functions took a
+`list_scan_functions` defaulting to `SCANS`, and no caller could ever pass one: a scan is a Python
+callable and these answer a `GET` with no body and a `POST` carrying a record. The parameters are
+gone. What is left is the limit under them, stated in `list_personal_data_classes`: a deployment
+that hands its checker a scan set of its own has given the scan a class these do not know about, so
+the picker will not offer it while the rows the scan claimed show it, and `order_claims_by_class`
+files it after the declared ones — which moves a span's `id` without moving its placeholder.
+Changing `SCANS` is what keeps every route agreeing. Making `SCANS` itself the configured thing is
+the fix when a deployment needs one, and nothing outside the suite does yet.
+
+**One thing left standing, and it is the redaction route's rather than this task's.** The count in
+a row is how many occurrences were *numbered*; `replace_text` replaces every substring occurrence
+with no word-boundary rule and no containment rule, so a value that is also a fragment of a longer
+number is replaced more often than the row says. That is what `redact` has always done and nothing
+here changes it.
+
+**What a reader sees change, and `make check` cannot.** Card 1's table is four columns — keep, what
+it is, the value, how many times it occurs — where it was six of offsets. Under it is one field and
+a picker, where *Re-read the rows* and *Add a span* were. The disclosure is read-only and says what
+each span stands in for. A value the verifier rejected is now on the table, unticked, where it used
+to be invisible. And the scan's row on the Checks panel counts **values** rather than spans, which
+is the same number more often than not and a different one exactly when it matters.
+
 **Source.** `spec.md` § *The spans*, Requirements 27 to 30.
 
 **Verify.** `make check`

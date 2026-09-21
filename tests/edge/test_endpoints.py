@@ -32,6 +32,7 @@ from dataforce.edge.database import DEFAULT_STORE_FILE, db
 from dataforce.edge.main import UI, create_app
 from dataforce.edge.routers.text2text import tool_decision as route
 from dataforce.modalities.text2text.data_quality import (
+    SCANS,
     PersonalDataDetected,
     personal_data_checking,
 )
@@ -356,6 +357,124 @@ def test_an_unserved_verifier_is_refused_before_any_model_is_called(
     assert resp.status_code == 422
     assert UNSERVED in resp.json()["detail"]
     assert JUROR in resp.json()["detail"]
+
+
+# ------------------------------------------------- numbering, with no model and no store
+
+
+def test_the_spans_route_numbers_the_values_it_is_handed_and_calls_no_model(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route a page may ask on every tick: two pure functions, and no name to refuse.
+
+    It takes values and answers offsets, which is the whole of it -- `<CLASS_N>` per distinct
+    value, every occurrence, and no body that could name a model to spend.
+
+    The number the customer gave, carried into the call that was labelled: a label is copied out
+    of the conversation, so the value stands twice and one placeholder has to cover both.
+    """
+    forbid_model_calls(monkeypatch)
+    called = {
+        **SAMPLE,
+        "label": [{"name": "OpenTicket", "arguments": {"ma_khach": PHONE}}],
+    }
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/spans",
+        json={**called, "claimed": [["PHONE", PHONE]]},
+    )
+
+    assert resp.status_code == 200
+    answer = resp.json()
+    assert answer["review_text"] == build_review_text(called)
+    assert answer["claims"] == [["PHONE", PHONE]]
+    assert [
+        answer["review_text"][span["start"] : span["end"]] for span in answer["spans"]
+    ] == [PHONE, PHONE]
+    assert {span["placeholder"] for span in answer["spans"]} == {"<PHONE_1>"}
+
+
+def test_the_order_the_values_arrive_in_settles_which_of_two_stands_first(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A prefix and the value it is a prefix of start at one offset, so their order is the body's.
+
+    `order_claims_by_class` sorts by first appearance and the sort is stable, which leaves the
+    order they arrived in as the tie-break -- and `<CLASS_N>` counts in that order. So the body
+    carries a list and not an object: a JSON object of them is one a client can reorder without
+    meaning to, and the placeholder that lands in the text moves with it.
+    """
+    forbid_model_calls(monkeypatch)
+    coded = {
+        **SAMPLE,
+        "messages": [{"role": "user", "content": "ma so 123456 nhe"}],
+        "label": None,
+    }
+
+    def numbered(claimed: list[list[str]]) -> Mapping[str, Any]:
+        resp = client.post(
+            f"{BASE}/data-quality/personal-data/spans",
+            json={**coded, "claimed": claimed},
+        )
+        assert resp.status_code == 200, resp.text
+        return {span["placeholder"] for span in resp.json()["spans"]}
+
+    assert numbered([["OTP", "123456"], ["OTP", "1234"]]) == {"<OTP_1>"}
+    assert numbered([["OTP", "1234"], ["OTP", "123456"]]) == {"<OTP_2>"}
+
+
+def test_the_values_a_reviewer_sent_are_not_a_key_of_the_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`claimed` is a declaration about this request, on the same terms as the scan's two.
+
+    So the text the answer indexes is the one the record builds, with no `claimed` rendered into
+    it: a sample with a key this service does not read goes through untouched.
+    """
+    forbid_model_calls(monkeypatch)
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/spans",
+        json={**SAMPLE, "claimed": [["PHONE", PHONE]]},
+    )
+
+    assert "claimed" not in resp.json()["review_text"]
+    assert resp.json()["review_text"] == build_review_text(dict(SAMPLE))
+
+
+def test_the_spans_route_answers_over_a_deployment_with_no_database(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`no_endpoints` leaves the store off, which is the state the review runs in.
+
+    Stated as a test rather than left to the others passing: a route that opened a session would
+    503 here, and this is the one route the page calls while somebody is still typing.
+    """
+    forbid_model_calls(monkeypatch)
+    assert db.open_engine() is None
+
+    resp = client.post(
+        f"{BASE}/data-quality/personal-data/spans",
+        json={**SAMPLE, "claimed": [["PHONE", PHONE]]},
+    )
+
+    assert resp.status_code == 200
+
+
+def test_the_classes_route_answers_what_a_value_may_be_said_to_be(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the picker beside *add a value* is filled from, so the page declares no list.
+
+    In the scans' own order, because that is the order `<CLASS_N>` counts in: a caller offering
+    them in another order would renumber what a reviewer was already reading.
+    """
+    forbid_model_calls(monkeypatch)
+
+    resp = client.get(f"{BASE}/data-quality/personal-data/classes")
+
+    assert resp.status_code == 200
+    assert resp.json() == [name for name, _ in SCANS]
 
 
 # ----------------------------------------------------------------- replacing, with no model

@@ -3,9 +3,10 @@
 export const held = {
   key: null,        // the queue row this sample came from, posted back to say it is done
   sample: null,     // the sample as the queue handed it over
-  detected: null,   // the scan's answer, with the spans as they came back
-  rows: [],         // the span rows as the human is editing them, added ones included
-  keeps: {},        // which rows the human is handing back
+  scanned: null,    // the scan's own answer: what the detectors claimed, before any renumbering
+  detected: null,   // the spans over the values still ticked, in the text they index
+  claimed: new Map(),  // value → what kind it is, as the human left it: card 1's rows
+  keeps: new Map(),    // which of those values the human is handing back
   handed: null,     // the detect shape with the spans as they left it
   review: null,     // what the reviewers said
   edited: null,     // the three, as they ship before redaction

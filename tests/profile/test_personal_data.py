@@ -59,6 +59,8 @@ from dataforce.profile.tool_decision.data_quality import (
 from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.services.tool_decision import (
     detect_personal_data,
+    list_personal_data_classes,
+    number_personal_data_spans,
     redact_personal_data,
 )
 
@@ -827,6 +829,131 @@ async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() 
 
     assert list_placeholders(detected, first) == {"<EMAIL_1>"}
     assert list_placeholders(detected, second) == {"<EMAIL_2>"}
+
+
+# -------------------------------------------------- the values a reviewer left, numbered
+
+
+async def test_the_values_a_reviewer_left_are_numbered_exactly_as_the_scan_numbered_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The point of the whole route: one rule, not a second one for values people add.
+
+    The scan's own claims handed straight back, so what comes out has to be what went in --
+    the same spans, the same ids, the same placeholders. A second implementation would agree on
+    the easy sample and disagree here, where a value sits inside another one.
+    """
+    scanned = await StubbedModels().detect(build_scan_input(SAMPLE))
+
+    numbered = number_personal_data_spans(SAMPLE, dict(map(reversed, scanned.claims)))
+
+    assert numbered.review_text == scanned.review_text
+    assert numbered.claims == scanned.claims
+    assert [span.model_dump(exclude={"reason"}) for span in numbered.spans] == [
+        span.model_dump(exclude={"reason"}) for span in scanned.spans
+    ]
+    assert read_span_slices(numbered) == [EMAIL, PHONE, PHONE, NAME]
+
+
+def test_a_value_typed_once_is_found_at_every_occurrence_under_one_placeholder() -> (
+    None
+):
+    """Requirement 29: the reviewer types the value, and the service answers the arithmetic.
+
+    The phone number stands three times in this sample -- in a turn, inside the email address and
+    in the label's argument. Two of the three are occurrences: the one inside the email has a word
+    character against it, which is the rule that keeps `09123456789012` from holding a phone
+    number. Nothing was typed but the value itself, and both occurrences carry the one placeholder.
+    """
+    text = build_review_text(SAMPLE)
+
+    numbered = number_personal_data_spans(SAMPLE, {PHONE: "PHONE"})
+
+    assert len(find_occurrences(text, PHONE)) == 3
+    assert read_span_slices(numbered) == [PHONE, PHONE]
+    assert list_placeholders(numbered, PHONE) == {"<PHONE_1>"}
+    assert [span.id for span in numbered.spans] == [1, 2]
+
+
+def test_a_value_inside_a_longer_one_is_dropped_with_nothing_on_the_page_asking() -> (
+    None
+):
+    """The containment rule, applied unconditionally -- which is why the `auto` box could go.
+
+    The street inside the address: claimed on its own it earns a span, because it is inside
+    nothing. Claimed beside the address it does not. Neither answer is the caller's to choose, so
+    there is nothing left for a tick box to turn off.
+
+    **And it is why a caller sends what it kept rather than everything it was told.** A reviewer
+    who unticks the address and keeps the street is asking for the street to come out; sending
+    both puts the street back inside a longer span nobody is replacing, and it ships in the clear.
+    The box the labelling page lost carried that scoping, and this is where it went.
+    """
+    street = "Lê Lợi"
+
+    alone = number_personal_data_spans(SAMPLE, {street: "NAME"})
+    inside_one = number_personal_data_spans(
+        SAMPLE, {ADDRESS: "ADDRESS", street: "NAME"}
+    )
+
+    assert street in ADDRESS
+    assert read_span_slices(alone) == [street]
+    assert read_span_slices(inside_one) == [ADDRESS]
+
+
+def test_saying_a_value_is_a_different_kind_renumbers_it() -> None:
+    """`<CLASS_N>` counts per class, so what a value is decides what stands in for it.
+
+    Within a class the number is first appearance in the text, which is why calling the email a
+    phone number makes it the *second* one: the turn says the number before it says the address.
+    """
+    text = build_review_text(SAMPLE)
+
+    both_phones = number_personal_data_spans(SAMPLE, {PHONE: "PHONE", EMAIL: "PHONE"})
+    reclassed = number_personal_data_spans(SAMPLE, {PHONE: "PHONE", EMAIL: "EMAIL"})
+
+    assert text.index(PHONE) < text.index(EMAIL)
+    assert list_placeholders(both_phones, PHONE) == {"<PHONE_1>"}
+    assert list_placeholders(both_phones, EMAIL) == {"<PHONE_2>"}
+    assert list_placeholders(reclassed, EMAIL) == {"<EMAIL_1>"}
+    assert list_placeholders(reclassed, PHONE) == {"<PHONE_1>"}
+
+
+def test_a_value_the_text_does_not_hold_is_left_out_rather_than_refused() -> None:
+    """A reviewer halfway through typing a value is not an error, and gets no offset either.
+
+    Left out of `claims` as well as of `spans`, because a claim is what the outcome is measured
+    against: one nothing could ever replace would hold every record back for good.
+    """
+    numbered = number_personal_data_spans(
+        SAMPLE, {PHONE: "PHONE", "": "EMAIL", "khong-o-trong-van-ban": "NAME"}
+    )
+
+    assert [value for _, value in numbered.claims] == [PHONE]
+    assert read_span_slices(numbered) == [PHONE, PHONE]
+
+
+def test_nothing_claimed_is_no_span_and_the_text_still_comes_back() -> None:
+    """A reviewer who unticked everything asked for nothing to be replaced, not for an error.
+
+    The text still comes back, because it is the frame of reference every offset indexes and the
+    thing on the screen.
+    """
+    numbered = number_personal_data_spans(SAMPLE, {})
+
+    assert numbered.claims == ()
+    assert numbered.spans == ()
+    assert numbered.review_text == build_review_text(SAMPLE)
+
+
+def test_the_classes_offered_are_the_scans_own_in_the_order_that_numbers_them() -> None:
+    """What a reviewer picks from. A list written anywhere else is a second declaration of it.
+
+    `SCANS` and not a parameter: a scan is a Python callable, so there is no request that could
+    carry one, and a parameter no caller can reach is a seam that only looks like a choice.
+    """
+    assert list_personal_data_classes() == tuple(name for name, _ in SCANS)
+    assert list_personal_data_classes() == PiiRuleDetector(SCANS).classes
 
 
 # ----------------------------------------------------------------- the copy and the outcome

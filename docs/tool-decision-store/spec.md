@@ -341,11 +341,12 @@ result and is the only table anything is ever exported from.
       did and neither is asked from here. They come back when there is something for a reviewer
       to *do* with what they report; until then they are two calls per sample buying a line that
       reads *nothing to report*.
-    - **The replacement is not a step.** A span the reviewer keeps is a value that has to come
-      out, so it comes out as they tick: unticking a span, moving an offset or adding a row makes
-      the copy again by itself, and a copy that is wrong until somebody presses a button is a copy
-      that ships wrong. An answer that arrives after a newer one is dropped rather than painted,
-      because it is the copy of spans that are no longer on the screen.
+    - **The replacement is not a step.** A value the reviewer keeps is a value that has to come
+      out, so it comes out as they tick: unticking a value, saying it is a different kind or adding
+      one the scan missed makes the copy again by itself, and a copy that is wrong until somebody
+      presses a button is a copy that ships wrong. An answer that arrives after a newer one is
+      dropped rather than painted, because it is the copy of values that are no longer on the
+      screen.
 36. **The checks are three columns: the check, the model that answers it, and what it said.** The
     middle one is the point — the model a check spends sits on that check's own row. A picker
     somewhere further down the page is one nobody finds, and a run that stops on *tick a verifier
@@ -355,7 +356,9 @@ result and is the only table anything is ever exported from.
       panel actually say* is the question that panel exists to answer. The personal-data routes'
       does not: what a reviewer needs from those is the text, not the keys it came wrapped in.
 37. **The reviewer's own two answers are the only required input.** The data panel lists the
-    detected spans with a keep tick each; the label panel carries *correct* or *modify*, the three
+    claimed **values** with a keep tick each — and a box to type one the scan missed, which is the
+    one field on that panel: where a value stands, how many times and which `<CLASS_N>` it gets are
+    the service's answers, so there is no offset to type; the label panel carries *correct* or *modify*, the three
     editable texts behind *modify*, and a tick for every declared facet. Nothing else on the screen
     is a field.
     - **What the data panel shows is the review text, as a text**: one string, with the line breaks
