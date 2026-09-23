@@ -34,6 +34,11 @@ dependencies = [
     "uvicorn>=0.52.4",
 ]
 
+[project.scripts]
+# The other half of declaring `uvicorn`: an install that has something to run the app with,
+# and no way to say so, is one a deployment still has to be told the import path of.
+dataforce = "dataforce.edge.main:serve"
+
 [project.optional-dependencies]
 # Only the sync imports this, and only inside the function that builds a client -- so the
 # pipeline installs and `make check` runs with no annotation tool anywhere. No route reaches

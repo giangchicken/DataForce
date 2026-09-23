@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 from agent_toolkit.llm import set_config_resolver
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import InvalidRequestError
 
 from dataforce.edge.database import DEFAULT_STORE_FILE, db
 from dataforce.edge.main import UI, create_app
@@ -46,6 +47,7 @@ from dataforce.profile.tool_decision.schema import (
 )
 from dataforce.profile.tool_decision.utils import build_review_text
 from dataforce.tables import Base
+from tests.conftest import attach
 
 BASE = "/text2text/tool-decision"
 
@@ -101,20 +103,35 @@ DRAWN_MODELS = ("DeepSeek-V4-Flash", "bge-m3", "gemma-4-31B-it", "sft-tool-decis
 # The one body that arrives from another route: the detect answer, with the spans as a reviewer
 # left them. Written out here rather than fetched, so this test drives one route.
 REVIEW_TEXT = f"user: số anh là {PHONE}."
+# The turn the number stands in, and where it stands **in that turn**. A span's offsets index the
+# field its `path` names and never the review text: the text is a rendering, it does not show
+# every string a record holds, and the two do not carry the same occurrences of a value.
+TURN = str(SAMPLE["messages"][0]["content"])
 DETECTED: Mapping[str, Any] = {
     "review_text": REVIEW_TEXT,
     "claims": [["PHONE", PHONE]],
     "spans": [
         {
             "id": 1,
-            "start": REVIEW_TEXT.index(PHONE),
-            "end": REVIEW_TEXT.index(PHONE) + len(PHONE),
+            "path": ["messages", 0, "content"],
+            "start": TURN.index(PHONE),
+            "end": TURN.index(PHONE) + len(PHONE),
             "personal_data_class": "PHONE",
             "placeholder": "<PHONE_1>",
             "reason": "khách tự cho số của mình",
         }
     ],
 }
+
+
+def read_span(record: Mapping[str, Any], span: Mapping[str, Any]) -> str:
+    """What one span's offsets read, in the string its `path` names."""
+    node: Any = record
+    for step in span["path"]:
+        node = node[step]
+    said: str = node
+    return said[span["start"] : span["end"]]
+
 
 # Where each `complete` this service calls is bound. One per step that asks a model, because that
 # is the seam a stub replaces -- there is no single import to patch.
@@ -305,7 +322,8 @@ def test_the_scan_confirms_what_the_verifier_confirms(
 
     answer = resp.json()
     span = answer["spans"][0]
-    assert answer["review_text"][span["start"] : span["end"]] == PHONE
+    assert span["path"] == ["messages", 0, "content"]
+    assert read_span(SAMPLE, span) == PHONE
     assert span["placeholder"] == "<PHONE_1>"
     assert span["reason"] == "số của khách"
 
@@ -388,9 +406,13 @@ def test_the_spans_route_numbers_the_values_it_is_handed_and_calls_no_model(
     answer = resp.json()
     assert answer["review_text"] == build_review_text(called)
     assert answer["claims"] == [["PHONE", PHONE]]
-    assert [
-        answer["review_text"][span["start"] : span["end"]] for span in answer["spans"]
-    ] == [PHONE, PHONE]
+    # One in the turn and one in the label's argument, each read in the field it is in. The value
+    # stands twice and one placeholder covers both, which is what co-referent means here.
+    assert [read_span(called, span) for span in answer["spans"]] == [PHONE, PHONE]
+    assert [span["path"] for span in answer["spans"]] == [
+        ["messages", 0, "content"],
+        ["label", 0, "arguments", "ma_khach"],
+    ]
     assert {span["placeholder"] for span in answer["spans"]} == {"<PHONE_1>"}
 
 
@@ -442,18 +464,16 @@ def test_the_values_a_reviewer_sent_are_not_a_key_of_the_record(
     assert resp.json()["review_text"] == build_review_text(dict(SAMPLE))
 
 
-def test_the_spans_route_answers_over_a_deployment_with_no_database(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+def test_the_spans_route_never_reaches_the_database(
+    unreachable: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`no_endpoints` leaves the store off, which is the state the review runs in.
-
-    Stated as a test rather than left to the others passing: a route that opened a session would
-    503 here, and this is the one route the page calls while somebody is still typing.
+    """Stated as a test rather than left to the others passing: a route that opened a session
+    would 503 against a database this one cannot reach, and this is the one route the page calls
+    while somebody is still typing.
     """
     forbid_model_calls(monkeypatch)
-    assert db.open_engine() is None
 
-    resp = client.post(
+    resp = unreachable.post(
         f"{BASE}/data-quality/personal-data/spans",
         json={**SAMPLE, "claimed": [["PHONE", PHONE]]},
     )
@@ -488,8 +508,10 @@ def test_the_redact_route_replaces_a_handed_back_value_in_every_field(
 ) -> None:
     """Where the record's three `new_` keys come from, and the reach `replace` does not have.
 
-    A span indexes `review_text`; the turns and the label are other strings, so this replaces by
-    value across the record. Its body carries no model either, so there is no name here to refuse.
+    A span names the field it is in and the offsets inside it, so this replaces **that stretch of
+    that string**. The record comes back whole: a field no span named is copied as it arrived, and
+    so is a corpus key this service never reads. Its body carries no model either, so there is no
+    name here to refuse.
     """
     forbid_model_calls(monkeypatch)
 
@@ -530,10 +552,30 @@ def test_the_redacted_record_comes_back_with_the_text_it_now_reads_as(
         **SAMPLE,
         "label": [{"name": "OpenTicket", "arguments": {"ma_khach": PHONE}}],
     }
+    # **Both places the number stands, because both are handed back.** A span names one stretch of
+    # one field, so the one in the turn says nothing about the one in the argument — under
+    # replacement by value the second came out for free, and that is exactly the freedom that made
+    # one occurrence unkeepable while another was kept.
+    both = {
+        **DETECTED,
+        "review_text": build_review_text(called),
+        "spans": [
+            DETECTED["spans"][0],
+            {
+                "id": 2,
+                "path": ["label", 0, "arguments", "ma_khach"],
+                "start": 0,
+                "end": len(PHONE),
+                "personal_data_class": "PHONE",
+                "placeholder": "<PHONE_1>",
+                "reason": "cùng số, chép vào lời gọi",
+            },
+        ],
+    }
 
     resp = client.post(
         f"{BASE}/data-quality/personal-data/redact",
-        json={**called, "detected": DETECTED},
+        json={**called, "detected": both},
     )
 
     text = resp.json()["review_text"]
@@ -775,6 +817,10 @@ def test_a_consensus_holding_no_call_answers_no_calls_and_keeps_every_word_of_it
     answer = resp.json()
     assert answer["llm"]["consensus"] == said
     assert answer["consensus_calls"] == []
+    # **And the answer says it answered.** No calls here is *the turn needs no tool*, which is an
+    # answer about this sample; no calls where nobody agreed is no answer at all. Off the calls
+    # alone the page cannot tell the two apart, and it refused to let anybody take the first.
+    assert answer["consensus_given"] is True
 
 
 def test_a_panel_of_none_asks_nothing_and_answers_nothing(
@@ -786,7 +832,12 @@ def test_a_panel_of_none_asks_nothing_and_answers_nothing(
     resp = client.post(f"{BASE}/ai-review", json=dict(SAMPLE))
 
     assert resp.status_code == 200
-    assert resp.json() == {"llm": None, "sft": None, "consensus_calls": []}
+    assert resp.json() == {
+        "llm": None,
+        "sft": None,
+        "consensus_calls": [],
+        "consensus_given": False,
+    }
 
 
 def test_the_review_s_declarations_are_not_keys_of_the_record(
@@ -917,19 +968,26 @@ LOOKED_UP = [{"name": "Lookup", "arguments": {"id": "KH-1"}}]
 
 
 @pytest.fixture
+def unreachable(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """The app over a database that is named and cannot be reached.
+
+    `client` is named for its model directory alone, which `create_app` reads once at startup --
+    so the app built here is the same one every other test gets, over a database it cannot use.
+    """
+    attach(monkeypatch, "postgresql+psycopg://user:pw@nosuchhost.invalid/db")
+    return TestClient(create_app(), raise_server_exceptions=False)
+
+
+@pytest.fixture
 def attached(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_endpoints: None
 ) -> Iterator[None]:
-    """A database of this test's own, attached the way a deployment attaches one.
+    """A database of this test's own, with its tables already made.
 
-    `no_endpoints` is named rather than left to run on its own: it clears
-    `DATAFORCE_DATABASE_URL`, and it has to do that before this sets it.
+    `a_database_of_this_test_s_own` hands every test a file under its own `tmp_path` already, so
+    what this adds is the tables, made ahead of the route rather than by it, and dropped after.
     """
-    monkeypatch.setenv(
-        "DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}"
-    )
     engine = db.open_engine()
-    assert engine is not None
     create_tables(engine)
 
     yield
@@ -978,23 +1036,23 @@ def store_a_corpus() -> None:
     )
 
 
-def test_the_statistics_say_what_to_set_where_no_database_is_attached(
-    client: TestClient,
+def test_the_statistics_refuse_a_database_they_cannot_reach(
+    unreachable: TestClient,
 ) -> None:
-    """503 rather than zeros: *a corpus with nothing in it* and *nothing was asked* are different
-    claims, and the detail names the variable so the message says what to set."""
-    resp = client.get(f"{BASE}/records/stats")
+    """503 rather than zeros: *a corpus with nothing in it* and *nothing could be asked* are
+    different claims, and only one of them is a number to plan a labelling day around."""
+    resp = unreachable.get(f"{BASE}/records/stats")
 
     assert resp.status_code == 503
-    assert "DATAFORCE_DATABASE_URL" in resp.json()["detail"]
+    assert "nosuchhost.invalid" in resp.json()["detail"]
 
 
-def test_no_other_route_is_affected_by_there_being_no_database(
-    client: TestClient,
+def test_no_other_route_is_affected_by_a_database_that_cannot_be_reached(
+    unreachable: TestClient,
 ) -> None:
     """The store is a place to put the result, never a dependency of the review."""
-    assert client.get(f"{BASE}/models").status_code == 200
-    assert client.get(f"{BASE}/").status_code == 200
+    assert unreachable.get(f"{BASE}/models").status_code == 200
+    assert unreachable.get(f"{BASE}/").status_code == 200
 
 
 def test_every_statistic_is_in_the_answer_over_rows_a_test_wrote(
@@ -1129,8 +1187,11 @@ POSTED_SCAN: Mapping[str, Any] = {
     "spans": [
         {
             "id": 1,
-            "start": SCAN_TEXT.index(POSTED_PHONE),
-            "end": SCAN_TEXT.index(POSTED_PHONE) + len(POSTED_PHONE),
+            # The turn the number stands in, and the offsets into **that** string. The review
+            # text above is what a reviewer read; it is not what the offsets index.
+            "path": ["messages", 0, "content"],
+            "start": POSTED_TURN.index(POSTED_PHONE),
+            "end": POSTED_TURN.index(POSTED_PHONE) + len(POSTED_PHONE),
             "personal_data_class": "PHONE",
             "placeholder": "<PHONE_1>",
             "reason": None,
@@ -1180,7 +1241,7 @@ def test_an_install_nobody_configured_takes_the_first_record(
     `chdir` keeps the file out of the repository, and is also what makes the assertion about it
     honest -- the default is resolved against the working directory.
     """
-    monkeypatch.delenv("DATAFORCE_DATABASE_URL", raising=False)
+    attach(monkeypatch, f"sqlite+pysqlite:///{tmp_path / DEFAULT_STORE_FILE}")
     monkeypatch.chdir(tmp_path)
 
     with TestClient(create_app()) as unconfigured:
@@ -1194,6 +1255,34 @@ def test_an_install_nobody_configured_takes_the_first_record(
     assert (tmp_path / DEFAULT_STORE_FILE).exists()
 
 
+def test_a_database_that_cannot_be_reached_is_said_at_startup_and_not_at_the_end_of_a_sample(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    no_endpoints: None,
+) -> None:
+    """What starting up buys, now that the tables are made on the way to every session.
+
+    It buys one line, and the line is the whole of it: a deployment whose database is behind a typo
+    or a firewall is told while somebody is still opening the page, rather than at the end of the
+    first sample they finish. So the line is what is asserted -- the app coming up proves nothing
+    here, because it comes up either way (`H-6`).
+    """
+    attach(monkeypatch, "postgresql+psycopg://user:pw@nosuchhost.invalid/db")
+
+    with TestClient(create_app()):
+        pass
+
+    said = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("{")
+    ]
+    unreachable = [one for one in said if one.get("event") == "store_unreachable"]
+    assert len(unreachable) == 1
+    assert unreachable[0]["describes"] == "postgresql \u00b7 nosuchhost.invalid/db"
+    assert "pw" not in json.dumps(unreachable[0])
+
+
 def test_a_database_that_cannot_be_reached_does_not_take_the_page_down(
     monkeypatch: pytest.MonkeyPatch, no_endpoints: None
 ) -> None:
@@ -1205,29 +1294,93 @@ def test_a_database_that_cannot_be_reached_does_not_take_the_page_down(
     result, so the one screen able to report the problem was the one the problem took away.
 
     Nothing is lost quietly for it: the write still refuses, because every route that stores
-    something opens its own session and finds the same thing.
+    something opens its own session and finds the same thing -- and it refuses in the service's own
+    words, which is what a 500 and a stack trace at the end of a finished review is not.
+
+    The refusal names the database and never the DSN, which here is the whole point of the
+    distinction: this DSN carries a password.
     """
-    monkeypatch.setenv(
-        "DATAFORCE_DATABASE_URL", "postgresql+psycopg://user:pw@nosuchhost.invalid/db"
-    )
+    attach(monkeypatch, "postgresql+psycopg://user:pw@nosuchhost.invalid/db")
 
     with TestClient(create_app(), raise_server_exceptions=False) as unreachable:
         assert unreachable.get("/health").status_code == 200
         assert unreachable.get("/ui/").status_code == 200
-        assert (
-            unreachable.post(f"{BASE}/records", json=build_review()).status_code == 500
+        refused = unreachable.post(f"{BASE}/records", json=build_review())
+
+    assert refused.status_code == 503
+    said = refused.json()["detail"]
+    assert "postgresql \u00b7 nosuchhost.invalid/db" in said
+    assert "pw" not in said
+    assert "[SQL:" not in refused.text
+    assert "[parameters:" not in refused.text
+
+
+def test_a_database_emptied_under_a_running_service_is_made_again_on_the_way_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_endpoints: None
+) -> None:
+    """A SQLite file can go out from under a live process, and the write after it still lands.
+
+    It is not a hypothetical: this suite deletes the default file in the checkout before every
+    test, so anyone who runs it beside a service of their own arrives here. What they used to get
+    was `500 Internal Server Error` at the end of a sample they had just finished reviewing, and
+    no way back but a restart -- because the tables were made once, at startup, and nothing made
+    them on the way to a session.
+
+    Nothing disposes the pool here, which is the whole of what this asserts. An unlinked file lives
+    on behind the connections holding it, so making the tables again is not enough on its own: it
+    would make them on the file nothing can find, answer 200, and lose the row when the process
+    ends. `store.exists()` is the check that the row went somewhere a reader can open.
+    """
+    store = tmp_path / "store.sqlite3"
+    attach(monkeypatch, f"sqlite+pysqlite:///{store}")
+
+    with TestClient(create_app(), raise_server_exceptions=False) as running:
+        assert running.post(f"{BASE}/records", json=build_review()).status_code == 200
+
+        store.unlink()
+
+        again = running.post(f"{BASE}/records", json=build_review())
+
+    assert again.status_code == 200
+    assert store.exists()
+
+
+def test_a_fault_in_the_sql_written_here_is_not_a_database_to_restart(
+    attached: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The boundary the refusal is registered on: `DBAPIError`, and not its parent.
+
+    *The database answered badly* is a reviewer's problem to act on. *This service asked badly* is
+    a bug in this repository, and answering one with a database to restart would send somebody to
+    read their deployment for a fault that is in this file.
+    """
+
+    def ask_badly(*read: object, **named: object) -> None:
+        raise InvalidRequestError(
+            "this service asked for something that is not a thing"
         )
 
+    monkeypatch.setattr(route, "select_stored_samples", ask_badly)
 
-def test_a_record_says_where_to_attach_a_database_rather_than_dropping_it(
-    client: TestClient,
+    with TestClient(create_app(), raise_server_exceptions=False) as running:
+        assert running.get(f"{BASE}/records").status_code == 500
+
+
+def test_a_record_names_the_database_it_could_not_reach_rather_than_dropping_itself(
+    unreachable: TestClient,
 ) -> None:
     """The store is a place to put the result, never a dependency of the review -- so the refusal
-    names the variable and the reviewer still has every answer on their screen."""
-    resp = client.post(f"{BASE}/records", json=build_review())
+    names the database and the variable, and the reviewer still has every answer on their screen.
+
+    The DSN carries a password and the statement carries the sample, so neither reaches the page.
+    """
+    resp = unreachable.post(f"{BASE}/records", json=build_review())
 
     assert resp.status_code == 503
-    assert "DATAFORCE_DATABASE_URL" in resp.json()["detail"]
+    said = resp.json()["detail"]
+    assert "nosuchhost.invalid" in said
+    assert "pw" not in said
+    assert "[SQL:" not in resp.text and "[parameters:" not in resp.text
 
 
 def test_a_finished_record_lands_in_both_tables_and_the_answer_says_so(
@@ -1366,9 +1519,93 @@ def test_the_stored_row_carries_what_ships_and_the_facets_it_was_ticked_with(
 
     counted = client.get(f"{BASE}/records/stats").json()
     assert counted["counted_distribution_by_facet"]["domain"] == {"customer_care": 1}
-    assert counted["counted_distribution_by_facet"]["personal_data"] == {'["PHONE"]': 1}
     assert counted["counted_distribution_by_facet"]["number_turns"] == {"1": 1}
     assert counted["tool_call_counts"] == {"OpenTicket": 1}
+    # **A class, not a combination.** `personal_data` and `call_trigger` hold a list, and counted
+    # whole they draw a bar per set -- `["FIRST_NAME", "NAME"]` beside `["FIRST_NAME"]` -- which
+    # answers nothing a reviewer asks of the panel.
+    assert counted["counted_distribution_by_facet"]["personal_data"] == {"PHONE": 1}
+    assert counted["counted_distribution_by_facet"]["call_trigger"] == {
+        "user_utterance": 1
+    }
+
+
+def test_a_facet_a_row_answered_with_nothing_is_counted_under_a_name_of_its_own(
+    client: TestClient, attached: None
+) -> None:
+    """A row holding no personal data still answered, and *how many hold none* is the first thing
+    asked of that panel. Exploded and left at that, an empty list falls out of the count and the
+    chart quietly describes a smaller corpus than the one stored."""
+    ticked = dict(TICKED) | {"call_trigger": []}
+    client.post(
+        f"{BASE}/records",
+        json=build_review(
+            personal_data=dict(POSTED_SCAN) | {"spans": [], "outcome": "reported"},
+            new_messages=[{"role": "user", "content": POSTED_TURN}],
+            **{"class": ticked},
+        ),
+    )
+
+    counted = client.get(f"{BASE}/records/stats").json()
+
+    assert counted["counted_distribution_by_facet"]["personal_data"] == {"none": 1}
+    assert counted["counted_distribution_by_facet"]["call_trigger"] == {"none": 1}
+
+
+def test_two_rows_counting_one_class_each_are_counted_once_each(
+    client: TestClient, attached: None
+) -> None:
+    """Two classes on one row is that row answering twice, and both answers are counted."""
+    both = dict(POSTED_SCAN) | {
+        "claims": [["PHONE", POSTED_PHONE], ["NAME", "Nam"]],
+        "spans": [
+            *POSTED_SCAN["spans"],
+            {
+                **POSTED_SCAN["spans"][0],
+                "id": 2,
+                "personal_data_class": "NAME",
+                "placeholder": "<NAME_1>",
+                "start": POSTED_TURN.index("anh"),
+                "end": POSTED_TURN.index("anh") + 3,
+            },
+        ],
+    }
+    client.post(
+        f"{BASE}/records",
+        json=build_review(
+            personal_data=both,
+            new_messages=[
+                {"role": "user", "content": REDACTED_TURN.replace("anh", "<NAME_1>")}
+            ],
+        ),
+    )
+
+    counted = client.get(f"{BASE}/records/stats").json()
+
+    assert counted["counted_distribution_by_facet"]["personal_data"] == {
+        "NAME": 1,
+        "PHONE": 1,
+    }
+
+
+def test_the_page_is_served_so_that_a_reload_is_a_reload(client: TestClient) -> None:
+    """`no-cache` on `ui/`, because an edit nobody on the page can see is a bug report about the
+    page.
+
+    It is *ask before you use it*, not *do not keep it*: the `ETag` `StaticFiles` already answers
+    turns the ask into a `304`, so the cost is one conditional request per file. Without it a
+    browser serves an ES module out of its own cache for as long as its heuristic likes.
+    """
+    resp = client.get("/ui/app.js")
+
+    assert resp.status_code == 200
+    assert resp.headers["cache-control"] == "no-cache"
+    assert resp.headers["etag"]
+
+    again = client.get("/ui/app.js", headers={"If-None-Match": resp.headers["etag"]})
+
+    assert again.status_code == 304
+    assert again.headers["cache-control"] == "no-cache"
 
 
 def test_a_sample_nobody_scanned_names_the_step_and_writes_nothing(
@@ -1407,6 +1644,86 @@ def test_a_confirmed_value_still_in_what_ships_names_the_redaction_and_writes_no
         "tool_decision_record": 0,
         "tool_decision_dataset": 0,
     }
+
+
+def test_a_place_the_reviewer_ticked_off_is_not_the_redaction_failing(
+    client: TestClient, attached: None
+) -> None:
+    """A value kept where it stands once and left standing where it stands again.
+
+    The precondition used to read *is this value a substring of what ships*, which was exactly
+    what the rewrite did while the rewrite was by value. It is per span now, so the same reading
+    refuses the ordinary case: two occurrences, one handed back, and the other left in the text on
+    purpose. What the guard counts is the placeholder the span put there.
+    """
+    twice = f"Chào anh {POSTED_PHONE}, số cũ là {POSTED_PHONE}"
+    one_left = f"Chào anh <PHONE_1>, số cũ là {POSTED_PHONE}"
+    review = build_review(
+        messages=[{"role": "user", "content": twice}],
+        new_messages=[{"role": "user", "content": one_left}],
+        personal_data=dict(POSTED_SCAN) | {"outcome": "withheld"},
+    )
+
+    assert client.post(f"{BASE}/records", json=review).status_code == 200
+
+    # And the half that must still bite: the same record with nothing replaced at all.
+    nothing_done = build_review(
+        messages=[{"role": "user", "content": twice}],
+        new_messages=[{"role": "user", "content": twice}],
+        personal_data=dict(POSTED_SCAN) | {"outcome": "withheld"},
+    )
+    refused = client.post(f"{BASE}/records", json=nothing_done)
+
+    assert refused.status_code == 422
+    assert "span 1 (PHONE)" in refused.json()["detail"]
+
+
+def test_the_placeholder_is_counted_in_the_field_the_span_names(
+    client: TestClient, attached: None
+) -> None:
+    """A copy that replaced somewhere else is not a copy that replaced here.
+
+    The old reading searched the whole shipped sample as one text, and a span's offsets indexed a
+    text that was not any of its fields. Both are the same mistake: a placeholder standing in the
+    label says nothing about the turn the span names, and a corpus sold on it ships the number.
+    """
+    review = build_review(
+        new_messages=[{"role": "user", "content": POSTED_TURN}],
+        new_label=[{"name": "OpenTicket", "arguments": {"sdt": "<PHONE_1>"}}],
+    )
+
+    resp = client.post(f"{BASE}/records", json=review)
+
+    assert resp.status_code == 422
+    assert "span 1 (PHONE)" in resp.json()["detail"]
+
+
+def test_a_rewrite_that_did_half_the_places_is_refused_for_the_half_it_missed(
+    client: TestClient, attached: None
+) -> None:
+    """Three spans of one value in one string and two placeholders in what ships.
+
+    The count is what makes this readable at all: every one of the three carries `<PHONE_1>`, so
+    asking whether the placeholder is *there* would clear a copy still holding the number.
+    """
+    thrice = f"{POSTED_PHONE} rồi {POSTED_PHONE} rồi {POSTED_PHONE}"
+    two_done = f"<PHONE_1> rồi <PHONE_1> rồi {POSTED_PHONE}"
+    spans = [
+        dict(POSTED_SCAN["spans"][0])
+        | {"id": n + 1, "start": at, "end": at + len(POSTED_PHONE)}
+        for n, at in enumerate(range(0, len(thrice), len(POSTED_PHONE) + len(" rồi ")))
+    ]
+    review = build_review(
+        messages=[{"role": "user", "content": thrice}],
+        new_messages=[{"role": "user", "content": two_done}],
+        personal_data=dict(POSTED_SCAN) | {"spans": spans, "outcome": "withheld"},
+    )
+
+    resp = client.post(f"{BASE}/records", json=review)
+
+    assert resp.status_code == 422
+    assert "span 3 (PHONE)" in resp.json()["detail"]
+    assert "span 1" not in resp.json()["detail"]
 
 
 def test_a_declared_facet_nobody_ticked_is_named_rather_than_becoming_a_null_column(

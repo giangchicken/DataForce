@@ -114,6 +114,7 @@ work. Node 22 is what the linker in `T1` is written against.
 | `T22` | A label is written on a form, not in JSON |
 | `T23` | The record is confirmed as a table |
 | `T24` | The dataset sheet says what the database holds |
+| `T26` | One occurrence is one tick |
 
 | | Phase 4 — the form |
 |---|---|
@@ -653,6 +654,69 @@ unconditionally, once by answering the unparsed text as a named call.
 
 **What a reader sees change.** Nothing yet. `T21` is what draws it.
 
+**The picker was closed, and nothing needed it to be.** Card 1 offered the four kinds
+`/data-quality/personal-data/classes` declares and no way to say anything else, so a reviewer who
+found an address, a bank account or a given name filed it as the nearest declared kind or left it
+in the text — un-redacted, which is the one outcome this card exists to prevent. Measured before
+changing anything: `order_claims_by_class` already puts a kind the scans do not declare *after* the
+declared ones and `find_and_number_spans` redacts it as `<FIRST_NAME_1>` like any other, and both
+docstrings say so. The service had never refused one. The picker is a `<datalist>` now — pick or
+type — offering what the service declares plus what this sample already carries, and what is typed
+is written the way a placeholder is, so `first name` and `FIRST_NAME` are one kind rather than two
+rows of the corpus's own count. The `nothing said what a value may be` refusal went with it: a
+deployment that declares no kinds now offers what the scan itself claimed and still takes one typed.
+
+**Both places a kind is said, because one of them alone is a trap.** The kind on a row of the keep
+table was the same closed picker, and leaving it closed would have left a hole with no way out of
+it: a value the scan claimed can only be moved to a kind something else on the sample already
+carries, and there is no way off the table — unticking leaves the value **in the text**, and
+re-adding it is refused as already claimed. So a number the scan read as a phone and a reviewer
+reads as an account number shipped as a phone. A kind is named once and offered in both.
+
+**The first shape of this was an `<input list>`, and it was wrong.** It read well and it was one
+control — but a `<datalist>` popup is drawn and **positioned by the browser**, and it came up over
+the other pane, two hundred pixels from the box it belonged to. Nothing in `style.css` touches it:
+there is no rule for `datalist` or `option` and no transform anywhere, so this is not a bug the page
+can fix. It is the one widget on this card the page can neither place, style nor check, on a screen
+whose whole rule is that every control is the page's own. So the kind is named the way a **domain**
+is named — `kind-new` and `kind-add` beside the list, the pattern this page already runs and this
+spec already blesses — and the picker is a `<select>` the page fills in both places.
+
+**Where a span stands is on the screen, and on the table that holds the decision.** `×3` beside a
+value says it occurs three times and nothing about *which* three, which is not enough to check a
+redaction: `Nam` inside `nam` inside a longer word is exactly the case the containment rule exists
+for, and a reviewer could not see it. The spans were first put in the disclosure under the card,
+which was the wrong place — a fact a reviewer needs to make the decision is not *working shown*, it
+is part of the decision. So `#scan-raw` is gone and its columns are on the keep table: each place a
+value stands is a row under it, and the value's tick, kind and text are cells spanning those rows.
+This does not reopen Requirement 28 — what went was **editing** an offset, and the three controls
+that did it are still gone. These are cells.
+
+**Why the tick spans the rows instead of sitting on each, measured rather than argued.** Keeping
+occurrence 2 of a value and not occurrence 1 is a real thing to want: `Nam` the given name and `Nam`
+in *miền Nam* are different, and a corpus that cannot tell them apart over-redacts. It is not
+expressible here, and the reason is not the page. `redact_personal_data` builds `{value:
+placeholder}` from the spans and calls `replace_node` over **every field of the record** — so a span
+dropped from what is handed to it changes nothing. Measured: a text with `Nam` three times, span
+`id=2` removed before `/redact`, and the answer came back with all three replaced. It cannot be
+otherwise while the offsets index the **review text** and what ships is `messages` and `label`,
+which are other strings — and `redact_personal_data`'s own docstring rules out the inverse, *there
+is no way back from a review text to a sample*. Per-occurrence keeping is a different contract for
+`/spans` and `/redact`, with spans located per field and the renumbering staying on the service's
+side. It is named here and not built.
+
+**Four defects re-injected, each red**: a named kind not offered; a kind named twice offered twice;
+a kind not written the way a placeholder is; and the offsets not shown.
+
+**What is not built, and why it is worth building.** The box does not offer kinds the **corpus**
+carries, only this sample's — so the second reviewer to meet a given name retypes `FIRST_NAME` and
+one of them will write `FIRSTNAME`. `domain` solved exactly this by reading its values back off
+`counted_distribution_by_facet`, and the same reading is available here. It is not done because
+those keys are JSON text and `ui/` may parse JSON in three modules only, each reading something
+that is JSON by declaration — a fourth would weaken a sweep worth more than the convenience. The
+right shape is a field on the statistics answer naming the kinds the corpus holds, which is the
+service's reading to do.
+
 ### T20 · The spans are approved, and only then are the reviewers asked
 
 **Goal.** Two buttons. The panel is handed the **redacted** record.
@@ -849,6 +913,22 @@ ticked. Checked in a browser at 1440×900 and 390×844: no console errors, no pa
 its arguments as JSON; never disabling the act that takes a proposal that does not exist; storing
 what arrived when the reviewer took the panel's answer; seeding the editor from what arrived; and
 putting the percentage back into the card head.
+
+**The second of those five was right about the rule and wrong about how to read it.** *A proposal
+that does not exist* was read off `consensus_calls` being empty — and empty is two answers. A panel
+that agreed the turn needs **no tool** comes back with no calls, exactly like a panel that agreed on
+nothing; `consensus` is `str | None` for precisely this reason and its own field says so, *None
+where it gave none defensibly, which is not the same as an empty answer*. So the card refused the
+one answer a tool-calling corpus is shortest of, while drawing *No call — that is an answer, not a
+skipped row* two lines above the dead button. The page contradicted itself on screen and every
+check passed.
+
+The fact is now a field of its own — `consensus_given` on `ReviewerVerdicts`, derived like
+`consensus_calls` — and the page reads that boolean. It could not read `consensus` instead:
+`tests/ui/test_page.py` sweeps `ui/` for any reach at that text, because reading a juror's prose is
+a second definition of what a call is, and the sweep is worth more than the shortcut. Reproved: the
+route answering the calls again under the new name turns the route's test red, and the card drawing
+*no call* under *nothing to take* turns the page's red.
 
 ### T22 · A label is written on a form, not in JSON
 
@@ -1052,6 +1132,36 @@ route and is in none of this task's criteria.
 database; a stored row's label drawn some other way; the catalog left out of an opened row; `.rows`
 put back on the table; and the statistics put back under the guide.
 
+**Read on the screen afterwards, and cut.** The panel had been built as *every figure the route
+answers*, which is a different thing from *what a reviewer reads*. Three cuts, and they are
+Requirements 18 and 19: the per-facet count tables became bar charts ranked by count, because a
+column of numbers beside a sheet that already lists every row is the same data asked for twice;
+`domain` and `call_trigger` came out of that list, because the matrix above them is the cross of
+exactly those two and the panel was printing both axes again underneath it; and *Tools called*
+became a top ten with the tail said in a line. The tail is the part worth naming — `tool_call_counts`
+carries every offered tool, a never-called one at `0`, and **the zeros are the finding**, so a
+ranking that silently dropped them would delete the one statistic that says what this corpus cannot
+teach. It says `2 of 14 tools are never called` instead. **Six defects were re-injected and each
+turned its check red**: the two matrix facets listed again; no cut at all; a silent cut; the
+never-called count dropped; a nought drawn unmarked; and every bar filling its track.
+
+**Read again, and two more.** The per-facet bars became **vertical frequency columns**: a
+distribution laid on its side reads as a ranking, and these are not rankings — they are how the
+corpus is spread over a facet's values. Which makes the axis matter, so the columns stand in the
+order the page **declares** the values and a declared value nothing carries stands at nought. That
+is the matrix's own rule brought down one level: `ambiguous` grouped by the database reads HIGH,
+LOW, MED, and a corpus with no MED in it looks like a corpus where MED does not exist. The tools
+chart stays horizontal, and the reason is its labels: a top-ten of `CalculateRoots_80d` and
+`GetTemperature_020` under 56px columns is unreadable, and a ranking is what it is.
+
+**And a stored row shuts on a second press.** It only ever opened — pressing the row again re-asked
+the route and redrew the same conversation under the table, so the only way back was to scroll past
+something already read. It toggles now, marks the row it came out of while it is open, asks the
+store nothing to close, and puts the line over the table back to how much is held. Six more defects
+were re-injected and each turned its check red: a second press re-opening; the axis read off the
+rows instead of the page's list; every column filling its track; the panel read off its calls again;
+the route answering the calls under the new name; and *no call* drawn under *nothing to take*.
+
 ---
 
 ### What the review of `T22`–`T24` measured, and what it cost
@@ -1143,6 +1253,105 @@ written above.
   list of calls is said as that rather than drawn as one* while `conversation.js` still implements
   it — and implements it better than the clause described, since it now points at the catalog's own
   warning. The clause is back, with the box taken out of it.
+
+---
+
+### T26 · One occurrence is one tick
+
+**Goal.** A reviewer ticks the places a value stands, not the value, and the tick is obeyed.
+
+**Context.** `T25` put every place a value stands on the table and left one tick across all of
+them, with a paragraph over `paintCard` explaining why it could not be otherwise: replacement was
+by **value** over every field of the record, so dropping a span from what was handed to `/redact`
+changed the answer not at all. `T19` of `docs/tool-decision-pipeline/plan.md` took that apart on
+the service's side — a span carries the `path` to the one string it is in, and replacement is per
+span — and the page is the other half. Until it lands, `Nam` the given name and `Nam` in
+*miền Nam* are three rows a reviewer can see and cannot answer separately.
+
+**Approach.** `held.keeps` stops being keyed by value and is keyed by a place — the span's `path`
+and its two offsets — with absence meaning *kept*, so a span the service has just renumbered needs
+no entry to be ticked. The checkbox moves out of the value's row-spanning cell and onto each row;
+what kind a value is stays one decision and goes on spanning them. `handedBack` drops the spans
+ticked off, which is the whole of what makes the tick mean anything. **A tick asks for nothing to
+be numbered again**: `/spans` answers about values and cannot be asked for *this value except at
+offset 42*, so the tick changes no request — it changes what is handed back. The row gains the
+field its offsets index, because two places at offset `0` of two different fields are one row drawn
+twice without it.
+
+**Acceptance criteria.**
+- One tick per row, and unticking one hands back that span and no other.
+- A tick posts no `/spans` call; a class change and an added value still do.
+- A value ticked off everywhere it stands hands back no span, and stays in `claims` — so `outcome`
+  still reads `withheld` rather than turning clean.
+- Each row names the field its offsets index, and a row ticked off is struck through rather than
+  dropped off the table.
+- `unreplaced()` flags a value only where **every** place it stands was kept and the copy still
+  holds it — otherwise the ordinary case, a value kept in one place and left in another, would
+  block the panel over a copy that is exactly what the reviewer asked for.
+
+**What it costs.** Two things, both in `spec.md` Requirement 27 rather than here. A value kept in
+one place and left in another stays in the record at the second, and where those two are one entity
+that is a re-identification path — the reviewer ticking the place off is the one asserting they are
+not the same thing. And the containment rule is measured over the values the service was handed,
+not over the places still ticked, so a place left in the text does not give a value sitting inside
+it a span of its own. Requirement 28's old reason for renumbering on every tick — *untick an email
+and the phone number inside it is what is left to hand back* — goes with it, and what it buys is a
+placeholder that no longer moves under a reviewer's eye each time somebody unticks a row.
+
+**Source.** `spec.md` Requirements 27, 28, 29; `docs/tool-decision-pipeline/plan.md` `T19`.
+
+**Verify.** `make check`, then the three-occurrence case by hand on <http://localhost:8000/ui/>.
+
+**What the first real sample through it caught.** Three, and the first of them stopped the record
+landing at all.
+
+- **The store's precondition was still reading the old contract, and refused the record.** It
+  sliced `review_text[start:end]` for the value — offsets that index a field, read against the
+  text — and then asked whether that string is a substring of what ships. Measured on the airline
+  sample: the one span the reviewer **kept** was reported as surviving, because the wrong slice
+  happened to occur in what ships, and the two they ticked off left `Nam` in the catalog, which the
+  old reading calls the redaction failing. Both halves are the same mistake: the guard mirrored a
+  rewrite that was by value, and the rewrite is per span. It counts placeholders in the one string
+  a span's `path` names now. What that reading cannot see it gained a second half for: nothing on a
+  span says what a reviewer typed into the label after the rewrite, and the form they type it on is
+  seeded from what arrived — so a claim standing in a shipped part oftener than in the one that
+  arrived is the same refusal. `docs/tool-decision-store/spec.md` Requirement 16 is rewritten to
+  both, and what neither refuses is stated there.
+- **`new_tools: null` is not a defect, and the record says so on purpose.** A `new_` key is `null`
+  where no new version was made, and the reviewer ticking off the two catalog occurrences is
+  exactly that: the catalog ships as it arrived. The store reads a null `new_` key as *what
+  arrived ships*, so nothing is lost by it.
+- **The catalog pane showed a tool's name and description and not its parameters.** The scan found
+  a value in `tools[4].parameters.properties.nationality.description`, card 1 drew that path on a
+  row, and the sample pane never showed the string. Drawn now, each parameter with its kind, its
+  description and whether the tool can be called without it.
+
+**And one the screen was arguing about rather than showing.** The kind and the value spanned their
+rows, and two of three rows read as cells missing. Merged, centred, ruled off — it went on reading
+that way, because a cell of its own height *is* a hole in two rows however it is styled. They are
+said on every row now, and are the same on each because they are one decision: one value is one
+kind wherever it stands, and `<CLASS_N>` is one placeholder per distinct value, so a per-row kind
+would be two placeholders for one thing and a reader of the corpus could no longer tell they are
+the same person. The three pickers carry the same value, so moving any of them moves the kind.
+
+**What looking at it in a browser caught, which nothing in the suite could.** The stub in
+`tests/ui/` answers *is this in the markup*; it cannot answer *is it on the screen*. Driven in a
+real browser over canned answers, three things were wrong that every check passed:
+
+- **The `where` column pushed `start` and `end` off the table.** A path is one token as far as a
+  browser is concerned, so `tools[0].function.parameters.properties.nationality.description` set
+  the table's width and the two columns the span is *about* were outside the visible area. It may
+  break now.
+- **The value column squeezed a phone number onto two lines.** A ten-digit number has no break
+  opportunity, so it broke mid-digit. The column has a floor.
+- **The frequency charts had four bars filling a whole pane**, their counts an inch above them, and
+  a gap between bars that said something the data does not. Requirement 18 now says what a
+  frequency chart is, and the count sits on its own bar.
+
+A browser is not in the suite and this did not put one there: `spec.md` Requirement 6 is *no build
+step, no npm, no lockfile*, and `test_page.py` says in as many words that this repository installs
+no browser. What was used is a throwaway environment outside the tree, driving the page the
+service was already serving.
 
 ---
 

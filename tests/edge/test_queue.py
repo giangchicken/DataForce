@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from dataforce.edge.database import NO_STORE, db
+from dataforce.edge.database import DEFAULT_STORE_FILE, Database, db
 from dataforce.edge.main import create_app
 from dataforce.profile.tool_decision.sample_building import (
     PREVIEW_CHARACTERS,
@@ -28,6 +28,7 @@ from dataforce.profile.tool_decision.schema import (
     ToolDecisionSample,
 )
 from dataforce.tables import Base
+from tests.conftest import attach
 from tests.edge.test_endpoints import BASE, build_review
 
 ASKED = {"role": "user", "content": "cho tôi xem hóa đơn tháng này"}
@@ -45,17 +46,11 @@ def labelling(
 ) -> Iterator[TestClient]:
     """The app over a database of this test's own.
 
-    `no_endpoints` is named rather than left to run on its own: it sets `DATAFORCE_DATABASE_URL`
-    to `off`, and it has to do that before this sets a DSN.
-
     No model directory, unlike `tests/edge/test_endpoints.py`'s client: not one route here reaches
     a model, so a fixture that wrote one would be describing a dependency these routes do not have.
     """
-    monkeypatch.setenv(
-        "DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}"
-    )
+    attach(monkeypatch, f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}")
     engine = db.open_engine()
-    assert engine is not None
     create_tables(engine)
 
     yield TestClient(create_app())
@@ -64,10 +59,15 @@ def labelling(
 
 
 @pytest.fixture
-def no_store(monkeypatch: pytest.MonkeyPatch, no_endpoints: None) -> TestClient:
-    """The app with the store turned off, which is a state the review runs in."""
-    monkeypatch.setenv("DATAFORCE_DATABASE_URL", NO_STORE)
-    return TestClient(create_app())
+def unreachable(monkeypatch: pytest.MonkeyPatch, no_endpoints: None) -> TestClient:
+    """The app over a database that is named and cannot be reached, which is the state left.
+
+    A deployment that names nothing writes to a file of its own, so *no database at all* is not
+    reachable any more -- what is, is a name behind a typo or a firewall, and that is refused
+    rather than quietly replaced with a second place to write.
+    """
+    attach(monkeypatch, "postgresql+psycopg://user:pw@nosuchhost.invalid/db")
+    return TestClient(create_app(), raise_server_exceptions=False)
 
 
 def import_two(labelling: TestClient) -> Mapping[str, Any]:
@@ -474,35 +474,31 @@ def test_the_store_says_which_database_and_never_the_dsn(
     Postgres rather than the SQLite the other tests use, because SQLite is the one dialect whose
     DSN has no password in it to leak.
     """
-    monkeypatch.setenv(
-        "DATAFORCE_DATABASE_URL",
+    attach(
+        monkeypatch,
         "postgresql+psycopg://alice:s3cret-do-not-leak@db.internal:5432/corpus",
     )
     client = TestClient(create_app())
 
-    answered = client.get(f"{BASE}/store").json()
+    said = client.get(f"{BASE}/store").json()["describes"]
 
-    assert answered["attached"] is True
-    said = answered["describes"]
     assert "s3cret-do-not-leak" not in said
     assert "alice" not in said
     assert "corpus" in said and "db.internal" in said
-    assert answered["variable"] == "DATAFORCE_DATABASE_URL"
 
 
-def test_the_store_says_there_is_none_rather_than_refusing(
-    no_store: TestClient,
+def test_the_store_names_the_default_where_a_deployment_named_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_endpoints: None
 ) -> None:
-    """Unlike every route that keeps something: *which database* has an answer with no database,
-    and it is the answer the page puts in its own header."""
-    answered = no_store.get(f"{BASE}/store")
+    """Unlike every route that keeps something, *which database* always has an answer -- and it is
+    the answer the page puts in its own header."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(db, "database_url", Database().database_url)
+
+    answered = TestClient(create_app()).get(f"{BASE}/store")
 
     assert answered.status_code == 200
-    assert answered.json() == {
-        "attached": False,
-        "describes": None,
-        "variable": "DATAFORCE_DATABASE_URL",
-    }
+    assert answered.json() == {"describes": DEFAULT_STORE_FILE}
 
 
 @pytest.mark.parametrize(
@@ -516,15 +512,18 @@ def test_the_store_says_there_is_none_rather_than_refusing(
     ],
     ids=["import", "next", "list", "one", "skip"],
 )
-def test_the_queue_says_where_to_attach_a_database(
-    no_store: TestClient, call: Any
+def test_the_queue_refuses_a_database_it_cannot_reach_in_the_service_s_own_words(
+    unreachable: TestClient, call: Any
 ) -> None:
-    """The store is a place to put the result, never a dependency of the review -- so every one of
-    these names the variable rather than failing in the service's own words."""
-    resp = call(no_store)
+    """Every one of these names the database rather than answering with a stack trace, and the
+    URL's password reaches neither the screen nor the statement that would carry it."""
+    resp = call(unreachable)
 
     assert resp.status_code == 503
-    assert "DATAFORCE_DATABASE_URL" in resp.json()["detail"]
+    said = resp.json()["detail"]
+    assert "nosuchhost.invalid" in said
+    assert "pw" not in said
+    assert "[SQL:" not in resp.text
 
 
 # ------------------------------------------------------------------ naming what was pasted in
@@ -568,29 +567,30 @@ def test_a_pasted_sample_is_given_the_name_an_import_would_have_given_it(
 
 
 def test_a_pasted_sample_that_named_itself_keeps_its_name(
-    no_store: TestClient,
+    unreachable: TestClient,
 ) -> None:
     """What a corpus calls its own rows is not this service's to overwrite. The key is still the
     content's, so a re-paste lands on the row it landed on last time either way."""
-    named = name_lines(no_store, {"id": "theirs-4", "messages": [THANKED]})
+    named = name_lines(unreachable, {"id": "theirs-4", "messages": [THANKED]})
 
     assert named["samples"][0]["id"] == "theirs-4"
 
 
-def test_naming_a_sample_needs_no_database(no_store: TestClient) -> None:
-    """**The one sample path that touches no store.** The review works with nothing attached, and
-    a paste that wanted a database to get a name would take that away."""
-    named = name_lines(no_store, {"messages": [ASKED]})
+def test_naming_a_sample_never_reaches_the_database(unreachable: TestClient) -> None:
+    """**The one sample path that touches no store**, proven against one that cannot be reached:
+    a route that went near it would refuse, and a paste that needed a database to get a name would
+    take the pasting path away from anyone whose database is down."""
+    named = name_lines(unreachable, {"messages": [ASKED]})
 
     assert uuid.UUID(named["samples"][0]["id"])
 
 
 def test_a_line_that_will_not_read_is_named_by_its_number_and_the_rest_are_answered(
-    no_store: TestClient,
+    unreachable: TestClient,
 ) -> None:
     """One bad line in a paste of three is not a reason to refuse the other two, and *which line*
     is the only thing a person can act on."""
-    resp = no_store.post(
+    resp = unreachable.post(
         f"{BASE}/samples/named",
         content=b'{"messages": []}\n[1, 2]\n{"messages": [{"role": "user"}]}',
         headers={"content-type": "application/x-ndjson"},
@@ -603,11 +603,11 @@ def test_a_line_that_will_not_read_is_named_by_its_number_and_the_rest_are_answe
 
 
 def test_naming_refuses_bytes_that_are_not_utf8_without_blaming_a_line(
-    no_store: TestClient,
+    unreachable: TestClient,
 ) -> None:
     """A paste in the wrong encoding has no readable lines at all, so naming one would send the
     person to go and fix a line that is not the problem."""
-    resp = no_store.post(
+    resp = unreachable.post(
         f"{BASE}/samples/named",
         content="số điện thoại".encode("utf-16"),
         headers={"content-type": "application/x-ndjson"},
@@ -656,7 +656,7 @@ RAW_LINE: Mapping[str, Any] = {
     ids=["duplicate", "abnormal", "redact"],
 )
 def test_a_line_with_no_name_is_read_by_the_routes_that_never_read_a_name(
-    no_store: TestClient, path: str, extra: Mapping[str, Any]
+    unreachable: TestClient, path: str, extra: Mapping[str, Any]
 ) -> None:
     """**A route may not demand a field it never uses.**
 
@@ -668,18 +668,18 @@ def test_a_line_with_no_name_is_read_by_the_routes_that_never_read_a_name(
     The two model routes are the same claim and are not here: they would need a served model, and
     what is under test is whether the body is *read*, not what a model says about it.
     """
-    resp = no_store.post(f"{BASE}{path}", json=dict(RAW_LINE, **extra))
+    resp = unreachable.post(f"{BASE}{path}", json=dict(RAW_LINE, **extra))
 
     assert resp.status_code == 200, resp.text
 
 
-def test_the_scan_reads_a_line_with_no_name(no_store: TestClient) -> None:
+def test_the_scan_reads_a_line_with_no_name(unreachable: TestClient) -> None:
     """The route the reviewer actually hits first, on the shape a corpus actually holds.
 
     Asserted by what it does *not* say: with no model directory the scan refuses for the model,
     which is a refusal that only happens once the body has been read.
     """
-    resp = no_store.post(
+    resp = unreachable.post(
         f"{BASE}/data-quality/personal-data",
         json=dict(RAW_LINE, language="vi", verifier_model="nobody-serves-this"),
     )

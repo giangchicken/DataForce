@@ -32,19 +32,31 @@ from dataforce.modalities.text2text.dataset_management.sample_building import (
 
 PHONE = "0912345678"
 EMAIL = "minh0912345678@vd.vn"
-REVIEW_TEXT = f"user: Chào anh {PHONE}, mail {EMAIL}\nlabel: null"
+TURN = f"Chào anh {PHONE}, mail {EMAIL}"
+REVIEW_TEXT = f"user: {TURN}\nlabel: null"
 
 ASKED = [{"role": "user", "content": "Chào anh <PHONE_1>, mail <EMAIL_1>"}]
 CATALOG = [{"type": "function", "function": {"name": "OpenTicket"}}]
 CALLED = [{"name": "OpenTicket", "arguments": {"ma_khach": "<PHONE_1>"}}]
 
 
-def build_span(value: str, personal_data_class: str, numbered: int) -> dict[str, Any]:
-    """One confirmed span over a value in `REVIEW_TEXT`, with the offsets read rather than typed."""
+def build_span(
+    value: str,
+    personal_data_class: str,
+    numbered: int,
+    path: tuple[str | int, ...] = ("messages", 0, "content"),
+    said: str = TURN,
+) -> dict[str, Any]:
+    """One confirmed span over a value in the field it stands in, offsets read rather than typed.
+
+    `REVIEW_TEXT` is what a reviewer read and is not what the offsets index: a span names the one
+    string it is in, and that string is a field of the record.
+    """
     return {
         "id": numbered,
-        "start": REVIEW_TEXT.index(value),
-        "end": REVIEW_TEXT.index(value) + len(value),
+        "path": list(path),
+        "start": said.index(value),
+        "end": said.index(value) + len(value),
         "personal_data_class": personal_data_class,
         "placeholder": f"<{personal_data_class}_1>",
         "reason": None,
@@ -63,7 +75,7 @@ def build_document(**overridden: Any) -> dict[str, Any]:
     """A finished review: every step answered, and the redaction took."""
     document: dict[str, Any] = {
         "id": "s4471",
-        "messages": [{"role": "user", "content": f"Chào anh {PHONE}, mail {EMAIL}"}],
+        "messages": [{"role": "user", "content": TURN}],
         "tools": CATALOG,
         "label": [{"name": "OpenTicket", "arguments": {"ma_khach": PHONE}}],
         "new_messages": ASKED,
@@ -190,16 +202,27 @@ def test_a_value_left_in_a_field_with_no_new_version_is_refused_too(
 ) -> None:
     """The reason the check reads what **ships** and not the `new_` keys literally. `new_tools` is
     `null` for a catalog nothing rewrote, so the original is what lands in the row -- and a check
-    that only read `new_tools` would clear a catalog with a phone number in a tool description."""
+    that only read `new_tools` would clear a catalog with a phone number in a tool description
+    that a reviewer had handed back a span over."""
+    described = {
+        "type": "function",
+        "function": {"name": "OpenTicket", "description": PHONE},
+    }
+    catalog_span = build_span(
+        PHONE, "PHONE", 3, ("tools", 0, "function", "description"), PHONE
+    )
+
     with pytest.raises(StepNotRun) as refused:
         building.build_sample(
             build_document(
-                tools=[{"type": "function", "function": {"name": PHONE}}],
+                tools=[described],
                 new_tools=None,
+                personal_data=SCANNED | {"spans": [*SCANNED["spans"], catalog_span]},
             )
         )
 
     assert REDACTION in str(refused.value)
+    assert "span 3 (PHONE)" in str(refused.value)
 
 
 def test_a_value_json_would_escape_is_still_found_in_what_ships(
@@ -208,33 +231,56 @@ def test_a_value_json_would_escape_is_still_found_in_what_ships(
     """The reason the check walks the strings rather than the sample serialised. A quote, a
     backslash and a newline are all escaped on the way into JSON, so a substring search over the
     serialised text would clear a record still holding one -- and it would do it silently, for the
-    kind of value the check exists for."""
+    kind of value the check exists for.
+
+    Redacted where the span said, and typed back into an argument after: the place the reviewer
+    handed back was rewritten, so the spans are satisfied and only the count says what happened.
+    """
     quoted = 'Trần "Minh" Nguyễn\\An'
-    text = f"user: {quoted} gọi"
+    arrived = f"{quoted} gọi"
 
     with pytest.raises(StepNotRun) as refused:
         building.build_sample(
             build_document(
+                messages=[{"role": "user", "content": arrived}],
+                new_messages=[{"role": "user", "content": "<NAME_1> gọi"}],
+                new_label=[{"name": "OpenTicket", "arguments": {"ho_ten": quoted}}],
                 personal_data={
-                    "review_text": text,
+                    "review_text": f"user: {arrived}",
                     "claims": [["NAME", quoted]],
-                    "spans": [
-                        {
-                            "id": 1,
-                            "start": text.index(quoted),
-                            "end": text.index(quoted) + len(quoted),
-                            "personal_data_class": "NAME",
-                            "placeholder": "<NAME_1>",
-                            "reason": None,
-                        }
-                    ],
+                    "spans": [build_span(quoted, "NAME", 1, said=arrived)],
                     "outcome": "redacted",
                 },
-                new_messages=[{"role": "user", "content": f"{quoted} gọi"}],
             )
         )
 
     assert REDACTION in str(refused.value)
+    # The class and the part, never the value -- the same rule the span refusal above keeps.
+    assert "NAME in label" in str(refused.value)
+    assert quoted not in str(refused.value)
+
+
+def test_a_place_the_reviewer_ticked_off_is_not_the_redaction_failing(
+    building: CountingSampleBuilding,
+) -> None:
+    """A value kept where it stands once and left standing where it stands again.
+
+    The guard used to read *is this value a substring of what ships*, which was exactly what the
+    rewrite did while the rewrite was by value. Replacement is per span now, so the same reading
+    refuses the ordinary case: two places, one handed back, the other left in the text on purpose.
+    """
+    twice = f"{TURN} hoặc {PHONE}"
+    one_left = f"Chào anh <PHONE_1>, mail <EMAIL_1> hoặc {PHONE}"
+
+    built = building.build_sample(
+        build_document(
+            messages=[{"role": "user", "content": twice}],
+            new_messages=[{"role": "user", "content": one_left}],
+            personal_data=SCANNED | {"outcome": "withheld"},
+        )
+    )
+
+    assert built.facets["personal_data"] == ["EMAIL", "PHONE"]
 
 
 def test_a_value_standing_where_a_key_would_be_is_not_a_value_left_behind(
@@ -254,11 +300,20 @@ def test_a_span_reading_nothing_is_not_a_value_anything_could_have_left_behind(
     building: CountingSampleBuilding,
 ) -> None:
     """A reviewer's own row, with offsets that select no text. The replacement skips it for the
-    same reason, and a precondition stricter than the rewrite would refuse finished records."""
-    empty = build_span(PHONE, "PHONE", 1) | {"end": REVIEW_TEXT.index(PHONE)}
+    same reason, and a precondition stricter than the rewrite would refuse finished records.
+
+    The turn it ships as holds no `<PHONE_1>` at all, so nothing but the skip can clear this: a
+    guard that asked every span for its placeholder would refuse a record the rewrite had
+    finished with.
+    """
+    empty = build_span(PHONE, "PHONE", 1) | {"end": TURN.index(PHONE)}
 
     built = building.build_sample(
-        build_document(personal_data=SCANNED | {"spans": [empty]})
+        build_document(
+            messages=[{"role": "user", "content": f"Chào anh, mail {EMAIL}"}],
+            new_messages=[{"role": "user", "content": "Chào anh, mail <EMAIL_1>"}],
+            personal_data=SCANNED | {"spans": [empty]},
+        )
     )
 
     assert built.facets["personal_data"] == ["PHONE"]

@@ -105,16 +105,23 @@ format's own shape, arguments as JSON text under one key ordering.
    is `PersonalDataCheckingConfig`: the model that confirms, and the rule scans that detect. Both
    detectors are built from it, so both exist before any record does, and a deployment's own scan
    function is a scan like any other.
-6. `review_text` is the string every span's offsets index — for this task the turns, the tool
-   catalog and the label together, because an argument value in a tool call is where personal data
-   sits. Nothing afterwards may reorder or reflow it. **It is built one way and there is no way
-   back.** `build_review_text` is module-level rather than a method on a checker, because it is
-   built twice from two sides — over the sample a scan is handed, and over the record a reviewer
-   left, to say what that record now reads as — and two spellings of it would be two frames of
-   reference. Nothing needs the other direction: everything that happens to a record after its
-   text has been read happens *to the record*, by value, so the record stays JSON the whole way
-   through and the text is rendered again whenever somebody has to read one. A parser going the
-   other way would be a second definition of what a turn and a call are.
+6. `review_text` is **what a detector and a reviewer read, and it indexes nothing** — for this
+   task the turns, the tool catalog and the label together, because an argument value in a tool
+   call is where personal data sits. Nothing afterwards may reorder or reflow it. **It is built one
+   way and there is no way back.** `build_review_text` is module-level rather than a method on a
+   checker, because it is built twice from two sides — over the sample a scan is handed, and over
+   the record a reviewer left, to say what that record now reads as — and two spellings of it would
+   be two frames of reference. A parser going the other way would be a second definition of what a
+   turn and a call are.
+   **So a span is located in the record and never in this text**, and the reason is measured rather
+   than argued. The text is a *rendering*: it never shows `tool_calls` at all, and it writes the
+   label through `json.dumps`, which escapes what a value may contain. Over one ordinary sample
+   `nam@vd.vn` occurs **twice in the text and three times in the record**, and `Nam` four times in
+   both — the two sequences disagree, and disagree by a different amount per value. Anything that
+   read *the k-th occurrence in the text* as *the k-th occurrence in the record* would replace a
+   different string than the one a reviewer pointed at, and would do it silently. That is why
+   replacement used to be by value, and it is why per-occurrence replacement has to walk the
+   record.
 7. Detection is two detectors over the same review text, unioned. One is the rule scans the input
    carries — `agent_toolkit`'s four, in the order email, phone, OTP, name, unless a caller passed
    its own — each handed the declared language; that order settles an overlap, where two scans
@@ -132,25 +139,71 @@ format's own shape, arguments as JSON text under one key ordering.
    span nothing came back about is not confirmed. Nothing detected is nobody asked. Every model
    answer on this flow writes its `reason` key before the value or the verdict it justifies, so
    what a model concludes is read off the reason it has already written.
-9. A span records `id`, `start`, `end`, `personal_data_class`, `placeholder` and `reason`, and
-   `review_text[start:end]` is the value the span was made from. Both offsets are non-negative:
-   a negative one is a slice counted from the end of the text, which reads a value nothing
-   detected, so the shape refuses it rather than answering about it. `id` is 1-based in the order the
-   spans were found and is what the confirmation is asked about and answers with; `reason` is the
-   confirmation's own words for that span, and the one thing on a span no rule here computes.
+9. A span records `id`, `path`, `start`, `end`, `personal_data_class`, `placeholder` and
+   `reason`. `path` is the keys and indices from the record's root to the one string the span is
+   in — `["messages", 2, "tool_calls", 0, "function", "arguments"]` — and `start`/`end` index
+   **that string**, so the value the span was made from is that string sliced. Both offsets are
+   non-negative: a negative one is a slice counted from the end, which reads a value nothing
+   detected, so the shape refuses it rather than answering about it. `id` is 1-based in the order
+   the spans were found, which is the order the record is walked in; `reason` is the confirmation's
+   own words for that span, and the one thing on a span no rule here computes. Which value gets
+   `_1` and which `_2` is still read off `review_text` (Requirement 10), because that is the string
+   a reviewer reads in order; only *where a span is* moved.
+   A reviewer reads `review_text` and a span names a field, so the page says which field and shows
+   the value — read off `placeholder`, which Requirement 10 makes one per distinct value. It does
+   not slice the text, because the text is not what the offsets index.
 10. One placeholder per distinct value, `<CLASS_N>` numbered per class in first-appearance order. A
     value said twice keeps one placeholder and stays co-referent.
 11. A span falling inside a longer span is dropped; the outermost wins.
-12. Replacing is every handed-over span's value swapped for its placeholder, longest value first
-    so a shorter value inside a longer one cannot cut it. By
-    value and not by offset, so a value confirmed at one occurrence is replaced at every
-    occurrence — which is what makes the rule runnable over the record's other fields at all,
-    where there are no offsets to run it by. A span whose
-    offsets read nothing is skipped, because replacing the empty string would place a placeholder
-    between every character; a span with no placeholder is skipped for the same reason read the
-    other way round — there is nothing to put in the text, and replacing a value with nothing
-    deletes it rather than marking it, and says `redacted` about a copy that lost a stretch of
-    itself. The claim such a span named is then unresolved, which is `withheld`.
+12. **Replacing is per span**: each handed-over span's `[start, end)` in the string its `path`
+    names, swapped for its placeholder, applied from the highest offset down within each string so
+    the offsets still standing stay true. A span nobody handed back is not replaced — **which is
+    what makes ticking one occurrence and not another mean anything**, and is the whole of this
+    requirement's change. The containment rule (Requirement 11) runs per string and settles a
+    shorter value inside a longer one there, so nothing sorts by length any more: `minh<PHONE_1>
+    @vd.vn` was the by-value rule cutting a kept email in half, and a span inside a longer span is
+    already dropped before anything is replaced. A span whose offsets read nothing is skipped,
+    because replacing the empty string would place a placeholder between every character; a span
+    with no placeholder is skipped for the same reason read the other way round — there is nothing
+    to put in the text, and replacing a value with nothing deletes it rather than marking it, and
+    says `redacted` about a copy that lost a stretch of itself. The claim such a span named is then
+    unresolved, which is `withheld`.
+    **And so is a span overlapping one already replaced.** Containment drops a span *inside* a
+    longer one; two may still overlap in part — `Trần Văn Anh Minh` and `Minh Hoàng Long` share a
+    word, and the real detector claims both off one sentence. Replacing the second over text the
+    first already rewrote would splice a placeholder into the middle of another and leave a copy
+    holding a fragment of neither. The later span wins, because working from the highest offset
+    down is what keeps the offsets still standing true; the earlier one is left alone, and its
+    claim goes unresolved. Which of two overlapping spans *should* win is still undecided; that a
+    copy may not hold a spliced fragment is not.
+    **`outcome` then asks two questions of every claim, not one.** *Is the value still standing* —
+    run the span finder again over the copy, rather than asking whether the value is a substring of
+    it, because those are different questions: an order number `09123456789012` holding a phone
+    inside it earns no span, and by-value replacement used to hide that by cutting the order number
+    in half. And *did its placeholder land* — a span handed back and then left alone for
+    overlapping takes its value out of the copy by cutting it rather than by replacing it, and half
+    a name gone is not a name redacted.
+    **What this costs, stated rather than discovered.** A value kept at one occurrence and dropped
+    at another stays in the record at the dropped one — as the same characters. Where the two
+    occurrences are one entity that is a re-identification path, and nothing here can tell the two
+    apart: the reviewer unticking an occurrence is the one asserting it is not the same thing, and
+    `Nam` the given name beside `miền Nam` the region is the case they are asserting it for.
+    Requirement 13 is the net underneath: `outcome` is measured against the **rendered copy**, so a
+    claimed value still standing in it reads `withheld` rather than `redacted`.
+    The containment rule pays the same way. Requirement 11 runs over the values the service was
+    handed, not over the places still ticked, so a value sitting inside a span the reviewer left
+    standing earns no span of its own — `minh` inside `minh@vd.vn` stays where the email stays.
+    The alternative is renumbering on every tick, and `/spans` answers about values: it cannot be
+    asked for *this value except at offset 42*, so a tick would have to withdraw the value whole,
+    which is the decision this requirement exists to take apart.
+    **And offsets go stale where by-value replacement could not.** The record handed to `/redact` is
+    the one the reviewer edited — § *The human edits the label* — so a span into `label` may point
+    at a string that has since changed, while a span into `messages` cannot. So `/redact` finds the
+    spans again over the record it is actually given, and the reviewer's answer travels as *which
+    occurrences they dropped* rather than as offsets to trust. A drop that matches nothing in the
+    record being redacted is one more claim left unresolved, which Requirement 13 already reads as
+    `withheld`: it is never silently taken as *replace it after all*, and never silently as
+    *leave it*.
     The copy a reviewer reads is the redacted record rendered forward by `build_review_text`, not
     a second rewrite of the scan's own string: one place where a replacement happens, and one
     place where a text is built from a record.
@@ -642,11 +695,13 @@ on where the record lands: it holds the personal data verbatim under `messages`,
 `label`, so the redaction protects a reader of the three `new_` keys and nothing else. Anything
 holding the record holds the values.
 
-What a reviewer let through is the page's to show, beside the reviewer who did it. Two cases it
-draws and neither side resolves: unticking a span leaves its value in the record, which is then
-redacted as far as the reviewer allowed and no further; and unticking a value another kept value
-sits inside cuts it in half, because replacement is by value across every field, so a phone inside
-a kept email becomes `minh<PHONE_1>@vd.vn`. Which of the two wins is not decided.
+What a reviewer let through is the page's to show, beside the reviewer who did it. Two cases were
+drawn here and left undecided — *unticking a span leaves its value in the record*, and *unticking a
+value another kept value sits inside cuts it in half* — and Requirement 12 decides both. Replacing
+per span is what makes the first one true on purpose rather than by accident: an occurrence nobody
+handed back is left standing, which is the answer a reviewer gave. The second stops existing:
+containment is settled per string before anything is replaced, so no kept value is cut by a shorter
+one inside it.
 
 **Files.**
 

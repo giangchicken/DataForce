@@ -297,7 +297,7 @@ picked and still served keeps its tick when the list is redrawn.
 
 | control | what it does |
 |---|---|
-| `keep-table` *(tick per row)* | one row per claimed **value**: keep it or leave it, what kind it is, and how many times it occurs. What you untick stays in the text exactly as it arrived, and says so where the count would be |
+| `keep-table` *(tick per row)* | one row per **place** a claimed value stands: keep it or leave it, the field it is in, and the offsets into that field. The value and its kind span its rows, because a value is one kind wherever it stands. What you untick stays in the text exactly as it arrived, struck through rather than dropped off the table |
 | the class picker on a row | what a value is, where the scan guessed wrong. Changing it renumbers, because `<CLASS_N>` counts per class |
 | **the value box + class + Add it** | a value the scan missed. Type it once; **every occurrence is found for you**, because that is what `find_and_number_spans` does with any value handed to it |
 | `review-text` *(text)* | the sample as one string, with its own line breaks. **One text, and the label above says what it is**: *the text the scan reads* while nothing has been read, then **the conversation the reviewers will be handed** — which is the thing a person most needs to see before spending a model call on it — and *the text as it ships* once the label is settled. The unreplaced text is never drawn here |
@@ -359,7 +359,7 @@ thing its name promises.
 | **Guide** | what a sample is, what makes a label right, what each facet means, what gets one refused. No route name, no file path, and no statistics — those are a reading of the database, so they open in the sheet the database is about | Close |
 | **Import** | a `.jsonl` file, one sample per line. The answer says how many were read, new, already held and unreadable — an unreadable line is named by its number | **Import**, Close |
 | **Samples** | every queue row in walk order with its state and its opening turn. Clicking one opens it; ticking rows walks just those, in the order they arrived | **Label the selected**, **Clear selection**, Close |
-| **Dataset** | **what the database holds right now**: which database it is, the counts, the statistics grid with its empty cells, and a page of stored rows — the facets, not the samples. Narrowable to the rows nothing could validate. One row opens whole. **Only `tool_decision_dataset`, the redacted half** — there is no route to `tool_decision_record` and this sheet does not ask for one, because that table keeps what arrived un-redacted | **Show more**, *only invalid*, Close |
+| **Dataset** | **what the database holds right now**: which database it is, the counts, the statistics grid with its empty cells, every other distribution under it as bars ranked by count — never `domain` or `call_trigger`, which the grid already crosses — and a page of stored rows — the facets, not the samples. Narrowable to the rows nothing could validate. One row opens whole. **Only `tool_decision_dataset`, the redacted half** — there is no route to `tool_decision_record` and this sheet does not ask for one, because that table keeps what arrived un-redacted | **Show more**, *only invalid*, Close |
 
 ---
 
@@ -428,7 +428,7 @@ tests/ui/
 | `conversation.js` | `adapter` | what a turn, a tool call and a label look like drawn — read by the sample pane, by **both** of card 2's tables and by a stored row opened out of the corpus | `turns`, `catalog`, `tool-count`, `raw-sample`, `language` |
 | `checks.js` | `adapter` | the two checks, the button that spends each one, and the row it reports on | `run-detect`, `run-review`, `run-note`, `said-2`, `said-6` |
 | `models.js` | `adapter` | which models answer, and that `config/model/` is a directory a deployment edits while the service is up | `verifier-ticks`, `jury-ticks`, `sft-ticks` |
-| `personal-data.js` | `adapter` | the values the reviewer keeps, the ones they add, and the copy that ships. **Not** where a value stands in the text — that is answered | `panel-data`, `keep-table`, `value-new`, `value-class`, `value-add`, `value-note`, `scan-raw`, `review-text`, `text-which`, `data-verdict`, `data-refusal` |
+| `personal-data.js` | `adapter` | the values the reviewer keeps, the ones they add, and the copy that ships. **Not** where a value stands in the text — that is answered | `panel-data`, `keep-table`, `value-new`, `value-class`, `value-add`, `value-note`, `kind-new`, `kind-add`, `kind-note`, `review-text`, `text-which`, `data-verdict`, `data-refusal` |
 | `label.js` | `adapter` | which of two calls ships, and the form that writes a third — the panel's proposal, what arrived, the three acts, and the catalog-built editor | `panel-label`, `proposed-call`, `proposed-note`, `arrived-call`, `arrived-note`, `jury-said`, `v-take`, `v-keep`, `v-write`, `call-form`, `call-add`, `call-none`, `label-fault`, `label-verdict`, `out-6`, `label-refusal` |
 | `facets.js` | `adapter` | which facets a person ticks, and where a value that is not declared comes from | `facet-ticks`, `domain-ticks`, `domain-new`, `domain-add`, `domain-note`, `domain-said`, `guide-facets` |
 | `record.js` | `logic` | the one thing this page composes, read back as a table | `record`, `record-table` |

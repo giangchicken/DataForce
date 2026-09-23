@@ -1,76 +1,46 @@
-"""wiring · create_app(): the config resolver, one router, the app's own route, and the UI.
-
-The labelling UI is mounted here and nowhere else. `wiring` is the one layer allowed to know both
-the API and the thing that calls it, and one process serving both is what lets a labeller open a
-URL and start with nothing installed but the service.
-
-**The tables are made here, at startup.** This is the only layer that has both the engine and every
-profile's tables in front of it -- importing the router is what registers them on `Base` -- and
-doing it at startup rather than on the way to an engine is what leaves `edge/database.py` able to
-open one and find the database as it really is. `create_all` only ever *creates*, so it is safe to
-run against a database that already holds rows, and it is what makes an install nobody configured
-able to take the first record.
-"""
+"""wiring · create_app(): the config resolver, one router, the app's own route, and the UI."""
 
 import logging
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from argparse import ArgumentParser
 from pathlib import Path
+from typing import Any
 
-from agent_toolkit.logging import configure_logging, get_logger
+import uvicorn
+from agent_toolkit.logging import configure_logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError
+from starlette.responses import Response
 
-from dataforce.tables import Base
-
-from .database import db
+from .database import check_database_on_startup, refuse_database_fault
 from .events import install_structured_events
 from .routers import tool_decision_router
 from .served_models import register_resolver
 
-logger = get_logger(__name__)
-
-# Inside the package, because `[tool.hatch.build.targets.wheel]` ships every file under
-# `src/dataforce` and nothing beside it -- a UI at `src/ui/` would be missing from an install.
 UI = Path(__file__).resolve().parent.parent / "ui"
 
 
-@asynccontextmanager
-async def make_tables(app: FastAPI) -> AsyncIterator[None]:
-    """Every declared table, made on the attached database before the first request.
+class RevalidatedFiles(StaticFiles):
+    """The page, served so that a reload is a reload.
 
-    Nothing happens where the store is turned off, which is the state the review runs in: the
-    labelling flow works with nowhere to put the result, so a startup that cannot reach a database
-    is not a startup that should fail.
+    `no-cache` is *ask before you use it*, not *do not keep it*: the browser still holds the file
+    and still gets a `304` off the `ETag` `StaticFiles` already answers, so the cost is one
+    conditional request per file. Without it a browser is free to serve an ES module out of its
+    own cache for as long as its heuristic likes, and an edit to `ui/` is then a change nobody on
+    the page can see -- which is a bug report about the page and a measurement about the cache.
 
-    **A database that is named and cannot be reached is that same state, reached by accident.**
-    `create_engine` builds an engine without connecting, so the first thing that touches the
-    database is this, and letting it out of the lifespan stops the process: a DSN with a typo in
-    it takes down the page a person would have opened to find out what was wrong. It is logged
-    and the app starts. Nothing is lost quietly by that -- every route that writes opens a session
-    of its own and refuses in the service's own words when it cannot, so a reviewer is told the
-    first time they ask the store for anything rather than at the end of the day.
-
-    The cost, stated: the tables were not made. A database that becomes reachable after this will
-    refuse every write until the process is restarted, because nothing makes them on the way to a
-    session -- `edge/database.py` says why, and this is the price of that.
+    One override and not two: `file_response` is where the 304 is decided as well as the 200, so
+    the header lands on whichever of them comes back.
     """
-    engine = db.open_engine()
-    if engine is not None:
-        try:
-            Base.metadata.create_all(engine)
-        except SQLAlchemyError as unreachable:
-            logger.error(
-                "store_unreachable",
-                extra={
-                    "describes": db.describe(),
-                    "variable": db.variable,
-                    "error": f"{type(unreachable).__name__}: {unreachable}",
-                },
-            )
-    yield
+
+    def file_response(self, *taken: Any, **named: Any) -> Response:
+        answer = super().file_response(*taken, **named)
+        answer.headers["cache-control"] = "no-cache"
+        return answer
+
+
+DEFAULT_PORT = 8000
 
 
 def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
@@ -82,7 +52,7 @@ def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
     app = FastAPI(
         title="DataForce",
         summary="the parts of a labelling process, each reachable on its own",
-        lifespan=make_tables,
+        lifespan=check_database_on_startup,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -95,10 +65,25 @@ def create_app(*, cors_origins: tuple[str, ...] = ("*",)) -> FastAPI:
     def get_health() -> dict[str, str]:
         return {"status": "ok"}
 
+    app.add_exception_handler(DBAPIError, refuse_database_fault)
     app.include_router(tool_decision_router)
 
-    app.mount("/ui", StaticFiles(directory=UI, html=True), name="ui")
+    app.mount("/ui", RevalidatedFiles(directory=UI, html=True), name="ui")
     return app
 
 
 app = create_app()
+
+
+def serve() -> None:
+    reading = ArgumentParser(
+        prog="dataforce", description="Serve the labelling UI and its API."
+    )
+    reading.add_argument("--port", type=int, default=DEFAULT_PORT)
+    reading.add_argument(
+        "--reload",
+        action="store_true",
+        help="restart on a source change, while editing",
+    )
+    asked = reading.parse_args()
+    uvicorn.run("dataforce.edge.main:app", port=asked.port, reload=asked.reload)

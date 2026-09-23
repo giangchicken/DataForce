@@ -31,7 +31,7 @@ import {
   pickedTool, review, sayLabelRefusal, tookNoCall, tookVerdict, typedArgument
 } from "./label.js";
 import {
-  addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
+  addKind, addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
   numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, unreplaced
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
@@ -436,15 +436,25 @@ $("value-new").onkeydown = event => {
   event.preventDefault();
   valuesChanged(addValue());
 };
+$("kind-add").onclick = () => addKind();
+$("kind-new").onkeydown = event => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  addKind();
+};
 $("keep-table").onchange = event => {
   const said = event.target.closest("[data-class]");
-  const box = said || event.target.closest("[data-keep]");
+  if (said) {
+    if (!held.claimed.has(said.dataset.class)) return paintCard();
+    return valuesChanged(numbered(claimedWith(said.dataset.class, said.value)));
+  }
+  const box = event.target.closest("[data-keep]");
   if (!box) return;
-  const value = said ? said.dataset.class : box.dataset.keep;
-  if (!held.claimed.has(value)) return paintCard();
-  if (said) return valuesChanged(numbered(claimedWith(value, said.value), held.keeps));
-  copyLater();
-  return valuesChanged(numbered(held.claimed, keptWith(value, box.checked)));
+  const span = (held.detected || { spans: [] }).spans[Number(box.dataset.keep)];
+  if (!span) return paintCard();
+  held.keeps = keptWith(span, box.checked);
+  paintCard();
+  return copyLater();
 };
 for (const id of ["facet-ticks", "domain-ticks"]) {
   $(id).onchange = () => composeRecord(readDeclaredFacets());

@@ -96,9 +96,13 @@
         </div>
         <p class="note">Tick the values that really are personal data. What you untick is left in
           the text exactly as it arrived. <b>Every value you keep is replaced as you tick</b> — you
-          never ask for the replacement, and the Checks panel says what it did.</p>
+          never ask for the replacement, and the Checks panel says what it did. Each place a value
+          stands is a row under it, with the offsets the service answered: <b>one tick covers all
+          of them</b>, because what ships is the turns and the call, and an offset into the text on
+          this screen locates nothing in either.</p>
         <div class="tablewrap"><table id="keep-table"><thead><tr>
-          <th>Keep</th><th>What it is</th><th>The value</th><th>Occurs</th>
+          <th>Keep</th><th>What it is</th><th>The value</th>
+          <th>stands in for</th><th>where</th><th>start</th><th>end</th>
         </tr></thead><tbody></tbody></table></div>
         <div class="fieldname">A value the scan missed</div>
         <div class="runline">
@@ -106,6 +110,16 @@
           <select id="value-class"></select>
           <button id="value-add" class="quiet">Add it</button>
           <span class="note" id="value-note">Type it once — every occurrence is found for you.</span>
+        </div>
+        <!-- The kinds the scans declare are not every kind a conversation holds. A kind they do
+             not declare is one the service orders after the declared ones and redacts as
+             `<KIND_1>` like any other, so offering it here costs nothing and not offering it
+             means an address ships filed as a name, or not filed at all. Same shape as adding a
+             domain: it is offered from the moment it is named, in both places a kind is said. -->
+        <div class="runline">
+          <input id="kind-new" placeholder="another kind, e.g. ADDRESS" spellcheck="false">
+          <button id="kind-add" class="quiet">Offer this kind</button>
+          <span class="note" id="kind-note"></span>
         </div>
 
         <!-- The one thing on this panel that is not a control, and the only text a reviewer is
@@ -121,12 +135,6 @@
           <div class="fieldname" id="text-which">The text the scan reads</div>
           <pre class="reviewtext" id="review-text"></pre>
         </div>
-        <details class="raw" id="scan-raw">
-          <summary>The spans this made, and what they replace</summary>
-          <div class="tablewrap"><table><thead><tr>
-            <th>id</th><th>class</th><th>stands in for</th><th>the value</th>
-          </tr></thead><tbody></tbody></table></div>
-        </details>
         <p class="refusal" id="data-refusal" hidden></p>
 
         <div class="askline">

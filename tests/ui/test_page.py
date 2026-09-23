@@ -24,6 +24,7 @@ from dataforce.edge.database import db
 from dataforce.edge.main import create_app
 from dataforce.profile.tool_decision.sample_building import create_tables
 from dataforce.tables import Base
+from tests.conftest import attach
 from tests.edge.test_endpoints import BASE, POSTED_PHONE, build_review
 
 CHECKS = Path(__file__).parent / "page.js"
@@ -449,16 +450,20 @@ def test_the_page_answers_no_question_about_where_a_value_stands() -> None:
     at all*. This is what says the offset stayed gone, because nothing else would notice a second
     copy of the rule creeping back in beside a table of numbers.
 
-    Reading a span is not holding a rule: the page still slices the review text to show what a
-    span stands in for, which is what `read_span_values` does on the other side of the call.
+    Reading a span is not holding a rule: the page reads a span out of the field its `path` names
+    to say which value a row is about, and draws the offsets the service answered beside it.
     """
     assert "other.end - other.start" not in SCRIPTS
     for gone in ("span-table", "span-check", "span-add", "span-note", '"auto"'):
         assert gone not in SCRIPTS, gone
         assert gone not in PAGE, gone
+    # Two boxes on the card, and the count is what holds the rule: a value, and a kind to offer.
+    # What kind a value *is* is picked from a list the page fills, never typed into a row. A third
+    # box appearing here is the offset table coming back.
     card = PAGE[PAGE.index('id="panel-data"') : PAGE.index('id="panel-label"')]
-    assert card.count("<input") == 1
-    assert 'id="value-new"' in card
+    assert re.findall(r'<input id="([^"]+)"', card) == ["value-new", "kind-new"]
+    assert '<select id="value-class">' in card
+    assert 'type="number"' not in card
 
 
 def test_what_a_value_may_be_said_to_be_is_asked_for_and_not_declared_here() -> None:
@@ -508,12 +513,8 @@ def attached_client(
     """The app over a database and a model directory of this test's own, reached as a deployment
     reaches them.
 
-    `no_endpoints` is named rather than left to run on its own: it sets `DATAFORCE_DATABASE_URL`
-    to `off`, and it has to do that before this sets a DSN.
     """
-    monkeypatch.setenv(
-        "DATAFORCE_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}"
-    )
+    attach(monkeypatch, f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}")
     served = tmp_path / "model"
     served.mkdir()
     for name in PAGE_MODELS:
@@ -523,7 +524,6 @@ def attached_client(
         )
     monkeypatch.setenv("DATAFORCE_MODEL_DIR", str(served))
     engine = db.open_engine()
-    assert engine is not None
     create_tables(engine)
 
     yield TestClient(create_app())

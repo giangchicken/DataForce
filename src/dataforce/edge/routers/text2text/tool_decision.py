@@ -82,15 +82,6 @@ PAGE = Path(__file__).resolve().parents[2] / "static" / "index.html"
 
 
 class Sample(BaseModel):
-    """One sample as a route receives it. **The name is optional, because a raw line has none.**
-
-    A corpus line is `{messages, tools, label}` -- nothing writes an `id` into one -- and the only
-    thing in this service that reads a sample's name is the key a record is stored under. Every
-    other route here scans, replaces or votes on the text and never looks at it, so demanding one
-    made a raw line unscannable for a field nobody was going to use. The one route that needs it
-    asks for it itself, in a sentence.
-    """
-
     model_config = ConfigDict(extra="allow")
 
     id: str | None = Field(
@@ -241,34 +232,19 @@ class ReviewerVerdicts(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def consensus_calls(self) -> tuple[Mapping[str, Any], ...]:
-        """`llm.consensus` read as calls, so nothing downstream has to parse one itself.
-
-        Derived and not stored, because a stored copy is one that can disagree with the text it
-        came from. `consensus` is untouched beside it: this is a second reading of the same
-        sentence, and the sentence is what a juror actually wrote.
-
-        Here rather than on `LLMReviewerVerdict` because that is
-        `modalities/text2text/ai_review/`, which serves every text2text task and may not name this
-        one's nouns -- a *tool call* is a thing `tool_decision` knows about. A router is an adapter
-        and may import the logic that defines one, which `parse_text_to_tools` already does.
-
-        Empty where the panel agreed on nothing, and equally where it wrote prose that holds no
-        call: the leniency is `parse_text_to_tools`'s own, so unreadable text is no calls with the
-        text still there rather than a refusal.
-        """
         agreed = None if self.llm is None else self.llm.consensus
         return () if agreed is None else parse_text_to_tools(agreed)
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def consensus_given(self) -> bool:
+        return self.llm is not None and self.llm.consensus is not None
 
-class StoreAttached(BaseModel):
-    attached: bool = Field(..., description="Whether there is a database at all.")
-    describes: str | None = Field(
-        default=None,
-        description="The database, named: a file name, or a dialect, host and name.",
-    )
-    variable: str = Field(
+
+class StoreNamed(BaseModel):
+    describes: str = Field(
         ...,
-        description="The variable that names it, for a message that says what to set.",
+        description="The database, named: a file name, or a dialect, host and name.",
     )
 
 
@@ -284,11 +260,6 @@ def get_models() -> tuple[str, ...]:
 
 @router.post("/data-quality/personal-data", summary="personal data in one sample")
 async def post_personal_data(request: PersonalDataScanRequest) -> PersonalDataDetected:
-    """What was found, or 422 where no model resolved or the language is not one it can scan.
-
-    `language` and `verifier_model` are declarations about this request and not keys of the
-    record, so the sample handed on is what the corpus carries.
-    """
     try:
         check_served_models((request.verifier_model,))
         return await detect_personal_data(
@@ -316,12 +287,6 @@ def get_personal_data_classes() -> tuple[str, ...]:
     summary="where these values stand in the text, numbered as the scan numbers them",
 )
 def post_personal_data_spans(request: SpanRequest) -> PersonalDataDetected:
-    """The same answer the scan gives, over the values a reviewer left rather than a model's.
-
-    No model and no database: the two pure functions the scan ends with, so a page may ask on
-    every tick. `claimed` is a declaration about this request and not a key of the record, so the
-    sample handed on is what the corpus carries.
-    """
     return number_personal_data_spans(
         request.model_dump(exclude={"claimed"}),
         {value: personal_data_class for personal_data_class, value in request.claimed},
@@ -403,15 +368,6 @@ async def post_ai_review(request: ReviewRequest) -> ReviewerVerdicts:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-def open_store() -> Session:
-    session = db.open_session()
-    if session is None:
-        raise HTTPException(
-            status_code=503, detail=f"no database attached: set {db.variable}"
-        )
-    return session
-
-
 @router.post(
     "/queue/import", summary="a file of raw samples, as rows waiting to be labelled"
 )
@@ -419,7 +375,7 @@ def post_queue_import(
     lines: Annotated[bytes, Body(media_type="application/x-ndjson")],
 ) -> QueuedSampleImport:
     """One JSON object per line. Re-importing a file imports nothing the second time."""
-    session = open_store()
+    session = db.open_session()
     try:
         text = lines.decode("utf-8")
     except UnicodeDecodeError as unreadable:
@@ -450,12 +406,8 @@ def describe_queue(session: Session) -> QueuedSampleWaiting:
 
 
 @router.get("/store", summary="which database a record would land in")
-def get_store() -> StoreAttached:
-    return StoreAttached(
-        attached=db.open_engine() is not None,
-        describes=db.describe(),
-        variable=db.variable,
-    )
+def get_store() -> StoreNamed:
+    return StoreNamed(describes=db.describe())
 
 
 @router.get("/queue", summary="the samples in the queue, to pick from")
@@ -465,7 +417,7 @@ def get_queue(limit: int = 200, offset: int = 0) -> QueuedSampleList:
     `limit` is capped rather than trusted: a corpus is as large as somebody's file, and one request
     asking for all of it is one response nobody can render.
     """
-    session = open_store()
+    session = db.open_session()
     with session:
         counted = count_queued_states(session)
         return QueuedSampleList(
@@ -481,7 +433,7 @@ def get_queue(limit: int = 200, offset: int = 0) -> QueuedSampleList:
 @router.get("/queue/next", summary="the next sample to label, and how much is left")
 def get_queue_next() -> QueuedSampleWaiting:
     """An empty queue answers an empty sample, not an error: nothing is wrong with being done."""
-    session = open_store()
+    session = db.open_session()
     with session:
         return describe_queue(session)
 
@@ -489,7 +441,7 @@ def get_queue_next() -> QueuedSampleWaiting:
 @router.get("/queue/{key}", summary="one queued sample, picked out of the list")
 def get_queued_sample(key: uuid.UUID) -> QueuedSampleWaiting:
     """Whatever state it is in: picking a row already labelled is asking to look at it again."""
-    session = open_store()
+    session = db.open_session()
     with session:
         found = select_queued_sample(session, key)
         if found is None:
@@ -507,7 +459,7 @@ def get_queued_sample(key: uuid.UUID) -> QueuedSampleWaiting:
 @router.post("/queue/{key}/skip", summary="pass this one over, and take the next")
 def post_queue_skip(key: uuid.UUID) -> QueuedSampleWaiting:
     """The row stays, in the state that says it was passed over, and the next one comes back."""
-    session = open_store()
+    session = db.open_session()
     with session:
         if not mark_queued_sample(session, key, QueueState.SKIPPED):
             raise HTTPException(status_code=404, detail=f"no queued sample under {key}")
@@ -519,7 +471,7 @@ def post_queue_skip(key: uuid.UUID) -> QueuedSampleWaiting:
 def post_record(
     review: ReviewedSample, queue_key: uuid.UUID | None = None
 ) -> RecordStored:
-    session = open_store()
+    session = db.open_session()
     if review.id is None:
         # In a sentence, not as a validation list: a body FastAPI could not read answers with the
         # whole sample echoed back inside it, and *which field* disappears into the echo. This is
@@ -561,7 +513,7 @@ def post_record(
 
 @router.get("/records", summary="the stored corpus, a page at a time")
 def get_stored_samples(limit: int = 100, offset: int = 0) -> StoredSampleList:
-    session = open_store()
+    session = db.open_session()
     with session:
         return StoredSampleList(
             samples=select_stored_samples(
@@ -576,7 +528,7 @@ def get_stored_samples(limit: int = 100, offset: int = 0) -> StoredSampleList:
     summary="what the labelled dataset holds, counted when it is asked",
 )
 def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
-    session = open_store()
+    session = db.open_session()
     with session:
         return build_dataset_statistics(
             sample_totals=count_total_samples(session),
@@ -590,7 +542,7 @@ def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
 
 @router.get("/records/{key}", summary="one stored sample, as it ships")
 def get_stored_sample(key: uuid.UUID) -> StoredSample:
-    session = open_store()
+    session = db.open_session()
     with session:
         found = select_stored_sample(session, key)
         if found is None:

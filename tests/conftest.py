@@ -1,44 +1,55 @@
 """What every test may assume: events land on stdout, and nothing reaches the network."""
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
+from sqlalchemy.engine import make_url
 
-from dataforce.edge.database import DEFAULT_STORE_FILE, NO_STORE
+from dataforce.edge import database
+from dataforce.edge.database import DEFAULT_STORE_FILE, db
 from dataforce.edge.events import install_structured_events
 
 # Where the suite is run from, which is where an unset DSN would put its file.
 CHECKOUT = Path.cwd()
 
 
+def attach(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
+    """Point the process-wide `Database` at one of this test's own."""
+    monkeypatch.setattr(db, "database_url", make_url(url))
+
+
 @pytest.fixture(autouse=True)
-def no_database_in_the_checkout(request: pytest.FixtureRequest) -> Iterator[None]:
-    """No test may leave the default SQLite file in the working directory.
+def a_database_of_this_test_s_own(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Every test writes to a file of its own, and none of them to the one in the checkout.
 
-    `no_endpoints` sets the variable to `off` so nothing resolves the default in the first place.
-    This is the second line: if that ever slips, or a new code path reaches a real database some
-    other way, the test that did it fails **by name** rather than a file quietly appearing in
-    somebody's checkout and being noticed a week later. The file is removed as well as reported,
-    so one slip does not then poison every test after it.
+    There is no *no database* state to fall back on any more: a deployment that names nothing still
+    writes somewhere, so a test that names nothing would write to the checkout's own file -- one
+    shared corpus, carried between tests in whatever order they ran.
 
-    Checked before as well as after, because *left behind by this test* and *was already there*
-    are different findings and only the first names a culprit. A file already sitting in the
-    checkout -- from a server somebody ran, or an earlier suite -- is cleared without failing
-    anything, so the blame lands on the test that actually reaches a database and not on whichever
-    one happened to run next.
+    The second half is the guard, and it is placed on the engine rather than on the file. Asking
+    afterwards whether a file appeared cannot answer this: the file is already there, because
+    somebody is running a service over it, and reading a database that already holds every table
+    changes neither its size nor its time. The engine is where *reaching* one is decided, so the
+    test that does it is named as it does it -- and nothing in the checkout is moved, renamed or
+    removed to find that out. Deleting it is how the corpus behind a running service was lost.
     """
-    left = CHECKOUT / DEFAULT_STORE_FILE
-    left.unlink(missing_ok=True)
+    attach(monkeypatch, f"sqlite+pysqlite:///{tmp_path / 'store.sqlite3'}")
+    forbidden = str(CHECKOUT / DEFAULT_STORE_FILE)
+    reached = database.create_engine
 
-    yield
+    def refuse_the_checkout(url: object, *read: object, **named: object) -> Engine:
+        if forbidden in str(url):
+            pytest.fail(
+                f"{request.node.nodeid} reached {DEFAULT_STORE_FILE} in the checkout, which "
+                "belongs to whoever is running a service over it. Declare a database of this "
+                "test's own with `attach`."
+            )
+        return reached(url, *read, **named)
 
-    if left.exists():
-        left.unlink()
-        pytest.fail(
-            f"{request.node.nodeid} left {DEFAULT_STORE_FILE} in the checkout: it reached a real "
-            "database. Declare a DSN of this test's own, or leave the store off."
-        )
+    monkeypatch.setattr(database, "create_engine", refuse_the_checkout)
 
 
 @pytest.fixture(autouse=True)
@@ -59,14 +70,9 @@ def no_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     `EnvConfigResolver` reads them, so a machine that exports `LLM_BASE_URL` is one unstubbed
     `resolve_config` away from a real call. The rest are this deployment's.
 
-    `DATAFORCE_DATABASE_URL` is the one that is *set* rather than cleared, and set to `off`: unset
-    means the default SQLite file in the working directory, so clearing it would point every test
-    that does not declare its own DSN at one shared file in the checkout -- and the store suite
-    drops every table it made. `off` is the same *no store* state these tests were always written
-    against. `DATAFORCE_TEST_DATABASE_URL` is left alone: it names a throwaway server and is read
-    on purpose.
+    `DATAFORCE_TEST_DATABASE_URL` is left alone: it names a throwaway server and is read on
+    purpose, by the fixture that attaches one.
     """
-    monkeypatch.setenv("DATAFORCE_DATABASE_URL", NO_STORE)
     for named in (
         "LLM_MODEL",
         "LLM_API_KEY",

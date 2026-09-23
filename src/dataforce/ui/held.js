@@ -6,7 +6,7 @@ export const held = {
   scanned: null,    // the scan's own answer: what the detectors claimed, before any renumbering
   detected: null,   // the spans over the values still ticked, in the text they index
   claimed: new Map(),  // value → what kind it is, as the human left it: card 1's rows
-  keeps: new Map(),    // which of those values the human is handing back
+  keeps: new Map(),    // span → is this one place handed back? absent means yes
   handed: null,     // the detect shape with the spans as they left it
   review: null,     // what the reviewers said
   edited: null,     // the three, as they ship before redaction

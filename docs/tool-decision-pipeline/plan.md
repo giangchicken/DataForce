@@ -71,6 +71,7 @@ what its *Source* points at, do it, run its *Verify*, commit.
 | 2 | The panel answers | `POST .../ai-review` returns both verdicts against stubbed model calls |
 | 3 | Every endpoint is drivable alone | Each route is exercised by its own arguments, and nothing threads one payload through two of them |
 | 4 | A labeller can label | `ui/` walks one pasted sample through every step, the user edits what each one answered, and the last rectangle is the record they approve |
+| 5 | One occurrence is one decision | A span names the field it is in, one occurrence of a value can be kept while another is not, and the record obeys |
 
 Phase 0 comes first and is not optional: every later *Verify* is `make check`, and until Phase 0
 lands that command reports 38 errors whether the task worked or not. Phases 1 and 2 are independent
@@ -106,6 +107,7 @@ algorithm to get right · **L** more than one sitting, so split it if it grows w
 | T16 | Eight rectangles, each calling its own route | 4 | T15 | L |
 | T17 | The user edits, and the human steps are those edits | 4 | T16 | M |
 | T18 | The last rectangle: the record, fixed or approved | 4 | T17 | M |
+| T19 | A span is located in the record, and one occurrence is one tick | 5 | T18 | L |
 
 ---
 
@@ -910,6 +912,111 @@ wrong answer rather than an undecided one.
 
 ---
 
+## Phase 5 · One occurrence is one decision
+
+### T19 · A span is located in the record, and one occurrence is one tick
+
+**Goal.** A reviewer ticks the places a value stands, not the value, and the tick is obeyed.
+
+**Context.** `Nam` the given name and `Nam` in *miền Nam* are the same three characters, and a
+corpus that cannot tell them apart either leaks a name or redacts a region. The page now shows every
+place a value stands, so a reviewer can *see* the difference and still cannot act on it: the tick is
+one per value, and one tick covering three rows is what this task is asked for.
+
+**Why it is not a checkbox.** Measured before deciding, twice:
+- Removing one span from the `PersonalDataDetected` handed to `/redact` changes the answer **not at
+  all**. `redact_personal_data` builds `{value: placeholder}` from the spans and calls
+  `replace_node`, which replaces by value across every field. A dropped span whose value has any
+  span left is still in the map.
+- The review text and the record do not hold the same occurrences. Over one ordinary sample,
+  `nam@vd.vn` occurs **twice in the review text and three times in the record** — the text never
+  renders `tool_calls`, and it writes the label through `json.dumps`, which escapes what a value may
+  contain. `Nam` occurs four times in both. The sequences disagree, and by a different amount per
+  value, so *the k-th occurrence in the text* is not *the k-th in the record*. A design that mapped
+  one to the other would replace a different string than the one the reviewer pointed at, silently.
+
+So the offsets have to be the record's. That is a contract change, and `spec.md` Requirements 6, 9
+and 12 are rewritten to it — § *Design* had already written both halves of this down as *"which of
+the two wins is not decided"*, and this decides them.
+
+**Acceptance criteria.**
+- `PersonalDataSpan` carries `path` — the keys and indices from the record's root to one string —
+  and `start`/`end` index that string.
+- `find_and_number_spans` walks the record rather than the review text. The word-boundary rule and
+  the containment rule run **per string**. `id` is 1-based in walk order.
+- `<CLASS_N>` is still one placeholder per distinct value, numbered per class in first-appearance
+  order over that walk.
+- Replacement is per span, applied from the highest offset down within each string. **A span not
+  handed back is not replaced**, and a test drives exactly that: one value, three occurrences, one
+  unticked, and the record holds the placeholder twice and the value once.
+- Nothing sorts by length any more. The `minh<PHONE_1>@vd.vn` case is a test that goes red if the
+  containment rule stops running per string.
+- **`/redact` finds the spans again over the record it is handed**, and the reviewer's answer
+  travels as which occurrences they dropped. The record it is handed is the one the reviewer
+  *edited* — the label may have moved under a `label.*` span since detect, while a `messages.*` span
+  cannot have — so offsets that were true at detect are not offsets to trust at redact. This is the
+  one thing by-value replacement got for free, and losing it is the cost of the change. A drop that
+  matches nothing is a claim left unresolved and reads `withheld`; it is never silently read as
+  *replace it after all*, and never silently as *leave it*. A test drives a label edited between
+  the two calls.
+- `outcome` still measures the rendered copy, so a claimed value left standing reads `withheld`.
+- The page ticks per row, says which field each span is in, and reads a span's value off its
+  placeholder rather than by slicing the review text.
+
+**What this costs, and it is written into the spec rather than left for somebody to find.** A value
+kept at one occurrence and dropped at another stays in the record at the dropped one, as the same
+characters. Where those two occurrences are one entity, that is a re-identification path. Nothing
+here can tell them apart — the reviewer unticking an occurrence is the one asserting they are not
+the same thing.
+
+**Source.** `spec.md` Requirements 6, 9, 11, 12, 13; § *Design*, the two conflicts it left open.
+
+**Verify.** `make check`, then the three-occurrence case by hand on <http://localhost:8000/ui/>.
+
+**What landed.** Both halves. The service half is measured: a span carries `path`,
+`find_and_number_spans` walks the record, replacement is per span, and dropping a span from what is
+handed to `/redact` leaves that occurrence standing — measured on a text holding `Nam` three times,
+one dropped, two replaced. The page half followed it: `held.keeps` is keyed by a place rather than
+by a value, the checkbox sits on each row instead of spanning them, each row names the field its
+offsets index, and `handedBack` drops the spans ticked off. It is written up as `T26` of
+`docs/labelling-ui/plan.md`, because it is a change to the screen and that is where the screen's
+history is kept.
+
+**What the first real sample caught, and it is not in this pipeline at all.** A turn reading
+`anh tên là Nguyễn Văn Nam` came back with one claim: the value `Nam`, under a class `FIRST_NAME`.
+Measured before blaming anything here — `name_detection_by_rules` claims **nothing** on that turn,
+nor on `Tôi là Trần Văn Minh`, nor on `My name is John Smith`, while `PHONE` and `EMAIL` answer on
+the same three. So the model is the only name detector this deployment has, and it reported one
+syllable. Requirement 11 takes the outermost of what was *claimed*; nothing claimed the whole name,
+so there was no outer to take. What it cost the record: `anh tên là Nguyễn Văn <FIRST_NAME_1>`
+shipped, which still identifies, and the three characters `Nam` then earned spans inside
+`Việt Nam` in two tool descriptions. `pii_llm_detect.txt` now says both halves — report the whole
+name and never one syllable of it, take the longer where two overlap, and never a narrower class
+for something the four already cover, because `<LAST_NAME_1> <FIRST_NAME_1>` is one person nobody
+can read as one.
+
+**One thing the page half decided that this task had not.** A tick asks for nothing to be numbered
+again. `/spans` answers about values and cannot be asked for *this value except at offset 42*, so a
+tick that renumbered would have to withdraw the value whole — the decision this task exists to take
+apart. What that costs is the containment rule: it is measured over the values the service was
+handed, not over the places still ticked, so a value sitting inside a place the reviewer left
+standing earns no span of its own. Requirement 12 states it.
+
+Two things the work itself turned up, neither of them in the criteria above, both now in the spec:
+- **Spans that overlap in part.** Containment drops a span *inside* a longer one, but two may
+  overlap — `Trần Văn Anh Minh` and `Minh Hoàng Long` off one sentence. Replacing per span from the
+  highest offset down would splice a placeholder into the middle of another, so the earlier one is
+  left alone and its claim goes unresolved. By-value replacement had hidden this by cutting one of
+  them in half.
+- **`outcome` was asking the wrong question.** It read *is the value a substring of the copy*, which
+  per-span replacement immediately falsified: an order number `09123456789012` holding a phone
+  inside it earns no span and is not that phone un-redacted, and by-value replacement had been
+  hiding it by cutting the order number down to `<PHONE_1>9012`. It now runs the span finder again
+  over the copy, and asks a second question beside it — *did the placeholder land* — because a span
+  left alone for overlapping takes its value out by cutting rather than replacing.
+
+---
+
 ## Not in this plan, and why
 
 - **`DuplicateDataChecking.duplicate_groups` and `CommonAbnormalChecking.check_verdict`.** Neither
@@ -918,10 +1025,11 @@ wrong answer rather than an undecided one.
 - **`ToolDecisionDuplicateChecking.embedding`.** § *Files* lists it, and it is a body for nothing
   while `duplicate_groups` is undecided — its only caller. T3 deletes the override and retires that
   half of the row (`T-1`).
-- **The two redaction conflicts the page draws.** Unticking a span leaves its value in the record;
-  unticking a value that another kept value sits inside cuts it in half. § *Design* records both and
-  says *"which of the two wins is not decided"*, so no task here decides it. The page shows them
-  beside the reviewer who caused them, which is the behaviour that exists.
+- ~~**The two redaction conflicts the page draws.**~~ Decided, and `T19` is where. Unticking a span
+  left its value in the record and unticking a value another kept value sits inside cut it in half,
+  because replacement was by value across every field. § *Design* said *"which of the two wins is
+  not decided"*; Requirement 12 now decides both — the first on purpose, the second out of
+  existence.
 - **The finetuned reviewer's own answer.** `SFTReviewerVerdict` carries a `confidence`,
   `tool_prediction.txt` asks for none, and `complete` answers with text and no logprobs — so T11
   left `ToolDecisionSFTPrediction.predict` raising rather than inventing a number, T13 made what it

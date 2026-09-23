@@ -138,17 +138,27 @@ class PersonalDataSpan(Frozen):
     id: int = Field(
         ..., description="1-based, in span order. What the confirmation answers with."
     )
-    # Code points, because that is what slicing `review_text` in Python counts. A reader counting
+    path: tuple[str | int, ...] = Field(
+        default=(),
+        description=(
+            "The keys and indices from the record's root to the one string this span is in. "
+            "The offsets index **that** string and never the review text: the text is a "
+            "rendering, it does not show every string a record holds and it escapes some of "
+            "them, so the two do not hold the same occurrences of a value. Empty means the "
+            "record itself is that string."
+        ),
+    )
+    # Code points, because that is what slicing a string in Python counts. A reader counting
     # UTF-16 units -- a browser does -- reads a different string from the same two numbers.
     start: int = Field(
         ...,
         ge=0,
-        description="Code-point offset of the hit in `review_text`, inclusive.",
+        description="Code-point offset of the hit in the string `path` names, inclusive.",
     )
     end: int = Field(
         ...,
         ge=0,
-        description="Code-point offset of the hit's end in `review_text`, exclusive.",
+        description="Code-point offset of the hit's end in that string, exclusive.",
     )
     personal_data_class: str = Field(
         ..., description="The typed class, which is what picks the placeholder."

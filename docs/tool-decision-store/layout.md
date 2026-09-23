@@ -87,8 +87,11 @@ and a per-task copy must not exist: a copy that drifts is a corpus sold in breac
 | `read_shipped_part(document, part)` | the `new_` copy, or what arrived where there is none. `null` under a `new_` key is *no new version was made*, never *it ships as nothing* — the page writes it for every clean catalog |
 | `read_shipped_sample(document)` | the three as they ship, as a `ShippedDatasetSample` |
 | `read_scanned_personal_data(document)` | the `personal_data` key, or `StepNotRun`. **Two arrivals, one refusal**: `null`, which is nobody having run step 2, and something that will not read as a scan, which is evidence nothing can check |
-| `list_text(node)` | every string under a node, values only — the same reach the replacement has, walked the same way |
-| `find_surviving_spans(scanned, shipped)` | every confirmed span whose value is still readable in what **ships**, string by string and never over the sample serialised: JSON escapes a quote, a backslash and a newline, so a serialised search would clear a record still holding one. **The spans and never the values**, because a refusal naming the value puts personal data in an HTTP body |
+| `list_text(node)` | every string under a node, values only — a key is not somewhere a value could have been left |
+| `count_text(node, value)` | how many times a value stands under a node, walked as strings and never serialised |
+| `read_node(node, path)` | what stands at a span's `path` in what **ships**, or `None` where nothing does — a call the reviewer deleted takes its arguments with it |
+| `find_surviving_spans(scanned, shipped)` | every handed-back span whose placeholder is not standing where the span says it stands, counted in the one string its `path` names and never over the sample serialised: JSON escapes a quote, a backslash and a newline, and a placeholder landing in the label says nothing about the turn. **Counted**, because three spans of one value in one string need three placeholders. **The spans and never the values**, because a refusal naming the value puts personal data in an HTTP body |
+| `find_claims_gained(scanned, document, shipped)` | every claim standing in a shipped part oftener than in the one that arrived — the half the spans cannot see, because nothing on a span says what a reviewer typed into the label after the rewrite. **The class and the part, never the value** |
 | `read_redacted_classes(scanned)` | the classes a confirmed span stood over, sorted and each named once. The one modality-derived facet |
 | `DatasetSampleBuilding.build_sample(document)` | both refusals, then the row. **Raising rather than answering** is the point: a precondition returned as a value is one a caller can forget to read, and the one that gets forgotten is the one whose cost is a fine |
 | — `build_input(shipped)` | abstract. What one sample of this task ships as |
@@ -148,7 +151,8 @@ what keeps `services/` out of them.
 | `build_sample(key, sample, times)` | a column per facet the table has one for, the rest into `notes`. `FACETS` is the whole of what splits them |
 | `merge_tool_decision_db(session, document, sample)` | the key, the first `created_time` read **before** either merge — `merge` replaces the whole row — then a `merge` into each table and one commit. **Both always**: the tables differ by what they hold, not by which rows reach them. The transaction is the session's own — hand it a session of its own, which is the trade for a function `rebuild_tool_decision_dataset` can reach with one it has already read on |
 | `count_total_samples(session)` | how many rows each table holds. They agree, and a run where they do not is a bug rather than a figure |
-| `count_by_facet(session)` | one `GROUP BY` per facet column. The column names are this task's, and this is the layer allowed to say them. Keyed by the **column's** way of writing a value, not the value's Python type, and **added** rather than assigned: SQLite groups a JSON column by text while Postgres groups `jsonb` by value, so two groups can be one key. Ordered by `ORDER BY`, because a JSON column can hold two values Python cannot compare |
+| `name_facet_values(value, written_as_text)` | the keys one row's answer is counted under: a class each where the facet holds a list, and `none` where the list is empty. A row answering nothing still answered |
+| `count_by_facet(session)` | one `GROUP BY` per facet column. The column names are this task's, and this is the layer allowed to say them. Keyed by the **column's** way of writing a value, not the value's Python type, and **added** rather than assigned: SQLite groups a JSON column by text while Postgres groups `jsonb` by value, so two groups can be one key. A list-valued facet is one row answering several times, so it is counted **per value and not per set** — counted whole it draws a bar per combination, which is set membership and not a distribution. Ordered by `ORDER BY`, because a JSON column can hold two values Python cannot compare |
 | `count_by_pair(session, row_facet, column_facet)` | `GROUP BY` two columns — only the pairs that exist. A list-valued facet comes back as a **tuple**, not as text: the caller reaches the values inside it, and splitting a set in SQL would be `json_each` and `jsonb_array_elements`, which is two statements for one question |
 | `select_sample_contents(session)` | every row of `dataset` as the statistics read it: the `id`, the `input` and the `label`. **One read, three questions**: the duplicate grouping is given all three and the label measurements read two, so a second query would fetch the same rows again. That is why there is no `stored_labels` |
 | `rebuild_tool_decision_dataset(session, building)` | delete every row and recompute from the record table, in one transaction, and answer how many it wrote. Handed the builder rather than importing one, so the module holding the SQL does not also decide whose samples it holds. A record that no longer passes the precondition stops the rebuild: finishing around it would leave a table nothing can call a function of the other |
@@ -209,13 +213,23 @@ directly, the way it already names `count_by_facet` and `list_offered_tools`.
 
 ## `edge/database.py` — `adapter`
 
+`H-5` is why the two FastAPI pieces are here rather than in `main.py`: translating a framework type
+— a `DBAPIError` into a `JSONResponse` — is an adapter's job, and this is the adapter that knows
+what a database fault means. `main.py` names them and hands them to the app.
+
 | Name | What it is |
 |---|---|
 | `Base` | the one declarative base every task's tables hang off |
-| `Database` | the DSN, the lock and the engine cache are one object's state, not three module globals |
-| `Database.open_engine()` | `Engine \| None` — one engine for the process, **under a lock**; unset, empty or whitespace is *no store* and never a default file; a changed DSN releases the old pool |
-| `Database.open_session()` | `Session \| None` — `None` is an answer every caller has to handle, not a failure |
-| `store` | the one instance, built from `DSN_VARIABLE`. Callers write `store.open_session()` |
+| `Database(database_url=None)` | `database_url` is the whole of how one is named, and is **parsed once, here**. Nothing, empty or blank is the SQLite file in the working directory |
+| `Database.database_url` | the parsed `URL`. `create_engine` takes it as it is, and `str()` on it masks the password — which is not why `describe()` exists, but is why nothing has to re-parse |
+| `Database.describe()` | `str` — the same one in words safe to put on a screen: a file name, or a dialect, host and name. **Never the URL**, which carries a password and a user |
+| `Database.check_database_exists()` | `bool` — the SQLite file this one lives in is on disk. `:memory:` and a server dialect hold no file, so they are never missing, and answering otherwise would drop the pool on every session and take an in-memory database with it |
+| `Database.open_engine()` | `Engine` — one engine for the process, **under a lock**; a changed URL releases the old pool |
+| `Database.check_url()` | every registered table made on it, and the pool dropped first where the file it was opened on is gone |
+| `Database.open_session()` | `Session` — through `check_url()`, so nothing is handed a session onto a database it has not made. Never `None`: there is always a database |
+| `check_database_on_startup(app)` | the lifespan. Makes the tables before the first request and **logs** rather than raising, so a database behind a typo is said while somebody is opening the page and not at the end of their first sample. That line is all it buys, now that every session makes them |
+| `refuse_database_fault(request, fault)` | `JSONResponse` — the `DBAPIError` handler. **503**, naming the database and never the URL or the statement. Registered on `DBAPIError` and not its parent: the database answering badly is this, a fault in the SQL written here is a 500 |
+| `db` | the one instance, over the file in the directory the process started in. Callers write `db.open_session()` |
 
 **No `TypeDecorator`, and no UTC.** A time is written and read exactly as it was given, so both
 dialects hand back the same value and nothing converts. The cost, stated: a row's instant is only

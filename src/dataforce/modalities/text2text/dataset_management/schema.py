@@ -41,9 +41,9 @@ class StepNotRun(Exception):
 class ScannedPersonalData(PersonalDataDetected):
     """The record's `personal_data` key: what the scan found, and how far redacting it got.
 
-    The detect answer as the page handed it back -- the spans say which values were confirmed and
-    the text they index is the only place those values can be read from, which is what the
-    precondition below needs -- plus the one thing the redaction knows and the spans do not.
+    The detect answer as the page handed it back -- the spans say which places were confirmed, and
+    each one names the field it stands in and what stands there instead, which is what the
+    precondition below counts -- plus the one thing the redaction knows and the spans do not.
 
     **The redacted copy itself is not in here.** It used to be, and it was the same text twice:
     the record already carries what ships under its three `new_` keys, and the precondition reads

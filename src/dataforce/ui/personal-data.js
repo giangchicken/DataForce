@@ -1,6 +1,7 @@
 // adapter · card 1: the values the reviewer keeps, the ones they add, and the copy that
 // ships. **Not** where a value stands in the text — that is answered. Owns keep-table,
-// value-new, value-class, value-add, value-note, scan-raw, review-text, text-which,
+// value-new, value-class, value-add, value-note, kind-new, kind-add, kind-note,
+// review-text, text-which,
 // data-verdict, data-refusal.
 
 import { asking, cannotAsk, mark } from "./checks.js";
@@ -11,6 +12,8 @@ import { ask, call } from "./wire.js";
 
 let classes = [];
 
+let addedKinds = [];
+
 let numberedAt = 0;
 
 let confirmed = new Map();
@@ -18,8 +21,36 @@ let confirmed = new Map();
 export async function askClasses() {
   const answer = await ask("/data-quality/personal-data/classes");
   classes = answer.ok && Array.isArray(answer.data) ? answer.data : [];
-  $("value-class").innerHTML = classes
-    .map(one => `<option value="${esc(one)}">${esc(one)}</option>`).join("");
+  paintKinds();
+}
+
+const offeredKinds = () =>
+  [...new Set([...classes, ...held.claimed.values(), ...addedKinds])];
+
+function paintKinds(pick = $("value-class").value) {
+  const kinds = offeredKinds();
+  $("value-class").innerHTML = kinds.map(one =>
+    `<option value="${esc(one)}"${one === pick ? " selected" : ""}>${esc(one)}</option>`).join("");
+  $("value-class").value = kinds.includes(pick) ? pick : (kinds[0] || "");
+}
+
+const namedKind = said => String(said ?? "").trim().toUpperCase().replace(/\s+/g, "_");
+
+export function addKind() {
+  const said = namedKind($("kind-new").value);
+  if (!said) return refuseKind("type a kind first");
+  if (offeredKinds().includes(said)) return refuseKind(`${said} is already offered`);
+  addedKinds = [...addedKinds, said];
+  paintKinds(said);
+  if (held.detected) paintCard();
+  $("kind-new").value = "";
+  say("kind-note", `${said} offered, and picked — a value added now is filed as one`);
+  return true;
+}
+
+function refuseKind(why) {
+  say("kind-note", why, "bad");
+  return false;
 }
 
 export async function detect() {
@@ -32,32 +63,28 @@ export async function detect() {
   if (!answer.ok) return false;
   const scanned = answer.data;
   held.claimed = new Map(scanned.claims.map(([named, value]) => [value, named]));
-  const confirmedValues = new Set(valuesIn(scanned));
-  held.keeps = new Map(scanned.claims.map(([, value]) => [value, confirmedValues.has(value)]));
+  held.keeps = new Map();
   confirmed = whyConfirmed(scanned);
   held.scanned = scanned;
   held.detected = scanned;
   held.handed = null;
   held.shipped = null;
   held.record = null;
-  await numbered(held.claimed, held.keeps);
+  await numbered(held.claimed);
   paintCard();
   paintReviewText();
   const found = held.claimed.size;
   sayVerdict("data-verdict", found ? `${found} to confirm` : "nothing found",
     found ? "bad" : "ok");
-  $("scan-raw").open = found > 0;
   return true;
 }
 
-export async function numbered(claimed, keeps) {
+export async function numbered(claimed) {
   if (!held.sample) return false;
   const mine = (numberedAt += 1);
   const answer = await call("/data-quality/personal-data/spans", {
     ...held.sample,
-    claimed: [...claimed]
-      .filter(([value]) => keeps.get(value) !== false)
-      .map(([value, named]) => [named, value])
+    claimed: [...claimed].map(([value, named]) => [named, value])
   });
   if (mine !== numberedAt) return false;
   if (!answer.ok) {
@@ -65,19 +92,25 @@ export async function numbered(claimed, keeps) {
     return false;
   }
   held.claimed = claimed;
-  held.keeps = keeps;
   held.detected = answer.data;
   return true;
 }
 
 export const claimedWith = (value, named) => new Map(held.claimed).set(value, named);
-export const keptWith = (value, on) => new Map(held.keeps).set(value, on);
+export const keptWith = (span, on) => new Map(held.keeps).set(spanKey(span), on);
 
-const readsIn = (letters, span) => letters.slice(span.start, span.end).join("");
-const valuesIn = found => {
-  const letters = chars(found.review_text);
-  return found.spans.map(span => readsIn(letters, span));
+const spanKey = span => JSON.stringify([span.path || [], span.start, span.end]);
+
+// A span names the field it is in and the offsets inside **that** string, so this walks the
+// record rather than slicing the text on the screen. Code points, because the service counts
+// them and a browser counts UTF-16 units -- two different strings from the same two numbers.
+const readsIn = (record, span) => {
+  let node = record;
+  for (const step of span.path || []) node = node == null ? node : node[step];
+  return typeof node === "string" ? chars(node).slice(span.start, span.end).join("") : "";
 };
+
+const valuesIn = found => (held.sample ? found.spans.map(span => readsIn(held.sample, span)) : []);
 
 function whyConfirmed(found) {
   const why = new Map();
@@ -88,46 +121,58 @@ function whyConfirmed(found) {
   return why;
 }
 
-function occurrences(found) {
-  const seen = new Map();
-  for (const value of valuesIn(found)) seen.set(value, (seen.get(value) || 0) + 1);
-  return seen;
-}
+const kept = span => held.keeps.get(spanKey(span)) !== false;
 
-const kept = value => held.keeps.get(value) !== false;
+const placesOf = (value, values) => held.detected.spans
+  .map((span, at) => [span, at])
+  .filter(([, at]) => values[at] === value);
 
-export const unreplaced = () => (!held.detected || !held.shipped ? []
-  : [...held.claimed.keys()].filter(value =>
-    kept(value) && (held.shipped.review_text || "").includes(value)));
+const fieldName = span => (span.path || []).reduce((said, step) =>
+  (typeof step === "number" ? `${said}[${step}]` : said ? `${said}.${step}` : String(step)), "");
+
+export const unreplaced = () => {
+  if (!held.detected || !held.shipped) return [];
+  const values = valuesIn(held.detected);
+  return [...held.claimed.keys()].filter(value =>
+    placesOf(value, values).every(([span]) => kept(span))
+    && (held.shipped.review_text || "").includes(value));
+};
 const placed = value => held.detected.claims.some(([, said]) => said === value);
 
 const pickClass = (value, named) => `<select data-class="${esc(value)}">${
-  [...new Set([...classes, ...held.claimed.values()])].map(one =>
+  offeredKinds().map(one =>
     `<option value="${esc(one)}"${one === named ? " selected" : ""}>${esc(one)}</option>`).join("")
 }</select>`;
 
+// One table, because there is one decision on it. A value and the places it stands are not two
+// tables: `×3` says a value occurs three times and nothing about *which* three, and `Nam` inside
+// `nam` inside a longer word is the case the containment rule exists for.
+//
+// **The tick sits on each place rather than spanning them.** A span names the field it stands in
+// and is replaced on its own, so `Nam` the given name and `Nam` in *miền Nam* are two decisions
+// and the reviewer makes both. The value and its kind are one decision and are drawn on every row
+// rather than merged down the group: a cell of its own height reads as rows with columns missing,
+// and the three pickers are one control -- they carry the same value, so moving any of them moves
+// the kind and all three redraw alike.
 export function paintCard() {
   if (!held.detected) return;
-  const counted = occurrences(held.detected);
   const values = valuesIn(held.detected);
   $("keep-table").querySelector("tbody").innerHTML = [...held.claimed].map(([value, named]) => {
-    const occurs = counted.get(value) || 0;
-    return `<tr class="${kept(value) ? "" : "out"}">
-      <td><input type="checkbox" data-keep="${esc(value)}"${kept(value) ? " checked" : ""}></td>
-      <td>${pickClass(value, named)}</td>
-      <td class="value">${esc(value)}</td>
-      <td class="note">${!kept(value) ? "left in the text"
-        : occurs ? `×${occurs}`
-        : placed(value) ? "inside something longer" : "not in the text"}</td>
-    </tr>`;
+    const said = `<td>${pickClass(value, named)}</td><td class="value">${esc(value)}</td>`;
+    const places = placesOf(value, values);
+    if (!places.length) {
+      return `<tr><td></td>${said}<td class="note" colspan="4">${
+        placed(value) ? "inside something longer" : "not in the text"}</td></tr>`;
+    }
+    return places.map(([span, at]) => `<tr class="${kept(span) ? "" : "out"}">`
+      + `<td><input type="checkbox" data-keep="${at}"${kept(span) ? " checked" : ""}></td>`
+      + said
+      + `<td class="standsfor">${esc(span.placeholder)}</td>`
+      + `<td class="field">${esc(fieldName(span))}</td>`
+      + `<td class="at">${esc(span.start)}</td>`
+      + `<td class="at">${esc(span.end)}</td></tr>`).join("");
   }).join("");
-  $("scan-raw").querySelector("tbody").innerHTML = held.detected.spans.map((span, at) => `
-    <tr>
-      <td>${esc(span.id)}</td>
-      <td>${esc(span.personal_data_class)}</td>
-      <td>${esc(span.placeholder)}</td>
-      <td class="value">${esc(values[at])}</td>
-    </tr>`).join("");
+  paintKinds();
 }
 
 export async function addValue() {
@@ -136,13 +181,11 @@ export async function addValue() {
   if (!held.detected) return refuseValue("nothing has been read for personal data yet");
   if (!value) return refuseValue("type the value first");
   if (held.claimed.has(value)) return refuseValue("that value is already on the table");
-  if (!classes.length) {
-    return refuseValue("nothing said what a value may be, so there is no kind to add it as");
-  }
   if (!named) return refuseValue("say what kind it is");
-  if (!await numbered(claimedWith(value, named), held.keeps)) return false;
+  if (!await numbered(claimedWith(value, named))) return false;
   $("value-new").value = "";
-  say("value-note", "added — every occurrence is found for you");
+  paintKinds(named);
+  say("value-note", `added as ${named} — every occurrence is found for you`);
   return true;
 }
 
@@ -157,8 +200,9 @@ export function handedBack() {
   return {
     review_text: held.detected.review_text,
     claims: held.scanned.claims,
-    spans: held.detected.spans.map((span, at) =>
-      span.reason ? span : { ...span, reason: confirmed.get(values[at]) ?? null })
+    spans: held.detected.spans
+      .map((span, at) => (span.reason ? span : { ...span, reason: confirmed.get(values[at]) ?? null }))
+      .filter(kept)
   };
 }
 
@@ -198,7 +242,6 @@ export function forgetPersonalData() {
   confirmed = new Map();
   paintReviewText();
   $("keep-table").querySelector("tbody").innerHTML = "";
-  $("scan-raw").querySelector("tbody").innerHTML = "";
   say("value-note", "");
   sayVerdict("data-verdict", "no scan yet", "");
 }

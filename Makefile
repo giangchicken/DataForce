@@ -1,6 +1,12 @@
 # `make check` is what CI runs and what must pass before a commit. It excludes
 # tests marked `integration`, which need the network or a running service.
-.PHONY: check lint types test integration
+.PHONY: run check lint types test integration
+
+# The port the labelling UI is served on. `make run PORT=8123` moves it.
+PORT ?= 8000
+
+run:
+	uv run dataforce --reload --port $(PORT)
 
 check: lint types test
 

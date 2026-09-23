@@ -53,6 +53,7 @@ from dataforce.profile.tool_decision.data_quality import (
     PiiLlmDetector,
     ToolDecisionPersonalChecking,
     find_and_number_spans,
+    group_spans_by_path,
     order_claims_by_class,
     replace_node,
 )
@@ -261,30 +262,56 @@ def find_occurrences(text: str, value: str) -> list[int]:
     return found
 
 
-def read_span_slices(found: PersonalDataDetected) -> list[str]:
-    """What each span's offsets actually read in the text the answer says they index."""
-    return [found.review_text[span.start : span.end] for span in found.spans]
+def read_span_value(record: Mapping[str, Any], span: PersonalDataSpan) -> str:
+    """What one span's offsets actually read, in the string its `path` names.
+
+    Not `review_text[start:end]`: the text is a rendering and the offsets are the record's.
+    """
+    node: Any = record
+    for step in span.path:
+        node = node[step]
+    said: str = node
+    return said[span.start : span.end]
+
+
+def read_span_slices(
+    found: PersonalDataDetected, record: Mapping[str, Any] = SAMPLE
+) -> list[str]:
+    """What each span's offsets actually read, in the record the answer says they index."""
+    return [read_span_value(record, span) for span in found.spans]
 
 
 def build_span(
-    text: str, value: str, personal_data_class: str, placeholder: str, id: int
+    record: Mapping[str, Any],
+    path: tuple[str | int, ...],
+    value: str,
+    personal_data_class: str,
+    placeholder: str,
+    id: int,
 ) -> PersonalDataSpan:
-    """One span a reviewer typed, with its offsets found rather than written down."""
+    """One span a reviewer typed, with its offsets found in its own field rather than written."""
+    node: Any = record
+    for step in path:
+        node = node[step]
+    said: str = node
     return PersonalDataSpan(
         id=id,
-        start=text.index(value),
-        end=text.index(value) + len(value),
+        path=path,
+        start=said.index(value),
+        end=said.index(value) + len(value),
         personal_data_class=personal_data_class,
         placeholder=placeholder,
     )
 
 
-def list_placeholders(found: PersonalDataDetected, value: str) -> set[str]:
+def list_placeholders(
+    found: PersonalDataDetected, value: str, record: Mapping[str, Any] = SAMPLE
+) -> set[str]:
     """Every placeholder the spans over one value carry. Two is one value read as two people."""
     return {
         span.placeholder
         for span in found.spans
-        if found.review_text[span.start : span.end] == value
+        if read_span_value(record, span) == value
     }
 
 
@@ -370,8 +397,8 @@ async def test_a_deployment_s_own_scan_runs_beside_the_four() -> None:
     detected = await checker.detect(scanned)
     redacted = redact_personal_data(detected, scanned.sample)
 
-    assert list_placeholders(detected, ticket) == {"<TICKET_1>"}
-    assert list_placeholders(detected, NAME) == {"<NAME_1>"}
+    assert list_placeholders(detected, ticket, scanned.sample) == {"<TICKET_1>"}
+    assert list_placeholders(detected, NAME, scanned.sample) == {"<NAME_1>"}
     assert (
         redacted.review_text
         == "user: anh <NAME_1> bao loi phieu <TICKET_1>\nlabel: null"
@@ -539,8 +566,10 @@ async def test_the_confirmation_is_handed_the_spans_the_text_and_the_language() 
     assert language == "vi"
     assert text == build_review_text(SAMPLE)
     assert [span.id for span in spans] == [1, 2, 3, 4, 5]
+    # Read through the span's own `path`: the offsets index the field it is in, and the text
+    # above is what the model is shown rather than what they index.
     assert [
-        (span.personal_data_class, text[span.start : span.end]) for span in spans
+        (span.personal_data_class, read_span_value(SAMPLE, span)) for span in spans
     ] == [
         ("EMAIL", EMAIL),
         ("PHONE", PHONE),
@@ -662,7 +691,6 @@ async def test_every_returned_offset_slices_back_to_its_value() -> None:
     offsets both, because "one of the three values" would pass on a span a character short.
     """
     detected = await StubbedModels().detect(build_scan_input(SAMPLE))
-    text = detected.review_text
 
     assert read_span_slices(detected) == [EMAIL, PHONE, PHONE, NAME]
     assert [span.personal_data_class for span in detected.spans] == [
@@ -671,11 +699,14 @@ async def test_every_returned_offset_slices_back_to_its_value() -> None:
         "PHONE",
         "NAME",
     ]
-    assert [span.start for span in detected.spans] == [
-        text.index(EMAIL),
-        find_occurrences(text, PHONE)[0],
-        find_occurrences(text, PHONE)[2],
-        text.index(NAME),
+    # In the field each one is in, not in the text above: the phone's second span is in the
+    # label's argument, where it is the whole string, and the review text is where it is read.
+    turn: str = SAMPLE["messages"][0]["content"]
+    assert [(tuple(span.path), span.start) for span in detected.spans] == [
+        (("messages", 0, "content"), turn.index(EMAIL)),
+        (("messages", 0, "content"), find_occurrences(turn, PHONE)[0]),
+        (("label", 0, "arguments", "ma_khach"), 0),
+        (("messages", 0, "content"), turn.index(NAME)),
     ]
 
 
@@ -704,14 +735,17 @@ async def test_the_digit_run_inside_the_email_earns_no_span() -> None:
     the `h` the run butts against.
     """
     detected = await StubbedModels().detect(build_scan_input(SAMPLE))
-    text = detected.review_text
-    inside = find_occurrences(text, PHONE)[1]
-    starts = [span.start for span in detected.spans]
+    turn: str = SAMPLE["messages"][0]["content"]
+    inside = find_occurrences(turn, PHONE)[1]
+    in_turn = [
+        span.start
+        for span in detected.spans
+        if tuple(span.path) == ("messages", 0, "content")
+    ]
 
-    assert text.index(EMAIL) < inside < text.index(EMAIL) + len(EMAIL)
-    assert inside not in starts
-    assert find_occurrences(text, PHONE)[0] in starts
-    assert find_occurrences(text, PHONE)[2] in starts
+    assert turn.index(EMAIL) < inside < turn.index(EMAIL) + len(EMAIL)
+    assert inside not in in_turn
+    assert find_occurrences(turn, PHONE)[0] in in_turn
 
 
 async def test_a_span_inside_a_longer_span_is_dropped() -> None:
@@ -761,14 +795,15 @@ async def test_an_occurrence_butting_against_a_word_character_is_not_one() -> No
     detected = await StubbedModels().detect(scanned)
     redacted = redact_personal_data(detected, scanned.sample)
 
-    assert [(span.start, span.end) for span in detected.spans] == [
-        (
-            detected.review_text.index(PHONE),
-            detected.review_text.index(PHONE) + len(PHONE),
-        )
+    assert [(tuple(span.path), span.start, span.end) for span in detected.spans] == [
+        (("messages", 0, "content"), said.index(PHONE), said.index(PHONE) + len(PHONE))
     ]
     assert redacted.review_text is not None
-    assert "<PHONE_1>9012" in redacted.review_text
+    # **And the order number comes through whole.** Replacing by value used to cut it --
+    # `<PHONE_1>9012` -- because the phone is a substring of it and nothing said where to stop.
+    # Replacing per span cannot: the run earned no span, so nothing points at it.
+    assert "09123456789012" in redacted.review_text
+    assert "<PHONE_1>9012" not in redacted.review_text
     assert redacted.outcome == "redacted"
 
 
@@ -803,8 +838,8 @@ async def test_two_addresses_each_get_their_own_placeholder() -> None:
     detected = await StubbedModels().detect(scanned)
     redacted = redact_personal_data(detected, scanned.sample)
 
-    assert list_placeholders(detected, "anh@vd.vn") == {"<EMAIL_1>"}
-    assert list_placeholders(detected, "chi@vd.vn") == {"<EMAIL_2>"}
+    assert list_placeholders(detected, "anh@vd.vn", scanned.sample) == {"<EMAIL_1>"}
+    assert list_placeholders(detected, "chi@vd.vn", scanned.sample) == {"<EMAIL_2>"}
     assert redacted.review_text == "user: mail <EMAIL_1>, cc <EMAIL_2> nhe\nlabel: null"
     assert redacted.outcome == "redacted"
 
@@ -827,8 +862,8 @@ async def test_a_class_with_two_values_numbers_them_in_first_appearance_order() 
 
     detected = await checker.detect(reading)
 
-    assert list_placeholders(detected, first) == {"<EMAIL_1>"}
-    assert list_placeholders(detected, second) == {"<EMAIL_2>"}
+    assert list_placeholders(detected, first, reading.sample) == {"<EMAIL_1>"}
+    assert list_placeholders(detected, second, reading.sample) == {"<EMAIL_2>"}
 
 
 # -------------------------------------------------- the values a reviewer left, numbered
@@ -985,9 +1020,13 @@ async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
 
     Two names sharing a word -- `anh` is a title cue *and* a common given name, so the real
     detector claims `Trần Văn Anh Minh` and `Minh Hoàng Long` off one sentence. Neither contains
-    the other, so both keep a span; replacement is by value, so the second finds a string the
-    first already cut and its placeholder never lands. Which span should win is undecided. What is
-    decided is that a copy holding half of a value is not that value redacted.
+    the other, so containment drops neither and both keep a span.
+
+    Replacing works from the highest offset down, so the later span lands and the earlier one is
+    left alone rather than spliced over text that has already moved. Which span should win is
+    undecided. What is decided is that a copy holding half of a value is not that value redacted,
+    and that it may not hold a fragment of both: `Trần Văn Anh ` is still readable, so the claim
+    it belongs to never resolves.
     """
     scanned = build_scan_input(
         {
@@ -1005,8 +1044,12 @@ async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
 
     assert [span.placeholder for span in detected.spans] == ["<NAME_1>", "<NAME_2>"]
     assert redacted.review_text is not None
-    assert "<NAME_1>" in redacted.review_text
-    assert "<NAME_2>" not in redacted.review_text
+    assert "<NAME_2>" in redacted.review_text
+    assert "<NAME_1>" not in redacted.review_text
+    # Neither placeholder is inside the other, and neither name survives whole. The half that is
+    # left is ordinary text, not a spliced placeholder -- which is what a reader has to be able
+    # to tell apart from a redaction that worked.
+    assert "<NAME_" not in redacted.review_text.replace("<NAME_2>", "")
     assert redacted.outcome == "withheld"
 
 
@@ -1023,8 +1066,8 @@ def test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced() 
         review_text=said,
         claims=(("NAME", NAME), ("PHONE", PHONE)),
         spans=(
-            build_span(said, NAME, "NAME", "<X_1>", 1),
-            build_span(said, PHONE, "PHONE", "<X_1>", 2),
+            build_span(sample, ("messages", 0, "content"), NAME, "NAME", "<X_1>", 1),
+            build_span(sample, ("messages", 0, "content"), PHONE, "PHONE", "<X_1>", 2),
         ),
     )
 
@@ -1048,7 +1091,7 @@ def test_a_span_with_no_placeholder_replaces_nothing_and_holds_the_record_back()
     detected = PersonalDataDetected(
         review_text=said,
         claims=(("PHONE", PHONE),),
-        spans=(build_span(said, PHONE, "PHONE", "", 1),),
+        spans=(build_span(sample, ("messages", 0, "content"), PHONE, "PHONE", "", 1),),
     )
 
     redacted = redact_personal_data(detected, sample)
@@ -1125,11 +1168,19 @@ def test_a_number_a_boolean_and_a_null_carry_no_value_to_trade_back() -> None:
     """`replace_node` walks a record and rewrites its strings. Everything else is copied.
 
     The walk is the point: a value sits in an argument three levels down as readily as in a turn,
-    and a node nothing can hold a value in is answered as it arrived rather than stringified.
+    and a node nothing can hold a value in is answered as it arrived rather than stringified. It
+    is also what the paths are read against -- a span names the string it is in by the same keys
+    and indices this walks, so a walk that skipped a list would leave a span pointing at nothing.
     """
     node = {"n": 42, "yes": True, "nothing": None, "said": [PHONE, {"deep": PHONE}]}
+    spans = group_spans_by_path(
+        (
+            build_span(node, ("said", 0), PHONE, "PHONE", "<PHONE_1>", 1),
+            build_span(node, ("said", 1, "deep"), PHONE, "PHONE", "<PHONE_1>", 2),
+        )
+    )
 
-    assert replace_node(node, {PHONE: "<PHONE_1>"}) == {
+    assert replace_node(node, spans) == {
         "n": 42,
         "yes": True,
         "nothing": None,

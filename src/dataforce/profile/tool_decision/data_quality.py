@@ -11,7 +11,7 @@ argument value in a tool call is where a phone number sits and a label is a tool
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -49,109 +49,138 @@ WORD = re.compile(r"\w")
 logger = get_logger(__name__)
 
 
-def find_and_number_spans(
-    text: str, detected: Sequence[tuple[str, str]]
-) -> tuple[PersonalDataSpan, ...]:
-    """Every span those values carry in `text`: numbered, bounded, and the outermost kept.
+def walk_record_strings(
+    node: Any, path: tuple[str | int, ...] = ()
+) -> Iterator[tuple[tuple[str | int, ...], str]]:
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, Mapping):
+        for key, value in node.items():
+            yield from walk_record_strings(value, (*path, key))
+    elif isinstance(node, list | tuple):
+        for at, value in enumerate(node):
+            yield from walk_record_strings(value, (*path, at))
 
-    Three rules in one pass, all answering where a value stands in the frame of reference:
-    `<CLASS_N>` per distinct value, so a value said twice stays co-referent; an occurrence with a
-    word character against it is not one; a span inside a longer span is dropped. `id` is 1-based
-    over what survives, so the ids a prompt shows have no holes.
 
-    Every entry is one non-empty value that occurs in `text` -- `pii_detect` holds both.
-    """
-    found: list[PersonalDataSpan] = []
-    counted: dict[str, int] = {}
-    for personal_data_class, value in detected:
-        counted[personal_data_class] = counted.get(personal_data_class, 0) + 1
-        placeholder = f"<{personal_data_class}_{counted[personal_data_class]}>"
+def find_spans_in_text(
+    text: str,
+    path: tuple[str | int, ...],
+    detected: Sequence[tuple[str, str]],
+    placeholders: Mapping[str, str],
+) -> list[tuple[int, PersonalDataSpan]]:
+    here: list[tuple[int, PersonalDataSpan]] = []
+    for claimed_at, (personal_data_class, value) in enumerate(detected):
         start = text.find(value)
         while start >= 0:
             end = start + len(value)
             before = text[start - 1] if start else ""
             after = text[end] if end < len(text) else ""
             if not (WORD.match(before) or WORD.match(after)):
-                found.append(
-                    PersonalDataSpan(
-                        id=0,
-                        start=start,
-                        end=end,
-                        personal_data_class=personal_data_class,
-                        placeholder=placeholder,
+                here.append(
+                    (
+                        claimed_at,
+                        PersonalDataSpan(
+                            id=0,
+                            path=path,
+                            start=start,
+                            end=end,
+                            personal_data_class=personal_data_class,
+                            placeholder=placeholders[value],
+                        ),
                     )
                 )
             start = text.find(value, end)
+    return [
+        (claimed_at, span)
+        for claimed_at, span in here
+        if not any(
+            other.start <= span.start
+            and span.end <= other.end
+            and other.end - other.start > span.end - span.start
+            for _, other in here
+        )
+    ]
+
+
+def name_placeholders(detected: Sequence[tuple[str, str]]) -> Mapping[str, str]:
+    """`<CLASS_N>` per distinct value, numbered per class in the order the claims arrive.
+
+    Which value gets `_1` is read off the claim order, which `order_claims_by_class` set from
+    `review_text` -- the string a reviewer reads in order. Only *where* a span is moved into the
+    record; which placeholder a value wears did not.
+    """
+    counted: dict[str, int] = {}
+    named: dict[str, str] = {}
+    for personal_data_class, value in detected:
+        if value in named:
+            continue
+        counted[personal_data_class] = counted.get(personal_data_class, 0) + 1
+        named[value] = f"<{personal_data_class}_{counted[personal_data_class]}>"
+    return named
+
+
+def find_and_number_spans(
+    record: Mapping[str, Any], detected: Sequence[tuple[str, str]]
+) -> tuple[PersonalDataSpan, ...]:
+    """Every span those values carry in the record: located, numbered, and the outermost kept.
+
+    `id` is 1-based over what survives, ordered by the claim first and by the walk second -- the
+    same order the ids ran in when the frame of reference was one text, so what a confirmation is
+    asked about did not move when *where a span is* did. Within one string they run by offset. Every entry of `detected` is one non-empty value -- `pii_detect` holds
+    that -- and a value that occurs nowhere in the record simply earns no span, which is a claim
+    left unresolved rather than an error.
+    """
+    placeholders = name_placeholders(detected)
+    found = [
+        (claimed_at, walked_at, span)
+        for walked_at, (path, said) in enumerate(walk_record_strings(record))
+        for claimed_at, span in find_spans_in_text(said, path, detected, placeholders)
+    ]
     return tuple(
         span.model_copy(update={"id": numbered})
-        for numbered, span in enumerate(
-            (
-                span
-                for span in found
-                if not any(
-                    other.start <= span.start
-                    and span.end <= other.end
-                    and other.end - other.start > span.end - span.start
-                    for other in found
-                )
-            ),
-            start=1,
+        for numbered, (_, _, span) in enumerate(
+            sorted(found, key=lambda one: (one[0], one[1], one[2].start)), start=1
         )
     )
 
 
-def read_span_values(text: str, spans: Sequence[PersonalDataSpan]) -> Mapping[str, str]:
-    """What stands in for each value, keyed by the value. The one place a span is read.
-
-    Keyed by value and not by placeholder, because one value gets one placeholder throughout a
-    scan and the other direction is not a map: two spans a reviewer typed the same placeholder on
-    would be one entry, and the value that lost would never be replaced --
-    leaving a record that says it was redacted and was not.
-
-    A span whose offsets read nothing is skipped: these arrive from a reviewer, and replacing the
-    empty string puts a placeholder between every character of the text. So is a span with no
-    placeholder, for the same reason read the other way round -- there is nothing to put in the
-    text, and replacing a value with nothing deletes it silently instead of marking it.
-    """
-    return {
-        text[span.start : span.end]: span.placeholder
-        for span in spans
-        if text[span.start : span.end] and span.placeholder
-    }
-
-
-def replace_text(text: str, placeholders: Mapping[str, str]) -> str:
-    """`text` copied with every value `placeholders` has one for replaced by it, longest first.
-
-    Longest first so a shorter value inside a longer one cannot cut it -- `minh<PHONE_1>@vd.vn` is
-    neither redacted nor intact.
-    """
-    replaced = text
-    for value, placeholder in sorted(
-        placeholders.items(), key=lambda pair: -len(pair[0])
-    ):
-        replaced = replaced.replace(value, placeholder)
+def replace_spans_in_text(said: str, spans: Sequence[PersonalDataSpan]) -> str:
+    replaced = said
+    lowest = len(said)
+    for span in sorted(spans, key=lambda one: -one.start):
+        if span.start >= span.end or not span.placeholder or span.end > len(said):
+            continue
+        if span.end > lowest:
+            continue
+        replaced = replaced[: span.start] + span.placeholder + replaced[span.end :]
+        lowest = span.start
     return replaced
 
 
-def replace_node(node: Any, placeholders: Mapping[str, str]) -> Any:
-    """`node` copied with every string under it replaced the same way `replace_text` does.
-
-    By value and not by offset, which is what makes the rule runnable here at all: the offsets
-    index `review_text`, and `messages`, `tools` and `label` are other strings.
-    So a value confirmed at one occurrence is replaced at every occurrence in every field -- a
-    value redacted in one field and left in another is not redacted.
-
-    Anything that is not a string, a mapping or a list is answered as it arrived: a number, a
-    boolean and a `null` carry no value to trade back.
-    """
+def replace_node(
+    node: Any,
+    spans: Mapping[tuple[str | int, ...], Sequence[PersonalDataSpan]],
+    path: tuple[str | int, ...] = (),
+) -> Any:
     if isinstance(node, str):
-        return replace_text(node, placeholders)
+        return replace_spans_in_text(node, spans.get(path, ()))
     if isinstance(node, Mapping):
-        return {key: replace_node(value, placeholders) for key, value in node.items()}
+        return {
+            key: replace_node(value, spans, (*path, key)) for key, value in node.items()
+        }
     if isinstance(node, list | tuple):
-        return [replace_node(item, placeholders) for item in node]
+        return [replace_node(item, spans, (*path, at)) for at, item in enumerate(node)]
     return node
+
+
+def group_spans_by_path(
+    spans: Sequence[PersonalDataSpan],
+) -> Mapping[tuple[str | int, ...], tuple[PersonalDataSpan, ...]]:
+    """The spans keyed by the string each one is in, which is what `replace_node` walks against."""
+    grouped: dict[tuple[str | int, ...], list[PersonalDataSpan]] = {}
+    for span in spans:
+        grouped.setdefault(tuple(span.path), []).append(span)
+    return {path: tuple(here) for path, here in grouped.items()}
 
 
 def order_claims_by_class(
@@ -181,38 +210,48 @@ def order_claims_by_class(
 
 
 def decide_replacement_outcome(
-    text: str,
     claims: Sequence[tuple[str, str]],
     spans: Sequence[PersonalDataSpan],
-    redacted: str,
+    redacted: Mapping[str, Any],
 ) -> PersonalDataReplacementOutcome:
     """How far replacing got, read off the copy rather than off what was asked for.
 
     `reported`: nothing was claimed, so there was nothing to rewrite. `redacted`: every claimed
-    value resolved -- the copy holds it nowhere, and every span kept over it reads as its
-    placeholder. `withheld`: everything between, including a reviewer who handed back no span at
-    all, because a rewrite asked for and not done is not a clean record. That last case needs no
-    branch of its own: a claim nobody handed a span for is still in the copy, so it never resolves.
+    value resolved -- the copy holds no occurrence of it that anything would detect. `withheld`:
+    everything between, including a reviewer who handed back no span at all, because a rewrite
+    asked for and not done is not a clean record. That last case needs no branch of its own: a
+    claim nobody handed a span for still stands in the copy, so it never resolves.
 
-    `redacted` is the *record's* copy rendered back as one text, so this measures what ships and
-    not a second rewrite of the scan's own text. Read off the copy because two values overlapping
-    *in part* keep both spans, and then replacement by value has the second looking for a string
-    the first already cut: its placeholder never lands and the copy holds a fragment of a name.
-    Which span should win is undecided; that this is not those values redacted is not. A claim
-    with no span at all is resolved by the longer value it sat inside.
+    **Measured by running the span finder again over the copy**, and not by asking whether the
+    value is a substring of it. Those are different questions, and per-span replacement is what
+    made the difference show: an order number `09123456789012` holding a phone inside it is not
+    that phone left un-redacted -- it earns no span, because a word character butts against it --
+    and replacing by value used to hide the distinction by cutting the order number in half.
 
-    The map is `read_span_values`' own, so a span nothing could be replaced through -- no value at
-    those offsets, or no placeholder to put there -- is not in it, and the value it named has to
-    be gone from the copy on its own. It is not, because nothing replaced it: `withheld`.
+    Two questions, and a claim resolves only on both. *Is it still standing* -- no occurrence of
+    the value that anything would detect is left in the copy. And *did its placeholder land* --
+    because a span handed back and then not applied, for overlapping one already replaced, takes
+    its value out of the copy by **cutting** it rather than by replacing it, and half a name gone
+    is not a name redacted. A claim nothing could ever replace has no usable span, so the second
+    question is not asked of it and being absent is enough.
     """
     if not claims:
         return "reported"
-    placeholders = read_span_values(text, spans)
+    placeholders = name_placeholders(claims)
+    standing = {span.placeholder for span in find_and_number_spans(redacted, claims)}
+    usable = {
+        span.placeholder for span in spans if span.start < span.end and span.placeholder
+    }
+    landed = {
+        placeholder
+        for placeholder in set(placeholders.values())
+        if any(placeholder in said for _, said in walk_record_strings(redacted))
+    }
     resolved = [
         value
         for _, value in claims
-        if value not in redacted
-        and (value not in placeholders or placeholders[value] in redacted)
+        if placeholders[value] not in standing
+        and (placeholders[value] not in usable or placeholders[value] in landed)
     ]
     return "redacted" if len(resolved) == len(claims) else "withheld"
 
@@ -238,17 +277,7 @@ class PiiLlmDetector:
         self.settings = verifier_config.settings
 
     async def detect(self, prompt: str, text: str) -> dict[str, str]:
-        """Which class the model claims each value as, keyed by value. Never raises (Req. 8).
 
-        The class is upper case and one word, because it is what picks `<CLASS_N>` and
-        `<home address_1>` beside `<HOME_ADDRESS_1>` reads as two kinds of thing; a finding
-        missing either half names nothing. A failed call and an answer of the wrong shape are one
-        event and one empty answer (`H-6`).
-
-        `text` is what the answer is about, and what a claim is checked against: a value not in it
-        verbatim is dropped, because the model was asked to copy and a number it normalised
-        carries no offset.
-        """
         try:
             resp_text = await complete(
                 prompt,
@@ -260,8 +289,7 @@ class PiiLlmDetector:
             json_parsed = PiiLlmDetected.model_validate(
                 extract_json_from_text(resp_text)
             ).detected
-        # A refusal, a timeout, a hung-up socket, prose where JSON was asked for: whatever went
-        # wrong, this step detected nothing, which leaves the record to the rule scans.
+
         except Exception as error:
             logger.warning(
                 "pii_llm_detect_failed",
@@ -290,11 +318,7 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
     async def detect(
         self, checking_input: PersonalDataCheckingInput
     ) -> PersonalDataDetected:
-        """Both detectors over this sample's review text, and the spans that survive the asking.
 
-        Spans first, then the confirmation, because what it is asked about is a span. Nothing is
-        replaced here: what comes back is what a reviewer is shown.
-        """
         text = build_review_text(checking_input.sample)
         language = checking_input.language
         prompt = self.build_pii_llm_detect_prompt(text, language)
@@ -304,7 +328,9 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         }
         claims = order_claims_by_class(text, claimed, self.pii_rule_detector.classes)
         spans = await self.confirm_pii_by_llm(
-            checking_input, text, find_and_number_spans(text, claims)
+            checking_input,
+            text,
+            find_and_number_spans(checking_input.sample, claims),
         )
         return PersonalDataDetected(review_text=text, claims=claims, spans=spans)
 

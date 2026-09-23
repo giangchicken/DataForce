@@ -35,9 +35,9 @@ What the repository already decided, and what this spec therefore does not:
 
 - `pyproject.toml` carries `sqlalchemy>=2.0.52,<2.1` for exactly this, unimported today. SQLite and
   Postgres are one code path with two DSNs, not two adapters.
-- The DSN is read once, from `DATAFORCE_DATABASE_URL`. **Unset means a SQLite file beside the
-  repository**, made on startup, so a deployment that configured nothing still has somewhere to put
-  a row. A DSN that is set wins, which is how Postgres arrives. The *no store* state every caller
+- The DSN is read from `DATAFORCE_DATABASE_URL`, or handed to a `Database` directly. **Unset means
+  a SQLite file beside the repository**, made on the way to the first session, so a deployment that
+  configured nothing still has somewhere to put a row. A DSN that is set wins, which is how Postgres arrives. The *no store* state every caller
   handles is still reachable, by setting the variable to `off` — it has to stay reachable, because
   the review works without a store and a state nothing can reach is a state nothing tests.
 - **There are no migrations.** `Base.metadata.create_all` is the only thing that makes a table, so
@@ -168,19 +168,34 @@ result and is the only table anything is ever exported from.
 
 16. **A sample whose steps did not run is refused, and nothing is written.** `personal_data` being
     `null`, or holding something nothing can read as a scan, means nobody scanned it — evidence that
-    cannot be checked proves nothing. A confirmed span's value still readable in **what ships** means
-    the redaction did not take: what ships, and not the three `new_` keys read literally, because a
-    `new_` key that is `null` ships what arrived and a value surviving there reaches the corpus just
-    the same. The reading is a plain substring over the whole shipped sample, which is exactly what
-    the replacement does — a check looser than the rewrite would clear a value the rewrite left, and
-    a stricter one would refuse records the rewrite had finished with. Either is a `422` naming the
-    step — **and the span, never the value**: a refusal that echoed it would put personal data in a
-    response body and in whatever logs one, and the span's number and class is what a reviewer needs
-    to go and tick it anyway. Neither is a row in either table: `khử nhận dạng` is a condition the `dataset` table
+    cannot be checked proves nothing. A handed-back span whose placeholder is **not standing where
+    the span says it stands** means the redaction did not take: read over what ships, and not the
+    three `new_` keys read literally, because a `new_` key that is `null` ships what arrived and a
+    value surviving there reaches the corpus just the same. The reading is the rewrite read from
+    the other side — the rewrite puts one placeholder into the string a span's `path` names, per
+    span, so the guard counts them in that one string. A check looser than the rewrite would clear
+    a value the rewrite left, and a stricter one would refuse records the rewrite had finished
+    with, and *is this value a substring of what ships* is now the stricter one: replacement is per
+    span, so a value the reviewer ticked off at one occurrence stands in the copy on purpose, and
+    a guard reading it as a failure refuses the ordinary case.
+    **And what ships may not have gained a claim.** The spans say *replace these places*; nothing
+    on them says what a reviewer typed into the label afterwards, and the form they type it on is
+    seeded from what arrived rather than from the copy. So a claimed value standing in a shipped
+    part **oftener than it stood in the one that arrived** is the same refusal, counted per part:
+    a value redacted out of the turns and typed into an argument reaches the corpus, and over the
+    whole sample the two totals would agree. Counted over the record's strings and never over the
+    sample serialised — JSON escapes a quote, a backslash and a newline, so a serialised search
+    would clear a record still holding one. What is left, stated rather than discovered: a value
+    standing where nobody ever handed back a span and what arrived already held it is not refused
+    here — `outcome` is the evidence beside it, and card 1 is where the reviewer answered for it.
+    Any of the three is a `422` naming the
+    step — **and the span or the class, never the value**: a refusal that echoed it would put personal
+    data in a response body and in whatever logs one, and the span's number and class, or the class
+    and which of the three parts it stands in, is what a reviewer needs to go and tick it anyway. Neither is a row in either table: `khử nhận dạng` is a condition the `dataset` table
     has to be able to prove about every row it holds, and the cheapest proof is that a row failing it
     never arrived.
 17. **The precondition is the modality's and no task writes its own.** What it reads — the
-    confirmed spans, the text they index, and the three `new_` keys — is a text2text shape, and
+    handed-back spans, the field each one names, and the three `new_` keys — is a text2text shape, and
     the obligation behind it is the law's rather than one task's. It reads the spans and **not**
     `personal_data.outcome`: the outcome is what the redaction says about itself, and a record
     saying it is clean is not a record that is. The outcome rides along as evidence, measured
@@ -490,8 +505,8 @@ result and is the only table anything is ever exported from.
     database named — a file name, or a dialect, a host and a name — and nothing that would let a
     reader connect. It is shown rather than chosen: a page that could set the DSN would let anyone
     who opens it point this service at any database it can reach, which is a much larger thing
-    than telling them where they are. Where nothing is attached it says so, and names the variable
-    to set.
+    than telling them where they are. There is always one to name: a deployment that named
+    nothing still writes somewhere, so the answer is never *none*.
 53. **The corpus can be read back, and only the redacted half of it.** Between the queue, which
     says what is *waiting*, and the statistics, which say what the whole comes to, a row somebody
     had written was readable nowhere — and a sample pasted straight in never had a queue row at
@@ -510,6 +525,37 @@ result and is the only table anything is ever exported from.
       corpus writing `["VerifyEmail_15d"]` shows up. It is told from a sample correctly labelled
       as needing no tool, which is zero beside true. The list can be narrowed to those rows,
       because finding them is the reason to open it.
+54. **The tables are made on the way to a session, not once at startup.** `create_engine` does not
+    connect, so a database is only ever *named* until something reads it — and one named at startup
+    can be gone by the afternoon. A SQLite file is deleted, restored from a copy, or cleared by a
+    suite run beside the service. What answered then was `500 Internal Server Error`, at the end of
+    the one flow a reviewer cannot repeat from memory, with no way back but a restart. Now the
+    session that finds them gone makes them again and the write lands.
+    - **An unlinked file has to be noticed, not just made again.** A file lives on behind every
+      connection still holding it, so a pool opened before the delete goes on reading and writing a
+      path nothing can find. Making the tables again on *that* is worse than the fault it replaced:
+      the write answers 200 and is gone with the process. The pool is dropped when the file the URL
+      names is not on disk, which is what makes the next connection open the name and find nothing.
+    - **Every session asks, and nothing remembers having asked.** Against a SQLite database that
+      already holds the tables the ask costs 0.11ms, which is less than anything else in the
+      request. A memo would only ever save a round trip on a server dialect, and no deployment can
+      name one today — so it was a cache guarding a case nobody can reach. Remembering is the thing
+      to add back the day a URL can be handed in from outside, and not before.
+    - **No suite removes a database to check itself.** This repository's own cleared the default
+      file in the checkout before every test, which is how the corpus behind a running service was
+      lost and how all of this was found. What a test may not do is *reach* that database, and the
+      engine is where reaching one is decided, so that is where it is refused.
+55. **A store that answers badly refuses in the service's own words.** `create_all` cannot reach a
+    host behind a typo or a firewall, a database this service has no rights on, or a disk that is
+    full — so those remain, and what used to answer them was the statement's own error. They answer
+    **503**, and the words name the database that did not answer.
+    - **Neither the URL nor the statement reaches the screen.** The first for Requirement 52's
+      reason. The second for one particular to this service: SQLAlchemy prints an error with its
+      bound parameters attached, and on a write those parameters are the sample, un-redacted half
+      included. The log is given the driver's own message, which is the fault without the row.
+    - **The database answering badly is this state; this service asking badly is not.** A fault in
+      the SQL written here is a bug in this repository, and answering it with a database to check
+      would send somebody to read their deployment for it. Those still answer 500.
 
 ## Design
 

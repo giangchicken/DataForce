@@ -20,15 +20,21 @@ Write the three keys in that order:
 
 Report the value, not the sentence around it: `Trần Văn Minh`, not `anh Trần Văn Minh nói`. One entry per distinct value — a value said twice is one entry, and the code finds every place it occurs.
 
+**Report the whole value and never a piece of it.** A name is the name as the text writes it — family name, middle name and given name together: `Nguyễn Văn Nam`, never `Nam`. Two things go wrong when you report one syllable, and both of them reach the corpus. `Nguyễn Văn` is left standing beside the placeholder, which still identifies the person. And the code searches for exactly what you wrote, so `Nam` is then found and replaced inside `Việt Nam`, inside a tool's description, inside every other place those three characters happen to stand. The same goes for an address, an account number and a date of birth: report the longest run the text actually holds.
+
+Where two values you could report overlap, report the **longer** one. A value sitting inside a longer one is dropped by the code, so the longer is the one that survives; reporting only the shorter leaves the rest of it in the text.
+
 # THE CLASSES
 
 Prefer these four, which is what the rule scans already use:
 - `EMAIL` — an address someone is reachable at
 - `PHONE` — a number someone can be called on
 - `OTP` — a one-time code sent to someone
-- `NAME` — a person's name
+- `NAME` — a person's name, whole: family name, middle name and given name together
 
 Anything else that identifies a person gets a class of your own naming, in UPPER_SNAKE_CASE and no more than two words: `ADDRESS`, `ID_NUMBER`, `BANK_ACCOUNT`, `DATE_OF_BIRTH`, `PLATE_NUMBER`. Use the same class for the same kind of thing throughout one answer.
+
+**Never a narrower class for something these four already cover.** `FIRST_NAME` and `LAST_NAME` are not two kinds of thing; they are one name cut in half. Each distinct value gets its own placeholder, so a name reported in pieces reaches the reader as `<LAST_NAME_1> <FIRST_NAME_1>` — two placeholders nobody can tell belong to one person. A person's name is `NAME`.
 
 ---
 

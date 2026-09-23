@@ -36,6 +36,7 @@ export const readTools = tools => (tools || []).map(tool => {
     fields: Object.entries(taken).map(([named, field]) => ({
       name: named,
       said: (field || {}).description || "",
+      type: (field || {}).type || "",
       needed: needed.includes(named)
     }))
   };
@@ -43,11 +44,24 @@ export const readTools = tools => (tools || []).map(tool => {
 
 export const offeredTools = () => readTools(held.sample.tools);
 
+// **Every word the catalog carries**, because every word of it ships and every word of it is
+// scanned: a name stands in `tools[4].parameters.properties.nationality.description` as readily as
+// in a turn, and card 1 draws that path beside a span a reviewer has to answer. Drawn to the tool's
+// name alone, the reviewer would be ticking a row about a string the screen never showed them.
 export const drawCatalog = read => (read.length
   ? read.map(tool => `<div class="tool"><b>${esc(tool.name)}</b>`
     + (tool.fields.length
       ? `<span class="args"> (${esc(tool.fields.map(field => field.name).join(", "))})</span>` : "")
     + (tool.said ? `<div class="note">${esc(tool.said)}</div>` : "")
+    + (tool.fields.length
+      ? '<div class="paramlist">' + tool.fields.map(field =>
+        `<div class="paramname">${esc(field.name)}`
+        + (field.type ? `<span class="paramtype">${esc(field.type)}</span>` : "")
+        + (field.needed ? '<span class="needed">required</span>' : "")
+        + "</div>"
+        + (field.said ? `<div class="note">${esc(field.said)}</div>` : "")).join("")
+        + "</div>"
+      : '<div class="note">This tool takes no argument.</div>')
     + "</div>").join("")
   : '<div class="empty">No tools were offered.</div>');
 

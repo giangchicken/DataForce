@@ -41,6 +41,8 @@ function sayAgreement(reviewed) {
 
 const proposed = () => (held.review || {}).consensus_calls || [];
 
+const panelAnswered = () => (held.review || {}).consensus_given === true;
+
 const writtenCalls = () => (held.written || [])
   .filter(one => one.name)
   .map(one => ({
@@ -100,14 +102,17 @@ function paintFaults() {
 }
 
 function paintProposal() {
-  const calls = proposed();
   const votes = ((held.review || {}).llm || {}).votes || [];
-  $("v-take").disabled = calls.length === 0;
-  $("proposed-call").innerHTML = held.review
-    ? drawLabel(calls)
-    : '<div class="empty">Nobody has been asked yet.</div>';
+  const answered = panelAnswered();
+  $("v-take").disabled = !answered;
+  $("proposed-call").innerHTML = !held.review
+    ? '<div class="empty">Nobody has been asked yet.</div>'
+    : answered
+      ? drawLabel(proposed())
+      : '<div class="empty">The panel agreed on nothing, so there is no answer of its own to'
+        + ' draw.</div>';
   say("proposed-note", !held.review ? ""
-    : calls.length
+    : answered
       ? `what more than half of ${votes.length} ${wordFor(votes.length, "reviewer", "reviewers")} gave`
       : "the panel agreed on nothing, so there is nothing to take");
   // **A juror's own answer, in the juror's own words.** Read as a call it would be this page

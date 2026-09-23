@@ -26,6 +26,7 @@ from sqlalchemy import Engine, inspect
 
 from dataforce.edge.database import db
 from dataforce.tables import Base
+from tests.conftest import attach
 
 TEST_DSN_VARIABLE = "DATAFORCE_TEST_DATABASE_URL"
 
@@ -59,11 +60,10 @@ def store_engine(
     """An engine on that DSN, reached the way the edge reaches one, with no table made yet.
 
     `no_endpoints` is named rather than left to run on its own: it clears
-    `DATAFORCE_DATABASE_URL`, and it has to do that before this sets it.
+    a database of its own, and it has to do that before this names the server's.
     """
-    monkeypatch.setenv("DATAFORCE_DATABASE_URL", store_url)
+    attach(monkeypatch, store_url)
     engine = db.open_engine()
-    assert engine is not None
     found = set(inspect(engine).get_table_names())
 
     yield engine

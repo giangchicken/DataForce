@@ -10,10 +10,13 @@ import { $, esc, say, wordFor } from "./screen.js";
 import { ask } from "./wire.js";
 
 const DATASET_PAGE = 100;
+const BARS_SHOWN = 10;
+const COUNTED_IN_THE_MATRIX = ["domain", "call_trigger"];
 
 let stored = [];
 let storedTotal = 0;
 let storedShown = 0;
+let storedOpen = null;
 
 export async function askDataset(more) {
   storedShown = more ? storedShown + DATASET_PAGE : 0;
@@ -23,8 +26,7 @@ export async function askDataset(more) {
   if (!answer.ok) return say("dataset-note", answer.detail, "bad");
   stored = [...stored, ...(answer.data.samples || [])];
   storedTotal = answer.data.total || 0;
-  $("dataset-one").innerHTML = "";
-  paintDataset();
+  closeStored();
 }
 
 export function paintDataset() {
@@ -40,7 +42,7 @@ export function paintDataset() {
     return;
   }
   body.innerHTML = rows.map(row => `<tr class="${row.schema_valid ? "" : "dropped"}">
-    <td><button class="open" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
+    <td><button class="open${row.key === storedOpen ? " opened" : ""}" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
     <td>${esc(row.domain)}</td>
     <td>${esc(row.ambiguous)}</td>
     <td>${esc(row.number_turns)}</td>
@@ -55,11 +57,14 @@ export function paintDataset() {
 // the same catalog. A second drawing here would be a second idea of what a stored row looks like,
 // and the one a reviewer never sees beside the original is the one that goes wrong quietly.
 export async function openStored(key) {
+  if (key === storedOpen) return closeStored();
   say("dataset-note", "reading…");
   const answer = await ask(`/records/${encodeURIComponent(key)}`);
   if (!answer.ok) return say("dataset-note", answer.detail, "bad");
   const one = answer.data;
   const valid = one.facets.schema_valid;
+  storedOpen = key;
+  paintDataset();
   say("dataset-note", `#${key}`);
   $("dataset-one").innerHTML = `<div class="storedone">`
     + `<div class="fieldname tight">Label as it ships</div>`
@@ -73,20 +78,20 @@ export async function openStored(key) {
     + `</div>`;
 }
 
+function closeStored() {
+  storedOpen = null;
+  $("dataset-one").innerHTML = "";
+  paintDataset();
+}
+
 // **Never the DSN**, in either place it is said: a connection string carries a password, and what
 // both of these answer is *am I writing where I think I am* without one.
 export async function askStore() {
   const answer = await ask("/store", {});
-  if (!answer.ok) return sayStore("store none", "", "nothing answered which database is attached");
-  const said = answer.data;
-  if (!said || typeof said !== "object" || typeof said.attached !== "boolean") {
-    return sayStore("store", "", "nothing answered which database is attached");
-  }
-  if (!said.attached) {
-    return sayStore("store none", `no database — set ${said.variable}`,
-      `nothing is attached, so nothing will be stored — set ${said.variable}`, "bad");
-  }
-  sayStore("store", said.describes, `records land in ${said.describes}`);
+  const named = answer.ok && answer.data && typeof answer.data.describes === "string"
+    ? answer.data.describes : "";
+  if (!named) return sayStore("store none", "", "nothing answered which database this writes to");
+  sayStore("store", named, `records land in ${named}`);
 }
 
 // The header says which, in as few words as a pill holds; the sheet that opens the corpus says it
@@ -151,6 +156,36 @@ function buildMatrixTable(grid) {
     + `<thead><tr><th class="axis"></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+function drawBars(counted) {
+  const ranked = Object.entries(counted).sort(([, one], [, two]) => two - one);
+  const most = ranked.length ? ranked[0][1] : 0;
+  return '<div class="barchart">'
+    + ranked.slice(0, BARS_SHOWN).map(([value, number]) =>
+      `<div class="barname">${esc(value)}</div>`
+      + '<div class="bartrack">'
+      + (number ? `<div class="barfill" style="width:${(number / most) * 100}%"></div>` : "")
+      + `</div><div class="barnumber${number ? "" : " zero"}">${esc(number)}</div>`).join("")
+    + '</div>'
+    + (ranked.length > BARS_SHOWN
+      ? `<p class="note">The ${BARS_SHOWN} largest of ${ranked.length}.</p>`
+      : "");
+}
+
+function drawHistogram(facet, counted) {
+  const declared = facetValues(facet);
+  const values = [...declared, ...Object.keys(counted).filter(one => !declared.includes(one))];
+  const most = Math.max(0, ...Object.values(counted));
+  return '<div class="histogram">'
+    + values.map(value => {
+      const number = counted[value] || 0;
+      return '<div class="column"><div class="columntrack">'
+        + `<div class="columnfill" style="height:${most ? (number / most) * 100 : 0}%">`
+        + `<span class="columnnumber${number ? "" : " zero"}">${esc(number)}</span></div>`
+        + `</div><div class="columnname">${esc(value)}</div></div>`;
+    }).join("")
+    + '</div>';
+}
+
 export function paintStrip() {
   const bits = [];
   if (waiting()) {
@@ -177,6 +212,7 @@ function paintStatistics() {
   const label = held.counted.label_summary || {};
   const calls = held.counted.tool_call_counts || {};
   const groups = held.counted.duplicate_groups || {};
+  const silent = Object.values(calls).filter(number => !number).length;
   const empty = listEmptyCells(grid);
   const byFacet = held.counted.counted_distribution_by_facet || {};
   $("stats").innerHTML = '<div class="fieldname">What the corpus holds</div>'
@@ -194,22 +230,23 @@ function paintStatistics() {
     + '</div>'
     + '<div class="fieldname">Tools called</div>'
     + (Object.keys(calls).length
-      ? '<div class="tablewrap"><table class="counts"><tbody>'
-        + Object.entries(calls).map(([name, number]) =>
-          `<tr><td>${esc(name)}</td><td>${esc(number)}</td></tr>`).join("")
-        + '</tbody></table></div>'
+      ? drawBars(calls)
+        + (silent
+          ? `<p class="note">${esc(silent)} of ${esc(Object.keys(calls).length)} tools`
+            + ` ${wordFor(silent, "is", "are")} never called — a corpus teaches no tool it never`
+            + ' calls.</p>'
+          : "")
       : '<p class="note">No stored sample calls a tool yet.</p>')
     + '<div class="fieldname">The same input twice</div>'
     + '<div class="figs">'
     + `<div><b>${esc((groups.same_label || []).length)}</b> ${wordFor((groups.same_label || []).length, "group", "groups")} agreeing</div>`
     + `<div><b>${esc((groups.diff_label || []).length)}</b> ${wordFor((groups.diff_label || []).length, "group", "groups")} disagreeing</div>`
     + '</div>'
-    + Object.entries(byFacet).map(([facet, values]) =>
-      `<div class="fieldname">${esc(facet)}</div>`
-      + '<div class="tablewrap"><table class="counts"><tbody>'
-      + (Object.keys(values).length
-        ? Object.entries(values).map(([value, number]) =>
-          `<tr><td>${esc(value)}</td><td>${esc(number)}</td></tr>`).join("")
-        : '<tr><td class="note">nothing stored</td><td></td></tr>')
-      + '</tbody></table></div>').join("");
+    + Object.entries(byFacet)
+      .filter(([facet]) => !COUNTED_IN_THE_MATRIX.includes(facet))
+      .map(([facet, values]) =>
+        `<div class="fieldname">${esc(facet)}</div>`
+        + (Object.keys(values).length
+          ? drawHistogram(facet, values)
+          : '<p class="note">nothing stored</p>')).join("");
 }

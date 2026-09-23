@@ -85,6 +85,10 @@ PREVIEW_CHARACTERS = 200
 # past its own limit, which a corpus of ten thousand lines would reach in one statement.
 KEYS_PER_LOOKUP = 500
 
+# What a facet holding an empty list is counted under. Lowercase, so it cannot be mistaken for a
+# personal-data class, which the scans write in UPPER_SNAKE_CASE.
+NOTHING_ANSWERED = "none"
+
 
 class ToolDecisionSampleBuilding(DatasetSampleBuilding):
     """A reviewed tool-calling sample, as the row `tool_decision`'s two tables take."""
@@ -440,6 +444,22 @@ def count_total_samples(session: Session) -> Mapping[str, int]:
     return counted
 
 
+def name_facet_values(value: Any, written_as_text: bool) -> tuple[str, ...]:
+    """What one row answers, as the keys a distribution counts it under.
+
+    **A facet that holds a list is one row answering several times.** `personal_data` is the
+    classes a record held and `call_trigger` is the ways it fires, and counted whole they draw a
+    bar per combination -- `["FIRST_NAME", "NAME"]` beside `["FIRST_NAME"]` beside `[]`, which is
+    a chart of set membership and not a distribution of anything. A row answering nothing still
+    answered, so an empty list keeps a name of its own rather than falling out of the count.
+    """
+    if written_as_text:
+        return (value,)
+    if isinstance(value, list):
+        return tuple(str(one) for one in value) or (NOTHING_ANSWERED,)
+    return (json.dumps(value, ensure_ascii=False),)
+
+
 def count_by_facet(
     session: Session,
 ) -> Mapping[str, Mapping[str, int]]:
@@ -451,8 +471,8 @@ def count_by_facet(
         for value, number in session.execute(
             select(column, func.count()).group_by(column).order_by(column)
         ):
-            key = value if written_as_text else json.dumps(value, ensure_ascii=False)
-            found[key] = found.get(key, 0) + number
+            for key in name_facet_values(value, written_as_text):
+                found[key] = found.get(key, 0) + number
         counted[facet] = found
     return counted
 

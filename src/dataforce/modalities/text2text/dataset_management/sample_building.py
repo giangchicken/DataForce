@@ -1,7 +1,7 @@
 """logic · a finished review read as the row it becomes, and the refusal that comes first.
 
 **The refusal is this file's whole reason to be the modality's.** What it reads -- whether anybody
-scanned the sample, and whether a value the redaction confirmed is still readable in what ships --
+scanned the sample, and whether every place the redaction confirmed reads as its placeholder --
 is a text2text shape, and the obligation behind it is the law's rather than one task's: a corpus
 derived from personal data is tradeable only once de-identified, so `khử nhận dạng` is something the
 `dataset` table has to be able to prove about every row it holds. The cheapest proof is that a row
@@ -18,7 +18,7 @@ ticked -- is the same for every sample this modality will ever hold.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
 from pydantic import ValidationError
@@ -77,17 +77,78 @@ def list_text(node: Any) -> Iterator[str]:
             yield from list_text(item)
 
 
+def count_text(node: Any, value: str) -> int:
+    return sum(said.count(value) for said in list_text(node))
+
+
+def read_node(node: Any, path: Sequence[str | int]) -> Any:
+    """What stands at `path` in what ships, or `None` where nothing does."""
+    for step in path:
+        if isinstance(node, Mapping):
+            node = node.get(step)
+        elif isinstance(node, list | tuple) and isinstance(step, int):
+            node = node[step] if -len(node) <= step < len(node) else None
+        else:
+            return None
+    return node
+
+
 def find_surviving_spans(
     scanned: ScannedPersonalData, shipped: ShippedDatasetSample
 ) -> tuple[PersonalDataSpan, ...]:
+    """Every handed-back span whose placeholder is not standing where the span says it stands.
 
-    written = tuple(list_text(shipped.model_dump()))
-    return tuple(
-        span
-        for span in scanned.spans
-        if (value := scanned.review_text[span.start : span.end])
-        and any(value in one for one in written)
-    )
+    The rewrite puts one placeholder into the string a span's `path` names, per span, so the
+    count is the same reading from the other side: three spans of one value in one string and two
+    `<NAME_1>` in it means one of the three did not take. A path that reaches no string in what
+    ships is a span that ships nowhere -- a call the reviewer deleted takes its arguments with it
+    -- and a span nobody handed back was never here to begin with, which is what makes ticking one
+    occurrence off mean anything.
+    """
+    written = shipped.model_dump()
+    standing: dict[tuple[tuple[str | int, ...], str], list[PersonalDataSpan]] = {}
+    for span in sorted(scanned.spans, key=lambda one: one.id):
+        if span.start >= span.end or not span.placeholder:
+            continue
+        standing.setdefault((tuple(span.path), span.placeholder), []).append(span)
+    survived: list[PersonalDataSpan] = []
+    for (path, placeholder), group in standing.items():
+        said = read_node(written, path)
+        if not isinstance(said, str):
+            continue
+        survived.extend(group[said.count(placeholder) :])
+    return tuple(sorted(survived, key=lambda one: one.id))
+
+
+def find_claims_gained(
+    scanned: ScannedPersonalData,
+    document: Mapping[str, Any],
+    shipped: ShippedDatasetSample,
+) -> tuple[str, ...]:
+    """Every claim standing in a shipped part oftener than it stood in the one that arrived.
+
+    The other half of the precondition, and the one the spans cannot see. A span says *replace
+    this place*; nothing says what a reviewer typed into the label afterwards, and the form they
+    type it on is seeded from what arrived. Counted per part, because a value redacted out of the
+    turns and typed into an argument is one the corpus still holds -- equal totals over the whole
+    sample, and a leak.
+
+    Read over the strings and never over the sample serialised: JSON escapes a quote, a backslash
+    and a newline, so a serialised search would clear a record still holding one.
+
+    **The class and the part, never the value** -- a refusal echoing it would put personal data in
+    an HTTP body and in whatever logs one.
+    """
+    gained = []
+    for personal_data_class, value in scanned.claims:
+        if not value:
+            continue
+        for part in SHIPPED_PARTS:
+            if count_text(getattr(shipped, part), value) > count_text(
+                document.get(part), value
+            ):
+                gained.append(f"{personal_data_class} in {part}")
+    return tuple(dict.fromkeys(gained))
 
 
 def read_redacted_classes(scanned: ScannedPersonalData) -> tuple[str, ...]:
@@ -100,10 +161,16 @@ class DatasetSampleBuilding(ABC):
         shipped = read_shipped_sample(document)
         if survived := find_surviving_spans(scanned, shipped):
             raise StepNotRun(
-                f"{REDACTION} did not run: a confirmed value is still in what ships, at "
+                f"{REDACTION} did not run: a confirmed value stands unreplaced in what "
+                "ships, at "
                 + ", ".join(
                     f"span {span.id} ({span.personal_data_class})" for span in survived
                 )
+            )
+        if gained := find_claims_gained(scanned, document, shipped):
+            raise StepNotRun(
+                f"{REDACTION} did not cover it: a confirmed value stands in what ships "
+                "where what arrived had none, as " + ", ".join(gained)
             )
         return DatasetSample(
             input=self.build_input(shipped),

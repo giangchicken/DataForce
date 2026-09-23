@@ -55,9 +55,10 @@ const ONE = {
   label: [{ name: "Lookup", arguments: { ma: PHONE } }]
 };
 
-// The one string the scan reads and every offset indexes: the turns, the catalog, then the label.
+// The one string the scan reads and the reviewer reads: the turns, the catalog, then the label.
 // Written out here the way the service writes it, because what the page shows is this and not a
-// route's JSON about it.
+// route's JSON about it. **It is not what a span's offsets index** — a span names the field it is
+// in, and this text is a rendering that neither shows every field nor writes them verbatim.
 const REVIEW_TEXT = [
   `user: ${SAID}`,
   "assistant: vâng ạ",
@@ -75,8 +76,17 @@ const occurrencesOf = (text, value) => {
   return found;
 };
 
-const PHONE_SPANS = occurrencesOf(REVIEW_TEXT, PHONE).map((at, n) => ({
+// Every place the number stands **in the record**: twice in the turn, once in the label's
+// argument. The turn's two and the argument's one are three different strings' worth of offsets,
+// which is the whole of what moved when a span stopped indexing the text above.
+const PHONE_PLACES = [
+  ...occurrencesOf(SAID, PHONE).map(at => [["messages", 0, "content"], at]),
+  [["label", 0, "arguments", "ma"], 0]
+];
+
+const PHONE_SPANS = PHONE_PLACES.map(([path, at], n) => ({
   id: n + 1,
+  path,
   start: at,
   end: at + PHONE.length,
   personal_data_class: "PHONE",
@@ -86,8 +96,6 @@ const PHONE_SPANS = occurrencesOf(REVIEW_TEXT, PHONE).map((at, n) => ({
 
 const WHY = "khách tự cho số của mình";
 const CONFIRMED_SPANS = PHONE_SPANS.map(span => ({ ...span, reason: WHY }));
-
-const NOTHING_NUMBERED = { review_text: REVIEW_TEXT, claims: [], spans: [] };
 
 // What `/redact` answers: the record with every confirmed value replaced, and that same record
 // rendered again. Both halves, because the record is what a corpus stores and the text is the
@@ -113,7 +121,13 @@ const THREE = { id: "s3", messages: [{ role: "user", content: "hủy dịch vụ
 
 const STATISTICS = {
   sample_totals: { tool_decision_record: 3, tool_decision_dataset: 3 },
-  counted_distribution_by_facet: { domain: { debt_collection: 3, insurance_claims: 1 } },
+  counted_distribution_by_facet: {
+    domain: { debt_collection: 3, insurance_claims: 1 },
+    call_trigger: { condition_met: 3 },
+    personal_data: { PHONE: 2, NAME: 1, none: 1 },
+    ambiguous: { LOW: 3, HIGH: 1 },
+    number_label_tools: { 0: 1, 1: 3 }
+  },
   counted_distribution_by_domain_and_call_trigger: { debt_collection: { condition_met: 3 } },
   label_summary: { total: 3, number_not_null_label: 2, number_diff_label: 2 },
   number_tools_offered: 1,
@@ -132,7 +146,7 @@ const ANSWERS = () => ({
     spans: CONFIRMED_SPANS
   },
   numbered: { review_text: REVIEW_TEXT, claims: [["PHONE", PHONE]], spans: PHONE_SPANS },
-  reviewed: { llm: { label_agreement: 0.75 }, sft: null },
+  reviewed: { llm: { label_agreement: 0.75 }, sft: null, consensus_given: true },
   redacted: REDACTED,
   imported: { read: 4, imported: 2, already_held: 1, unreadable: [3] }
 });
@@ -242,6 +256,11 @@ const typeArgument = (page, arg, said, at = "0") =>
 const dropCall = (page, at = "0") => hit(page.el("call-form").onclick, "[data-drop]", { drop: at });
 const blocksOn = page => (page.el("call-form").markup().match(/class="callform"/g) || []).length;
 
+// One place a value stands, ticked or left in the text. The row is keyed by where the span sits
+// in the answer the service gave, which is the handle the page has when the tick comes back.
+const tickPlace = (page, at, on) =>
+  hit(page.el("keep-table").onchange, "[data-keep]", { keep: String(at), on });
+
 const clickRow = (page, key) => hit(page.el("list-rows").onclick, "[data-open]", { open: key });
 const tickRow = (page, key, on) =>
   hit(page.el("list-rows").onchange, "[data-pick]", { pick: key, on });
@@ -281,6 +300,16 @@ async function main() {
   claims("the catalog names the tool and what it is for",
     page.byId.get("catalog").innerHTML.includes("Lookup")
     && page.byId.get("catalog").innerHTML.includes("tra cứu"));
+  // **Every word the catalog carries.** A scan claims a value in
+  // `tools[0].parameters.properties.ma.description` as readily as in a turn, and card 1 draws that
+  // path on the row the reviewer has to answer. Drawn to the tool's name alone, they would be
+  // ticking a row about a string this screen never showed them.
+  claims("**and every parameter it declares**, with what each one is for",
+    page.byId.get("catalog").innerHTML.includes("Mã khách hàng")
+    && page.byId.get("catalog").innerHTML.includes("Kênh khách liên hệ"));
+  claims("and what kind each takes, and which the tool cannot be called without",
+    page.byId.get("catalog").innerHTML.includes("string")
+    && page.byId.get("catalog").innerHTML.includes("required"));
   claims("the label that arrived is drawn as a call",
     page.byId.get("arrived-call").innerHTML.includes("Lookup"));
   claims("**before there is a record to confirm the table says so**, rather than sitting blank",
@@ -399,17 +428,38 @@ async function main() {
   claims("**the text on screen is the one the reviewers will be handed**, said so before the"
     + " button that hands it over",
     page.el("text-which").textContent.includes("reviewers will be handed"));
-  claims("a scan that found something opens its own working unasked",
-    page.byId.get("scan-raw").open === true);
   claims("the data panel says how many values there are to confirm",
     page.byId.get("data-verdict").textContent.includes("1"));
   const kept = () => page.el("keep-table").markup();
-  claims("**a row is a value, and how many times it occurs is answered beside it**",
-    kept().includes(PHONE) && kept().includes(`×${PHONE_SPANS.length}`));
-  claims("**and no offset is on the screen**: the row carries the value, not two numbers",
-    !kept().includes(`value="${PHONE_SPANS[0].start}"`));
-  claims("the spans it made are shown read-only, each with what it stands in for",
-    shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
+  // **One table, because there is one decision on it.** A value and the places it stands were two
+  // tables, and `×3` says a value occurs three times while saying nothing about *which* three —
+  // `Nam` inside `nam` inside a longer word is the case the containment rule exists for, and no
+  // reviewer could see it. The tick is the row's own, because a span is replaced on its own; the
+  // value and its kind are one decision, and are said on every row rather than merged down the
+  // group, where a cell of its own height reads as rows with their columns missing.
+  claims("**a row is a place the value stands**, and the value and its kind stand on every one",
+    kept().includes(PHONE)
+    && (kept().match(/class="value"/g) || []).length === PHONE_SPANS.length
+    && (kept().match(/data-class="/g) || []).length === PHONE_SPANS.length
+    && !kept().includes("rowspan"));
+  claims("**and each place carries its own tick** — `Nam` the given name and `Nam` in *miền Nam*"
+    + " are the same three characters, and one tick over the three of them cannot tell them apart",
+    (kept().match(/data-keep=/g) || []).length === PHONE_SPANS.length
+    && (kept().match(/ checked/g) || []).length === PHONE_SPANS.length);
+  claims("**and each row says where**, with what stands in for it",
+    PHONE_SPANS.every(span =>
+      kept().includes(`class="at">${span.start}<`) && kept().includes(`class="at">${span.end}<`))
+    && shown(kept()).includes("<PHONE_1>"));
+  // Two occurrences at offset 0 of two different fields, and offsets alone would draw them as the
+  // same row twice. The field is what a span's offsets index, so it is what the row has to name.
+  claims("**and which field it is in**, because the offsets index that field and nothing else",
+    kept().includes("messages[0].content") && kept().includes("label[0].arguments.ma"));
+  // The rule Requirement 28 took away is *editing* an offset. The offset boxes, the re-slice
+  // button and the `auto` tick are still gone; these are cells.
+  claims("**read and never typed** — an offset is a cell here, and the only box is the tick",
+    !kept().includes('type="number"')
+    && (kept().match(/<input/g) || []).length === page.el("keep-table").markup()
+      .split('type="checkbox"').length - 1);
 
   // ------------------------------------------------------------------ a step that fails
   page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data": { status: 500, detail: "the service fell over" } } });
@@ -570,33 +620,44 @@ async function main() {
   claims("**and no vote is spent on it**", !paths(page).includes("/ai-review"));
 
   // ------------------------------------------------- the copy follows the ticking, with no button
-  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
+  page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const copies = () => posted(page, "/data-quality/personal-data/redact").length;
   const numbering = () => posted(page, "/data-quality/personal-data/spans");
+  const handed = () =>
+    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected;
   const first = copies();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
-  claims("unticking a value says at once that the copy is being made again",
+  const numberedOnce = numbering().length;
+  tickPlace(page, 0, false);
+  claims("unticking a place says at once that the copy is being made again",
     page.el("said-2").textContent.includes("replacing…"));
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
-  claims("**the copy is made again when a value is unticked** — nothing is asked for",
+  claims("**the copy is made again when a place is unticked** — nothing is asked for",
     copies() === first + 1);
-  claims("**and every occurrence of it is out of what was sent**, not just the first",
-    JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).detected.spans.length === 0);
-  claims("**a value unticked is left out of what is numbered** — so a value the reviewer keeps that"
-    + " sat inside it is free to earn a span of its own",
-    numbering().length === 2
-    && JSON.parse(numbering().at(-1).body).claimed.every(([, said]) => said !== PHONE));
+  claims("**and only that occurrence is out of what was sent** — the other two stand where they"
+    + " stood, which is the whole of what one tick over three rows could not say",
+    handed().spans.length === PHONE_SPANS.length - 1
+    && !handed().spans.some(span =>
+      same([span.path, span.start], [PHONE_SPANS[0].path, PHONE_SPANS[0].start])));
+  claims("**a tick asks for nothing to be numbered again** — where a value stands is what the"
+    + " service answered about the record, and dropping one of them did not move the rest",
+    numbering().length === numberedOnce);
   claims("**but it is still a claim the record is measured against**, because a rewrite asked for"
     + " and not done is not a clean record",
-    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
-      .detected.claims, [["PHONE", PHONE]]));
+    same(handed().claims, [["PHONE", PHONE]]));
+  claims("and the row it came off is struck through rather than dropped off the table, because a"
+    + " place left in the text is a decision somebody has to be able to see and undo",
+    page.el("keep-table").markup().includes('<tr class="out">')
+    && (page.el("keep-table").markup().match(/ checked/g) || []).length === PHONE_SPANS.length - 1);
+  PHONE_SPANS.forEach((span, at) => tickPlace(page, at, false));
+  await waited(320);
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**a value ticked off everywhere it stands hands back no span at all**",
+    handed().spans.length === 0);
   claims("the row then says nothing was left to replace",
     page.el("said-2").textContent.includes("nothing to replace"));
-  claims("and the row says the value was left in the text, rather than counting nothing",
-    page.el("keep-table").markup().includes("left in the text"));
 
   const MISSED = "vâng ạ";
   const WITH_MISSED = {
@@ -604,8 +665,10 @@ async function main() {
     claims: [["PHONE", PHONE], ["NAME", MISSED]],
     spans: [...PHONE_SPANS, {
       id: PHONE_SPANS.length + 1,
-      start: REVIEW_TEXT.indexOf(MISSED),
-      end: REVIEW_TEXT.indexOf(MISSED) + MISSED.length,
+      // The assistant's turn, where the value the scan missed actually stands.
+      path: ["messages", 1, "content"],
+      start: 0,
+      end: MISSED.length,
       personal_data_class: "NAME",
       placeholder: "<NAME_1>",
       reason: null
@@ -618,8 +681,7 @@ async function main() {
       ? { ...span, personal_data_class: "OTP", placeholder: "<OTP_1>" } : span))
   };
   page = await start({ ...ANSWERS(),
-    numbered: [ANSWERS().numbered, WITH_MISSED, RECLASSED, { ...RECLASSED,
-      spans: RECLASSED.spans.filter(span => span.personal_data_class !== "OTP") }] });
+    numbered: [ANSWERS().numbered, WITH_MISSED, RECLASSED] });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   const made = copies();
@@ -640,7 +702,7 @@ async function main() {
     + " what settles which is numbered first",
     same(sentValues, [["PHONE", PHONE], ["NAME", MISSED]]));
   claims("what comes back is what is drawn: the occurrences are the service's answer",
-    kept().includes(MISSED) && shown(page.el("scan-raw").markup()).includes("<NAME_1>"));
+    kept().includes(MISSED) && shown(kept()).includes("<NAME_1>"));
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
   claims("**a value added remakes the copy too**, over the spans that value earned",
@@ -648,16 +710,54 @@ async function main() {
     && JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
       .detected.spans.length === WITH_MISSED.spans.length);
 
+  // **A kind the scans do not declare.** `order_claims_by_class` already orders one after the
+  // declared kinds and redacts it as `<KIND_1>` like any other — measured — so the only thing
+  // that ever refused an address or an ID number was this page's own picker, and a reviewer who
+  // could not say what a value is filed it as the nearest declared kind or left it in the text.
+  // Its own page: the numbering answers above are a sequence, and one more call shifts them all.
+  const typing = await start();
+  await typing.byId.get("run-detect").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  typing.el("kind-new").value = "first name";
+  typing.el("kind-add").onclick();
+  claims("**a kind the scans never declared can be named**, because a value nobody can name is a"
+    + " value that ships un-redacted, which is the thing this card exists to stop",
+    typing.el("value-class").innerHTML.includes("FIRST_NAME"));
+  claims("**and it is written the way a placeholder is**, so `first name` and `FIRST_NAME` are one"
+    + " kind rather than two rows of the corpus's own count",
+    !typing.el("value-class").innerHTML.includes("first name"));
+  claims("naming it picks it, because a kind is named at the moment there is a value for it",
+    typing.el("value-class").value === "FIRST_NAME");
+  claims("the box is emptied, so the next one is not typed on top of it",
+    typing.el("kind-new").value === "");
+  claims("**and it is offered on every row too**, so a value the scan claimed can be moved to it —"
+    + " unticking leaves the value in the text and re-adding it is refused as already claimed, so"
+    + " a kind reachable only where a value is added is a row with no way out of it",
+    typing.el("keep-table").markup().includes("FIRST_NAME"));
+  typing.el("kind-new").value = "FIRST_NAME";
+  typing.el("kind-add").onclick();
+  claims("naming it twice says so rather than offering it twice",
+    typing.el("kind-note").textContent.includes("already offered")
+    && (typing.el("value-class").innerHTML.match(/value="FIRST_NAME"/g) || []).length === 1);
+  typing.el("value-new").value = "Giang";
+  typing.el("value-class").value = "FIRST_NAME";
+  await typing.el("value-add").onclick();
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**and a value filed under it goes as that kind**, which the service orders after the"
+    + " ones it declares and redacts as `<FIRST_NAME_1>` like any other",
+    JSON.parse(posted(typing, "/data-quality/personal-data/spans").at(-1).body).claimed
+      .some(pair => same(pair, ["FIRST_NAME", "Giang"])));
+
   const noKinds = await start({ ...ANSWERS(), classes: [] });
   await noKinds.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   noKinds.el("value-new").value = MISSED;
   await noKinds.el("value-add").onclick();
   for (let n = 0; n < 4; n += 1) await settled();
-  claims("**a deployment that says nothing about the kinds says so where a value is added**",
-    noKinds.el("value-note").textContent.includes("no kind")
-    && !posted(noKinds, "/data-quality/personal-data/spans").some(one =>
-      JSON.parse(one.body).claimed.some(([, value]) => value === MISSED)));
+  claims("**a deployment that declares no kinds still offers what the scan itself claimed**, so"
+    + " the box is never empty where there is anything on the table to add a value beside",
+    noKinds.el("value-class").innerHTML.includes("PHONE")
+    && !noKinds.el("value-class").innerHTML.includes("EMAIL"));
   claims("**and it asks again rather than staying empty for the rest of the shift** — a page opened"
     + " while the service was restarting is not a page that can never add a value",
     posted(noKinds, "/data-quality/personal-data/classes").length === 2);
@@ -670,20 +770,22 @@ async function main() {
     && JSON.parse(numberings().at(-1).body).claimed.some(pair => same(pair, ["OTP", PHONE])));
   claims("**and what stands in the text for it is drawn as it came back**, because `<CLASS_N>`"
     + " counts per class and the page counts nothing",
-    shown(page.el("scan-raw").markup()).includes("<OTP_1>")
-    && !shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
+    shown(page.el("keep-table").markup()).includes("<OTP_1>")
+    && !shown(page.el("keep-table").markup()).includes("<PHONE_1>"));
 
   const before7 = numberings().length;
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  tickPlace(page, 0, false);
   await waited(320);
   for (let n = 0; n < 8; n += 1) await settled();
-  claims("**unticking one value asks for the rest to be numbered again**, because what is dropped"
-    + " for being inside a longer span is measured over what is still ticked",
-    numberings().length === before7 + 1
-    && JSON.parse(numberings().at(-1).body).claimed.every(([, value]) => value !== PHONE));
-  claims("and neither occurrence of it is handed back to be replaced",
+  // **The cost of the tick being per place, written down rather than left to be found.** What a
+  // longer span swallows is measured over the values the service was handed, so a place left in
+  // the text does not give the value sitting inside it a span of its own. The reviewer who
+  // unticks that place is the one saying the characters may stand.
+  claims("**a place ticked off asks for nothing to be numbered again**",
+    numberings().length === before7);
+  claims("and that occurrence alone is left out of what is handed back to be replaced",
     JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body)
-      .detected.spans.length === WITH_MISSED.spans.length - PHONE_SPANS.length);
+      .detected.spans.length === WITH_MISSED.spans.length - 1);
 
   const twoNumbered = [
     ANSWERS().numbered,
@@ -695,15 +797,15 @@ async function main() {
     slow: { "/data-quality/personal-data/spans": [0, 400, 0] } });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "OTP" });
   await waited(60);
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: true });
+  hit(page.el("keep-table").onchange, "[data-class]", { class: PHONE }, { value: "PHONE" });
   await waited(700);
   for (let n = 0; n < 10; n += 1) await settled();
   claims("**a numbering that lands after a newer one is dropped**, not read as the answer to what"
     + " is on the screen",
-    page.el("keep-table").markup().includes(`×${PHONE_SPANS.length}`)
-    && shown(page.el("scan-raw").markup()).includes("<PHONE_1>"));
+    (page.el("keep-table").markup().match(/data-keep=/g) || []).length === PHONE_SPANS.length
+    && shown(page.el("keep-table").markup()).includes("<PHONE_1>"));
 
   page = await start({ ...ANSWERS(),
     refuse: { "/data-quality/personal-data/spans": { status: 503, detail: "service restarting" } } });
@@ -735,8 +837,7 @@ async function main() {
   for (let n = 0; n < 10; n += 1) await settled();
   claims("**a numbering that lands after the sample changed is dropped**, not painted onto the next",
     page.byId.get("sample-name").textContent.includes("s2")
-    && !page.el("keep-table").markup().includes(PHONE)
-    && !page.el("scan-raw").markup().includes(PHONE));
+    && !page.el("keep-table").markup().includes(PHONE));
   page.inputsNamed("f-domain")[0].checked = true;
   await page.byId.get("submit").onclick();
   for (let n = 0; n < 12; n += 1) await settled();
@@ -758,8 +859,10 @@ async function main() {
     claims: [["PHONE", PHONE], ["NAME", INSIDE]],
     spans: [...CONFIRMED_SPANS, {
       id: CONFIRMED_SPANS.length + 1,
-      start: REVIEW_TEXT.indexOf(INSIDE),
-      end: REVIEW_TEXT.indexOf(INSIDE) + INSIDE.length,
+      // The tool's own name, in the catalog the sample carries.
+      path: ["tools", 0, "function", "name"],
+      start: 0,
+      end: INSIDE.length,
       personal_data_class: "NAME",
       placeholder: "<NAME_1>",
       reason: WHY
@@ -794,8 +897,8 @@ async function main() {
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a row keys itself by the value, escaped into the attribute a browser reads back**",
-    page.el("keep-table").markup().includes(`data-keep="${esc(AWKWARD)}"`)
-    && shown(page.el("keep-table").markup()).includes(`data-keep="${AWKWARD}"`));
+    page.el("keep-table").markup().includes(`data-class="${esc(AWKWARD)}"`)
+    && shown(page.el("keep-table").markup()).includes(`data-class="${AWKWARD}"`));
   claims("and the value on it is the corpus\'s own text, not markup the page let through",
     page.el("keep-table").markup().includes("&lt;b&gt;"));
 
@@ -811,9 +914,9 @@ async function main() {
     slow: { "/data-quality/personal-data/redact": [0, 400, 0] } });
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  tickPlace(page, 0, false);
   await waited(240);
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: true });
+  tickPlace(page, 0, true);
   await waited(600);
   for (let n = 0; n < 8; n += 1) await settled();
   claims("**a copy that lands after a newer one is dropped**, not read as the answer to what is on the screen",
@@ -993,7 +1096,8 @@ async function main() {
       ]
     },
     sft: null,
-    consensus_calls: CONSENSUS_CALLS
+    consensus_calls: CONSENSUS_CALLS,
+    consensus_given: true
   };
   page = await start({ ...ANSWERS(), labelChecked: BARE_NAME_FAULT, reviewed: PANEL });
   claims("**before anybody is asked the proposal says so**, rather than sitting empty",
@@ -1122,13 +1226,38 @@ async function main() {
   // rather than being a live button that puts nothing in the record.
   page = await start({ ...ANSWERS(),
     reviewed: { llm: { label_agreement: 0, consensus: null, votes: [] }, sft: null,
-      consensus_calls: [] } });
+      consensus_calls: [], consensus_given: false } });
   await page.byId.get("run-detect").onclick();
   await settle(10);
   await askPanel(page);
   claims("**a panel that agreed on nothing offers nothing to take**, and says which",
     page.el("v-take").disabled === true
     && page.el("proposed-note").textContent.includes("agreed on nothing"));
+  claims("**and nothing is drawn as its answer** — a panel with nothing to take that drew *no"
+    + " call* under that sentence would be the page contradicting itself in two lines",
+    !page.el("proposed-call").innerHTML.includes("the turn needs no tool"));
+
+  // The other half of the same field, and the one that was broken: a panel that agreed the turn
+  // needs **no tool**. `consensus_calls` is empty for both, so off the calls alone this read as
+  // *agreed on nothing* and the act that takes it was dead — which refused the reviewer the one
+  // answer a tool-calling corpus is shortest of, and the guide's own words call an answer.
+  page = await start({ ...ANSWERS(),
+    reviewed: { llm: { label_agreement: 1, consensus: "Không cần gọi tool nào.", votes: [] },
+      sft: null, consensus_calls: [], consensus_given: true } });
+  await page.byId.get("run-detect").onclick();
+  await settle(10);
+  await askPanel(page);
+  claims("**a panel that agreed the turn needs no tool has given an answer, and it can be taken**",
+    page.el("v-take").disabled === false
+    && page.el("proposed-call").innerHTML.includes("the turn needs no tool"));
+  claims("and it is not read as a panel that agreed on nothing",
+    !page.el("proposed-note").textContent.includes("agreed on nothing"));
+  page.el("v-take").checked = true;
+  await page.el("v-take").onchange();
+  await waited(400);
+  await settle(10);
+  claims("**and taking it ships no call**, which is the answer and not a skipped row",
+    same(JSON.parse(posted(page, "/data-quality/personal-data/redact").at(-1).body).label, []));
 
   // **The label, and nothing else.** The turns are what a customer said and the catalog is what
   // the assistant was offered; a page that let either be retyped is a page that can make the
@@ -1276,9 +1405,10 @@ async function main() {
     + " them and the two boxes cannot say different numbers about one thing",
     page.el("said-2").textContent.includes("2 values found")
     && page.el("record-table").markup().includes("2 of 2 values replaced"));
-  // And one of the two unticked, so the count and what it is counted against differ. Equal, they
-  // cannot tell a denominator from a numerator, which is how the wrong one went unnoticed.
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
+  // And one of the two ticked off everywhere it stands, so the count and what it is counted
+  // against differ. Equal, they cannot tell a denominator from a numerator, which is how the
+  // wrong one went unnoticed.
+  PHONE_SPANS.forEach((span, at) => tickPlace(page, at, false));
   await settle(12);
   await waited(400);
   await settle(12);
@@ -1315,7 +1445,7 @@ async function main() {
 
   // A value unticked after the label was settled. What is on screen is then a copy of spans nobody
   // is ticking any more, which is the same staleness the replacement has and gets the same answer.
-  page = await start({ ...ANSWERS(), numbered: [ANSWERS().numbered, NOTHING_NUMBERED] });
+  page = await start();
   await page.byId.get("run-detect").onclick();
   for (let n = 0; n < 8; n += 1) await settled();
   page.el("v-keep").checked = true;
@@ -1324,8 +1454,8 @@ async function main() {
   for (let n = 0; n < 10; n += 1) await settled();
   const shipped = () => posted(page, "/data-quality/personal-data/redact").length;
   const madeOnce = shipped();
-  hit(page.el("keep-table").onchange, "[data-keep]", { keep: PHONE, on: false });
-  claims("unticking a value takes the shipping copy down with it too",
+  PHONE_SPANS.forEach((span, at) => tickPlace(page, at, false));
+  claims("unticking a place takes the shipping copy down with it too",
     page.el("review-text").textContent.includes("replacing…"));
   await waited(600);
   for (let n = 0; n < 10; n += 1) await settled();
@@ -1489,6 +1619,25 @@ async function main() {
   claims("**and its label is drawn by the code card 2 draws one with**, so a stored row and a live"
     + " one cannot come to look like different things",
     one.includes('class="calltable"'));
+  claims("the row it came out of is marked while it is open, so the sheet says which one this is",
+    page.el("dataset-rows").querySelector("tbody").innerHTML.includes("open opened"));
+
+  const asked = posted(page, "/records/d2").length;
+  hit(page.el("dataset-rows").onclick, "[data-stored]", { stored: "d2" });
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**pressing the same row again shuts it**, which is the only way back to the table"
+    + " without scrolling past a conversation somebody has finished reading",
+    page.byId.get("dataset-one").innerHTML === ""
+    && !page.el("dataset-rows").querySelector("tbody").innerHTML.includes("open opened"));
+  claims("and shutting it says nothing to the store, because it is already read",
+    posted(page, "/records/d2").length === asked);
+  claims("the line over the table goes back to saying how much is held, not which row was open",
+    page.byId.get("dataset-note").textContent.includes("of 2"));
+
+  hit(page.el("dataset-rows").onclick, "[data-stored]", { stored: "d2" });
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("and pressing it once more opens it again",
+    page.byId.get("dataset-one").innerHTML.includes("kiểm tra email"));
 
   // ------------------------------------------------------------------ the keyboard
   page = await start();
@@ -1588,6 +1737,51 @@ async function main() {
   claims("how many tools were offered is read", stats.includes("<b>1</b> tool the catalogs put in front of the model"));
   claims("the duplicate groups are read", stats.includes("<b>1</b> group agreeing"));
 
+  // Everything under the matrix, which is where the per-facet distributions are drawn. Scoped past
+  // it because the matrix draws `domain` and `call_trigger` itself -- a check over the whole panel
+  // would read the matrix's own axis labels and pass whatever was written below.
+  const under = stats.slice(stats.indexOf("</table>"));
+  claims("**neither facet the matrix crosses is counted a second time under it** — they are"
+    + " already crossed there, and a corpus said twice is a corpus read twice",
+    !under.includes('<div class="fieldname">domain</div>')
+    && !under.includes('<div class="fieldname">call_trigger</div>'));
+  claims("**a facet the matrix does not cross is a frequency chart**, because what this panel"
+    + " answers is how the corpus is spread and the sheet under it carries the rows themselves",
+    under.includes('<div class="fieldname">ambiguous</div>')
+    && under.includes('<div class="fieldname">number_label_tools</div>')
+    && under.includes('<div class="histogram">'));
+  const heights = [...under.matchAll(/height:([\d.]+)%/g)].map(one => Number(one[1]));
+  claims("**a column is its count against the largest**, so the shape reads without the numbers",
+    heights.includes(100) && heights.some(one => one > 0 && one < 100));
+  const arguable = under.slice(under.indexOf(">ambiguous<"), under.indexOf(">number_label_tools<"));
+  claims("**the columns stand in the order the page declares the values**, not the order the"
+    + " database grouped them in — a level chart reading HIGH, LOW, MED is no distribution",
+    arguable.indexOf(">LOW<") < arguable.indexOf(">MED<")
+    && arguable.indexOf(">MED<") < arguable.indexOf(">HIGH<"));
+  claims("**and a declared level nothing carries stands at nought**, which is the same finding"
+    + " as an empty cell of the matrix and is lost the moment the axis is read off the rows",
+    arguable.includes('class="columnnumber zero">0<'));
+
+  // ------------------------------------------------ the tools called, which is a top and a tail
+  const MANY = { NeverCalled: 0, NeverCalledEither: 0 };
+  for (let n = 0; n < 12; n += 1) MANY[`Tool_${n}`] = 12 - n;
+  page = await start({ ...ANSWERS(), statistics: { ...STATISTICS, tool_call_counts: MANY } });
+  const tools = page.byId.get("stats").innerHTML;
+  claims("**only the top tools are drawn** — a catalog of two hundred is a panel nobody scrolls",
+    tools.includes("Tool_0") && !tools.includes("Tool_10"));
+  claims("and the chart says what it cut, so the top is read as a top and not as the whole",
+    tools.includes("The 10 largest of 14."));
+  claims("**how many tools are never called is said even where the cut takes the zeros** — that is"
+    + " the finding the tail carries, and a top ten that dropped it silently would hide it",
+    tools.includes("2 of 14 tools are never called"));
+
+  page = await start({ ...ANSWERS(),
+    statistics: { ...STATISTICS, tool_call_counts: { Lookup: 2, OpenTicket: 0 } } });
+  claims("**a tool nothing calls is drawn at nought and marked**, because the zeros are the finding",
+    page.el("stats").innerHTML.includes('class="barnumber zero">0<'));
+  claims("and a figure of one does not read as many",
+    page.el("stats").innerHTML.includes("1 of 2 tools is never called"));
+
   // ------------------------------------------------------------------ import
   page = await start();
   chose(page, { name: "corpus.jsonl", size: 40, text: async () => '{"a":1}\n{"b":2}' });
@@ -1609,14 +1803,9 @@ async function main() {
     page.el("store").textContent === "store.sqlite3");
   claims("and never the DSN, which would carry a password",
     !page.el("store").textContent.includes("://"));
-  page = await start({ ...ANSWERS(),
-    store: { attached: false, describes: null, variable: "DATAFORCE_DATABASE_URL" } });
-  claims("with nothing attached it names the variable to set",
-    page.el("store").textContent.includes("DATAFORCE_DATABASE_URL")
-    && page.el("store").className.includes("none"));
   page = await start({ ...ANSWERS(), store: null });
   claims("**a 200 in the wrong shape claims nothing** rather than saying `set undefined`",
-    page.el("store").textContent === "");
+    page.el("store").textContent === "" && page.el("store").className.includes("none"));
 
   // ------------------------------------------------------------------ pasting one in
   page = await start({ ...ANSWERS(), queue: [] });
@@ -1768,12 +1957,13 @@ async function main() {
   claims("an empty queue disables the acts that need a sample",
     page.byId.get("submit").disabled && page.byId.get("run-detect").disabled);
 
-  // ------------------------------------------------------------------ no database
-  page = await start({ ...ANSWERS(), refuse: { "/records/stats": { status: 503, detail: "no database attached: set DATAFORCE_DATABASE_URL" } } });
-  claims("with no store the strip says so in the service's own words",
-    page.byId.get("strip").textContent.includes("DATAFORCE_DATABASE_URL"));
-  claims("with no store the statistics say so where the grid would be",
-    page.byId.get("stats").innerHTML.includes("DATAFORCE_DATABASE_URL")
+  // ------------------------------------------------------------------ a database that did not answer
+  const DID_NOT_ANSWER = "store.sqlite3 did not answer.";
+  page = await start({ ...ANSWERS(), refuse: { "/records/stats": { status: 503, detail: DID_NOT_ANSWER } } });
+  claims("a store that did not answer is said on the strip in the service's own words",
+    page.byId.get("strip").textContent.includes(DID_NOT_ANSWER));
+  claims("and said where the grid would be, rather than a grid of zeros",
+    page.byId.get("stats").innerHTML.includes(DID_NOT_ANSWER)
     && !page.byId.get("stats").innerHTML.includes("matrix"));
 
   // ------------------------------------------------------------------ a 200 that is not an answer

@@ -251,6 +251,29 @@ already knows is a labelling tool, not a CMS.
     skeleton rows, and the run button keeps naming the check it is on. *(Doherty Threshold.)*
 17. **What may be inspected is collapsed; what must be answered is open.** The disclosures are the
     only collapsed things on the screen, and no question ever hides inside one.
+18. **A distribution is a chart, and a ranked chart says what it cut.** What a reviewer asks of the
+    statistics is *which values carry this corpus*, and the page of rows under them already carries
+    every row's own values — so each distribution is a bar ranked by count rather than a column of
+    numbers. A chart is cut at the ten largest and says so, because a catalog of two hundred tools
+    is a panel nobody scrolls to the end of. **What the cut takes is said beside it**: how many
+    tools the corpus never calls is the finding of that statistic, and it is the first thing a
+    ranking drops.
+    **A frequency chart is drawn as one**: the bars touch, because what is being counted is one
+    axis and a gap between them draws a gap that is not in the data; rules run behind them, which
+    is what makes two bars comparable without reading the number off each; and the baseline under
+    them is the axis. The count sits on its own bar rather than in a row of its own, so a short
+    bar's number is beside it. **No curve is drawn over it.** A curve says the values between two
+    bars mean something, and `LOW`/`MED`/`HIGH` and a list of personal-data classes have nothing
+    between them — it would be a shape the corpus does not have.
+    **And a facet holding a list is one bar per value, not one per combination.** `personal_data`
+    and `call_trigger` are lists, and counted whole they drew `["FIRST_NAME", "NAME"]` beside
+    `["FIRST_NAME"]` beside `[]`, which is set membership and not a distribution of anything. *Which
+    combinations occur* is the matrix's question. A row answering nothing still answered, so an
+    empty list is counted under `none` rather than falling out — *how many hold none* is the first
+    thing asked of that panel.
+19. **Nothing on the panel is counted twice.** `domain` and `call_trigger` are what the matrix
+    crosses, so neither is listed again underneath it. A figure in two places is a figure free to
+    come apart, and the cross answers everything either column alone would.
 
 ### The flow
 
@@ -297,20 +320,62 @@ already knows is a labelling tool, not a CMS.
     the text, how many times, which occurrences count and which nested span is dropped are the
     service's answers — `order_claims_by_class` and `find_and_number_spans`, the same two the
     detector runs, so a value the reviewer added is numbered by the rule that numbered the rest.
+    **A kind the scans do not declare can be named, beside the list.** They declare four and
+    number them in that order; a kind they do not declare is one `order_claims_by_class` puts after
+    the declared ones and `<KIND_N>` redacts like any other — measured, not assumed. So the closed
+    picker was the page's own limit, and it cost exactly what this card exists to prevent: a
+    reviewer who finds an address, an ID number or a given name had to file it as the nearest
+    declared kind or leave it in the text. Named the way `domain` is named — a box and a button
+    beside the list, not a free-text field in place of it — and written the way a placeholder is,
+    so `first name` and `FIRST_NAME` are one kind rather than two rows of the corpus's own count.
+    It is offered in **both** places a kind is said, the picker and every row of the keep table,
+    because a kind reachable only where a value is added leaves a row with no way out of it:
+    unticking leaves the value in the text, and re-adding it is refused as already claimed.
+    **What kind a value is stays a list the page fills**, not a box: the page must be able to
+    position, style and check every control on this card, and a native `<datalist>` popup is the
+    one widget it can do none of those to — it drew itself over the other pane.
+    **And where a span stands is shown, on the one table that holds the decision.** `×3` beside a
+    value said it occurs three times and nothing about *which* three — `Nam` inside `nam` inside a
+    longer word is the case the containment rule exists for, and no reviewer could see it. So each
+    place a value stands is a row under it, carrying **the field it stands in** and the `start` and
+    `end` the service answered — the offsets index that field and nothing else, so two places at
+    offset `0` of two different fields are one row drawn twice without it. The value's own cells
+    span those rows. Shown, in a cell: what Requirement 28 took away is *editing* an offset, and the
+    three controls that did it are still gone.
+    **One tick to a place.** A span is replaced on its own (pipeline Requirement 12), so the
+    reviewer decides one at a time: `Nam` the given name and `Nam` in *miền Nam* are the same three
+    characters, and one tick over the three rows could tell them apart in neither direction. A place
+    ticked off is struck through rather than dropped off the table, because leaving a value in the
+    text is a decision somebody has to be able to see and undo. What kind a value is stays one
+    decision and spans the rows, because a value is one kind wherever it stands.
+    **What the tick costs, said here rather than left to be found.** A value kept in one place and
+    left in another stays in the record at the second, as the same characters; where the two are one
+    entity that is a re-identification path, and the reviewer ticking the place off is the one
+    asserting they are not the same thing. And a place left in the text does not give a value
+    sitting inside it a span of its own — the containment rule is measured over the values the
+    service was handed, which is the same sentence read from the other side.
+    **And the catalog is drawn to every word it carries**, because a row may name one. A scan
+    claims a value in `tools[4].parameters.properties.nationality.description` as readily as in a
+    turn — measured, on a real corpus line — and the pane that showed a tool's name and its own
+    description alone left the reviewer ticking a row about a string this screen never showed them.
+    Each parameter is drawn with what it is for, what kind it takes and whether the tool can be
+    called without it.
 28. **So three controls go.** The offset table behind *The spans, by offset*; *Re-read the rows*,
     which existed to re-slice what somebody typed; and the **`auto` tick box**, because dropping a
     span inside a longer one is what `find_and_number_spans` does unconditionally. With them goes
     `app.js`'s `inside` — the JavaScript copy of the containment rule — and the pipeline spec's
-    admission that one rule lives in three places becomes two. **The rule is still measured over
-    the values still ticked**, which is what the toggle's own sentence gave as its reason: untick a
-    street and the name inside it is what is left to hand back. It falls out of what is asked
-    rather than out of a box — only the ticked values are sent to be numbered — and the price is
-    that a placeholder moves when a value before it is unticked, which is a number changing under a
-    reviewer's eye against a value they kept going out un-redacted.
-29. **A value typed once is replaced everywhere it occurs.** That is not a new rule; it is
-    Requirement 12 of the pipeline spec, which already replaces by value and not by offset. What is
-    new is that the reviewer can see it: the row says how many occurrences that value has, and the
-    redacted text below shows every one of them carrying the same placeholder.
+    admission that one rule lives in three places becomes two. **The rule is measured over every
+    value on the table, and a tick asks for nothing to be numbered again.** The toggle's own
+    sentence gave the other reading as its reason — untick a street and the name inside it is what
+    is left to hand back — and that went when the tick became a place rather than a value: a place
+    left in the text is not the value withdrawn, so there is nothing to renumber against. The price
+    is the one Requirement 27 states. What it buys is that a placeholder no longer moves under a
+    reviewer's eye each time somebody unticks a row, and that a tick costs no round trip at all.
+29. **A value typed once is found everywhere it occurs.** That is not a new rule; it is
+    Requirement 9 of the pipeline spec, which numbers one span per occurrence over the whole
+    record. What is new is that the reviewer can see each one and answer it: the rows under the
+    value are its occurrences, each naming the field it stands in, and the redacted text below
+    shows every place still ticked carrying the same placeholder.
 30. **Renumbering costs no model call.** The route that answers it runs the two pure functions and
     nothing else, so a reviewer adding a value gets the spans back immediately and the panel is
     never re-asked for it.

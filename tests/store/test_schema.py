@@ -324,18 +324,27 @@ def test_counted_by_facet_answers_a_count_per_value_of_every_facet(
     assert counted["schema_valid"] == {"false": 1, "true": 2}
 
 
-def test_a_list_valued_facet_is_counted_by_the_whole_set(
+def test_a_list_valued_facet_is_counted_by_the_value_and_not_by_the_set(
     corpus_session: Session,
 ) -> None:
-    """The facet as the row carries it: *which combinations occur*, which is a different question
-    from how often each value inside one appears. The second is the joint distribution matrix's."""
+    """One row answering twice is two answers, and both are counted.
+
+    Counted whole, a facet holding a list draws a bar per combination -- `["FIRST_NAME", "NAME"]`
+    beside `["FIRST_NAME"]` beside `[]` -- which is a chart of set membership and answers nothing
+    a reviewer asks of the panel. *Which combinations occur* is the joint matrix's question and
+    `count_by_pair` is where it is asked.
+
+    A row answering nothing still answered, so an empty list keeps a name rather than falling out
+    of the count -- *how many hold no personal data* is the first thing asked of that panel.
+    """
     counted = count_by_facet(corpus_session)
 
     assert counted["call_trigger"] == {
-        '["condition_met"]': 2,
-        '["user_utterance", "every_turn"]': 1,
+        "condition_met": 2,
+        "user_utterance": 1,
+        "every_turn": 1,
     }
-    assert counted["personal_data"] == {"[]": 1, '["PHONE"]': 2}
+    assert counted["personal_data"] == {"none": 1, "PHONE": 2}
 
 
 def test_counted_by_pair_answers_only_the_pairs_the_rows_carry(
@@ -397,24 +406,28 @@ def test_a_json_column_holding_a_null_is_counted_and_does_not_raise(
 
     assert counted["null"] == 1
     assert counted['"null"'] == 1
-    assert counted['["PHONE"]'] == 2
+    assert counted["PHONE"] == 2
 
 
 @pytest.mark.parametrize("facet", ToolDecisionSample.FACETS)
 def test_every_facet_s_counts_add_up_to_the_number_of_rows(
     facet: str, corpus_session: Session
 ) -> None:
-    """The property a `GROUP BY` read has to keep: every row is counted once, under one value.
+    """The property a `GROUP BY` read has to keep: every row is counted once **per answer**.
 
     It is what breaks first if two groups are ever folded onto one key by assignment rather than
-    by adding -- a row disappears, and no figure in the answer says where it went.
+    by adding -- a row disappears, and no figure in the answer says where it went. A facet holding
+    a list is a row answering several times, so the sum it has to reach is the answers and not the
+    rows; a row answering nothing is one answer, which is what keeps an empty list in the count.
     """
+    answers = 0
+    for value in corpus_session.scalars(select(getattr(ToolDecisionSample, facet))):
+        answers += (len(value) or 1) if isinstance(value, list) else 1
+
     counted = count_by_facet(corpus_session)[facet]
 
-    assert (
-        sum(counted.values())
-        == count_total_samples(corpus_session)["tool_decision_dataset"]
-    )
+    assert sum(counted.values()) == answers
+    assert answers >= count_total_samples(corpus_session)["tool_decision_dataset"]
 
 
 def test_two_spellings_of_one_json_value_are_summed_and_not_overwritten(
@@ -437,4 +450,4 @@ def test_two_spellings_of_one_json_value_are_summed_and_not_overwritten(
     )
     corpus_session.commit()
 
-    assert count_by_facet(corpus_session)["call_trigger"]['["condition_met"]'] == 3
+    assert count_by_facet(corpus_session)["call_trigger"]["condition_met"] == 3

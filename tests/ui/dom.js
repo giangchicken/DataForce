@@ -315,7 +315,7 @@ async function build(answers, app) {
     const named = path.split("?")[0];
     const body = named === "/models" ? answers.models
       : named === "/store" ? (answers.store === undefined
-        ? { attached: true, describes: "store.sqlite3", variable: "DATAFORCE_DATABASE_URL" }
+        ? { describes: "store.sqlite3" }
         : answers.store)
       : named === "/records/stats" ? answering(named, answers.statistics)
       : named === "/queue" ? listQueued()

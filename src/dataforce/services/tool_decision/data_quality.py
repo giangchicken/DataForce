@@ -45,8 +45,8 @@ from dataforce.profile.tool_decision.data_quality import (
     ToolDecisionPersonalChecking,
     decide_replacement_outcome,
     find_and_number_spans,
+    group_spans_by_path,
     order_claims_by_class,
-    read_span_values,
     replace_node,
 )
 from dataforce.profile.tool_decision.label_statistics import list_label_faults
@@ -125,7 +125,7 @@ def number_personal_data_spans(
     }
     claims = order_claims_by_class(text, placed, list_personal_data_classes())
     return PersonalDataDetected(
-        review_text=text, claims=claims, spans=find_and_number_spans(text, claims)
+        review_text=text, claims=claims, spans=find_and_number_spans(sample, claims)
     )
 
 
@@ -152,15 +152,12 @@ def redact_personal_data(
     Not async, and no model is asked: the spans arrive from the reviewer who ticked, edited or
     added them. Nothing is kept either -- the sample is read, copied and answered.
     """
-    placeholders = read_span_values(detected.review_text, detected.spans)
-    redacted = {key: replace_node(value, placeholders) for key, value in sample.items()}
+    redacted = replace_node(sample, group_spans_by_path(detected.spans))
     reads_as = build_review_text(redacted)
     return PersonalDataRedacted(
         sample=redacted,
         review_text=reads_as,
-        outcome=decide_replacement_outcome(
-            detected.review_text, detected.claims, detected.spans, reads_as
-        ),
+        outcome=decide_replacement_outcome(detected.claims, detected.spans, redacted),
     )
 
 
