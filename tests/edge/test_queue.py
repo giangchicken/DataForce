@@ -290,6 +290,31 @@ def test_a_submitted_sample_leaves_the_queue_as_the_record_lands(
     assert after["key"] != key
 
 
+def test_deleting_a_stored_sample_leaves_the_queue_row_it_came_from(
+    labelling: TestClient,
+) -> None:
+    """Requirement 54's cost, measured rather than asserted in prose.
+
+    The queue row is keyed by the raw line's own content and says a line was imported, which stays
+    true of a sample taken back out of the corpus -- so the sample is still in the list, still
+    openable, and labelling it again writes it back. **What that means is that the delete does not
+    reach the un-redacted copy the queue holds**, and a deletion demand is not finished by it.
+    """
+    import_two(labelling)
+    key = labelling.get(f"{BASE}/queue/next").json()["key"]
+    stored = labelling.post(
+        f"{BASE}/records", params={"queue_key": key}, json=build_review()
+    ).json()["id"]
+
+    resp = labelling.request("DELETE", f"{BASE}/records", json={"keys": [stored]})
+
+    assert resp.status_code == 204, resp.text
+    listed = labelling.get(f"{BASE}/queue").json()
+    assert listed["done"] == 1
+    assert [row["state"] for row in listed["samples"] if row["key"] == key] == ["done"]
+    assert labelling.get(f"{BASE}/queue/{key}").status_code == 200
+
+
 def test_a_refused_record_leaves_its_row_waiting(labelling: TestClient) -> None:
     """The failure a corpus cannot detect later: a row marked done whose record was never written
     is a sample nobody is ever shown again, and neither table says so."""
@@ -375,7 +400,7 @@ def test_the_list_shows_every_sample_with_its_state(labelling: TestClient) -> No
     listed = labelling.get(f"{BASE}/queue").json()
 
     assert [one["state"] for one in listed["samples"]] == ["skipped", "waiting"]
-    assert [one["arrived"] for one in listed["samples"]] == [1, 2]
+    assert [one["walk_position"] for one in listed["samples"]] == [1, 2]
     assert listed["samples"][0]["said"] == ASKED["content"]
     assert listed == {**listed, "waiting": 1, "skipped": 1, "done": 0}
 

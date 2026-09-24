@@ -27,6 +27,9 @@ process.on("unhandledRejection", error =>
 
 const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8"));
 
+// The one value that must not reach the sheet: what a customer said before anything replaced it.
+const POSTED_IN_THE_CORPUS = "0912345678";
+
 (async () => {
   const queued = read("queued.json");
   const real = read("stats.json");
@@ -43,7 +46,9 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
     detected: read("detected.json"),
     // The redact route's own answer, both halves of it: the record the page composes `new_*`
     // out of, and the text it puts on the screen once the values are settled.
-    redacted: read("redacted.json")
+    redacted: read("redacted.json"),
+    // The corpus sheet: a page of stored rows as the route really writes them, read by name.
+    dataset: read("dataset.json")
   }, APP);
   for (let n = 0; n < 8; n += 1) await settled();
 
@@ -138,6 +143,41 @@ const read = named => JSON.parse(fs.readFileSync(path.join(FROM, named), "utf8")
   claims("the queue key the route answered travels back with the record",
     records.length === 1
     && records[0].path.includes(`queue_key=${encodeURIComponent(queued.key)}`));
+
+  // ---------------------------------------------- the corpus read back, and a row taken out
+  await page.byId.get("open-dataset").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  const listed = read("dataset.json");
+  const rows = page.el("dataset-rows").querySelector("tbody").innerHTML;
+  claims("every stored row the route answered is a line on the sheet",
+    listed.samples.length > 0 && listed.samples.every(row => rows.includes(row.key)));
+  // The distinctive ones. `number_turns`, `number_label_tools` and `number_provided_tools` are all
+  // `1` in this corpus, so no check here can tell them apart from each other; what pins those is
+  // the header order in `index.html` and the row the stub reads in `page.js`.
+  claims("and the facets it was filed under are read by the names the route writes",
+    listed.samples.every(row =>
+      rows.includes(row.domain) && rows.includes(row.ambiguous)
+      && rows.includes(`>${row.personal_data.join(", ") || "\u2014"}<`)
+      && rows.includes(row.schema_valid ? ">yes<" : ">no<")));
+  claims("**and the redacted copy is what the sheet shows**, which is the only half there is a"
+    + " route to", !rows.includes(POSTED_IN_THE_CORPUS));
+
+  page.el("dataset-rows").onchange({
+    target: {
+      closest: asked => (asked === "[data-erase]"
+        ? { dataset: { erase: listed.samples[0].key }, checked: true } : null)
+    }
+  });
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 12; n += 1) await settled();
+  const erased = page.asked.filter(one => one.method === "DELETE");
+  claims("ticking a row and confirming sends its key to the route that deletes",
+    erased.length === 1 && JSON.parse(erased[0].body).keys.join() === listed.samples[0].key);
+  claims("**and the line over the table says what went**, off what the reviewer ticked, because"
+    + " the route answers no body to read it out of",
+    page.byId.get("dataset-going").textContent.includes("1 row deleted"));
 
   // ------------------------------------------ a line with no name, named by the real service
   // The seam this exists for, on the path that had no test with a name missing from it. A raw

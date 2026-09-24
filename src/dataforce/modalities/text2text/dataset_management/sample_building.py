@@ -105,7 +105,7 @@ def find_surviving_spans(
     -- and a span nobody handed back was never here to begin with, which is what makes ticking one
     occurrence off mean anything.
     """
-    written = shipped.model_dump()
+    shipped_document = shipped.model_dump()
     standing: dict[tuple[tuple[str | int, ...], str], list[PersonalDataSpan]] = {}
     for span in sorted(scanned.spans, key=lambda one: one.id):
         if span.start >= span.end or not span.placeholder:
@@ -113,7 +113,7 @@ def find_surviving_spans(
         standing.setdefault((tuple(span.path), span.placeholder), []).append(span)
     survived: list[PersonalDataSpan] = []
     for (path, placeholder), group in standing.items():
-        said = read_node(written, path)
+        said = read_node(shipped_document, path)
         if not isinstance(said, str):
             continue
         survived.extend(group[said.count(placeholder) :])

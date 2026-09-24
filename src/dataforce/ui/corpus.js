@@ -1,13 +1,14 @@
-// adapter · what is already stored: the dataset sheet, the statistics grid, the strip, and
-// which database a record lands in. Owns dataset-rows, dataset-bad, dataset-one,
+// adapter · what is already stored: the dataset sheet, the statistics grid, the strip, the rows
+// a reviewer took back out, and which database a record lands in. Owns dataset-rows,
+// dataset-bad, dataset-all, dataset-erase, dataset-keep, dataset-going, dataset-one,
 // dataset-more, dataset-note, dataset-store, stats, strip, store.
 
 import { drawCatalog, drawLabel, drawTurns, readTools } from "./conversation.js";
 import { facetValues, paintDomainTicks } from "./facets.js";
-import { held } from "./held.js";
+import { DECLARED_FACETS, held } from "./held.js";
 import { waiting } from "./queue.js";
 import { $, esc, say, wordFor } from "./screen.js";
-import { ask } from "./wire.js";
+import { ask, erase } from "./wire.js";
 
 const DATASET_PAGE = 100;
 const BARS_SHOWN = 10;
@@ -17,6 +18,8 @@ let stored = [];
 let storedTotal = 0;
 let storedShown = 0;
 let storedOpen = null;
+const erasing = new Set();
+let armed = false;
 
 export async function askDataset(more) {
   storedShown = more ? storedShown + DATASET_PAGE : 0;
@@ -29,19 +32,28 @@ export async function askDataset(more) {
   closeStored();
 }
 
+const listShownRows = () =>
+  ($("dataset-bad").checked ? stored.filter(row => !row.schema_valid) : stored);
+
 export function paintDataset() {
   const only = $("dataset-bad").checked;
-  const rows = only ? stored.filter(row => !row.schema_valid) : stored;
+  const rows = listShownRows();
+  // A tick on a row the filter has since hidden is a row that would go without being seen, so the
+  // act counts what is on the table and nothing else.
+  const shown = new Set(rows.map(row => row.key));
+  for (const key of erasing) if (!shown.has(key)) erasing.delete(key);
   say("dataset-note", `${rows.length} of ${storedTotal} ${wordFor(storedTotal, "row", "rows")}`);
   $("dataset-more").disabled = stored.length >= storedTotal;
+  paintErasing();
   const body = $("dataset-rows").querySelector("tbody");
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="8" class="empty">${
+    body.innerHTML = `<tr><td colspan="9" class="empty">${
       only ? "Every stored row validates against its catalog." : "Nothing is stored yet."
     }</td></tr>`;
     return;
   }
   body.innerHTML = rows.map(row => `<tr class="${row.schema_valid ? "" : "dropped"}">
+    <td><input type="checkbox" data-erase="${esc(row.key)}"${erasing.has(row.key) ? " checked" : ""}></td>
     <td><button class="open${row.key === storedOpen ? " opened" : ""}" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
     <td>${esc(row.domain)}</td>
     <td>${esc(row.ambiguous)}</td>
@@ -52,6 +64,24 @@ export function paintDataset() {
     <td class="${row.schema_valid ? "ok" : "bad"}">${row.schema_valid ? "yes" : "no"}</td>
   </tr>`).join("");
 }
+
+// What a person ticked, then what was computed off it. The order is `DECLARED_FACETS`'s own, so
+// a facet added to the tick list appears here in the place it appears on the card -- and anything
+// the service answers that this page does not declare still shows, after them.
+const orderFacetNames = facets => {
+  const declared = DECLARED_FACETS.map(one => one.name).filter(name => name in facets);
+  return [...declared, ...Object.keys(facets).filter(name => !declared.includes(name))];
+};
+
+const sayFacet = value =>
+  Array.isArray(value) ? (value.join(", ") || "—")
+    : typeof value === "boolean" ? (value ? "yes" : "no")
+      : value === null || value === "" ? "—" : String(value);
+
+const drawFacets = facets => '<div class="facetlist">'
+  + orderFacetNames(facets).map(name =>
+    `<div><span class="facetname">${esc(name)}</span>${esc(sayFacet(facets[name]))}</div>`).join("")
+  + "</div>";
 
 // Whole, and drawn by the code the sample pane draws with -- the same call table, the same turns,
 // the same catalog. A second drawing here would be a second idea of what a stored row looks like,
@@ -67,7 +97,9 @@ export async function openStored(key) {
   paintDataset();
   say("dataset-note", `#${key}`);
   $("dataset-one").innerHTML = `<div class="storedone">`
-    + `<div class="fieldname tight">Label as it ships</div>`
+    + `<div class="fieldname tight">Filed under</div>`
+    + drawFacets(one.facets || {})
+    + `<div class="fieldname">Label as it ships</div>`
     + drawLabel(one.label ?? null)
     + (valid ? "" : `<p class="refusal">Nothing could validate this label against the catalog`
       + ` — a call names a tool that was never offered, or leaves out an argument it requires.</p>`)
@@ -82,6 +114,66 @@ function closeStored() {
   storedOpen = null;
   $("dataset-one").innerHTML = "";
   paintDataset();
+}
+
+// The one act on this sheet that changes the corpus, so it is armed and then confirmed: there is
+// no undo, and the record table is the only copy of what arrived. Ticking anything disarms it,
+// because the sentence on screen names a number that has just stopped being true.
+export function tickStored(key, on) {
+  if (on) erasing.add(key);
+  else erasing.delete(key);
+  armed = false;
+  paintErasing();
+}
+
+export function tickAllStored(on) {
+  for (const row of listShownRows()) {
+    if (on) erasing.add(row.key);
+    else erasing.delete(row.key);
+  }
+  armed = false;
+  paintDataset();
+}
+
+export function keepStored() {
+  armed = false;
+  paintDataset();
+}
+
+function paintErasing() {
+  const rows = listShownRows();
+  $("dataset-all").checked = rows.length > 0 && rows.every(row => erasing.has(row.key));
+  $("dataset-erase").disabled = erasing.size === 0;
+  $("dataset-erase").className = armed ? "bad" : "quiet";
+  $("dataset-erase").textContent = armed
+    ? `Yes, delete ${erasing.size} ${wordFor(erasing.size, "row", "rows")}`
+    : erasing.size ? `Delete the ${erasing.size} selected` : "Delete the selected";
+  $("dataset-keep").hidden = !armed;
+  if (!armed) say("dataset-going", "");
+}
+
+export async function eraseStored() {
+  if (!erasing.size) return;
+  if (!armed) {
+    armed = true;
+    paintErasing();
+    return say("dataset-going",
+      `${erasing.size} ${wordFor(erasing.size, "row", "rows")} will go from both tables — the copy`
+      + " that ships and the record of what arrived. There is no undo. The queue rows stay, so"
+      + " these samples are still in the list to be labelled again.", "bad");
+  }
+  armed = false;
+  say("dataset-going", "deleting…");
+  const answer = await erase("/records", { keys: [...erasing] });
+  if (!answer.ok) {
+    paintErasing();
+    return say("dataset-going", answer.detail, "bad");
+  }
+  const gone = erasing.size;
+  erasing.clear();
+  await askDataset(false);
+  await askStatistics();
+  say("dataset-going", `${gone} ${wordFor(gone, "row", "rows")} deleted`);
 }
 
 // **Never the DSN**, in either place it is said: a connection string carries a password, and what
@@ -213,6 +305,7 @@ function paintStatistics() {
   const calls = held.counted.tool_call_counts || {};
   const groups = held.counted.duplicate_groups || {};
   const silent = Object.values(calls).filter(number => !number).length;
+  const rowsWithNoCall = (label.total ?? 0) - (label.number_not_null_label ?? 0);
   const empty = listEmptyCells(grid);
   const byFacet = held.counted.counted_distribution_by_facet || {};
   $("stats").innerHTML = '<div class="fieldname">What the corpus holds</div>'
@@ -225,6 +318,7 @@ function paintStatistics() {
     + '<div class="figs">'
     + `<div><b>${esc(label.total ?? 0)}</b> ${wordFor(label.total ?? 0, "row", "rows")}</div>`
     + `<div><b>${esc(label.number_not_null_label ?? 0)}</b> answered with a call</div>`
+    + `<div><b>${esc(rowsWithNoCall)}</b> answered with no call</div>`
     + `<div><b>${esc(label.number_diff_label ?? 0)}</b> distinct ${wordFor(label.number_diff_label ?? 0, "answer", "answers")}</div>`
     + `<div><b>${esc(held.counted.number_tools_offered ?? 0)}</b> ${wordFor(held.counted.number_tools_offered ?? 0, "tool", "tools")} the catalogs put in front of the model</div>`
     + '</div>'

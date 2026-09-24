@@ -26,8 +26,12 @@ function sayDetail(detail) {
   return JSON.stringify(detail, null, 2);
 }
 
-export const call = (path, body) => ask(path, {
-  method: "POST",
+const send = (method, path, body) => ask(path, {
+  method,
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body)
 });
+
+export const call = (path, body) => send("POST", path, body);
+
+export const erase = (path, body) => send("DELETE", path, body);

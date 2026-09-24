@@ -65,26 +65,29 @@ def create_joint_distribution_matrix(
     pair_counts: Mapping[tuple[Any, Any], int],
 ) -> Mapping[str, Mapping[str, int]]:
 
-    counted: Counter[tuple[str, str]] = Counter()
+    number_by_cell: Counter[tuple[str, str]] = Counter()
     for (row, column), number in pair_counts.items():
         for one_row in list_categories(row):
             for one_column in list_categories(column):
-                counted[(one_row, one_column)] += number
+                number_by_cell[(one_row, one_column)] += number
 
     rows = sorted({one for row, _ in pair_counts for one in list_categories(row)})
     columns = sorted(
         {one for _, column in pair_counts for one in list_categories(column)}
     )
-    return {row: {column: counted[(row, column)] for column in columns} for row in rows}
+    return {
+        row: {column: number_by_cell[(row, column)] for column in columns}
+        for row in rows
+    }
 
 
 def summarise_labels(labels: Sequence[Sequence[Any] | None]) -> DatasetLabelSummary:
 
-    written = {canonical_json(label or ()) for label in labels}
+    label_texts = {canonical_json(label or ()) for label in labels}
     return DatasetLabelSummary(
         total=len(labels),
         number_not_null_label=sum(1 for label in labels if label),
-        number_diff_label=len(written),
+        number_diff_label=len(label_texts),
     )
 
 

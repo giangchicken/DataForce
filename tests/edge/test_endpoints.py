@@ -1510,6 +1510,80 @@ def test_a_stored_sample_nobody_holds_is_a_sentence_and_not_an_empty_row(
     assert "no stored sample under" in resp.json()["detail"]
 
 
+def test_a_deleted_row_goes_out_of_both_tables_and_the_statistics_move_with_it(
+    client: TestClient, attached: None
+) -> None:
+    """Requirement 54. Both, because `dataset` is computed from `record`: a delete taking only the
+    redacted half is undone by the next rebuild, and what it leaves standing is what arrived."""
+    key = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+
+    resp = client.request("DELETE", f"{BASE}/records", json={"keys": [key]})
+
+    assert resp.status_code == 204, resp.text
+    assert client.get(f"{BASE}/records/{key}").status_code == 404
+    assert client.get(f"{BASE}/records").json()["total"] == 0
+    assert client.get(f"{BASE}/records/stats").json()["sample_totals"] == {
+        "tool_decision_record": 0,
+        "tool_decision_dataset": 0,
+    }
+
+
+def test_a_key_the_corpus_does_not_hold_does_not_refuse_the_rest(
+    client: TestClient, attached: None
+) -> None:
+    """Two people with the sheet open and one of them deletes first.
+
+    Refusing the whole call over a row that is already gone would leave every row that *is* there
+    standing, and the reviewer would have to work out which of their ticks was the stale one.
+    """
+    key = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+
+    resp = client.request(
+        "DELETE", f"{BASE}/records", json={"keys": [key, str(uuid.uuid4())]}
+    )
+
+    assert resp.status_code == 204, resp.text
+    assert client.get(f"{BASE}/records").json()["total"] == 0
+
+
+def test_one_key_asked_for_twice_is_one_row_and_not_two(
+    client: TestClient, attached: None
+) -> None:
+    """A repeated key deletes the one row it names, and does not refuse the second reading of it."""
+    key = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+
+    resp = client.request("DELETE", f"{BASE}/records", json={"keys": [key, key]})
+
+    assert resp.status_code == 204, resp.text
+    assert client.get(f"{BASE}/records").json()["total"] == 0
+
+
+def test_a_delete_naming_no_row_is_refused_rather_than_answering_nothing_happened(
+    client: TestClient, attached: None
+) -> None:
+    """The one case that can only be a mistake: the page disables the button until a row is
+    ticked, so an empty call is a caller that has lost track of its own selection."""
+    resp = client.request("DELETE", f"{BASE}/records", json={"keys": []})
+
+    assert resp.status_code == 422
+    assert "names no row to delete" in resp.json()["detail"]
+
+
+def test_more_keys_than_one_call_takes_is_refused_by_number(
+    client: TestClient, attached: None
+) -> None:
+    """The read's own cap, read backwards: one request may not ask for an unbounded corpus in
+    either direction, and the sentence says how many it will take."""
+    resp = client.request(
+        "DELETE",
+        f"{BASE}/records",
+        json={"keys": [str(uuid.uuid4()) for _ in range(1001)]},
+    )
+
+    assert resp.status_code == 422
+    assert "1000 is the most" in resp.json()["detail"]
+
+
 def test_the_stored_row_carries_what_ships_and_the_facets_it_was_ticked_with(
     client: TestClient, attached: None
 ) -> None:
@@ -1528,6 +1602,31 @@ def test_the_stored_row_carries_what_ships_and_the_facets_it_was_ticked_with(
     assert counted["counted_distribution_by_facet"]["call_trigger"] == {
         "user_utterance": 1
     }
+
+
+def test_a_facet_stored_in_notes_is_read_back_and_counted(
+    client: TestClient, attached: None
+) -> None:
+    """The two facets a person ticks that no route ever answered: `direction` and
+    `have_conversation_flow` are keys in `notes` rather than columns, and until this they were
+    written and unreadable — not on the page of rows, not on the row opened whole, not counted.
+
+    Both halves here, because either alone leaves the hole: the statistic says what the corpus
+    holds of it, and the opened row says what **this** row answered.
+    """
+    key = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+
+    counted = client.get(f"{BASE}/records/stats").json()
+    assert counted["counted_distribution_by_facet"]["direction"] == {"inbound": 1}
+    assert counted["counted_distribution_by_facet"]["have_conversation_flow"] == {
+        "false": 1
+    }
+
+    facets = client.get(f"{BASE}/records/{key}").json()["facets"]
+    assert facets["direction"] == TICKED["direction"]
+    assert facets["have_conversation_flow"] == TICKED["have_conversation_flow"]
+    # And the columns are still all there beside them, keyed the same way.
+    assert set(facets) >= set(ToolDecisionSample.FACETS)
 
 
 def test_a_facet_a_row_answered_with_nothing_is_counted_under_a_name_of_its_own(

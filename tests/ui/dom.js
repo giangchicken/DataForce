@@ -221,8 +221,8 @@ async function build(answers, app) {
   // leaves every other container's ticks where they were, and a cache over the joined markup
   // would throw away a model the reviewer picked because a list somewhere else was redrawn.
   const inputsIn = el => {
-    const held = ticks.get(el.id);
-    if (!held || held.drew !== el.innerHTML) {
+    const cached = ticks.get(el.id);
+    if (!cached || cached.drew !== el.innerHTML) {
       ticks.set(el.id, { drew: el.innerHTML, boxes: readTicks(el.innerHTML) });
     }
     return ticks.get(el.id).boxes;
@@ -329,6 +329,11 @@ async function build(answers, app) {
       // corpus back off it, so the method is what tells them apart here as it does in the router.
       : named === "/records" && (how.method || "GET") === "GET"
         ? (answers.dataset || { samples: [], total: 0 })
+      // The third thing on one path: the sheet deletes the rows a reviewer ticked. No body comes
+      // back from it, so there is nothing here to answer with -- what the page sent is what a
+      // check reads, off `asked`.
+      : named === "/records" && (how.method || "GET") === "DELETE"
+        ? null
       : named === "/records" ? (answers.stored || { id: "r1", created_time: "t", modified_time: "t" })
       : named.startsWith("/records/") ? (answers.datasetOne || null)
       : named.startsWith("/queue/") && named.endsWith("/skip") ? nextQueued()
@@ -389,7 +394,7 @@ async function build(answers, app) {
       samples: queue.map((one, n) => ({
         key: keyOf(one),
         state: (answers.states || {})[keyOf(one)] || "waiting",
-        arrived: n + 1,
+        walk_position: n + 1,
         said: ((one.messages || [])[0] || {}).content || ""
       })),
       ...counts()

@@ -52,15 +52,15 @@ def build_client() -> Any:
     return LabelStudio(base_url=url, api_key=key)  # type: ignore[no-untyped-call]
 
 
-def list_held_tasks(tool: Any, project_id: str) -> dict[str, str]:
+def list_task_ids(tool: Any, project_id: str) -> dict[str, str]:
     """The task id the project already holds, by `sample_id`. What makes a re-push a no-op."""
-    held: dict[str, str] = {}
+    task_ids: dict[str, str] = {}
     for task in tool.tasks.list(project=int(project_id)):
         data = getattr(task, "data", None) or {}
         sample_id = data.get(SAMPLE_ID)
         if sample_id:
-            held[str(sample_id)] = str(task.id)
-    return held
+            task_ids[str(sample_id)] = str(task.id)
+    return task_ids
 
 
 def publish_samples(
@@ -68,16 +68,20 @@ def publish_samples(
 ) -> SyncCounts:
     """Post every sample the project does not already hold, and report both counts."""
     tool = build_client()
-    held = list_held_tasks(tool, project_id)
-    posted = 0
+    task_ids = list_task_ids(tool, project_id)
+    number_posted = 0
     for sample in samples:
         sample_id = str(sample[SAMPLE_ID])
-        if sample_id in held:
+        if sample_id in task_ids:
             continue
         created = tool.tasks.create(project=int(project_id), data=dict(sample))
-        held[sample_id] = str(created.id)
-        posted += 1
-    return SyncCounts(posted=posted, already_held=len(samples) - posted, task_ids=held)
+        task_ids[sample_id] = str(created.id)
+        number_posted += 1
+    return SyncCounts(
+        posted=number_posted,
+        already_held=len(samples) - number_posted,
+        task_ids=task_ids,
+    )
 
 
 def list_task_annotations(tool: Any, task_id: str) -> list[ReturnedAnnotation]:
@@ -117,8 +121,8 @@ def convert_annotation(returned_one: ReturnedAnnotation) -> Annotation | None:
         name = str(control.get("from_name", ""))
         value = control.get("value", {})
         if isinstance(value, Mapping):
-            picked = value.get("choices") or value.get("text")
-            values[name] = picked[0] if isinstance(picked, list) and picked else picked
+            answer = value.get("choices") or value.get("text")
+            values[name] = answer[0] if isinstance(answer, list) and answer else answer
     correction = values.get("corrected_label")
     return Annotation(
         annotator_id=returned_one.annotator_id,
@@ -133,7 +137,7 @@ def list_project_annotations(project_id: str) -> dict[str, list[Annotation]]:
     """Every annotation the project holds, by `sample_id`."""
     tool = build_client()
     answers: dict[str, list[Annotation]] = {}
-    for sample_id, task_id in list_held_tasks(tool, project_id).items():
+    for sample_id, task_id in list_task_ids(tool, project_id).items():
         annotations = [
             convert_annotation(one) for one in list_task_annotations(tool, task_id)
         ]

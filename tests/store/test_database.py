@@ -226,13 +226,13 @@ def test_a_changed_dsn_releases_the_pool_the_old_one_held(
     second_path = tmp_path_factory.mktemp("second") / "store.sqlite3"
     attach(monkeypatch, f"sqlite+pysqlite:///{first_path}")
     first = db.open_engine()
-    held = first.pool
+    pool = first.pool
 
     attach(monkeypatch, f"sqlite+pysqlite:///{second_path}")
     second = db.open_engine()
 
     assert second is not first
-    assert first.pool is not held
+    assert first.pool is not pool
 
 
 def test_one_metadata_holds_every_task_s_tables() -> None:

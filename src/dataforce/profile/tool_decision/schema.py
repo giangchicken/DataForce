@@ -45,13 +45,7 @@ class ToolDecisionQueuedSample(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
     document: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     imported_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    # Where this row stands in the walk, counting on from whatever the table already held.
-    # `imported_time` cannot do it: every row of one file is written in the same breath and carries
-    # the same instant, so ordering by it leaves the tie to the key -- which is a hash of the
-    # content, and hands a curated file back in an order nobody chose.
-    arrived: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    # Indexed because every walk of the queue is one `WHERE state = 'waiting' LIMIT 1`, and that is
-    # the one query a labeller waits on -- once per sample, all day.
+    walk_position: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     state: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
 
@@ -131,7 +125,9 @@ class ToolDecisionDatasetStatistics(BaseModel):
         description=(
             "One distribution per facet, over **every** row of `dataset`: a facet name, "
             "then each value it holds, then how many samples carry that value -- "
-            '`["domain"]["telesale"]` is how many samples are telesale. Each '
+            '`["domain"]["telesale"]` is how many samples are telesale. A facet held as a '
+            "key in `notes` rather than as a column is counted here too, and a row written "
+            "before that facet existed is counted under `none`. Each "
             "distribution adds up to `sample_totals`, and *counted* is in the name "
             "because these are counts and never shares. The value is written as text, "
             "because a JSON object has no other kind of key. A set-valued facet is keyed "
@@ -243,7 +239,7 @@ class QueuedSampleRow(BaseModel):
         ..., description="The queue row's key, which is also the sample's name."
     )
     state: str = Field(..., description="One of `waiting`, `done`, `skipped`.")
-    arrived: int = Field(
+    walk_position: int = Field(
         ..., description="Where it stands in the walk, counting from one."
     )
     said: str = Field(
@@ -323,24 +319,19 @@ class StoredSample(BaseModel):
         description="The calls as they ship. `()` and `null` both mean no call was needed.",
     )
     facets: Mapping[str, Any] = Field(
-        default_factory=dict, description="Every facet column, by name."
+        default_factory=dict,
+        description=(
+            "Every facet this row carries, by name -- the columns and the keys in `notes` "
+            "together. Both, because a facet that is a key rather than a column is still "
+            "something a person ticked, and answering only the columns made `direction` and "
+            "`have_conversation_flow` write-only."
+        ),
     )
     created_time: datetime = Field(..., description="When it was first stored.")
     modified_time: datetime = Field(..., description="When it was last written.")
 
 
 class LabelChecked(BaseModel):
-    """Whether one label validates against the catalog beside it, and what is wrong with it.
-
-    The same measurement `schema_valid` is written from, asked *before* a row is written rather
-    than read off one afterwards. Both, because they catch different rows: this one stops a
-    reviewer ticking *correct* on a label that names a tool without calling it, and the column
-    finds the ones already in the corpus.
-
-    The sentences are the rule's own and the page does not paraphrase them -- a page that worded
-    the fault itself would be a second opinion about what a valid call is.
-    """
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_valid: bool = Field(
@@ -401,17 +392,6 @@ class ToolDecisionDataStamp(NamedTuple):
 
 
 class ToolDecisionSampleContent(NamedTuple):
-    """One sample's content under its key: what goes in, and what comes out.
-
-    The two columns a buyer is sold, without the nine facets that describe them -- which is exactly
-    what every measurement over the corpus reads and nothing more.
-
-    Declared rather than answered as a bare triple, because the reading happens two layers from the
-    query: `services/` is handed these and takes the key, the input and the label off each one, and
-    a bare tuple would have it doing that by position -- four times, at a distance, with the column
-    order of a `SELECT` as the only thing holding it together.
-    """
-
     key: str
     input: Mapping[str, Any]
     label: Any

@@ -271,6 +271,10 @@ already knows is a labelling tool, not a CMS.
     combinations occur* is the matrix's question. A row answering nothing still answered, so an
     empty list is counted under `none` rather than falling out — *how many hold none* is the first
     thing asked of that panel.
+    **A figure that is half of a total says its other half.** How many rows answered with a call is
+    also how many were labelled to call nothing, and that second number is what says whether the
+    corpus teaches the negative case at all. Leaving it to be subtracted from the total standing
+    beside it is leaving it unread.
 19. **Nothing on the panel is counted twice.** `domain` and `call_trigger` are what the matrix
     crosses, so neither is listed again underneath it. A figure in two places is a figure free to
     come apart, and the cross answers everything either column alone would.
@@ -312,6 +316,31 @@ already knows is a labelling tool, not a CMS.
     to `tool_decision_record` and this screen does not ask for one**: that table keeps what arrived
     un-redacted, and serving it would put a customer's address on the screen of anyone who can open
     the page, which is the thing this whole part exists to prevent.
+    **A row opened whole says every facet it was filed under**, the ones a person ticked and the
+    ones computed off them, in the order the card asks them in. Two of the five declared facets
+    were not columns of the table — they are keys in `notes` — and until this the page answered
+    only the columns, so `direction` and `have_conversation_flow` were ticked, stored, and
+    readable nowhere on the screen that stored them. The distribution panel counts them for the
+    same reason.
+    **The rows scroll inside the sheet rather than lengthening it.** `Show more` adds a hundred a
+    press and the column carrying a system prompt runs to six lines, so the sheet grew past any
+    screen and the panel under the table — the row a reviewer opened — went down with it. The table
+    gets a track of its own, and the head stays in view inside that track: at row eighty the columns
+    are unnamed otherwise, and the box that ticks every row shown, which is what the act above reads,
+    has scrolled off with them.
+    **And a row can be taken out of it, which is the one act on this sheet that changes anything.**
+    A sample labelled against the wrong catalog is a row the corpus is worse for holding, and until
+    there was a way to take one out the only correction was dropping the database. Rows are ticked
+    the way the samples list already ticks them — a box a row, and a box in the head for every row
+    shown — because *this group* is one question and the screen should not have two shapes for it.
+    The act sits over the table with the ticks, and it is **armed and then confirmed**: there is no
+    undo and `tool_decision_record` is the only copy of what arrived, so the first click says what
+    will go and the second does it. What it says is *both tables*, what ships and what arrived,
+    because a reviewer reading *delete this row* off a sheet titled with the redacted half has been
+    told half of what happens. The queue row stays, and the sheet says so rather than leaving it to
+    be found — the sample is still in the list, still openable, and labelling it again writes it
+    back. **What the line afterwards says is what the reviewer ticked**: the route answers no body,
+    because the page named the keys and the reloaded table under it is what shows the corpus moved.
 
 ### The spans
 

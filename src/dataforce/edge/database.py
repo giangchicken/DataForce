@@ -33,19 +33,19 @@ class Database:
 
     def describe(self) -> str:
         dialect = self.database_url.get_backend_name()
-        held = self.database_url.database
+        database_name = self.database_url.database
         if dialect == "sqlite":
-            return Path(held or ":memory:").name
-        return f"{dialect} · {self.database_url.host or 'local'}/{held or '?'}"
+            return Path(database_name or ":memory:").name
+        return f"{dialect} · {self.database_url.host or 'local'}/{database_name or '?'}"
 
     def check_database_exists(self) -> bool:
-        held = self.database_url.database
-        if self.database_url.get_backend_name() != "sqlite" or held in (
+        database_name = self.database_url.database
+        if self.database_url.get_backend_name() != "sqlite" or database_name in (
             None,
             ":memory:",
         ):
             return True
-        return Path(str(held)).exists()
+        return Path(str(database_name)).exists()
 
     def open_engine(self) -> Engine:
         with self.lock:

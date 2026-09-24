@@ -162,7 +162,16 @@ def test_the_dataset_sheet_says_what_the_database_holds() -> None:
     put a customer's address on the screen of anyone who can open the page.
     """
     sheet = PAGE[PAGE.index('id="sheet-dataset"') : PAGE.index('id="sheet-list"')]
-    for named in ("dataset-store", "stats", "dataset-rows", "dataset-one"):
+    for named in (
+        "dataset-store",
+        "stats",
+        "dataset-rows",
+        "dataset-one",
+        "dataset-all",
+        "dataset-erase",
+        "dataset-keep",
+        "dataset-going",
+    ):
         assert f'id="{named}"' in sheet, named
         assert PAGE.count(f'id="{named}"') == 1, named
     # Which database, then what the whole comes to, then the page of rows.
@@ -177,6 +186,36 @@ def test_the_dataset_sheet_says_what_the_database_holds() -> None:
     assert 'class="rows" id="dataset-rows"' not in PAGE
     assert re.search(r'<div class="rows" id="list-rows">', PAGE), (
         "`.rows` is the sample list, and it is the only thing that wears it"
+    )
+
+
+def test_a_stored_row_can_be_taken_back_out_and_the_act_is_confirmed_first() -> None:
+    """Requirement 26, and `docs/tool-decision-store/spec.md` Requirement 54.
+
+    Two facts the stub cannot read: that the act is reached from the rows it acts on, and that it
+    starts unpressable. A delete that armed itself, or one sitting somewhere else on the sheet,
+    would pass every behavioural check in `page.js` and be the wrong control on the screen.
+    """
+    sheet = PAGE[PAGE.index('id="sheet-dataset"') : PAGE.index('id="sheet-list"')]
+    acts = sheet[
+        sheet.index('<div class="runline">') : sheet.index('id="dataset-rows"')
+    ]
+    assert 'id="dataset-erase"' in acts, "the act sits over the table with the ticks"
+    assert re.search(r'id="dataset-erase"[^>]* disabled', acts), (
+        "nothing is ticked when the sheet opens, so the act starts unpressable"
+    )
+    assert re.search(r'id="dataset-keep"[^>]* hidden', acts), (
+        "cancelling only exists once the act is armed"
+    )
+    # **Beside the act, not in the sheet's head.** The head scrolls away long before the table
+    # does, so a warning written there is one the reviewer arms the delete without ever seeing.
+    assert sheet.index('id="dataset-erase"') < sheet.index('id="dataset-going"')
+    assert sheet.index('id="dataset-going"') < sheet.index('id="dataset-rows"')
+    # The box in the head ticks every row shown, so it is in the head and not in a row.
+    head = sheet[sheet.index("<thead>") : sheet.index("</thead>")]
+    assert 'id="dataset-all"' in head
+    assert head.count("<th>") + head.count("<th ") == 9, (
+        "one column a facet, plus the one the ticks are in"
     )
 
 
@@ -248,9 +287,9 @@ def classes_written(source: str) -> set[str]:
     source = unremarked(source)
     found: set[str] = set()
 
-    def keep(held: str) -> None:
+    def keep(text: str) -> None:
         found.update(
-            word for word in held.split() if re.fullmatch(r"[A-Za-z][\w-]*", word)
+            word for word in text.split() if re.fullmatch(r"[A-Za-z][\w-]*", word)
         )
 
     def skip_literal(text: str, at: int) -> int:
@@ -298,10 +337,10 @@ def classes_written(source: str) -> set[str]:
                 word += here
             at += 1
 
-    for held in re.findall(r"""className\s*=\s*["'`]([^"'`]*)""", source):
-        keep(held)
-    for held in re.findall(r"""classList\.\w+\(\s*["']([\w-]+)["']""", source):
-        found.add(held)
+    for written in re.findall(r"""className\s*=\s*["'`]([^"'`]*)""", source):
+        keep(written)
+    for name in re.findall(r"""classList\.\w+\(\s*["']([\w-]+)["']""", source):
+        found.add(name)
     return found
 
 
@@ -338,6 +377,32 @@ def test_every_class_the_page_writes_has_a_rule() -> None:
 # whose names are `STATE_SAID`'s keys in `held.js`), and the kind a check's verdict is said in
 # (`checks.js`'s state map). A fifth belongs here only with the same kind of answer beside it.
 FROM_DATA = {"assistant", "busy", "done", "skipped"}
+
+
+def test_the_rows_of_the_corpus_scroll_under_a_head_that_stays() -> None:
+    """A sheet as long as the corpus is a sheet nobody reaches the foot of.
+
+    `Show more` adds a hundred rows a press and the preview column runs to six lines, so the
+    dataset sheet grew past any screen and the panel under the table -- the row a reviewer opened
+    -- went with it. The rows get a track of their own, and the head stays in view inside it
+    because at row eighty the columns are unnamed otherwise and the tick-all box, which is what
+    the delete act reads, has scrolled off with them.
+
+    Held here rather than in a behavioural check because neither the stub nor the reading run
+    lays anything out: a cap that is deleted renders exactly the same in both, and the page is
+    infinite again with every other check still green.
+    """
+    assert '<div class="tablewrap rowscroll"><table id="dataset-rows">' in PAGE
+
+    capped = re.search(r"\.rowscroll \{([^}]*)\}", STYLE)
+    assert capped and "max-height" in capped[1] and "overflow-y: auto" in capped[1], (
+        "the rows of the corpus are not capped, so the sheet is as long as the corpus"
+    )
+
+    head = re.search(r"\.rowscroll thead th \{([^}]*)\}", STYLE)
+    assert head and "position: sticky" in head[1] and "background" in head[1], (
+        "the head of the rows does not stay, so the columns are unnamed as soon as it scrolls"
+    )
 
 
 def test_every_rule_has_a_user() -> None:
@@ -601,6 +666,18 @@ def test_the_page_reads_what_the_routes_actually_answer(
 
     answered = attached_client.get(f"{BASE}/records/stats")
     assert answered.status_code == 200
+    # The sheet's own page of rows, read by name in JavaScript to draw the table. Captured before
+    # the third record is written, so the page and the counts agree. The delete answers no body at
+    # all, so what the reading run holds it to is the status and the row being gone afterwards.
+    listed = attached_client.get(f"{BASE}/records")
+    assert listed.status_code == 200, listed.text
+    gone = attached_client.post(f"{BASE}/records", json=build_review(id="page-gone"))
+    assert gone.status_code == 200, gone.text
+    erased = attached_client.request(
+        "DELETE", f"{BASE}/records", json={"keys": [gone.json()["id"]]}
+    )
+    assert erased.status_code == 204, erased.text
+    assert attached_client.get(f"{BASE}/records/{gone.json()['id']}").status_code == 404
     # The models route too. It is the one whose answer the page had wrong -- a bare array read as
     # though it carried a `models` key -- and no stub can catch that, because a stub answers
     # whatever shape the page was written against.
@@ -631,6 +708,7 @@ def test_the_page_reads_what_the_routes_actually_answer(
     (tmp_path / "anonymous.json").write_text(anonymous, encoding="utf-8")
     (tmp_path / "redacted.json").write_text(redacted.text, encoding="utf-8")
     (tmp_path / "detected.json").write_text(detected.text, encoding="utf-8")
+    (tmp_path / "dataset.json").write_text(listed.text, encoding="utf-8")
 
     run_node(str(READING), str(tmp_path))
 

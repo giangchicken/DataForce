@@ -236,6 +236,7 @@ COUNTED: tuple[Mapping[str, Any], ...] = (
         "call_trigger": ["condition_met"],
         "personal_data": ["PHONE"],
         "number_turns": 2,
+        "notes": {"direction": "inbound", "have_conversation_flow": False},
     },
     {
         "input": {"messages": [{"role": "user", "content": "nợ bao nhiêu"}]},
@@ -244,7 +245,10 @@ COUNTED: tuple[Mapping[str, Any], ...] = (
         "call_trigger": ["condition_met"],
         "personal_data": ["PHONE"],
         "number_turns": 2,
+        "notes": {"direction": "outbound", "have_conversation_flow": True},
     },
+    # **And one carrying no note at all**, which is what every row written before a facet was
+    # declared looks like. A count that dropped it would say the corpus is smaller than it is.
     {
         "input": {"messages": [{"role": "user", "content": "cảm ơn em"}]},
         "label": None,
@@ -316,7 +320,7 @@ def test_counted_by_facet_answers_a_count_per_value_of_every_facet(
     """
     counted = count_by_facet(corpus_session)
 
-    assert set(counted) == set(ToolDecisionSample.FACETS)
+    assert set(counted) >= set(ToolDecisionSample.FACETS)
     assert counted["domain"] == {"debt_collection": 2, "telesale": 1}
     assert counted["language"] == {"en": 1, "vi": 2}
     assert counted["ambiguous"] == {"LOW": 2, "HIGH": 1}
@@ -345,6 +349,60 @@ def test_a_list_valued_facet_is_counted_by_the_value_and_not_by_the_set(
         "every_turn": 1,
     }
     assert counted["personal_data"] == {"none": 1, "PHONE": 2}
+
+
+def test_a_facet_in_notes_is_counted_like_any_other(corpus_session: Session) -> None:
+    """The hole this closes: a facet that is a key rather than a column was **write-only**.
+
+    A person ticks `have_conversation_flow`, `build_tool_decision_sample` puts it in `notes`
+    because it is not true of every row in the table, and then no reader on any route ever answers
+    what the corpus holds of it -- not the page of rows, not the row opened whole, not the
+    statistics. It was stored and unreadable.
+
+    Counted in Python and not in a `GROUP BY`, because reading inside a JSON column is spelled
+    differently in every dialect and this file is the one place the two must stay one code path.
+    """
+    counted = count_by_facet(corpus_session)
+
+    assert set(counted) - set(ToolDecisionSample.FACETS) == {
+        "direction",
+        "have_conversation_flow",
+    }
+    assert counted["direction"] == {"inbound": 1, "none": 1, "outbound": 1}
+
+
+def test_a_row_written_before_a_note_facet_existed_is_counted_under_none(
+    corpus_session: Session,
+) -> None:
+    """Every distribution still adds up to the rows, which is what the panel reads them against.
+
+    A facet declared today means every older row answered nothing, and a count that dropped those
+    rows would draw a chart of a corpus smaller than the one the totals report -- the same reason
+    an empty list keeps a name of its own.
+    """
+    counted = count_by_facet(corpus_session)
+
+    assert counted["have_conversation_flow"] == {"false": 1, "none": 1, "true": 1}
+    assert (
+        sum(counted["have_conversation_flow"].values())
+        == (count_total_samples(corpus_session)[ToolDecisionSample.__tablename__])
+    )
+
+
+def test_a_note_value_is_read_as_text_rather_than_as_its_json(
+    corpus_session: Session,
+) -> None:
+    """`inbound`, never `"inbound"`. A string is a string wherever it is stored.
+
+    The column path tells a text column from a JSON one by the column's own type, which a key
+    inside one JSON object has nothing to answer with -- so the value's own type is what says it.
+    A boolean still reads as `true`, the way `schema_valid` does.
+    """
+    counted = count_by_facet(corpus_session)
+
+    assert "inbound" in counted["direction"]
+    assert '"inbound"' not in counted["direction"]
+    assert set(counted["have_conversation_flow"]) == {"true", "false", "none"}
 
 
 def test_counted_by_pair_answers_only_the_pairs_the_rows_carry(

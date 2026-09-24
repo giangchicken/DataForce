@@ -109,14 +109,18 @@ def name_placeholders(detected: Sequence[tuple[str, str]]) -> Mapping[str, str]:
     `review_text` -- the string a reviewer reads in order. Only *where* a span is moved into the
     record; which placeholder a value wears did not.
     """
-    counted: dict[str, int] = {}
-    named: dict[str, str] = {}
+    number_by_class: dict[str, int] = {}
+    placeholder_by_value: dict[str, str] = {}
     for personal_data_class, value in detected:
-        if value in named:
+        if value in placeholder_by_value:
             continue
-        counted[personal_data_class] = counted.get(personal_data_class, 0) + 1
-        named[value] = f"<{personal_data_class}_{counted[personal_data_class]}>"
-    return named
+        number_by_class[personal_data_class] = (
+            number_by_class.get(personal_data_class, 0) + 1
+        )
+        placeholder_by_value[value] = (
+            f"<{personal_data_class}_{number_by_class[personal_data_class]}>"
+        )
+    return placeholder_by_value
 
 
 def find_and_number_spans(
@@ -131,7 +135,7 @@ def find_and_number_spans(
     left unresolved rather than an error.
     """
     placeholders = name_placeholders(detected)
-    found = [
+    spans_with_order = [
         (claimed_at, walked_at, span)
         for walked_at, (path, said) in enumerate(walk_record_strings(record))
         for claimed_at, span in find_spans_in_text(said, path, detected, placeholders)
@@ -139,7 +143,8 @@ def find_and_number_spans(
     return tuple(
         span.model_copy(update={"id": numbered})
         for numbered, (_, _, span) in enumerate(
-            sorted(found, key=lambda one: (one[0], one[1], one[2].start)), start=1
+            sorted(spans_with_order, key=lambda one: (one[0], one[1], one[2].start)),
+            start=1,
         )
     )
 
@@ -299,12 +304,12 @@ class PiiLlmDetector:
                 },
             )
             return {}
-        found: dict[str, str] = {}
+        class_by_value: dict[str, str] = {}
         for finding in json_parsed:
-            named = "_".join(finding.label.upper().split())
-            if finding.text and named and finding.text in text:
-                found.setdefault(finding.text, named)
-        return found
+            personal_data_class = "_".join(finding.label.upper().split())
+            if finding.text and personal_data_class and finding.text in text:
+                class_by_value.setdefault(finding.text, personal_data_class)
+        return class_by_value
 
 
 class ToolDecisionPersonalChecking(PersonalDataChecking):

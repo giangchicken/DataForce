@@ -20,7 +20,8 @@ import {
   sayQueueName, skipQueued, waiting, walkThese
 } from "./queue.js";
 import {
-  askDataset, askStatistics, askStore, openStored, paintDataset, paintStrip
+  askDataset, askStatistics, askStore, eraseStored, keepStored, openStored, paintDataset,
+  paintStrip, tickAllStored, tickStored
 } from "./corpus.js";
 import { composeRecord, forgetRecord, paintRecord } from "./record.js";
 import {
@@ -342,9 +343,16 @@ $("open-list").onclick = () => { openSheet("sheet-list"); askList(); };
 $("open-dataset").onclick = () => { openSheet("sheet-dataset"); askDataset(false); };
 $("dataset-more").onclick = () => askDataset(true);
 $("dataset-bad").onchange = paintDataset;
+$("dataset-erase").onclick = eraseStored;
+$("dataset-keep").onclick = keepStored;
+$("dataset-all").onchange = event => tickAllStored(event.target.checked);
 $("dataset-rows").onclick = event => {
   const open = event.target.closest("[data-stored]");
   if (open) openStored(open.dataset.stored);
+};
+$("dataset-rows").onchange = event => {
+  const tick = event.target.closest("[data-erase]");
+  if (tick) tickStored(tick.dataset.erase, tick.checked);
 };
 for (const button of marked("close")) {
   button.onclick = () => shutSheet(button.dataset.close);

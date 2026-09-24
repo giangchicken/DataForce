@@ -78,7 +78,7 @@ export function paintList() {
     + `<label class="tick"><input type="checkbox" data-pick="${esc(row.key)}"`
     + `${picked.has(row.key) ? " checked" : ""}></label>`
     + `<button class="open" data-open="${esc(row.key)}">`
-    + `<span class="at">${esc(row.arrived)}</span>`
+    + `<span class="at">${esc(row.walk_position)}</span>`
     + `<span class="said">${esc(row.said) || "<i>no turns</i>"}</span>`
     + `<span class="was">${esc(STATE_SAID[row.state] || row.state)}</span>`
     + "</button></div>").join("");

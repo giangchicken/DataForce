@@ -18,8 +18,8 @@ function fails(said) {
   console.log(`FAIL  ${said}`);
 }
 
-function claims(said, held) {
-  if (held) console.log(`  ok  ${said}`);
+function claims(said, passed) {
+  if (passed) console.log(`  ok  ${said}`);
   else fails(said);
 }
 
@@ -175,7 +175,11 @@ const STORED_ONE = {
       description: "kiểm tra tính hợp lệ của một địa chỉ email" } }]
   },
   label: ["VerifyEmail_15d"],
-  facets: { schema_valid: false, domain: "telesale" },
+  // **Two of these are keys in `notes`, not columns.** `direction` and
+  // `have_conversation_flow` are what a person ticks and no route used to answer, so the
+  // fixture carries them where the service now puts them: in the one map, beside the columns.
+  facets: { direction: "inbound", have_conversation_flow: true,
+    schema_valid: false, domain: "telesale" },
   created_time: "2026-09-18T00:00:00",
   modified_time: "2026-09-18T00:00:00"
 };
@@ -1619,6 +1623,16 @@ async function main() {
   claims("**and its label is drawn by the code card 2 draws one with**, so a stored row and a live"
     + " one cannot come to look like different things",
     one.includes('class="calltable"'));
+  claims("**the row says every facet it was filed under**, the ones a person ticked and the ones"
+    + " computed off them — a facet living in `notes` was written and readable nowhere",
+    one.includes('class="facetlist"')
+    && one.includes('<span class="facetname">have_conversation_flow</span>yes')
+    && one.includes('<span class="facetname">direction</span>inbound')
+    && one.includes('<span class="facetname">schema_valid</span>no'));
+  claims("and they are in the order the card asks them in, the ticked ones before the computed",
+    one.indexOf("facetname\">domain") < one.indexOf("facetname\">direction")
+    && one.indexOf("facetname\">have_conversation_flow") < one.indexOf("facetname\">schema_valid"));
+
   claims("the row it came out of is marked while it is open, so the sheet says which one this is",
     page.el("dataset-rows").querySelector("tbody").innerHTML.includes("open opened"));
 
@@ -1638,6 +1652,117 @@ async function main() {
   for (let n = 0; n < 8; n += 1) await settled();
   claims("and pressing it once more opens it again",
     page.byId.get("dataset-one").innerHTML.includes("kiểm tra email"));
+
+  // -------------------------------------------------- a row taken back out of the corpus
+  //
+  // Every act this page ever had added to it. The row labelled against the wrong catalog, the line
+  // imported from a file somebody meant to fix first, the duplicate nobody saw until it landed:
+  // until this there was nothing to do about any of them but drop the database, which takes every
+  // other row with it.
+  page.el("dataset-bad").checked = false;
+  page.el("dataset-bad").onchange();
+  claims("nothing ticked is nothing to delete, and the act says so before it is reached for",
+    page.el("dataset-erase").disabled === true
+    && page.el("dataset-erase").textContent === "Delete the selected");
+
+  const tickStored = (key, on) =>
+    hit(page.el("dataset-rows").onchange, "[data-erase]", { erase: key, on });
+
+  tickStored("d1", true);
+  tickStored("d2", true);
+  tickStored("d2", false);
+  claims("**ticking a row names it in the act**, so what is about to go is counted before it goes,"
+    + " and unticking takes it back off",
+    page.el("dataset-erase").disabled === false
+    && page.el("dataset-erase").textContent === "Delete the 1 selected");
+  tickStored("d2", true);
+  claims("and a tick alone deletes nothing", posted(page, "/records")
+    .filter(one => one.method === "DELETE").length === 0);
+
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  claims("**the first press arms and does not delete**, because there is no undo and the record"
+    + " table is the only copy of what arrived",
+    posted(page, "/records").filter(one => one.method === "DELETE").length === 0
+    && page.el("dataset-erase").textContent === "Yes, delete 2 rows"
+    && page.el("dataset-keep").hidden === false);
+  claims("and it says what goes: both tables, and the queue row that stays",
+    page.byId.get("dataset-going").textContent.includes("both tables")
+    && page.byId.get("dataset-going").textContent.includes("no undo")
+    && page.byId.get("dataset-going").textContent.includes("queue"));
+  claims("**a state is a word first**, so the armed button reads differently as well as redder",
+    page.el("dataset-erase").className === "bad");
+
+  page.el("dataset-keep").onclick();
+  claims("cancelling puts the act back and deletes nothing, keeping the ticks",
+    posted(page, "/records").filter(one => one.method === "DELETE").length === 0
+    && page.el("dataset-erase").textContent === "Delete the 2 selected"
+    && page.el("dataset-keep").hidden === true);
+
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  const readBefore = posted(page, "/records").filter(one => one.method === "GET").length;
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 12; n += 1) await settled();
+  const erased = posted(page, "/records").filter(one => one.method === "DELETE");
+  claims("**the second press deletes, in one call carrying the keys**, because a tick names a"
+    + " group and a call a row has no answer for a half-done one",
+    erased.length === 1 && JSON.parse(erased[0].body).keys.join() === "d1,d2");
+  claims("and the sheet reads the corpus and the statistics again, because both just moved",
+    posted(page, "/records").filter(one => one.method === "GET").length > readBefore
+    && posted(page, "/records/stats").length > 1);
+  claims("the line over the table says how many went",
+    page.byId.get("dataset-going").textContent.includes("2 rows deleted"));
+  claims("and the ticks are gone with them, so the next press has nothing to delete",
+    page.el("dataset-erase").disabled === true);
+
+  // The box in the head, which is the other half of *this group*: a sheet holding a hundred rows
+  // is one nobody ticks a row at a time.
+  page.el("dataset-all").onchange({ target: { checked: true } });
+  claims("**the box in the head ticks every row shown**",
+    page.el("dataset-erase").textContent === "Delete the 2 selected"
+    && page.el("dataset-rows").querySelector("tbody").innerHTML.split(" checked").length === 3);
+  page.el("dataset-all").onchange({ target: { checked: false } });
+  claims("and unticking it clears them", page.el("dataset-erase").disabled === true);
+
+  // A tick on a row the filter then hides would go without being seen. The act counts what is on
+  // the table, so narrowing the table narrows it.
+  tickStored("d1", true);
+  page.el("dataset-bad").checked = true;
+  page.el("dataset-bad").onchange();
+  claims("**narrowing the table drops a tick it has hidden**, so the act never names a row the"
+    + " reviewer cannot see",
+    page.el("dataset-erase").disabled === true);
+  page.el("dataset-bad").checked = false;
+  page.el("dataset-bad").onchange();
+
+  // Two people with the sheet open, one of them deletes first: the other's tick names a row that
+  // is already gone. The route answers nothing either way, so what the page says is what it asked
+  // to go -- and the reload under it is what tells the reviewer the corpus really moved.
+  page = await start({ ...ANSWERS(), dataset: STORED, datasetOne: STORED_ONE });
+  await page.byId.get("open-dataset").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  hit(page.el("dataset-rows").onchange, "[data-erase]", { erase: "d1", on: true });
+  hit(page.el("dataset-rows").onchange, "[data-erase]", { erase: "d2", on: true });
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 12; n += 1) await settled();
+  claims("**a key the corpus no longer holds does not refuse the rest**, and the line says what"
+    + " was ticked rather than reading a count out of an answer that has none",
+    page.byId.get("dataset-going").textContent.includes("2 rows deleted"));
+
+  // A store that will not take the delete: the sentence is the service's, and the ticks stay,
+  // because a reviewer whose selection was thrown away by a 503 has to make it again.
+  page.answers.refuse = { "/records": { status: 503, detail: "store.sqlite3 did not answer." } };
+  hit(page.el("dataset-rows").onchange, "[data-erase]", { erase: "d1", on: true });
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  page.el("dataset-erase").onclick();
+  for (let n = 0; n < 12; n += 1) await settled();
+  claims("a store that refuses the delete says so in its own words, and the ticks stay",
+    page.byId.get("dataset-going").textContent.includes("did not answer")
+    && page.el("dataset-erase").textContent === "Delete the 1 selected");
 
   // ------------------------------------------------------------------ the keyboard
   page = await start();
@@ -1736,6 +1861,10 @@ async function main() {
   claims("the empty cells are named, not just counted", stats.includes("telesale × condition_met"));
   claims("how many tools were offered is read", stats.includes("<b>1</b> tool the catalogs put in front of the model"));
   claims("the duplicate groups are read", stats.includes("<b>1</b> group agreeing"));
+  claims("**the labels are said both ways**, because how many rows the corpus teaches to call"
+    + " nothing is a finding of its own and is otherwise a subtraction the reader does",
+    stats.includes("<b>2</b> answered with a call")
+    && stats.includes("<b>1</b> answered with no call"));
 
   // Everything under the matrix, which is where the per-facet distributions are drawn. Scoped past
   // it because the matrix draws `domain` and `call_trigger` itself -- a check over the whole panel

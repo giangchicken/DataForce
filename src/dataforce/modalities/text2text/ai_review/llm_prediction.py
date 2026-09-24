@@ -101,13 +101,13 @@ class LLMPrediction(ABC):
         """
         if not pred_texts:
             return None
-        written, given = Counter(
+        agreed_text, number_agreeing = Counter(
             self.normalize_prediction(one) for one in pred_texts
         ).most_common(1)[0]
-        if given * 2 <= len(pred_texts):
+        if number_agreeing * 2 <= len(pred_texts):
             return None
         return next(
-            one for one in pred_texts if self.normalize_prediction(one) == written
+            one for one in pred_texts if self.normalize_prediction(one) == agreed_text
         )
 
     async def find_llm_judge_consensus(self, pred_texts: Sequence[str]) -> str | None:
@@ -123,8 +123,12 @@ class LLMPrediction(ABC):
         resp_text = await self.judge_prediction(pred_texts)
         if resp_text is None:
             return None
-        picked = self.normalize_prediction(resp_text)
+        judged_text = self.normalize_prediction(resp_text)
         return next(
-            (one for one in pred_texts if self.normalize_prediction(one) == picked),
+            (
+                one
+                for one in pred_texts
+                if self.normalize_prediction(one) == judged_text
+            ),
             None,
         )

@@ -38,6 +38,7 @@ from dataforce.profile.tool_decision.sample_building import (
     count_by_pair,
     count_queued_states,
     count_total_samples,
+    delete_tool_decision_samples,
     mark_queued_sample,
     merge_tool_decision_db,
     name_queued_sample,
@@ -221,6 +222,15 @@ class RecordStored(BaseModel):
     )
 
 
+class RecordKeys(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keys: tuple[uuid.UUID, ...] = Field(
+        default=(),
+        description="The keys to delete. A key given twice is one row.",
+    )
+
+
 class ReviewerVerdicts(BaseModel):
     """What each reviewer said. None where the request ticked no such model."""
 
@@ -384,24 +394,26 @@ def post_queue_import(
         ) from unreadable
     samples, refused = read_queued_samples(text)
     with session:
-        imported, already_held = queue_tool_decision_samples(session, samples)
+        number_imported, number_already_held = queue_tool_decision_samples(
+            session, [name_queued_sample(document) for document in samples]
+        )
     return QueuedSampleImport(
         read=len(samples) + len(refused),
-        imported=imported,
-        already_held=already_held,
+        imported=number_imported,
+        already_held=number_already_held,
         unreadable=refused,
     )
 
 
 def describe_queue(session: Session) -> QueuedSampleWaiting:
     waiting = select_next_queued_sample(session)
-    counted = count_queued_states(session)
+    number_by_state = count_queued_states(session)
     return QueuedSampleWaiting(
         sample=None if waiting is None else dict(waiting[1]),
         key=None if waiting is None else str(waiting[0]),
-        waiting=counted[QueueState.WAITING],
-        done=counted[QueueState.DONE],
-        skipped=counted[QueueState.SKIPPED],
+        waiting=number_by_state[QueueState.WAITING],
+        done=number_by_state[QueueState.DONE],
+        skipped=number_by_state[QueueState.SKIPPED],
     )
 
 
@@ -419,14 +431,14 @@ def get_queue(limit: int = 200, offset: int = 0) -> QueuedSampleList:
     """
     session = db.open_session()
     with session:
-        counted = count_queued_states(session)
+        number_by_state = count_queued_states(session)
         return QueuedSampleList(
             samples=select_queued_samples(
                 session, min(max(limit, 1), 1000), max(offset, 0)
             ),
-            waiting=counted[QueueState.WAITING],
-            done=counted[QueueState.DONE],
-            skipped=counted[QueueState.SKIPPED],
+            waiting=number_by_state[QueueState.WAITING],
+            done=number_by_state[QueueState.DONE],
+            skipped=number_by_state[QueueState.SKIPPED],
         )
 
 
@@ -443,16 +455,16 @@ def get_queued_sample(key: uuid.UUID) -> QueuedSampleWaiting:
     """Whatever state it is in: picking a row already labelled is asking to look at it again."""
     session = db.open_session()
     with session:
-        found = select_queued_sample(session, key)
-        if found is None:
+        queued_sample = select_queued_sample(session, key)
+        if queued_sample is None:
             raise HTTPException(status_code=404, detail=f"no queued sample under {key}")
-        counted = count_queued_states(session)
+        number_by_state = count_queued_states(session)
         return QueuedSampleWaiting(
-            sample=found,
+            sample=queued_sample,
             key=str(key),
-            waiting=counted[QueueState.WAITING],
-            done=counted[QueueState.DONE],
-            skipped=counted[QueueState.SKIPPED],
+            waiting=number_by_state[QueueState.WAITING],
+            done=number_by_state[QueueState.DONE],
+            skipped=number_by_state[QueueState.SKIPPED],
         )
 
 
@@ -544,7 +556,37 @@ def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
 def get_stored_sample(key: uuid.UUID) -> StoredSample:
     session = db.open_session()
     with session:
-        found = select_stored_sample(session, key)
-        if found is None:
+        stored_sample = select_stored_sample(session, key)
+        if stored_sample is None:
             raise HTTPException(status_code=404, detail=f"no stored sample under {key}")
-        return found
+        return stored_sample
+
+
+DELETED_AT_ONCE = 1000
+
+
+@router.delete(
+    "/records",
+    status_code=204,
+    summary="rows the corpus should not hold, out of both tables",
+)
+def delete_stored_samples(request: RecordKeys) -> None:
+    if not request.keys:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "this names no row to delete. Tick the rows on the dataset sheet, or send "
+                "their keys."
+            ),
+        )
+    if len(request.keys) > DELETED_AT_ONCE:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{len(request.keys)} keys is more than one call deletes; "
+                f"{DELETED_AT_ONCE} is the most."
+            ),
+        )
+    session = db.open_session()
+    with session:
+        delete_tool_decision_samples(session, request.keys)

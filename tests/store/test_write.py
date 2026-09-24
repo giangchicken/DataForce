@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sqlalchemy import Engine, select, update
+from sqlalchemy import Engine, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from dataforce.profile.tool_decision.sample_building import (
     ToolDecisionSampleBuilding,
     count_total_samples,
     create_tables,
+    delete_tool_decision_samples,
     merge_tool_decision_db,
     rebuild_tool_decision_dataset,
 )
@@ -371,3 +372,59 @@ def test_the_two_tables_agree_after_every_write_this_suite_makes(
     assert set(store_session.scalars(select(ToolDecisionRecord.id))) == set(
         store_session.scalars(select(ToolDecisionSample.id))
     )
+
+
+# ------------------------------------------------------------------ a row taken back out
+
+
+def test_a_deleted_key_leaves_neither_table_holding_it(store_session: Session) -> None:
+    """Requirement 54, and the invariant above it: the two tables agree after a delete as after a
+    write, because a `record` left standing is rebuilt into a `dataset` row by the next rebuild."""
+    first = merge_tool_decision_db(
+        store_session, build_document(), build_stored_sample()
+    ).key
+    second = merge_tool_decision_db(
+        store_session, build_document(id="s4472"), build_stored_sample()
+    ).key
+
+    delete_tool_decision_samples(store_session, [first])
+
+    assert set(store_session.scalars(select(ToolDecisionRecord.id))) == {second}
+    assert set(store_session.scalars(select(ToolDecisionSample.id))) == {second}
+
+
+def test_a_key_neither_table_holds_takes_nothing_with_it(
+    store_session: Session,
+) -> None:
+    """A key nothing holds is not a reason to leave the rows that are there standing."""
+    stored_key = merge_tool_decision_db(
+        store_session, build_document(), build_stored_sample()
+    ).key
+
+    delete_tool_decision_samples(store_session, [uuid.uuid4(), stored_key])
+
+    assert count_total_samples(store_session) == {
+        ToolDecisionRecord.__tablename__: 0,
+        ToolDecisionSample.__tablename__: 0,
+    }
+
+
+def test_a_record_with_no_dataset_row_is_still_deleted(
+    store_session: Session,
+) -> None:
+    """The half-written state a rebuild is insurance against, deleted rather than stepped over.
+
+    A delete reading `dataset` alone would step over a key whose un-redacted half is the very
+    thing the delete is for, and leave it behind.
+    """
+    key = merge_tool_decision_db(
+        store_session, build_document(), build_stored_sample()
+    ).key
+    with store_session.begin():
+        store_session.execute(
+            delete(ToolDecisionSample).where(ToolDecisionSample.id == key)
+        )
+
+    delete_tool_decision_samples(store_session, [key])
+
+    assert store_session.get(ToolDecisionRecord, key) is None

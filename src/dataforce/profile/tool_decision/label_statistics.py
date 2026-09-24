@@ -73,14 +73,14 @@ def list_label_faults(
 def count_tool_calls(
     labels: Sequence[Sequence[Any] | None], catalogs: Sequence[Sequence[Any]]
 ) -> Mapping[str, int]:
-    counted: Counter[str] = Counter()
+    number_by_tool: Counter[str] = Counter()
     for label, catalog in zip(labels, catalogs, strict=True):
         offered = (read_named_function(entry) for entry in catalog)
-        counted.update(
+        number_by_tool.update(
             {function["name"]: 0 for function in offered if function is not None}
         )
-        counted.update(list_called_tools(label))
-    return dict(sorted(counted.items()))
+        number_by_tool.update(list_called_tools(label))
+    return dict(sorted(number_by_tool.items()))
 
 
 def list_offered_tools(catalogs: Sequence[Sequence[Any]]) -> tuple[str, ...]:

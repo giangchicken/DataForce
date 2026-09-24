@@ -198,6 +198,11 @@ pre.ok { border-color: #abefc6; background: var(--ok-soft); }
 button.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.accent:hover:not(:disabled) { background: #2850bd; border-color: #2850bd; }
 button.quiet { color: var(--dim); }
+/* an act with no undo, once it is armed. The word on it changes with the colour: `Delete the
+   selected` becomes `Yes, delete 3 rows`, because a screen that says a thing only in red says it
+   to some of its readers. */
+button.bad { border-color: #fecdca; background: var(--warn-soft); color: var(--warn); }
+button.bad:hover:not(:disabled) { border-color: var(--warn); }
 
 /* the note */
 
@@ -237,6 +242,13 @@ p.note { margin: 0 0 var(--space-3); }
 /* the table */
 
 .tablewrap { overflow-x: auto; }
+.rowscroll { max-height: 60vh; overflow-y: auto; }
+.rowscroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  box-shadow: inset 0 -1px var(--line-soft);
+}
 tr.out { color: var(--dim); }
 td.ok { color: var(--ok); }
 td.bad { color: var(--warn); }
@@ -599,7 +611,14 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
 #dataset-store { margin-bottom: var(--space-2); }
 .storedone { margin-top: var(--space-4); border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
 .storedone .turns { max-height: 320px; overflow: auto; }
+/* every facet the row was filed under, the ticked ones and the computed ones together. A row that
+   answers eleven and shows nine is a row whose other two were written and can never be read. */
+.facetlist { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-bottom: var(--space-3); }
+.facetlist div { font-size: var(--text-1); }
+.facetname { color: var(--dim); margin-right: var(--space-1); }
 #dataset-rows td { vertical-align: top; }
+#dataset-rows th:first-child, #dataset-rows td:first-child { width: 1%; }
+#dataset-rows input { accent-color: var(--accent); }
 #dataset-rows td.bad { font-weight: 600; }
 #dataset-rows tr.dropped { background: var(--warn-soft); }
 #dataset-rows .open {

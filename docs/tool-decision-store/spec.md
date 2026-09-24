@@ -160,6 +160,21 @@ result and is the only table anything is ever exported from.
     `direction`, each true of a *group* of label sets rather than of the table. **A facet added
     later starts in `notes`**, always, and becomes a column only when something is grouping by it
     often enough for the scan to hurt.
+    - **A key in `notes` is read back and counted like any other facet.** It is not a column; it is
+      not therefore invisible. `direction` and `have_conversation_flow` were ticked by a person,
+      written, and then answered by no route at all — not by the page of rows, not by the row
+      opened whole, not by the statistics — which made two of the five declared facets write-only.
+      A row opened whole answers every facet it carries in one map, columns and notes keys
+      together, and the per-facet distribution counts the notes keys beside the columns.
+    - **That count is the scan this requirement priced, and it is done in Python.** Reading inside
+      a JSON column is spelled differently in every dialect, and a `GROUP BY` written one way
+      would make one file the place SQLite and Postgres stop being one code path — so the column
+      comes back whole and the counting happens above it. The day the scan hurts is the day that
+      facet earns a column, which is the sentence above unchanged.
+    - **A row that predates the facet is counted under `none`**, on the same terms as an empty
+      list: a facet declared today means every older row answered nothing, and a chart that
+      dropped those rows would draw a corpus smaller than the totals report. *How many rows
+      predate this question* is a figure somebody wants rather than one to hide.
 15. `dataset` is computed from `record`. Every column in it comes from the `record` row of the same
     key, so it can be dropped and rebuilt at any time, and nothing writes to it except that
     computation. A `dataset` row that disagrees with its `record` is a bug with one possible cause.
@@ -450,7 +465,7 @@ result and is the only table anything is ever exported from.
     is counted and named by its number, never dropped in silence and never a reason to refuse the
     lines around it.
 46. **The queue is a third table in this task's profile**, holding the raw line as it arrived, when
-    it was imported, and which of *waiting*, *done* or *skipped* it is. Raw, because the reviewer's
+    it was imported, where it stands in the walk, and which of *waiting*, *done* or *skipped* it is. Raw, because the reviewer's
     corrections belong to `record` and a queue that held corrected samples could not be re-walked.
 47. **A submitted sample is marked done in the same transaction that writes the two tables.** Three
     writes or none. A queue row marked done against a record that was never written is a sample
@@ -525,7 +540,39 @@ result and is the only table anything is ever exported from.
       corpus writing `["VerifyEmail_15d"]` shows up. It is told from a sample correctly labelled
       as needing no tool, which is zero beside true. The list can be narrowed to those rows,
       because finding them is the reason to open it.
-54. **The tables are made on the way to a session, not once at startup.** `create_engine` does not
+54. **A row can be taken back out, and taking it out reaches both tables.** Reviewing is not only
+    adding: a sample labelled against the wrong catalog, a line imported from a file somebody meant
+    to fix first, a duplicate nobody saw until it had landed — each is a row the corpus is worse for
+    holding, and a corpus with no way to take one out is one that gets corrected by dropping the
+    whole database. The rows are ticked on the sheet that lists them and `DELETE /records` takes
+    the keys, which is the same shape the list already uses for *this group* rather than a second
+    idea of how a group is named.
+    - **Both tables in one transaction, or neither.** Requirement 47 read backwards. `dataset` is
+      computed from `record` (Requirement 15), so a delete that took only the redacted half would
+      be undone by the next rebuild — and the half it left standing is the one holding what
+      arrived, un-redacted, which is the half a deletion demand under 91/2025/QH15 is actually
+      about.
+    - **The queue is not touched, and that is said here rather than left to be found.** A queue row
+      holds the raw line as it was imported, un-redacted, and it is keyed by the line's own content
+      rather than by the record's key. So deleting a stored sample takes it out of the corpus and
+      leaves the row saying it was imported and labelled — which is true, and is what keeps the
+      sample reachable from the list for anyone who wants to label it again. **A deletion demand is
+      therefore not finished by this route**: the queue is the un-redacted staging table and
+      emptying it is a different act, which this service does not offer today and which the person
+      running the deployment has to know is still theirs to do.
+    - **It cannot be undone, so it is armed and then confirmed.** `record` is the only copy of what
+      arrived; there is no recycle bin to put it in and nothing to restore it from but a backup of
+      the database. One click arms the act and names what will go, a second does it, and the words
+      say both tables rather than *this row*.
+    - **A key the corpus does not hold is not a refusal.** Two people with the sheet open and one
+      of them deletes: the other's tick names a row that is already gone, and refusing the whole
+      call would leave every row that *is* there standing for no reason. A call naming no key at
+      all is refused, because that one can only be a mistake.
+    - **The route answers no body.** `204`, and the sheet reloads. A delete has nothing to say that
+      the caller does not already know: it named the keys, and the page of rows under the act is
+      what shows the corpus moved. Counting the rows that went, or naming the ones nothing held,
+      would be a second reading of the same fact — and two figures free to disagree.
+55. **The tables are made on the way to a session, not once at startup.** `create_engine` does not
     connect, so a database is only ever *named* until something reads it — and one named at startup
     can be gone by the afternoon. A SQLite file is deleted, restored from a copy, or cleared by a
     suite run beside the service. What answered then was `500 Internal Server Error`, at the end of
@@ -545,7 +592,7 @@ result and is the only table anything is ever exported from.
       file in the checkout before every test, which is how the corpus behind a running service was
       lost and how all of this was found. What a test may not do is *reach* that database, and the
       engine is where reaching one is decided, so that is where it is refused.
-55. **A store that answers badly refuses in the service's own words.** `create_all` cannot reach a
+56. **A store that answers badly refuses in the service's own words.** `create_all` cannot reach a
     host behind a typo or a firewall, a database this service has no rights on, or a disk that is
     full — so those remain, and what used to answer them was the statement's own error. They answer
     **503**, and the words name the database that did not answer.
@@ -716,8 +763,10 @@ Proposals, not decisions:
 
 - The export itself — the manifest, the licence file, the format a buyer receives. Selling needs
   it; it is its own decision and it reads only `dataset`.
-- Deleting a row, and what a deletion request under 91/2025/QH15 does to a corpus already sold. It
-  is a real obligation and it is a process, not a column.
+- What a deletion demand under 91/2025/QH15 does to a corpus **already sold**, and what it does to
+  the queue. Requirement 54 takes a row out of the two tables this service owns, which is as far as
+  a route reaches: a copy in a buyer's hands is a process and a contract, and the raw line in the
+  queue is a table this page has no act on. Both are real obligations and neither is a column.
 - Auth on the write route. Today's flow has none anywhere, and one guarded door in an unguarded
   building is theatre. It becomes urgent the moment `record` holds real transcripts.
 - The provenance dossier itself. Per corpus, not per row, and a document rather than a table —

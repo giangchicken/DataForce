@@ -348,9 +348,13 @@
       <div class="fieldname">The rows</div>
       <div class="runline">
         <label class="inline"><input type="checkbox" id="dataset-bad"> Only rows nothing could validate</label>
+        <button id="dataset-erase" class="quiet" disabled>Delete the selected</button>
+        <button id="dataset-keep" class="quiet" hidden>Cancel</button>
         <button id="dataset-more" class="quiet">Show more</button>
       </div>
-      <div class="tablewrap"><table id="dataset-rows"><thead><tr>
+      <div class="note" id="dataset-going"></div>
+      <div class="tablewrap rowscroll"><table id="dataset-rows"><thead><tr>
+        <th><input type="checkbox" id="dataset-all"></th>
         <th>Sample</th><th>Domain</th><th>Arguable</th><th>Turns</th>
         <th>Calls</th><th>Offered</th><th>Redacted</th><th>Valid</th>
       </tr></thead><tbody></tbody></table></div>

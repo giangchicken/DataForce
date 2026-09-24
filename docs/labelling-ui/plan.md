@@ -115,6 +115,8 @@ work. Node 22 is what the linker in `T1` is written against.
 | `T23` | The record is confirmed as a table |
 | `T24` | The dataset sheet says what the database holds |
 | `T26` | One occurrence is one tick |
+| `T27` | A row can be taken back out of the corpus |
+| `T28` | A facet in `notes` is read back and counted |
 
 | | Phase 4 — the form |
 |---|---|
@@ -1352,6 +1354,122 @@ A browser is not in the suite and this did not put one there: `spec.md` Requirem
 step, no npm, no lockfile*, and `test_page.py` says in as many words that this repository installs
 no browser. What was used is a throwaway environment outside the tree, driving the page the
 service was already serving.
+
+---
+
+### T27 · A row can be taken back out of the corpus
+
+**Goal.** A reviewer ticks stored rows on the dataset sheet and deletes them, out of both tables.
+
+**Context.** Every act this page has ever had adds to the corpus. `T24` made what is stored
+readable, and reading it is when a reviewer first sees the row they labelled against the wrong
+catalog, the line that was imported from a file somebody meant to fix first, the duplicate nobody
+saw until it landed. There has been nothing to do about any of them: the only correction was
+dropping the database, which takes every other row with it. The store spec named deleting as out of
+scope while there was no route; Requirement 54 is what replaces that sentence, and half of what it
+says is about which tables a delete reaches.
+
+**Approach.** `DELETE /records` takes a body of keys, because the tick names a group and a route
+taking one key at a time would be N round trips with no answer for a half-done one.
+`delete_tool_decision_samples` deletes out of `tool_decision_record` and `tool_decision_dataset` and
+commits once — `merge_rows` read backwards. The route answers **`204` and no body**: the caller named
+the keys, and the page of rows it reloads is what shows the corpus moved, so counting what went or
+naming what nothing held would be the same fact said a second way. A key the corpus does not hold is
+therefore not a refusal and not a report — it simply takes nothing with it. The page ticks
+the way the samples list ticks: a box a row, a box in the head, a set in the module, and the buttons
+redrawn off its size. The act is armed and then confirmed, because there is no undo and `record` is
+the only copy of what arrived.
+
+**Acceptance criteria.**
+- Ticking rows and confirming takes them out of both tables, and the statistics move with them.
+- The first click arms and names what will go; the second deletes. Cancelling leaves the ticks.
+- A key the corpus no longer holds does not refuse the call, and the rows it does hold still go.
+- A call naming no key is refused in a sentence, and the button cannot make one.
+- The queue row stays, in the state it was in, so the sample is still in the list to be labelled
+  again.
+
+**What it costs.** A deletion demand under 91/2025/QH15 is not finished by this route: the queue
+holds the raw line un-redacted under a key of its own, and emptying it is an act this service does
+not offer. Written into `docs/tool-decision-store/spec.md` Requirement 54 and its § *Out of Scope*
+rather than left for whoever answers the first demand to discover.
+
+**Source.** `spec.md` Requirement 26; `docs/tool-decision-store/spec.md` Requirement 54.
+
+**Verify.** `make check`, then tick two rows on <http://localhost:8000/ui/> and delete them.
+
+---
+
+### T28 · A facet in `notes` is read back and counted
+
+**Goal.** A facet a person ticks is answerable by some route, whether or not it is a column.
+
+**Context.** Found by reading one stored row on screen and asking where
+`have_conversation_flow` went. It went where the store spec says it goes — `notes`, because it is
+true of a group of label sets rather than of the table — and then nothing read it back. All three
+readers loop `ToolDecisionSample.FACETS`: `select_stored_samples` draws the page of rows,
+`select_stored_sample` answers one row whole, `count_by_facet` answers the distributions. So two of
+the five facets the card asks for were ticked, stored, and visible on no screen in this repository.
+The write was right; every read was short.
+
+**Approach.** `count_by_note` reads the `notes` column whole and counts above SQL, because a
+`GROUP BY` inside a JSON column is spelled differently in each dialect and this file is the one
+place the two must stay one code path — which is the scan Requirement 14 already priced.
+`select_stored_sample` merges `notes` into the one `facets` map, columns last so a column always
+wins a name. The page draws that map on the row it opens, ordered by `DECLARED_FACETS` so a facet
+appears where the card asks it, and the statistics panel needs no change at all: it already draws a
+histogram per key the distribution carries.
+
+**Acceptance criteria.**
+- A row opened whole answers `direction` and `have_conversation_flow` beside the nine columns.
+- The statistics carry a distribution for each, drawn as a chart like any other facet.
+- A row written before the facet existed is counted under `none`, so the distribution still adds
+  up to the rows.
+- A note value that is a string reads as itself and not as its JSON — `inbound`, never
+  `"inbound"` — and a boolean reads `true`, the way `schema_valid` does.
+
+**What it does not do.** `select_stored_samples`, the page of rows, is unchanged: eleven columns in
+a table already too narrow for the one carrying a system prompt. *What did this row answer* is a
+question about one row, which is the thing that opens.
+
+**Source.** `spec.md` Requirement 26; `docs/tool-decision-store/spec.md` Requirement 14.
+
+**Verify.** `make check`, then open a stored row on <http://localhost:8000/ui/>.
+
+---
+
+### T29 · The rows scroll, and the labels are said both ways
+
+**Goal.** The dataset sheet stays a screen tall, and the statistics say how many rows call nothing.
+
+**Context.** Two findings off the same screenful. The sheet lengthens by a hundred rows a press and
+the preview column runs to six lines, so it ran past any screen — and the panel that opens a row
+sits under the table, so the further the table grows the further the thing it opens is from the row
+that opened it. The head goes with it: by row eighty the columns are unnamed and the tick-all box,
+which the delete act reads, is off screen above. Separately, the labels block said *3 answered with
+a call* over a total of 7 and never said *4 answered with no call* — the number that says whether
+the corpus teaches the negative case, left as a subtraction beside the figure it comes out of.
+
+**Approach.** The table's wrapper takes a cap and a track of its own; the head cells are sticky
+against that track, painted rather than bordered because `border-collapse` scrolls a sticky border
+away. The figure is arithmetic on `label_summary`, which is already on the wire — no route, no
+column, no second reading of the corpus.
+
+**Acceptance criteria.**
+- A page of a hundred stored rows scrolls inside the sheet, with the column names and the tick-all
+  box still in view at the last row.
+- The labels block names both halves of the total, and a corpus whose every row calls a tool reads
+  nought rather than blank.
+- The cap and the pinned head are held by a check, because neither the stub nor the reading run
+  lays anything out — a deleted cap renders identically in both.
+
+**What it does not do.** The preview column is not clamped and no column is added. Narrowing what
+one row *shows* is a different question from how many rows are on screen, and the one the reviewer
+asked was the second.
+
+**Source.** `spec.md` Requirements 18 and 26.
+
+**Verify.** `make check`, then open the dataset sheet on <http://localhost:8000/ui/> with more than
+a screenful stored.
 
 ---
 
