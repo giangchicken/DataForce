@@ -401,7 +401,7 @@ def test_the_list_shows_every_sample_with_its_state(labelling: TestClient) -> No
 
     assert [one["state"] for one in listed["samples"]] == ["skipped", "waiting"]
     assert [one["walk_position"] for one in listed["samples"]] == [1, 2]
-    assert listed["samples"][0]["said"] == ASKED["content"]
+    assert listed["samples"][0]["preview"] == ASKED["content"]
     assert listed == {**listed, "waiting": 1, "skipped": 1, "done": 0}
 
 
@@ -418,7 +418,7 @@ def test_a_listed_row_carries_a_preview_and_not_the_conversation(
 
     listed = labelling.get(f"{BASE}/queue").json()
 
-    assert len(listed["samples"][0]["said"]) == PREVIEW_CHARACTERS
+    assert len(listed["samples"][0]["preview"]) == PREVIEW_CHARACTERS
     assert "messages" not in listed["samples"][0]
 
 
@@ -426,7 +426,7 @@ def test_a_sample_with_no_turns_is_still_listed(labelling: TestClient) -> None:
     """Empty rather than hidden: a sample nothing was said in is one worth seeing in the list."""
     labelling.post(f"{BASE}/queue/import", content=write_lines({"messages": []}))
 
-    assert labelling.get(f"{BASE}/queue").json()["samples"][0]["said"] == ""
+    assert labelling.get(f"{BASE}/queue").json()["samples"][0]["preview"] == ""
 
 
 def test_the_list_is_paged_and_the_counts_are_of_the_whole_queue(
@@ -440,7 +440,7 @@ def test_the_list_is_paged_and_the_counts_are_of_the_whole_queue(
 
     page = labelling.get(f"{BASE}/queue", params={"limit": 2, "offset": 1}).json()
 
-    assert [one["said"] for one in page["samples"]] == ["b", "c"]
+    assert [one["preview"] for one in page["samples"]] == ["b", "c"]
     assert page["waiting"] == 3
 
 

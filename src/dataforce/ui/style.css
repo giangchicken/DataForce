@@ -651,7 +651,9 @@ details.raw[open] > summary { margin-bottom: var(--space-2); }
   word-break: break-all;
 }
 #keep-table td.value { min-width: 12ch; }
-tr.out .standsfor { text-decoration: line-through; }
+tr.out .standsfor input { text-decoration: line-through; }
+.standsfor input { min-width: 14ch; width: 100%; font-size: var(--text-1); }
+.standsfor input.bad { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
 
 
 /* the sample list */

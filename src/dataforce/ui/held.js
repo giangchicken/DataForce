@@ -7,6 +7,7 @@ export const held = {
   detected: null,   // the spans over the values still ticked, in the text they index
   claimed: new Map(),  // value → what kind it is, as the human left it: card 1's rows
   keeps: new Map(),    // span → is this one place handed back? absent means yes
+  stands: new Map(),   // span → the placeholder the reviewer retyped over the one it was given
   handed: null,     // the detect shape with the spans as they left it
   review: null,     // what the reviewers said
   edited: null,     // the three, as they ship before redaction

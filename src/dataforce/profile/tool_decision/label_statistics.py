@@ -36,8 +36,8 @@ def list_label_faults(
 ) -> tuple[str, ...]:
 
     required_by_tool: dict[str, set[str]] = {}
-    for offered in catalog:
-        function = read_named_function(offered)
+    for entry in catalog:
+        function = read_named_function(entry)
         if function is None:
             continue
         parameters = function.get("parameters") or {}
@@ -75,16 +75,24 @@ def count_tool_calls(
 ) -> Mapping[str, int]:
     number_by_tool: Counter[str] = Counter()
     for label, catalog in zip(labels, catalogs, strict=True):
-        offered = (read_named_function(entry) for entry in catalog)
+        offered_functions = (read_named_function(entry) for entry in catalog)
         number_by_tool.update(
-            {function["name"]: 0 for function in offered if function is not None}
+            {
+                function["name"]: 0
+                for function in offered_functions
+                if function is not None
+            }
         )
         number_by_tool.update(list_called_tools(label))
     return dict(sorted(number_by_tool.items()))
 
 
 def list_offered_tools(catalogs: Sequence[Sequence[Any]]) -> tuple[str, ...]:
-    offered = (read_named_function(entry) for catalog in catalogs for entry in catalog)
+    offered_functions = (
+        read_named_function(entry) for catalog in catalogs for entry in catalog
+    )
     return tuple(
-        sorted({function["name"] for function in offered if function is not None})
+        sorted(
+            {function["name"] for function in offered_functions if function is not None}
+        )
     )

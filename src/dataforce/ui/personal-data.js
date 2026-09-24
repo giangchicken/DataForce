@@ -1,6 +1,6 @@
 // adapter · card 1: the values the reviewer keeps, the ones they add, and the copy that
 // ships. **Not** where a value stands in the text — that is answered. Owns keep-table,
-// value-new, value-class, value-add, value-note, kind-new, kind-add, kind-note,
+// value-new, value-class, value-add, value-note, keep-note, kind-new, kind-add, kind-note,
 // review-text, text-which,
 // data-verdict, data-refusal.
 
@@ -123,6 +123,34 @@ function whyConfirmed(found) {
 
 const kept = span => held.keeps.get(spanKey(span)) !== false;
 
+const STANDS_FOR = /^<([A-Z][A-Z0-9_]*)_\d+>$/;
+
+export const standsFor = span => {
+  const typed = held.stands.get(spanKey(span));
+  const named = typed ? STANDS_FOR.exec(typed) : null;
+  return named && named[1] === span.personal_data_class ? typed : span.placeholder;
+};
+
+export function standInWith(span, typed) {
+  const said = typed.trim();
+  if (!said || said === span.placeholder) {
+    const stands = new Map(held.stands);
+    stands.delete(spanKey(span));
+    return { ok: true, stands };
+  }
+  const named = STANDS_FOR.exec(said);
+  if (!named) {
+    return { ok: false, why: `${said} is not a placeholder — one reads <CLASS_1>.` };
+  }
+  if (named[1] !== span.personal_data_class) {
+    return {
+      ok: false,
+      why: `${said} stands in for ${named[1]}, and this value is filed as ${span.personal_data_class}.`
+    };
+  }
+  return { ok: true, stands: new Map(held.stands).set(spanKey(span), said) };
+}
+
 const placesOf = (value, values) => held.detected.spans
   .map((span, at) => [span, at])
   .filter(([, at]) => values[at] === value);
@@ -167,7 +195,8 @@ export function paintCard() {
     return places.map(([span, at]) => `<tr class="${kept(span) ? "" : "out"}">`
       + `<td><input type="checkbox" data-keep="${at}"${kept(span) ? " checked" : ""}></td>`
       + said
-      + `<td class="standsfor">${esc(span.placeholder)}</td>`
+      + `<td class="standsfor"><input data-standsfor="${at}" value="${esc(standsFor(span))}"`
+      + ` title="${esc(standsFor(span))}" spellcheck="false"></td>`
       + `<td class="field">${esc(fieldName(span))}</td>`
       + `<td class="at">${esc(span.start)}</td>`
       + `<td class="at">${esc(span.end)}</td></tr>`).join("");
@@ -201,7 +230,11 @@ export function handedBack() {
     review_text: held.detected.review_text,
     claims: held.scanned.claims,
     spans: held.detected.spans
-      .map((span, at) => (span.reason ? span : { ...span, reason: confirmed.get(values[at]) ?? null }))
+      .map((span, at) => ({
+        ...span,
+        placeholder: standsFor(span),
+        reason: span.reason || confirmed.get(values[at]) || null
+      }))
       .filter(kept)
   };
 }

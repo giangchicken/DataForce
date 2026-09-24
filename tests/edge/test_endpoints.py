@@ -1420,7 +1420,7 @@ def test_the_corpus_reads_back_as_a_page_of_the_redacted_table(
     # store's, and a test that recomputed it would agree with itself rather than with the store.
     assert row["key"] == stored.json()["id"]
     assert POSTED_PHONE not in resp.text
-    assert REDACTED_TURN.startswith(row["said"][:10])
+    assert REDACTED_TURN.startswith(row["preview"][:10])
     # The facets it was filed under, which is what the list is read for.
     assert row["domain"] == TICKED["domain"]
     assert row["ambiguous"] == TICKED["ambiguous"]

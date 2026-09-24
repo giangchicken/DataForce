@@ -54,7 +54,7 @@ export function paintDataset() {
   }
   body.innerHTML = rows.map(row => `<tr class="${row.schema_valid ? "" : "dropped"}">
     <td><input type="checkbox" data-erase="${esc(row.key)}"${erasing.has(row.key) ? " checked" : ""}></td>
-    <td><button class="open${row.key === storedOpen ? " opened" : ""}" data-stored="${esc(row.key)}">${esc(row.said) || "<i>no turns</i>"}</button></td>
+    <td><button class="open${row.key === storedOpen ? " opened" : ""}" data-stored="${esc(row.key)}">${esc(row.preview) || "<i>no turns</i>"}</button></td>
     <td>${esc(row.domain)}</td>
     <td>${esc(row.ambiguous)}</td>
     <td>${esc(row.number_turns)}</td>

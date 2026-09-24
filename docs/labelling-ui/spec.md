@@ -344,11 +344,23 @@ already knows is a labelling tool, not a CMS.
 
 ### The spans
 
-27. **A span is a value and a class. Offsets are answered, never typed.** A reviewer unticks a value
+27. **A span is a value and a class. Offsets are answered, never typed — but what it stands in for
+    is.** A reviewer unticks a value
     the scan claimed, or types one it missed and says what kind it is. Where that value stands in
     the text, how many times, which occurrences count and which nested span is dropped are the
     service's answers — `order_claims_by_class` and `find_and_number_spans`, the same two the
     detector runs, so a value the reviewer added is numbered by the rule that numbered the rest.
+    **What a value stands in for is a box, and it is the one thing on this table the reviewer
+    overrules the service about.** `Đà Nẵng` and `đà nẵng` are one place written two ways, and the
+    numbering gives them `<PROVINCE_ADDRESS_2>` and `<PROVINCE_ADDRESS_1>` — a corpus that says
+    they are two places. Retyping one over the other is how a reviewer says they are one. It is
+    **per occurrence**, like the tick beside it and for the same reason: a span is replaced on its
+    own. Two things are refused rather than shipped — text that is not a placeholder at all, and a
+    placeholder naming a kind this value is not filed as, because an address shipping as
+    `<EMAIL_1>` teaches the wrong class to everything downstream. **A refused box keeps what was
+    typed and says it was refused**: the text stays so it can be fixed rather than retyped, and a
+    row reading something the copy was not made with is a row lying about what ships. Clearing the box goes back to
+    what the service numbered, so the override is undoable and the service still owns the default.
     **A kind the scans do not declare can be named, beside the list.** They declare four and
     number them in that order; a kind they do not declare is one `order_claims_by_class` puts after
     the declared ones and `<KIND_N>` redacts like any other — measured, not assumed. So the closed

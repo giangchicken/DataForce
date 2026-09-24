@@ -395,7 +395,7 @@ async function build(answers, app) {
         key: keyOf(one),
         state: (answers.states || {})[keyOf(one)] || "waiting",
         walk_position: n + 1,
-        said: ((one.messages || [])[0] || {}).content || ""
+        preview: ((one.messages || [])[0] || {}).content || ""
       })),
       ...counts()
     };

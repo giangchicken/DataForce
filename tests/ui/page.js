@@ -156,11 +156,11 @@ const ANSWERS = () => ({
 const STORED = {
   total: 2,
   samples: [
-    { key: "d1", said: "mail anh là <EMAIL_1>", language: "vi", domain: "debt_collection",
+    { key: "d1", preview: "mail anh là <EMAIL_1>", language: "vi", domain: "debt_collection",
       ambiguous: "LOW", call_trigger: ["condition_met"], personal_data: ["EMAIL"],
       number_turns: 2, number_label_tools: 1, number_provided_tools: 1, schema_valid: true,
       modified_time: "2026-09-19T00:00:00" },
-    { key: "d2", said: "anh muốn kiểm tra email", language: "vi", domain: "telesale",
+    { key: "d2", preview: "anh muốn kiểm tra email", language: "vi", domain: "telesale",
       ambiguous: "HIGH", call_trigger: ["user_utterance"], personal_data: [],
       number_turns: 1, number_label_tools: 0, number_provided_tools: 1, schema_valid: false,
       modified_time: "2026-09-18T00:00:00" }
@@ -460,10 +460,12 @@ async function main() {
     kept().includes("messages[0].content") && kept().includes("label[0].arguments.ma"));
   // The rule Requirement 28 took away is *editing* an offset. The offset boxes, the re-slice
   // button and the `auto` tick are still gone; these are cells.
-  claims("**read and never typed** — an offset is a cell here, and the only box is the tick",
+  claims("**an offset is read and never typed** — the two boxes on this table are the tick and"
+    + " the stand-in, and no offset is among them",
     !kept().includes('type="number"')
-    && (kept().match(/<input/g) || []).length === page.el("keep-table").markup()
-      .split('type="checkbox"').length - 1);
+    && (kept().match(/<input/g) || []).length
+      === (kept().match(/type="checkbox"/g) || []).length
+        + (kept().match(/data-standsfor=/g) || []).length);
 
   // ------------------------------------------------------------------ a step that fails
   page = await start({ ...ANSWERS(), refuse: { "/data-quality/personal-data": { status: 500, detail: "the service fell over" } } });
@@ -662,6 +664,65 @@ async function main() {
     handed().spans.length === 0);
   claims("the row then says nothing was left to replace",
     page.el("said-2").textContent.includes("nothing to replace"));
+
+  // ------------------------------------------------- what a value stands in for, retyped
+  // Two spellings of one province numbered `_1` and `_2` are a corpus saying they are two places.
+  // The reviewer retypes the stand-in; where the value stands is still the service's answer.
+  page = await start();
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  const standing = () => page.el("keep-table").markup();
+  const retype = (at, said) =>
+    hit(page.el("keep-table").onchange, "[data-standsfor]", { standsfor: String(at) }, { value: said });
+  const copied = () => posted(page, "/data-quality/personal-data/redact").length;
+  const wasCopied = copied();
+
+  retype(0, "<PHONE_2>");
+  await waited(320);
+  await settle(6);
+  claims("**a stand-in the reviewer retypes is what the copy is made with**, so two spellings of"
+    + " one place can be made to read as one place",
+    handed().spans.some(span => span.placeholder === "<PHONE_2>"));
+  claims("**and only the place it was typed on moves** — the stand-in is per occurrence, like the"
+    + " tick beside it",
+    handed().spans.filter(span => span.placeholder === "<PHONE_2>").length === 1
+    && handed().spans.filter(span => span.placeholder === "<PHONE_1>").length
+      === PHONE_SPANS.length - 1);
+  claims("the row shows what it now stands in for", shown(standing()).includes("<PHONE_2>"));
+  claims("**and the copy is made again off it**, because a stand-in is a change to what ships",
+    copied() > wasCopied);
+
+  const afterTyping = copied();
+  const box = { dataset: { standsfor: "1" }, value: "", className: "" };
+  const retypeBadly = said => {
+    box.value = said;
+    return page.el("keep-table").onchange({
+      target: { closest: asked => (asked === "[data-standsfor]" ? box : null) }
+    });
+  };
+  retypeBadly("PHONE_9");
+  await settle(4);
+  claims("**a stand-in that is not a placeholder is refused in a sentence**, rather than shipped"
+    + " into the record as itself",
+    page.el("keep-note").textContent.includes("not a placeholder")
+    && copied() === afterTyping);
+  claims("**and the box it was typed in says it was refused**, because the text stays for fixing"
+    + " and a row reading something the copy was not made with is a row lying about what ships",
+    box.className === "bad");
+  retypeBadly("<EMAIL_1>");
+  await settle(4);
+  claims("**and one naming another kind is refused too** — an address filed as an email is a"
+    + " corpus that teaches the wrong class",
+    page.el("keep-note").textContent.includes("EMAIL")
+    && copied() === afterTyping);
+  claims("neither refusal moved what is handed back",
+    handed().spans.filter(span => span.placeholder === "<PHONE_2>").length === 1);
+
+  retype(0, "");
+  await waited(320);
+  await settle(6);
+  claims("**clearing the box goes back to what the service numbered**, so a retype is undoable",
+    handed().spans.every(span => span.placeholder === "<PHONE_1>"));
 
   const MISSED = "vâng ạ";
   const WITH_MISSED = {

@@ -126,19 +126,12 @@ def name_placeholders(detected: Sequence[tuple[str, str]]) -> Mapping[str, str]:
 def find_and_number_spans(
     record: Mapping[str, Any], detected: Sequence[tuple[str, str]]
 ) -> tuple[PersonalDataSpan, ...]:
-    """Every span those values carry in the record: located, numbered, and the outermost kept.
 
-    `id` is 1-based over what survives, ordered by the claim first and by the walk second -- the
-    same order the ids ran in when the frame of reference was one text, so what a confirmation is
-    asked about did not move when *where a span is* did. Within one string they run by offset. Every entry of `detected` is one non-empty value -- `pii_detect` holds
-    that -- and a value that occurs nowhere in the record simply earns no span, which is a claim
-    left unresolved rather than an error.
-    """
     placeholders = name_placeholders(detected)
     spans_with_order = [
         (claimed_at, walked_at, span)
-        for walked_at, (path, said) in enumerate(walk_record_strings(record))
-        for claimed_at, span in find_spans_in_text(said, path, detected, placeholders)
+        for walked_at, (path, text) in enumerate(walk_record_strings(record))
+        for claimed_at, span in find_spans_in_text(text, path, detected, placeholders)
     ]
     return tuple(
         span.model_copy(update={"id": numbered})
@@ -149,17 +142,19 @@ def find_and_number_spans(
     )
 
 
-def replace_spans_in_text(said: str, spans: Sequence[PersonalDataSpan]) -> str:
-    replaced = said
-    lowest = len(said)
+def replace_spans_in_text(text: str, spans: Sequence[PersonalDataSpan]) -> str:
+    replaced_text = text
+    lowest = len(text)
     for span in sorted(spans, key=lambda one: -one.start):
-        if span.start >= span.end or not span.placeholder or span.end > len(said):
+        if span.start >= span.end or not span.placeholder or span.end > len(text):
             continue
         if span.end > lowest:
             continue
-        replaced = replaced[: span.start] + span.placeholder + replaced[span.end :]
+        replaced_text = (
+            replaced_text[: span.start] + span.placeholder + replaced_text[span.end :]
+        )
         lowest = span.start
-    return replaced
+    return replaced_text
 
 
 def replace_node(
@@ -219,46 +214,32 @@ def decide_replacement_outcome(
     spans: Sequence[PersonalDataSpan],
     redacted: Mapping[str, Any],
 ) -> PersonalDataReplacementOutcome:
-    """How far replacing got, read off the copy rather than off what was asked for.
 
-    `reported`: nothing was claimed, so there was nothing to rewrite. `redacted`: every claimed
-    value resolved -- the copy holds no occurrence of it that anything would detect. `withheld`:
-    everything between, including a reviewer who handed back no span at all, because a rewrite
-    asked for and not done is not a clean record. That last case needs no branch of its own: a
-    claim nobody handed a span for still stands in the copy, so it never resolves.
-
-    **Measured by running the span finder again over the copy**, and not by asking whether the
-    value is a substring of it. Those are different questions, and per-span replacement is what
-    made the difference show: an order number `09123456789012` holding a phone inside it is not
-    that phone left un-redacted -- it earns no span, because a word character butts against it --
-    and replacing by value used to hide the distinction by cutting the order number in half.
-
-    Two questions, and a claim resolves only on both. *Is it still standing* -- no occurrence of
-    the value that anything would detect is left in the copy. And *did its placeholder land* --
-    because a span handed back and then not applied, for overlapping one already replaced, takes
-    its value out of the copy by **cutting** it rather than by replacing it, and half a name gone
-    is not a name redacted. A claim nothing could ever replace has no usable span, so the second
-    question is not asked of it and being absent is enough.
-    """
     if not claims:
         return "reported"
-    placeholders = name_placeholders(claims)
-    standing = {span.placeholder for span in find_and_number_spans(redacted, claims)}
-    usable = {
+    placeholder_by_value = name_placeholders(claims)
+    standing_placeholders = {
+        span.placeholder for span in find_and_number_spans(redacted, claims)
+    }
+    handed_placeholders = {
         span.placeholder for span in spans if span.start < span.end and span.placeholder
     }
-    landed = {
+    landed_placeholders = {
         placeholder
-        for placeholder in set(placeholders.values())
-        if any(placeholder in said for _, said in walk_record_strings(redacted))
+        for placeholder in handed_placeholders
+        if any(placeholder in text for _, text in walk_record_strings(redacted))
     }
-    resolved = [
+    gone_values = [
         value
         for _, value in claims
-        if placeholders[value] not in standing
-        and (placeholders[value] not in usable or placeholders[value] in landed)
+        if placeholder_by_value[value] not in standing_placeholders
     ]
-    return "redacted" if len(resolved) == len(claims) else "withheld"
+    return (
+        "redacted"
+        if len(gone_values) == len(claims)
+        and landed_placeholders == handed_placeholders
+        else "withheld"
+    )
 
 
 class PiiLlmDetector:
@@ -327,11 +308,13 @@ class ToolDecisionPersonalChecking(PersonalDataChecking):
         text = build_review_text(checking_input.sample)
         language = checking_input.language
         prompt = self.build_pii_llm_detect_prompt(text, language)
-        claimed = {
+        class_by_value = {
             **await self.pii_llm_detector.detect(prompt, text),
             **self.pii_rule_detector.detect(text, language),
         }
-        claims = order_claims_by_class(text, claimed, self.pii_rule_detector.classes)
+        claims = order_claims_by_class(
+            text, class_by_value, self.pii_rule_detector.classes
+        )
         spans = await self.confirm_pii_by_llm(
             checking_input,
             text,

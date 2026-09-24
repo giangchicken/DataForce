@@ -79,7 +79,7 @@ export function paintList() {
     + `${picked.has(row.key) ? " checked" : ""}></label>`
     + `<button class="open" data-open="${esc(row.key)}">`
     + `<span class="at">${esc(row.walk_position)}</span>`
-    + `<span class="said">${esc(row.said) || "<i>no turns</i>"}</span>`
+    + `<span class="said">${esc(row.preview) || "<i>no turns</i>"}</span>`
     + `<span class="was">${esc(STATE_SAID[row.state] || row.state)}</span>`
     + "</button></div>").join("");
   pickedChanged();

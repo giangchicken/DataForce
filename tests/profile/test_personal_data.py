@@ -579,6 +579,36 @@ async def test_the_confirmation_is_handed_the_spans_the_text_and_the_language() 
     ]
 
 
+async def test_a_stand_in_the_reviewer_retyped_is_what_the_outcome_is_measured_against() -> (
+    None
+):
+    """The reviewer retypes a placeholder, and the record is still clean.
+
+    Two spellings of one province standing in for one `<PROVINCE_ADDRESS_1>` is a corpus saying
+    they are one place, and the page offers that. A rule measuring the copy against the numbering
+    *this file* would have given answers `withheld` for a record nothing is wrong with -- the
+    value is gone, which is the only question the law asks of it.
+    """
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels().detect(scanned)
+    retyped = detected.model_copy(
+        update={
+            "spans": tuple(
+                span.model_copy(update={"placeholder": "<KEPT_9>"})
+                for span in detected.spans
+            )
+        }
+    )
+
+    redacted = redact_personal_data(retyped, scanned.sample)
+
+    assert redacted.review_text is not None
+    assert "<KEPT_9>" in redacted.review_text
+    for value in (PHONE, EMAIL, NAME):
+        assert value not in redacted.review_text
+    assert redacted.outcome == "redacted"
+
+
 async def test_only_a_confirmed_value_is_replaced() -> None:
     """The confirmation is what sets the precision: what it leaves out earns no span at all."""
     scanned = build_scan_input(SAMPLE)

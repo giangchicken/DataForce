@@ -217,10 +217,10 @@ def read_opening_turn(document: Mapping[str, Any]) -> str:
     turns = document.get("messages") or []
     if not turns:
         return ""
-    said = turns[0].get("content")
-    if not isinstance(said, str):
-        said = json.dumps(said, ensure_ascii=False)
-    return said[:PREVIEW_CHARACTERS]
+    text = turns[0].get("content")
+    if not isinstance(text, str):
+        text = json.dumps(text, ensure_ascii=False)
+    return text[:PREVIEW_CHARACTERS]
 
 
 def select_queued_samples(
@@ -248,7 +248,7 @@ def select_queued_samples(
             key=str(key),
             state=state,
             walk_position=walk_position,
-            said=read_opening_turn(document),
+            preview=read_opening_turn(document),
         )
         for key, state, walk_position, document in rows
     )
@@ -321,7 +321,7 @@ def select_stored_samples(
     return tuple(
         StoredSampleRow(
             key=str(key),
-            said=read_opening_turn(one_input),
+            preview=read_opening_turn(one_input),
             modified_time=modified_time,
             **dict(zip(ToolDecisionSample.FACETS, facets, strict=True)),
         )

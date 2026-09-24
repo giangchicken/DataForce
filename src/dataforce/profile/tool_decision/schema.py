@@ -242,7 +242,7 @@ class QueuedSampleRow(BaseModel):
     walk_position: int = Field(
         ..., description="Where it stands in the walk, counting from one."
     )
-    said: str = Field(
+    preview: str = Field(
         default="",
         description=(
             "The opening turn, cut to a preview. Empty where the sample has no turns at all, "
@@ -267,7 +267,7 @@ class StoredSampleRow(BaseModel):
     """
 
     key: str = Field(..., description="The row's key, which is also the sample's name.")
-    said: str = Field(
+    preview: str = Field(
         default="",
         description="The opening turn of the redacted copy, cut to a preview.",
     )

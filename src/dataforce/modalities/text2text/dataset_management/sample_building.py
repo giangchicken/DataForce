@@ -78,7 +78,7 @@ def list_text(node: Any) -> Iterator[str]:
 
 
 def count_text(node: Any, value: str) -> int:
-    return sum(said.count(value) for said in list_text(node))
+    return sum(text.count(value) for text in list_text(node))
 
 
 def read_node(node: Any, path: Sequence[str | int]) -> Any:
@@ -106,18 +106,18 @@ def find_surviving_spans(
     occurrence off mean anything.
     """
     shipped_document = shipped.model_dump()
-    standing: dict[tuple[tuple[str | int, ...], str], list[PersonalDataSpan]] = {}
+    spans_by_place: dict[tuple[tuple[str | int, ...], str], list[PersonalDataSpan]] = {}
     for span in sorted(scanned.spans, key=lambda one: one.id):
         if span.start >= span.end or not span.placeholder:
             continue
-        standing.setdefault((tuple(span.path), span.placeholder), []).append(span)
-    survived: list[PersonalDataSpan] = []
-    for (path, placeholder), group in standing.items():
-        said = read_node(shipped_document, path)
-        if not isinstance(said, str):
+        spans_by_place.setdefault((tuple(span.path), span.placeholder), []).append(span)
+    standing_spans: list[PersonalDataSpan] = []
+    for (path, placeholder), group in spans_by_place.items():
+        text = read_node(shipped_document, path)
+        if not isinstance(text, str):
             continue
-        survived.extend(group[said.count(placeholder) :])
-    return tuple(sorted(survived, key=lambda one: one.id))
+        standing_spans.extend(group[text.count(placeholder) :])
+    return tuple(sorted(standing_spans, key=lambda one: one.id))
 
 
 def find_claims_gained(

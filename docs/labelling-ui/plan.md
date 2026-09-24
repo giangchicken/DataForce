@@ -1473,6 +1473,50 @@ a screenful stored.
 
 ---
 
+### T30 · What a value stands in for is the reviewer's to retype
+
+**Goal.** Two spellings of one thing can be made to stand in for one placeholder.
+
+**Context.** Found on a real sample: `Đà Nẵng` and `đà nẵng` in two turns are numbered
+`<PROVINCE_ADDRESS_2>` and `<PROVINCE_ADDRESS_1>`, and a corpus carrying both teaches that they are
+two different places. The store already declared this column the reviewer's —
+`test_two_spans_a_reviewer_typed_one_placeholder_on_both_are_both_replaced` has been green since the
+redaction was written, and `redact_personal_data` replaces with the placeholder it is handed. Only
+two things were missing: the page drew the column as text, and `decide_replacement_outcome`
+measured the copy against the numbering *it* would have given rather than against what came back.
+
+**Approach.** The cell becomes a box. The override is held per span, keyed the way the tick is, so a
+renumber does not wipe it and clearing it falls back to what the service numbered. Two refusals, in
+the page: text that is not `<CLASS_N>`, and a placeholder naming a kind this value is not filed as.
+`decide_replacement_outcome` asks *did every span handed back land* about the placeholders **handed
+back**; the first question — is the claimed value gone from the copy — is untouched, because that
+one is not the reviewer's to answer.
+
+**Acceptance criteria.**
+- Retyping a stand-in is what the copy is made with, and only the occurrence it was typed on moves.
+- A stand-in that is not a placeholder, or that names another kind, is refused in a sentence and
+  nothing is sent, and the box says it was refused rather than showing text the copy was not made
+  with.
+- Clearing the box goes back to the service's own numbering.
+- A record whose spans carry a retyped placeholder reads `redacted`, not `withheld`.
+- A value cut rather than replaced still reads `withheld`, so the second question still bites.
+
+**What it costs.** The box is 14ch — wide enough for `<FIRST_NAME_1>`, the longest placeholder
+this corpus writes on its own — and no wider, because the path beside it is the cell that has to
+break and every character taken from it breaks it further. A kind somebody names by hand can be
+longer than that, so the box carries its whole text as a `title`.
+
+**What it does not do.** The offsets stay read-only — Requirement 28 took that away and nothing here
+gives it back. Nor does it merge two values into one claim: they stay two rows, two claims and two
+spans that happen to stand in for one name.
+
+**Source.** `spec.md` Requirement 27; `docs/tool-decision-store/spec.md` Requirements 16 and 17.
+
+**Verify.** `make check`, then retype a stand-in on <http://localhost:8000/ui/> and read the copy
+under it.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

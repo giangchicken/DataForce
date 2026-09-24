@@ -33,7 +33,7 @@ import {
 } from "./label.js";
 import {
   addKind, addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
-  numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, unreplaced
+  numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, standInWith, unreplaced
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
@@ -455,6 +455,20 @@ $("keep-table").onchange = event => {
   if (said) {
     if (!held.claimed.has(said.dataset.class)) return paintCard();
     return valuesChanged(numbered(claimedWith(said.dataset.class, said.value)));
+  }
+  const typed = event.target.closest("[data-standsfor]");
+  if (typed) {
+    const span = (held.detected || { spans: [] }).spans[Number(typed.dataset.standsfor)];
+    if (!span) return paintCard();
+    const answer = standInWith(span, typed.value);
+    if (!answer.ok) {
+      typed.className = "bad";
+      return say("keep-note", answer.why, "bad");
+    }
+    held.stands = answer.stands;
+    say("keep-note", "");
+    paintCard();
+    return copyLater();
   }
   const box = event.target.closest("[data-keep]");
   if (!box) return;

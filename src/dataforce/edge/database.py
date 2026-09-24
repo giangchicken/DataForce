@@ -90,9 +90,9 @@ def refuse_database_fault(request: Request, fault: Exception) -> JSONResponse:
         "store_unusable",
         extra={
             "describes": db.describe(),
-            "asked": request.url.path,
+            "path": request.url.path,
             "error": type(fault).__name__,
-            "said": str(getattr(fault, "orig", "")),
+            "detail": str(getattr(fault, "orig", "")),
         },
     )
     return JSONResponse(
