@@ -176,20 +176,21 @@ format's own shape, arguments as JSON text under one key ordering.
     down is what keeps the offsets still standing true; the earlier one is left alone, and its
     claim goes unresolved. Which of two overlapping spans *should* win is still undecided; that a
     copy may not hold a spliced fragment is not.
-    **`outcome` then asks two questions of every claim, not one.** *Is the value still standing* —
-    run the span finder again over the copy, rather than asking whether the value is a substring of
-    it, because those are different questions: an order number `09123456789012` holding a phone
-    inside it earns no span, and by-value replacement used to hide that by cutting the order number
-    in half. And *did its placeholder land* — a span handed back and then left alone for
-    overlapping takes its value out of the copy by cutting it rather than by replacing it, and half
-    a name gone is not a name redacted.
+    **`outcome` then asks one question, and asks it of every span that came back:** is the
+    placeholder it was handed standing in the string its `path` names? Counted per place rather
+    than looked up, because two spans of one value in one string and one placeholder standing in
+    it means one of the two did not take — a span left alone for overlapping takes its value out
+    of the copy by cutting it rather than by replacing it, and half a name gone is not a name
+    redacted. It asks nothing about a value nobody handed a span for: that value standing in the
+    copy is the answer somebody gave about it.
     **What this costs, stated rather than discovered.** A value kept at one occurrence and dropped
     at another stays in the record at the dropped one — as the same characters. Where the two
     occurrences are one entity that is a re-identification path, and nothing here can tell the two
     apart: the reviewer unticking an occurrence is the one asserting it is not the same thing, and
     `Nam` the given name beside `miền Nam` the region is the case they are asserting it for.
-    Requirement 13 is the net underneath: `outcome` is measured against the **rendered copy**, so a
-    claimed value still standing in it reads `withheld` rather than `redacted`.
+    There is no net underneath, and writing one in would be a lie about who decided: the reviewer
+    unticking an occurrence is the assertion, `outcome` is over the spans they handed back, and
+    nothing after them reads the two occurrences back together.
     The containment rule pays the same way. Requirement 11 runs over the values the service was
     handed, not over the places still ticked, so a value sitting inside a span the reviewer left
     standing earns no span of its own — `minh` inside `minh@vd.vn` stays where the email stays.
@@ -201,7 +202,7 @@ format's own shape, arguments as JSON text under one key ordering.
     at a string that has since changed, while a span into `messages` cannot. So `/redact` finds the
     spans again over the record it is actually given, and the reviewer's answer travels as *which
     occurrences they dropped* rather than as offsets to trust. A drop that matches nothing in the
-    record being redacted is one more claim left unresolved, which Requirement 13 already reads as
+    record being redacted is one more span that could not take, which Requirement 13 reads as
     `withheld`: it is never silently taken as *replace it after all*, and never silently as
     *leave it*.
     The copy a reviewer reads is the redacted record rendered forward by `build_review_text`, not
@@ -211,13 +212,17 @@ format's own shape, arguments as JSON text under one key ordering.
     (Requirement 10), and keyed the other way two spans a reviewer typed the same placeholder on
     would be one entry, leaving the value that lost in a copy reporting itself redacted. The original is never overwritten: `review_text` stays on the detect
     answer and the copy is on the replace answer.
-13. `outcome` is `reported` where no detector claimed anything — there was nothing to rewrite —
-    `redacted` where the copy was made and every claimed value resolved, and `withheld` everywhere
-    between: the copy holding what resolved, and equally the answer where the confirmation
-    confirmed none or a reviewer handed back no span. A rewrite asked for and not finished is
-    `withheld`, never `reported`. It is measured against `claims` and not against the spans, which
-    is why the detect answer carries them: spans alone cannot tell a clean record from one whose
-    every candidate was dropped.
+13. `outcome` is over the spans handed back and over nothing else. `reported` where none came
+    back: nothing was asked of the rewrite. `redacted` where every one of them is standing where it
+    was handed. `withheld` where one could not take — nothing to put in its place, offsets that
+    read nothing, or a placeholder not standing in the string its `path` names. A rewrite asked for
+    and not finished is `withheld`, never `reported`. **It is not measured against `claims`.**
+    Measured that way it read a value nobody handed a span for as a rewrite that failed, so one
+    untick on a false positive answered `withheld` for a record nothing was wrong with, and the
+    page kept a second rule of its own to let a reviewer work at all — two definitions of one rule,
+    which is `T-6`. What the spans cannot tell apart, nothing downstream can: a candidate the
+    confirmation dropped and an occurrence a reviewer unticked arrive here as the same thing, and
+    both of them mean *leave it*.
 14. Nothing on either shape records that a human looked. `outcome` says what was done to the text,
     and the flow's own answer is that the human returned the spans.
 15. **The human edits the label, and only the label.** What they edited it to, redacted, is

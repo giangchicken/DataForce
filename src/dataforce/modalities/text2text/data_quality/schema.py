@@ -225,9 +225,11 @@ class PersonalDataRedacted(Frozen):
     outcome: PersonalDataReplacementOutcome = Field(
         ...,
         description=(
-            "`redacted`: every claimed value is gone from the copy and reads as its placeholder. "
-            "`reported`: nothing was claimed, so there was nothing to rewrite. `withheld`: "
-            "rewritten as far as the spans allowed, and held out of a release because something "
-            "did not resolve -- a reviewer who handed back no span included."
+            "Over the spans handed back, and nothing about the values nobody handed one for. "
+            "`redacted`: every one of them is standing where it was handed, so the copy holds "
+            "nothing it was asked to replace. `reported`: none came back, so nothing was asked -- "
+            "a value a scan claimed and a reviewer unticked is one left in the text on purpose. "
+            "`withheld`: a span could not take, having nothing to put in, offsets that read "
+            "nothing, or a placeholder not standing in the string its path names."
         ),
     )

@@ -210,34 +210,25 @@ def order_claims_by_class(
 
 
 def decide_replacement_outcome(
-    claims: Sequence[tuple[str, str]],
-    spans: Sequence[PersonalDataSpan],
-    redacted: Mapping[str, Any],
+    spans: Sequence[PersonalDataSpan], redacted: Mapping[str, Any]
 ) -> PersonalDataReplacementOutcome:
 
-    if not claims:
+    if not spans:
         return "reported"
-    placeholder_by_value = name_placeholders(claims)
-    standing_placeholders = {
-        span.placeholder for span in find_and_number_spans(redacted, claims)
-    }
-    handed_placeholders = {
-        span.placeholder for span in spans if span.start < span.end and span.placeholder
-    }
-    landed_placeholders = {
-        placeholder
-        for placeholder in handed_placeholders
-        if any(placeholder in text for _, text in walk_record_strings(redacted))
-    }
-    gone_values = [
-        value
-        for _, value in claims
-        if placeholder_by_value[value] not in standing_placeholders
-    ]
+    text_by_path = dict(walk_record_strings(redacted))
+    number_by_place: dict[tuple[tuple[str | int, ...], str], int] = {}
+    for span in spans:
+        if span.start >= span.end or not span.placeholder:
+            return "withheld"
+        place = (tuple(span.path), span.placeholder)
+        number_by_place[place] = number_by_place.get(place, 0) + 1
     return (
         "redacted"
-        if len(gone_values) == len(claims)
-        and landed_placeholders == handed_placeholders
+        if all(
+            text_by_path[path].count(placeholder) >= number
+            for (path, placeholder), number in number_by_place.items()
+            if path in text_by_path
+        )
         else "withheld"
     )
 

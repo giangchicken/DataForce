@@ -1517,6 +1517,62 @@ under it.
 
 ---
 
+### T31 · `outcome` is over the spans handed back, and the page reads it
+
+**Goal.** A record the service redacted is a record the reviewer can hand on.
+
+**Context.** Found on a real sample: a `FIRST_NAME` value `nam`, every occurrence of it replaced,
+and the bar reading *the copy still holds 1 value you kept, so it is not a text the reviewers may
+be shown* — with no row left on the table to untick. Two faults, one on each side of the seam.
+
+The page's: `unreplaced()` asked `review_text.includes(value)`, a bare substring test, while the
+service finds an occurrence only where no word character stands against it. `nam` sits inside `an
+array of tool names`, a sentence this corpus carries at the same two offsets of all eight stored
+records, so the page read three letters of an English word as a value left standing. That is a
+second definition of the service's rule living in `ui/`, which `T-6` forbids and which
+`spec.md` Requirement 3 of § *The tree* already named: a `ui/` module that computes an outcome is
+the page disagreeing with the service.
+
+The service's, and the reason the page had a rule at all: `decide_replacement_outcome` measured
+the copy against **`claims`** — every value the scan claimed, including the ones the reviewer
+unticked. A value unticked everywhere is a value left in the text on purpose, so the answer was
+`withheld` for any record a reviewer corrected a false positive on. Gating the flow on that word
+would have stopped the work every time somebody unticked a value, so the page could not read it,
+so the page kept its own rule.
+
+**Approach.** `/redact` replaces what it is handed and says what that came to, and nothing else.
+`decide_replacement_outcome(spans, redacted)` asks one question of each span that came back — is
+the placeholder it was handed standing in the string its `path` names, counted per place — and
+asks nothing about a value nobody handed a span for. `reported` where none came back, `withheld`
+where one could not take. The page deletes `unreplaced()` and reads the word.
+
+**Acceptance criteria.**
+- A value the reviewer unticked everywhere is left in the copy and the outcome is `redacted`.
+- A value replaced at one place and left at another is `redacted`: the tick is per occurrence.
+- A span that could not take — no placeholder, offsets reading nothing, overlapping one already
+  replaced — is still `withheld`, and a copy the service calls `withheld` still stops the page.
+- The page does not read the copy for itself: a copy called `redacted` is in reach whatever
+  letters of a kept value stand inside a longer word.
+
+**What it costs.** `withheld` no longer means *a rewrite was asked for and did not happen*, because
+nothing here can tell that from *nobody asked*. A confirmation that confirms nothing and a reviewer
+who unticks everything arrive as the same payload — no spans — and both now read `reported`. The
+first of those used to be caught, by accident, by the page rule this removes. What reports it is
+what always reported it: the failure event the step writes. `docs/tool-decision-pipeline/spec.md`
+Requirement 13 is rewritten to say so rather than leaving the old sentence standing.
+
+**What it does not do.** It does not touch what the replacement replaces, how a span is numbered,
+or the store's own precondition — which never read `outcome` (store spec Requirement 17) and still
+re-reads the spans out of what ships.
+
+**Source.** `spec.md` Requirement 29 and § *The tree* Requirement 3;
+`docs/tool-decision-pipeline/spec.md` Requirements 12 and 13.
+
+**Verify.** `make check`, then keep a value that is also a syllable of an ordinary word on
+<http://localhost:8000/ui/>, untick a false positive, and read the bar under card 1.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

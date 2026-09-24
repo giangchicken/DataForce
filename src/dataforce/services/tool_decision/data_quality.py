@@ -1,30 +1,4 @@
-"""logic · the full logic behind each data-quality endpoint.
-
-Personal data is two calls a reviewer sits between. `detect_personal_data` builds the
-checker from its config and the scan's input out of what arrived -- the record whole, and the
-language declared beside it -- and answers what a reviewer is shown. `redact_personal_data` takes
-that answer back with the spans as the reviewer left them, and replaces those values and nothing
-else, over the record's own fields -- the one reach the review text's offsets do not have. It
-answers the redacted record, the text that record now reads as, and how far the rewrite got.
-
-**There was a third, and it was the same rewrite with less reach.** `replace_personal_data`
-copied `review_text` alone and answered a text nothing read and an outcome measured against the
-scan's own copy rather than against what ships. Both halves are here now, over the record.
-
-`number_personal_data_spans` is the one asked between them, and asked often: a reviewer keeps a
-value or types one the scan missed, and where it stands, how many times and which `<CLASS_N>` it
-gets are answered by the two functions `detect` ends with. No model and no database, so it costs
-what a function call costs -- which is what lets the page ask on every tick and hold no rule of
-its own about where a value stands.
-
-`check_label_calls` is the one check here with no model behind it at all: the store's own
-`schema_valid` rule, asked while the sample is still on the screen, so that a reviewer is told a
-label names a tool without calling it *before* they say the label is correct.
-
-`report_duplicates` and `report_abnormalities` take a sample and nothing else: neither declares a shape
-to return, so neither has a model to ask, and a config they ignore would be one a caller has to
-supply for nothing.
-"""
+"""logic · the full logic behind each data-quality endpoint."""
 
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -157,7 +131,7 @@ def redact_personal_data(
     return PersonalDataRedacted(
         sample=redacted,
         review_text=reads_as,
-        outcome=decide_replacement_outcome(detected.claims, detected.spans, redacted),
+        outcome=decide_replacement_outcome(detected.spans, redacted),
     )
 
 

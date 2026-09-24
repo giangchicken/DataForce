@@ -625,6 +625,42 @@ async function main() {
   await settle(6);
   claims("**and no vote is spent on it**", !paths(page).includes("/ai-review"));
 
+  // -------------------------------- the copy is the service's answer and not the page's guess
+  //
+  // The service finds an occurrence only where no word character stands against it, so `nam` in
+  // `an array of tool names` was never a span and is not a value the copy still holds. A page
+  // reading the copy for itself read those three letters as a value left standing and would not
+  // let the record past -- on a corpus where every catalog written against a JSON schema carries
+  // the word. Two definitions of one rule, and the weaker one was the one that stopped the work.
+  const CATALOG_LINE = "an array of tool names, Vietnam";
+  const NAM_SAMPLE = { id: "s9", messages: [{ role: "user", content: "ten toi la nam" }],
+    tools: [], label: [] };
+  const NAM_DETECTED = {
+    review_text: `user: ten toi la nam\n[Lookup]\n${CATALOG_LINE}`,
+    claims: [["NAME", "nam"]],
+    spans: [{ id: 1, path: ["messages", 0, "content"], start: 11, end: 14,
+      personal_data_class: "NAME", placeholder: "<NAME_1>", reason: WHY }]
+  };
+  page = await start({ ...ANSWERS(),
+    queue: [NAM_SAMPLE, TWO],
+    detected: NAM_DETECTED,
+    numbered: NAM_DETECTED,
+    redacted: {
+      outcome: "redacted",
+      sample: { ...NAM_SAMPLE, messages: [{ role: "user", content: "ten toi la <NAME_1>" }] },
+      review_text: `user: ten toi la <NAME_1>\n[Lookup]\n${CATALOG_LINE}`
+    } });
+  await page.byId.get("run-detect").onclick();
+  await settle();
+  await waited(320);
+  await settle(6);
+  claims("**a copy the service called redacted is one the reviewers may be shown**, whatever"
+    + " letters of a kept value are left standing inside a longer word",
+    !page.byId.get("run-review").disabled
+    && !page.el("run-note").textContent.includes("still holds"));
+  claims("and the scan's row counts it replaced",
+    page.el("said-2").textContent.includes("1 value replaced"));
+
   // ------------------------------------------------- the copy follows the ticking, with no button
   page = await start();
   await page.byId.get("run-detect").onclick();

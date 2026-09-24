@@ -196,7 +196,7 @@ class StubbedModels(ToolDecisionPersonalChecking):
         return tuple(
             span.model_copy(update={"reason": f"stubbed for {span.placeholder}"})
             for span in spans
-            if real is None or text[span.start : span.end] in real
+            if real is None or read_span_value(checking_input.sample, span) in real
         )
 
 
@@ -610,7 +610,11 @@ async def test_a_stand_in_the_reviewer_retyped_is_what_the_outcome_is_measured_a
 
 
 async def test_only_a_confirmed_value_is_replaced() -> None:
-    """The confirmation is what sets the precision: what it leaves out earns no span at all."""
+    """The confirmation is what sets the precision: what it leaves out earns no span at all.
+
+    And what it leaves out stays in the text, which is the answer it gave rather than a rewrite
+    that failed: the outcome is measured against the values something asked to have replaced.
+    """
     scanned = build_scan_input(SAMPLE)
     detected = await StubbedModels(confirmed=[EMAIL, NAME]).detect(scanned)
     redacted = redact_personal_data(detected, scanned.sample)
@@ -618,7 +622,7 @@ async def test_only_a_confirmed_value_is_replaced() -> None:
     assert list_placeholders(detected, PHONE) == set()
     assert redacted.review_text is not None
     assert PHONE in redacted.review_text
-    assert redacted.outcome == "withheld"
+    assert redacted.outcome == "redacted"
 
 
 async def test_an_answer_about_a_span_that_was_not_shown_is_discarded(
@@ -659,7 +663,7 @@ async def test_an_answer_about_a_span_that_was_not_shown_is_discarded(
     ]
     assert [span.id for span in detected.spans] == [3]
     assert read_span_slices(detected) == [PHONE]
-    assert redacted.outcome == "withheld"
+    assert redacted.outcome == "redacted"
 
 
 async def test_a_confirmed_span_carries_the_reason_it_was_confirmed_for(
@@ -1045,6 +1049,60 @@ async def test_the_outcome_is_redacted_where_every_detected_value_resolved() -> 
     assert redacted.outcome == "redacted"
 
 
+async def test_a_value_nobody_handed_a_span_for_is_left_in_the_copy_and_the_copy_is_clean() -> (
+    None
+):
+    """A claim with no span is a value somebody left in the text, not a rewrite that failed.
+
+    The outcome is over the spans that came back and nothing else. Asked about the claims instead,
+    a reviewer unticking one false positive -- `Nam` in `Việt Nam` is a place, not a person -- held
+    back every record they touched, and the page had to disagree with the service to let them
+    work. Which side of the seam left it is not knowable here: an unticked value and one a
+    confirmation did not confirm arrive as the same thing, and both mean *leave it*.
+    """
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels().detect(scanned)
+    left = detected.model_copy(
+        update={
+            "spans": tuple(
+                span
+                for span in detected.spans
+                if read_span_value(SAMPLE, span) != PHONE
+            )
+        }
+    )
+
+    redacted = redact_personal_data(left, scanned.sample)
+
+    assert redacted.review_text is not None
+    assert PHONE in redacted.review_text
+    assert redacted.outcome == "redacted"
+
+
+async def test_a_value_replaced_in_one_place_and_left_in_another_is_a_clean_copy() -> (
+    None
+):
+    """The tick is per occurrence, so a copy holding the place nobody handed back is the answer.
+
+    The phone number stands in the turn and in the label's argument, and a reviewer may mean one
+    and not the other. One span back, one place replaced, one place left -- and the rewrite did
+    everything it was asked to.
+    """
+    scanned = build_scan_input(SAMPLE)
+    detected = await StubbedModels().detect(scanned)
+    one_place = next(
+        span for span in detected.spans if read_span_value(SAMPLE, span) == PHONE
+    )
+    left = detected.model_copy(update={"spans": (one_place,)})
+
+    redacted = redact_personal_data(left, scanned.sample)
+
+    assert redacted.review_text is not None
+    assert PHONE in redacted.review_text
+    assert one_place.placeholder in redacted.review_text
+    assert redacted.outcome == "redacted"
+
+
 async def test_a_value_cut_in_half_is_withheld_rather_than_redacted() -> None:
     """`withheld`, in the case containment does not answer: spans that overlap in part.
 
@@ -1278,8 +1336,8 @@ async def test_a_failed_call_answers_nothing_and_says_so_on_stdout(
     """§ *Error Behavior*: Neither step may raise, and a failure is an event.
 
     Both steps fail here. The model detector answers nothing, which leaves the rule scans' values
-    detected; the confirmation then confirms none of them, so nothing is replaced and the decision
-    is `withheld` rather than `reported` -- a rewrite was asked for and did not happen. One JSON
+    detected; the confirmation then confirms none of them, so nothing was asked of the rewrite and
+    the decision is `reported`. That the step failed is the event, not the outcome word -- one JSON
     object per failure on stdout, each naming the step, and never a log file (`H-6`).
     """
 
@@ -1298,7 +1356,7 @@ async def test_a_failed_call_answers_nothing_and_says_so_on_stdout(
     assert detected.spans == ()
     # Nothing confirmed is nothing replaced, so the copy still holds every value the rules found.
     assert PHONE in redacted.review_text
-    assert redacted.outcome == "withheld"
+    assert redacted.outcome == "reported"
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [event["event"] for event in events] == [
         "pii_llm_detect_failed",
@@ -1331,7 +1389,7 @@ async def test_an_answer_of_the_wrong_shape_is_not_an_answer(
     redacted = redact_personal_data(detected, scanned.sample)
 
     assert detected.spans == ()
-    assert redacted.outcome == "withheld"
+    assert redacted.outcome == "reported"
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [event["event"] for event in events] == [
         "pii_llm_detect_failed",

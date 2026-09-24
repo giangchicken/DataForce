@@ -158,13 +158,6 @@ const placesOf = (value, values) => held.detected.spans
 const fieldName = span => (span.path || []).reduce((said, step) =>
   (typeof step === "number" ? `${said}[${step}]` : said ? `${said}.${step}` : String(step)), "");
 
-export const unreplaced = () => {
-  if (!held.detected || !held.shipped) return [];
-  const values = valuesIn(held.detected);
-  return [...held.claimed.keys()].filter(value =>
-    placesOf(value, values).every(([span]) => kept(span))
-    && (held.shipped.review_text || "").includes(value));
-};
 const placed = value => held.detected.claims.some(([, said]) => said === value);
 
 const pickClass = (value, named) => `<select data-class="${esc(value)}">${
@@ -244,10 +237,8 @@ export function sayPersonalData() {
   const found = held.claimed.size;
   const scan = found ? `${found} ${wordFor(found, "value", "values")} found` : "nothing found";
   if (!held.shipped) return mark(2, "wait", `${scan} · replacing…`);
-  const left = unreplaced().length;
-  if (left) {
-    return mark(2, "bad",
-      `${scan} · the copy still holds ${left} ${wordFor(left, "value", "values")} you kept`);
+  if (held.shipped.outcome === "withheld") {
+    return mark(2, "bad", `${scan} · the copy still holds a value you kept`);
   }
   const replaced = new Set(valuesIn(held.handed)).size;
   mark(2, "answered", `${scan} · ${replaced

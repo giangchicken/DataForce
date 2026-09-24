@@ -5,7 +5,7 @@
 
 import { call } from "./wire.js";
 import {
-  $, marked, onKey, onReturn, say, ticksNamed, wordFor
+  $, marked, onKey, onReturn, say, ticksNamed
 } from "./screen.js";
 import {
   COPY_AFTER, DECLARED_FACETS, held
@@ -33,7 +33,7 @@ import {
 } from "./label.js";
 import {
   addKind, addValue, askClasses, claimedWith, detect, forgetPersonalData, handedBack, keptWith,
-  numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, standInWith, unreplaced
+  numbered, paintCard, paintReviewText, sayDataRefusal, sayPersonalData, standInWith
 } from "./personal-data.js";
 import { TICK_LISTS, paintTicks, readTicked } from "./models.js";
 import { paintCatalog, paintTurns, sayNoSample } from "./conversation.js";
@@ -88,10 +88,9 @@ function whatIsInTheWay() {
   if (numbering > 0) return ["numbering the values you left…", false];
   if (held.copyNote) return [held.copyNote, true];
   if (!held.shipped) return ["replacing the values you kept…", false];
-  const left = unreplaced().length;
-  if (left) {
-    return [`the copy still holds ${left} ${wordFor(left, "value", "values")} you kept, so it is`
-      + " not a text the reviewers may be shown", true];
+  if (held.shipped.outcome === "withheld") {
+    return ["the copy still holds a value you kept, so it is not a text the reviewers may be"
+      + " shown", true];
   }
   return ["", false];
 }
