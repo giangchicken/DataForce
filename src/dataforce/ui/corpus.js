@@ -13,6 +13,7 @@ import { ask, erase } from "./wire.js";
 const DATASET_PAGE = 100;
 const BARS_SHOWN = 10;
 const COUNTED_IN_THE_MATRIX = ["domain", "call_trigger"];
+const OPEN_TO_THE_REVIEWER = ["personal_data"];
 
 let stored = [];
 let storedTotal = 0;
@@ -341,6 +342,8 @@ function paintStatistics() {
       .map(([facet, values]) =>
         `<div class="fieldname">${esc(facet)}</div>`
         + (Object.keys(values).length
-          ? drawHistogram(facet, values)
+          ? (OPEN_TO_THE_REVIEWER.includes(facet)
+            ? drawBars(values)
+            : drawHistogram(facet, values))
           : '<p class="note">nothing stored</p>')).join("");
 }

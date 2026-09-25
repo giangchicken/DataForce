@@ -2009,6 +2009,31 @@ async function main() {
     + " as an empty cell of the matrix and is lost the moment the axis is read off the rows",
     arguable.includes('class="columnnumber zero">0<'));
 
+  // ------------------------------------- the one facet whose values nobody declares
+  const KINDS = { ADDRESS: 2, NAME: 3, none: 6, FIRST_NAME: 3 };
+  for (let n = 0; n < 8; n += 1) KINDS[`KIND_${n}`] = 1;
+  page = await start({ ...ANSWERS(),
+    statistics: { ...STATISTICS,
+      counted_distribution_by_facet: {
+        ...STATISTICS.counted_distribution_by_facet, personal_data: KINDS } } });
+  const holds = page.byId.get("stats").innerHTML;
+  const afterKinds = holds.slice(holds.indexOf(">personal_data<"));
+  const kinds = afterKinds.slice(0, afterKinds.indexOf('<div class="fieldname">', 1));
+  claims("**the personal-data kinds are ranked and cut like the tool names** — a reviewer names a"
+    + " kind the moment a conversation holds one, so nothing on the page bounds that axis, and a"
+    + " column for every kind ever named is a row of labels nobody can read",
+    kinds.includes('<div class="barchart">') && !kinds.includes('<div class="histogram">'));
+  claims("and they stand largest first, not in the order the database grouped them in",
+    kinds.indexOf(">none</div>") < kinds.indexOf(">NAME</div>")
+    && kinds.indexOf(">NAME</div>") < kinds.indexOf(">ADDRESS</div>")
+    && kinds.indexOf(">ADDRESS</div>") < kinds.indexOf(">KIND_0</div>"));
+  claims("**and the tail is cut and said**, so the top is read as a top and not as every kind"
+    + " the corpus holds",
+    !kinds.includes(">KIND_7</div>") && kinds.includes("The 10 largest of 12."));
+  claims("**the facets the page declares values for are columns still**, because a declared value"
+    + " at nought is a finding and a ranking is what drops it",
+    holds.includes('<div class="histogram">'));
+
   // ------------------------------------------------ the tools called, which is a top and a tail
   const MANY = { NeverCalled: 0, NeverCalledEither: 0 };
   for (let n = 0; n < 12; n += 1) MANY[`Tool_${n}`] = 12 - n;

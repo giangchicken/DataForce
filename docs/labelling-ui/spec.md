@@ -265,6 +265,12 @@ already knows is a labelling tool, not a CMS.
     bar's number is beside it. **No curve is drawn over it.** A curve says the values between two
     bars mean something, and `LOW`/`MED`/`HIGH` and a list of personal-data classes have nothing
     between them — it would be a shape the corpus does not have.
+    **Which facet is ranked and which stands on a declared axis is settled by who names the
+    values.** A facet the page declares values for is a column per declared value in the declared
+    order, so one nothing carries stands at nought — the same finding as an empty cell of the
+    matrix, and ranking is exactly what drops it. `personal_data` declares nothing: a reviewer
+    names a kind the moment a conversation holds one, so its axis grows with the corpus and is
+    ranked and cut like the tool names.
     **And a facet holding a list is one bar per value, not one per combination.** `personal_data`
     and `call_trigger` are lists, and counted whole they drew `["FIRST_NAME", "NAME"]` beside
     `["FIRST_NAME"]` beside `[]`, which is set membership and not a distribution of anything. *Which

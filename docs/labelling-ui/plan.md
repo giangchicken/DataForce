@@ -1621,6 +1621,34 @@ in, add a value, and read the head of the card.
 
 ---
 
+### T33 · The kinds nobody declares are ranked, not drawn on an axis
+
+**Goal.** The `personal_data` distribution is readable at any number of kinds.
+
+**Context.** Twenty-one kinds on a real corpus, drawn as a column per kind: the names overlapped,
+wrapped mid-word and ran under each other, and the panel said nothing a reviewer could read.
+`personal_data` is the one facet whose values nobody declares -- a reviewer names a kind at card 1
+the moment a conversation holds one -- so its axis grows with the corpus and has no end. Every
+other facet either has a declared list, where a value at nought is the finding, or a numeric axis
+whose order is the information.
+
+`spec.md` Requirement 18 had already decided this: *a ranked chart says what it cut*, cut at the
+ten largest, because a catalog of two hundred is a panel nobody scrolls. `tool_call_counts` was
+drawn that way and this facet was not.
+
+**Approach.** `drawBars` -- the drawer the tool names already use -- for the facets whose values
+are open to the reviewer, `drawHistogram` for the rest.
+
+**Acceptance criteria.**
+- The kinds stand largest first, cut at ten, with what the cut took said beside them.
+- A facet the page declares values for is still a column axis, zeros included.
+
+**Source.** `spec.md` Requirement 18.
+
+**Verify.** `make check`, then read the statistics panel against `/records/stats`.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.
