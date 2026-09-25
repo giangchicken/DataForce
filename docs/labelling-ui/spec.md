@@ -347,6 +347,15 @@ already knows is a labelling tool, not a CMS.
     be found — the sample is still in the list, still openable, and labelling it again writes it
     back. **What the line afterwards says is what the reviewer ticked**: the route answers no body,
     because the page named the keys and the reloaded table under it is what shows the corpus moved.
+    **And the corpus can be taken away as a file, from the sheet that shows it.** Labelling is done
+    somewhere else than where a corpus is trained on, and until this the only way out of the store
+    was a database file somebody copied off a host — which is the half that keeps what arrived. The
+    button saves what `GET /records/export` answers (store spec Requirement 57): the redacted half,
+    whole, every facet with it. It is a link the browser follows, not a fetch the page parses, so
+    the corpus is never held twice in a browser and what lands in the file is the service's own
+    words; the file is named for what it holds and the day it was taken, because two exports a week
+    apart are otherwise one name overwritten. It is dead while nothing is stored — an empty file
+    reads like a corpus somebody lost.
 
 ### The spans
 

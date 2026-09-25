@@ -1649,6 +1649,43 @@ are open to the reviewer, `drawHistogram` for the rest.
 
 ---
 
+### T34 · The corpus leaves as a file
+
+**Goal.** What a reviewer labelled can be taken out of the store without copying a database.
+
+**Context.** The store answers a page of facets and one row at a time — what the sheet is read by.
+What the corpus is *for* is a file somebody trains on, and there was no way to that file: the page
+of rows carries previews rather than samples, so assembling one meant a call per key, and the only
+other route out of the store was copying `store.sqlite3` off the host — which is the file holding
+`tool_decision_record`, the half that keeps what arrived un-redacted. The one safe way out was the
+one nobody had built.
+
+**Approach.** `GET /records/export` answers every row of `tool_decision_dataset` whole, oldest
+write first, built by the same `read_stored_sample` that answers `/records/{key}` — one definition
+of what a stored row looks like, not two. The button is a link the browser follows: nothing in
+`ui/` parses the corpus or holds a second copy of it, and what lands in the file is the service's
+own words rather than whatever the page's `JSON.stringify` made of them. `wire.js` owns it, like
+every other door to the service.
+
+**Acceptance criteria.**
+- Every stored row comes back whole — the copy that ships, the label, every facet, `notes`
+  included — in the order the corpus grew.
+- Nothing of `tool_decision_record` is reachable: what a customer said before any value was
+  replaced is not in the answer.
+- The page asks the route through no `fetch`, and the file is named for what it holds and the day.
+- An empty corpus leaves the button dead.
+
+**What it costs.** One response per corpus, stated rather than worked around: there is no page
+parameter, because a page boundary in an export is a file that is quietly half a corpus. The day a
+corpus outgrows one response what it needs is a stream.
+
+**Source.** `docs/tool-decision-store/spec.md` Requirement 57 and § *Design*, *the export reads
+`dataset`*; `spec.md` Requirement 26.
+
+**Verify.** `make check`, then open the corpus on <http://localhost:8000/ui/> and press it.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

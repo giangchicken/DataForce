@@ -35,3 +35,10 @@ const send = (method, path, body) => ask(path, {
 export const call = (path, body) => send("POST", path, body);
 
 export const erase = (path, body) => send("DELETE", path, body);
+
+export function download(path, named) {
+  const link = document.createElement("a");
+  link.href = API + path;
+  link.download = named;
+  link.click();
+}

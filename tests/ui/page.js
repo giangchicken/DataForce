@@ -1716,6 +1716,25 @@ async function main() {
   claims("the sheet says how much the corpus holds",
     page.byId.get("dataset-note").textContent.includes("2"));
 
+  claims("**the corpus can be taken away whole**, and the button is live once a row is in it",
+    page.el("dataset-export").disabled === false);
+  page.el("dataset-export").onclick();
+  const saved = page.made.find(one => one.tagName === "A");
+  claims("**it is a link to the route that answers the corpus, followed rather than read** — a"
+    + " page that fetched it and re-serialised it would hold the corpus in the browser twice and"
+    + " hand back whatever its own JSON.stringify made of what the service said",
+    saved.href === "/text2text/tool-decision/records/export"
+    && saved.clicked === true
+    && !paths(page).includes("/records/export"));
+  claims("and the file says what it holds and the day it was taken",
+    /^tool-decision-corpus-\d{4}-\d{2}-\d{2}\.json$/.test(saved.download));
+  const nothingStored = await start({ ...ANSWERS(), dataset: { samples: [], total: 0 } });
+  await nothingStored.byId.get("open-dataset").onclick();
+  for (let n = 0; n < 8; n += 1) await settled();
+  claims("**an empty corpus leaves the button dead** rather than saving an empty file that reads"
+    + " like a corpus somebody lost",
+    nothingStored.el("dataset-export").disabled === true);
+
   page.el("dataset-bad").checked = true;
   page.el("dataset-bad").onchange();
   const only = page.el("dataset-rows").querySelector("tbody").innerHTML;

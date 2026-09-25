@@ -21,7 +21,7 @@ import {
 } from "./queue.js";
 import {
   askDataset, askStatistics, askStore, eraseStored, keepStored, openStored, paintDataset,
-  paintStrip, tickAllStored, tickStored
+  paintStrip, saveCorpus, tickAllStored, tickStored
 } from "./corpus.js";
 import { composeRecord, forgetRecord, paintRecord } from "./record.js";
 import {
@@ -343,6 +343,7 @@ $("open-dataset").onclick = () => { openSheet("sheet-dataset"); askDataset(false
 $("dataset-more").onclick = () => askDataset(true);
 $("dataset-bad").onchange = paintDataset;
 $("dataset-erase").onclick = eraseStored;
+$("dataset-export").onclick = saveCorpus;
 $("dataset-keep").onclick = keepStored;
 $("dataset-all").onchange = event => tickAllStored(event.target.checked);
 $("dataset-rows").onclick = event => {

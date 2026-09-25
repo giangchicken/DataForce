@@ -135,6 +135,9 @@ class El {
   }
   insertAdjacentHTML(_, said) { this.innerHTML = this.innerHTML + said; }
   scrollIntoView() {}
+  // What a browser does to a link nobody can see: follows it. The page makes one to save a file,
+  // so what a check reads is the element that was made and the fact it was followed.
+  click() { this.clicked = true; if (this.onclick) this.onclick(); }
 }
 
 // **What a browser hands back out of an attribute it parsed.** The page escapes everything it
@@ -231,7 +234,16 @@ async function build(answers, app) {
   const inputsNamed = name =>
     [...byId.values()].flatMap(inputsIn).filter(box => box.name === name);
 
+  const made = [];
   const document = {
+    // An element the page makes rather than finds. A link made to save a file is never in
+    // `index.html`, so it is kept here instead -- otherwise a check could only see that nothing
+    // on the page changed, which is also what a broken download looks like.
+    createElement(tag) {
+      const element = new El(tag);
+      made.push(element);
+      return element;
+    },
     getElementById(id) {
       if (!declared.has(id)) {
         throw new Error(
@@ -422,7 +434,9 @@ async function build(answers, app) {
   // `answers` is handed back so a check can change what a route says part way through a run: a
   // deployment's model directory is edited while the page is open, which is the whole reason the
   // page asks again.
-  return { context, byId, bySelector, keys, woken, asked, answers, document, inputsNamed, el };
+  return {
+    context, byId, bySelector, keys, woken, asked, answers, document, inputsNamed, el, made
+  };
 }
 
 const settled = () => new Promise(resolve => setImmediate(resolve));

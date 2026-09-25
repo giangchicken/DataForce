@@ -1,12 +1,14 @@
 """adapter · one APIRouter for tool_decision: a request body in, one part's answer out."""
 
+import json
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlalchemy.orm import Session
@@ -47,6 +49,7 @@ from dataforce.profile.tool_decision.sample_building import (
     select_queued_sample,
     select_queued_samples,
     select_sample_contents,
+    select_stored_corpus,
     select_stored_sample,
     select_stored_samples,
 )
@@ -550,6 +553,21 @@ def get_dataset_statistics() -> ToolDecisionDatasetStatistics:
             ),
             sample_contents=select_sample_contents(session),
         )
+
+
+@router.get(
+    "/records/export",
+    summary="the stored corpus, whole, to keep as a file",
+    response_model=tuple[StoredSample, ...],
+)
+def get_stored_corpus() -> Response:
+    session = db.open_session()
+    with session:
+        corpus = select_stored_corpus(session)
+    return Response(
+        content=json.dumps(jsonable_encoder(corpus), indent=2, ensure_ascii=False),
+        media_type="application/json",
+    )
 
 
 @router.get("/records/{key}", summary="one stored sample, as it ships")

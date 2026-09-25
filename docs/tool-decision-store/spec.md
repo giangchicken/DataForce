@@ -603,6 +603,22 @@ result and is the only table anything is ever exported from.
     - **The database answering badly is this state; this service asking badly is not.** A fault in
       the SQL written here is a bug in this repository, and answering it with a database to check
       would send somebody to read their deployment for it. Those still answer 500.
+57. **The corpus leaves whole, through a route of its own.** Requirement 53 answers a page of
+    facets and one row at a time, which is what a sheet is read by. What a corpus is *for* is the
+    file somebody trains on, and assembling that out of a page of keys and one call per key is a
+    shape that breaks on the first corpus worth having. `GET /records/export` answers every row of
+    `tool_decision_dataset` whole — the copy that ships, the label, and every facet it is filed
+    under, columns and `notes` together — in the order the corpus grew, so a file taken twice
+    differs by what was added and not by how it was sorted. It reads the same table as everything
+    else served, which is the sentence § *Design* already wrote: the export reads `dataset`, and
+    `dataset` holds no raw transcript to find.
+    - **It is not paged.** A page boundary in an export is a file that is quietly half a corpus.
+      One response per corpus is what that costs, and it is stated rather than worked around: the
+      day a corpus outgrows one response what it needs is a stream, not a second page parameter.
+    - **The page does not read it in order to save it.** The browser follows a link to the route
+      and writes what comes back. Nothing in `ui/` parses the corpus, re-serialises it, or holds a
+      second copy of it — a page that did would hand back whatever its own `JSON.stringify` made
+      of what the service said.
 
 ## Design
 

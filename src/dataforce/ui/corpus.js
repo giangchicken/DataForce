@@ -1,14 +1,14 @@
 // adapter · what is already stored: the dataset sheet, the statistics grid, the strip, the rows
 // a reviewer took back out, and which database a record lands in. Owns dataset-rows,
 // dataset-bad, dataset-all, dataset-erase, dataset-keep, dataset-going, dataset-one,
-// dataset-more, dataset-note, dataset-store, stats, strip, store.
+// dataset-more, dataset-export, dataset-note, dataset-store, stats, strip, store.
 
 import { drawCatalog, drawLabel, drawTurns, readTools } from "./conversation.js";
 import { facetValues, paintDomainTicks } from "./facets.js";
 import { DECLARED_FACETS, held } from "./held.js";
 import { waiting } from "./queue.js";
 import { $, esc, say, wordFor } from "./screen.js";
-import { ask, erase } from "./wire.js";
+import { ask, download, erase } from "./wire.js";
 
 const DATASET_PAGE = 100;
 const BARS_SHOWN = 10;
@@ -45,6 +45,7 @@ export function paintDataset() {
   for (const key of erasing) if (!shown.has(key)) erasing.delete(key);
   say("dataset-note", `${rows.length} of ${storedTotal} ${wordFor(storedTotal, "row", "rows")}`);
   $("dataset-more").disabled = stored.length >= storedTotal;
+  $("dataset-export").disabled = !storedTotal;
   paintErasing();
   const body = $("dataset-rows").querySelector("tbody");
   if (!rows.length) {
@@ -175,6 +176,11 @@ export async function eraseStored() {
   await askDataset(false);
   await askStatistics();
   say("dataset-going", `${gone} ${wordFor(gone, "row", "rows")} deleted`);
+}
+
+export function saveCorpus() {
+  const today = new Date().toISOString().slice(0, 10);
+  download("/records/export", `tool-decision-corpus-${today}.json`);
 }
 
 // **Never the DSN**, in either place it is said: a connection string carries a password, and what

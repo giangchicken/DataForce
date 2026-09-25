@@ -343,8 +343,11 @@ def select_stored_sample(session: Session, key: uuid.UUID) -> StoredSample | Non
     rather than trusting that.
     """
     stored_sample = session.get(ToolDecisionSample, key)
-    if stored_sample is None:
-        return None
+    return None if stored_sample is None else read_stored_sample(stored_sample)
+
+
+def read_stored_sample(stored_sample: ToolDecisionSample) -> StoredSample:
+    """One row of the dataset table as it ships, facets and all."""
     return StoredSample(
         key=str(stored_sample.id),
         input=dict(stored_sample.input),
@@ -358,6 +361,25 @@ def select_stored_sample(session: Session, key: uuid.UUID) -> StoredSample | Non
         },
         created_time=stored_sample.created_time,
         modified_time=stored_sample.modified_time,
+    )
+
+
+def select_stored_corpus(session: Session) -> tuple[StoredSample, ...]:
+    """Every stored row whole, oldest write first.
+
+    The order a corpus grew in, not the sheet's newest-first: what this is read into is a file,
+    and a file rewritten from the top every time a row is added is a file nothing can diff.
+
+    Read off `tool_decision_dataset` like everything else served, so what leaves here is the copy
+    that ships. The table that keeps what arrived is not exported, and there is no route to it.
+    """
+    return tuple(
+        read_stored_sample(stored_sample)
+        for stored_sample in session.scalars(
+            select(ToolDecisionSample).order_by(
+                ToolDecisionSample.created_time, ToolDecisionSample.id
+            )
+        )
     )
 
 

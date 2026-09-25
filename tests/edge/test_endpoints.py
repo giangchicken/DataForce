@@ -1449,6 +1449,40 @@ def test_one_stored_sample_comes_back_whole_and_stats_is_not_read_as_a_key(
     assert client.get(f"{BASE}/records/stats").status_code == 200
 
 
+def test_the_whole_corpus_comes_back_as_one_file_in_the_order_it_grew(
+    client: TestClient, attached: None
+) -> None:
+    """What the export button saves: every stored row whole, and nothing the sheet leaves out.
+
+    Oldest write first and written out a line at a time, because what this is read into is a file:
+    a file rewritten from the top every time a row is added, or held on one line, is a file whose
+    diff says nothing about what changed. `export` is this router's own name and is
+    declared before the route that takes a `{key}`, the trap `stats` already taught.
+
+    Read off the dataset table like everything else served: what a customer said before any value
+    was replaced is in the other table, and no route answers with it.
+    """
+    first = client.post(f"{BASE}/records", json=build_review()).json()["id"]
+    second = client.post(f"{BASE}/records", json=build_review(id="s-second")).json()[
+        "id"
+    ]
+
+    resp = client.get(f"{BASE}/records/export")
+
+    assert resp.status_code == 200
+    whole = resp.json()
+    assert [one["key"] for one in whole] == [first, second]
+    assert [one["created_time"] for one in whole] == sorted(
+        one["created_time"] for one in whole
+    )
+    assert whole[0]["input"]["messages"] == [{"role": "user", "content": REDACTED_TURN}]
+    assert whole[0]["label"] == OPENED
+    assert whole[0]["facets"]["schema_valid"] is True
+    assert POSTED_PHONE not in resp.text
+    assert resp.text.splitlines()[0] == "["
+    assert len(resp.text.splitlines()) > len(whole)
+
+
 def test_a_label_naming_a_tool_without_calling_it_reads_back_as_one_nothing_validated(
     client: TestClient, attached: None
 ) -> None:
