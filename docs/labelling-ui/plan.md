@@ -1573,6 +1573,54 @@ re-reads the spans out of what ships.
 
 ---
 
+### T32 · Card 1 says what its own table says
+
+**Goal.** Nothing on card 1 states a fact the table under it contradicts.
+
+**Context.** Three faults, all found by reading the screen against the code, none of them in the
+service.
+
+The count in the card's head was written in one place -- `detect()` -- and nowhere else. The table
+is repainted whenever a value is added, so a scan that found nothing went on saying **nothing
+found**, in green, over a row the reviewer had just put there; the Checks row, deriving the same
+number from the same state on every copy, said *1 value found* at the same moment. Two readings of
+one number, and only one of them followed the state: `T-6` measured on the page.
+
+The guidance under the button described the layout `T26` replaced. *Each place a value stands is a
+row under it* and *one tick covers all of them* were true of the two-tier table with a merged tick;
+what ships is one row per place, each carrying its own tick -- measured, three places drew three
+boxes. `spec.md` § *the keep table* said both things at once: **One tick to a place** in one
+paragraph and *the value's own cells span those rows* in the one above it.
+
+`addValue` refused any value already on the table. The reviewer's way out of a wrong kind is the
+picker on the row, and that picker calls `numbered(claimedWith(value, kind))` -- exactly what the
+add box would have called. Measured on an unticked row: the picker sent `[["FIRST_NAME","Bang"]]`
+and the box answered *that value is already on the table*. One operation, two controls, one of them
+refusing it.
+
+**Approach.** The verdict is written by `paintCard`, which is what runs when the table changes, and
+`detect` stops writing it. The guidance says a row carries its own tick and that the offsets are
+into the field the row names. `addValue` refuses only what would change nothing -- the same value
+under the kind it already has -- and says which kind a re-filed value moved from.
+
+**Acceptance criteria.**
+- A value the reviewer adds is counted in the card's head, in the same breath as on the table.
+- A value already on the table, typed again under another kind, is filed under it.
+- The same value under the kind it already has is refused, and nothing is sent.
+
+**What it does not do.** It does not re-tick a re-filed value: `spanKey` is `path`, `start` and
+`end`, so a tick belongs to a place and a kind belongs to a value, and the row's own picker has
+always behaved this way. Whether changing a kind should assert the value is personal data again is
+a decision nobody has taken.
+
+**Source.** `spec.md` § *the keep table*, **One tick to a place** and the requirement that a kind
+is offered in both places a kind is said.
+
+**Verify.** `make check`, then on <http://localhost:8000/ui/> scan a sample the scans find nothing
+in, add a value, and read the head of the card.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

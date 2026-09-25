@@ -804,6 +804,10 @@ async function main() {
     same(sentValues, [["PHONE", PHONE], ["NAME", MISSED]]));
   claims("what comes back is what is drawn: the occurrences are the service's answer",
     kept().includes(MISSED) && shown(kept()).includes("<NAME_1>"));
+  claims("**the card's count is the table's own** — a value the reviewer adds is one more to"
+    + " confirm, and a scan that found nothing cannot go on saying so over a row",
+    page.byId.get("data-verdict").textContent === "2 to confirm"
+    && page.byId.get("data-verdict").className.includes("bad"));
   await waited(320);
   for (let n = 0; n < 6; n += 1) await settled();
   claims("**a value added remakes the copy too**, over the spans that value earned",
@@ -831,10 +835,27 @@ async function main() {
     typing.el("value-class").value === "FIRST_NAME");
   claims("the box is emptied, so the next one is not typed on top of it",
     typing.el("kind-new").value === "");
-  claims("**and it is offered on every row too**, so a value the scan claimed can be moved to it —"
-    + " unticking leaves the value in the text and re-adding it is refused as already claimed, so"
-    + " a kind reachable only where a value is added is a row with no way out of it",
+  claims("**and it is offered on every row too**, so a value the scan claimed can be moved to it"
+    + " where the reviewer is looking at the place it stands",
     typing.el("keep-table").markup().includes("FIRST_NAME"));
+  typing.el("value-new").value = PHONE;
+  typing.el("value-class").value = "FIRST_NAME";
+  await typing.el("value-add").onclick();
+  for (let n = 0; n < 6; n += 1) await settled();
+  claims("**a value already on the table, typed again under another kind, is filed under it**"
+    + " rather than refused — the page holds one kind to a value, so that is the move the row's"
+    + " own picker makes, and refusing it left a reviewer who had unticked the row nothing to press",
+    JSON.parse(posted(typing, "/data-quality/personal-data/spans").at(-1).body).claimed
+      .some(pair => same(pair, ["FIRST_NAME", PHONE]))
+    && typing.el("value-note").textContent.includes("rather than PHONE"));
+  const asItStands = posted(typing, "/data-quality/personal-data/spans").length;
+  typing.el("value-new").value = PHONE;
+  typing.el("value-class").value = "FIRST_NAME";
+  await typing.el("value-add").onclick();
+  for (let n = 0; n < 4; n += 1) await settled();
+  claims("**and under the kind it already has it is refused**, because nothing would change",
+    typing.el("value-note").textContent.includes("already on the table as FIRST_NAME")
+    && posted(typing, "/data-quality/personal-data/spans").length === asItStands);
   typing.el("kind-new").value = "FIRST_NAME";
   typing.el("kind-add").onclick();
   claims("naming it twice says so rather than offering it twice",

@@ -370,25 +370,30 @@ already knows is a labelling tool, not a CMS.
     beside the list, not a free-text field in place of it — and written the way a placeholder is,
     so `first name` and `FIRST_NAME` are one kind rather than two rows of the corpus's own count.
     It is offered in **both** places a kind is said, the picker and every row of the keep table,
-    because a kind reachable only where a value is added leaves a row with no way out of it:
-    unticking leaves the value in the text, and re-adding it is refused as already claimed.
+    because a kind reachable only where a value is added leaves a row with no way out of it. And a
+    value the table already holds, typed again under another kind, is filed under it rather than
+    refused: a value has one kind wherever it stands, so that is the same move the row's own picker
+    makes, and the box says which kind it moved from. Only the kind it already has is refused,
+    because nothing would change.
     **What kind a value is stays a list the page fills**, not a box: the page must be able to
     position, style and check every control on this card, and a native `<datalist>` popup is the
     one widget it can do none of those to — it drew itself over the other pane.
     **And where a span stands is shown, on the one table that holds the decision.** `×3` beside a
     value said it occurs three times and nothing about *which* three — `Nam` inside `nam` inside a
     longer word is the case the containment rule exists for, and no reviewer could see it. So each
-    place a value stands is a row under it, carrying **the field it stands in** and the `start` and
-    `end` the service answered — the offsets index that field and nothing else, so two places at
-    offset `0` of two different fields are one row drawn twice without it. The value's own cells
-    span those rows. Shown, in a cell: what Requirement 28 took away is *editing* an offset, and the
-    three controls that did it are still gone.
+    place a value stands is a row of its own, carrying **the field it stands in** and the `start`
+    and `end` the service answered — the offsets index that field and nothing else, so two places
+    at offset `0` of two different fields are one row drawn twice without it. Shown, in a cell:
+    what Requirement 28 took away is *editing* an offset, and the three controls that did it are
+    still gone.
     **One tick to a place.** A span is replaced on its own (pipeline Requirement 12), so the
     reviewer decides one at a time: `Nam` the given name and `Nam` in *miền Nam* are the same three
     characters, and one tick over the three rows could tell them apart in neither direction. A place
     ticked off is struck through rather than dropped off the table, because leaving a value in the
     text is a decision somebody has to be able to see and undo. What kind a value is stays one
-    decision and spans the rows, because a value is one kind wherever it stands.
+    decision and is drawn on every row rather than merged down the group: a value is one kind
+    wherever it stands, and a cell of its own height reads as rows with their columns missing. The
+    pickers carry the value, so moving any one of them moves the kind and every row redraws alike.
     **What the tick costs, said here rather than left to be found.** A value kept in one place and
     left in another stays in the record at the second, as the same characters; where the two are one
     entity that is a re-identification path, and the reviewer ticking the place off is the one

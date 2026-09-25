@@ -73,9 +73,6 @@ export async function detect() {
   await numbered(held.claimed);
   paintCard();
   paintReviewText();
-  const found = held.claimed.size;
-  sayVerdict("data-verdict", found ? `${found} to confirm` : "nothing found",
-    found ? "bad" : "ok");
   return true;
 }
 
@@ -195,6 +192,9 @@ export function paintCard() {
       + `<td class="at">${esc(span.end)}</td></tr>`).join("");
   }).join("");
   paintKinds();
+  const found = held.claimed.size;
+  sayVerdict("data-verdict", found ? `${found} to confirm` : "nothing found",
+    found ? "bad" : "ok");
 }
 
 export async function addValue() {
@@ -202,12 +202,17 @@ export async function addValue() {
   const named = $("value-class").value;
   if (!held.detected) return refuseValue("nothing has been read for personal data yet");
   if (!value) return refuseValue("type the value first");
-  if (held.claimed.has(value)) return refuseValue("that value is already on the table");
   if (!named) return refuseValue("say what kind it is");
+  const namedBefore = held.claimed.get(value);
+  if (namedBefore === named) {
+    return refuseValue(`that value is already on the table as ${named}`);
+  }
   if (!await numbered(claimedWith(value, named))) return false;
   $("value-new").value = "";
   paintKinds(named);
-  say("value-note", `added as ${named} — every occurrence is found for you`);
+  say("value-note", namedBefore
+    ? `filed as ${named} rather than ${namedBefore} — every place it stands moves with it`
+    : `added as ${named} — every occurrence is found for you`);
   return true;
 }
 
