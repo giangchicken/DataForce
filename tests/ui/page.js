@@ -2030,7 +2030,7 @@ async function main() {
 
   // ------------------------------------- the one facet whose values nobody declares
   const KINDS = { ADDRESS: 2, NAME: 3, none: 6, FIRST_NAME: 3 };
-  for (let n = 0; n < 8; n += 1) KINDS[`KIND_${n}`] = 1;
+  for (let n = 0; n < 20; n += 1) KINDS[`KIND_${n}`] = 1;
   page = await start({ ...ANSWERS(),
     statistics: { ...STATISTICS,
       counted_distribution_by_facet: {
@@ -2048,23 +2048,23 @@ async function main() {
     && kinds.indexOf(">ADDRESS</div>") < kinds.indexOf(">KIND_0</div>"));
   claims("**and the tail is cut and said**, so the top is read as a top and not as every kind"
     + " the corpus holds",
-    !kinds.includes(">KIND_7</div>") && kinds.includes("The 10 largest of 12."));
+    !kinds.includes(">KIND_19</div>") && kinds.includes("The 20 largest of 24."));
   claims("**the facets the page declares values for are columns still**, because a declared value"
     + " at nought is a finding and a ranking is what drops it",
     holds.includes('<div class="histogram">'));
 
   // ------------------------------------------------ the tools called, which is a top and a tail
   const MANY = { NeverCalled: 0, NeverCalledEither: 0 };
-  for (let n = 0; n < 12; n += 1) MANY[`Tool_${n}`] = 12 - n;
+  for (let n = 0; n < 22; n += 1) MANY[`Tool_${n}`] = 22 - n;
   page = await start({ ...ANSWERS(), statistics: { ...STATISTICS, tool_call_counts: MANY } });
   const tools = page.byId.get("stats").innerHTML;
   claims("**only the top tools are drawn** — a catalog of two hundred is a panel nobody scrolls",
-    tools.includes("Tool_0") && !tools.includes("Tool_10"));
+    tools.includes("Tool_0") && !tools.includes("Tool_20"));
   claims("and the chart says what it cut, so the top is read as a top and not as the whole",
-    tools.includes("The 10 largest of 14."));
+    tools.includes("The 20 largest of 24."));
   claims("**how many tools are never called is said even where the cut takes the zeros** — that is"
     + " the finding the tail carries, and a top ten that dropped it silently would hide it",
-    tools.includes("2 of 14 tools are never called"));
+    tools.includes("2 of 24 tools are never called"));
 
   page = await start({ ...ANSWERS(),
     statistics: { ...STATISTICS, tool_call_counts: { Lookup: 2, OpenTicket: 0 } } });

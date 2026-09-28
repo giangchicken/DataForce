@@ -254,8 +254,8 @@ already knows is a labelling tool, not a CMS.
 18. **A distribution is a chart, and a ranked chart says what it cut.** What a reviewer asks of the
     statistics is *which values carry this corpus*, and the page of rows under them already carries
     every row's own values — so each distribution is a bar ranked by count rather than a column of
-    numbers. A chart is cut at the ten largest and says so, because a catalog of two hundred tools
-    is a panel nobody scrolls to the end of. **What the cut takes is said beside it**: how many
+    numbers. A chart is cut at the twenty largest and says so, because a catalog of two hundred
+    tools is a panel nobody scrolls to the end of. **What the cut takes is said beside it**: how many
     tools the corpus never calls is the finding of that statistic, and it is the first thing a
     ranking drops.
     **A frequency chart is drawn as one**: the bars touch, because what is being counted is one

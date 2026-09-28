@@ -11,7 +11,7 @@ import { $, esc, say, wordFor } from "./screen.js";
 import { ask, download, erase } from "./wire.js";
 
 const DATASET_PAGE = 100;
-const BARS_SHOWN = 10;
+const BARS_SHOWN = 20;
 const COUNTED_IN_THE_MATRIX = ["domain", "call_trigger"];
 const OPEN_TO_THE_REVIEWER = ["personal_data"];
 
