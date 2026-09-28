@@ -106,6 +106,34 @@ SAMPLE: Mapping[str, Any] = {
     "label": [{"name": "OpenTicket", "arguments": {"ma_khach": PHONE}}],
 }
 
+# A sample whose assistant answers by calling a tool, which is what most of this corpus is: the
+# turn carries no content at all, and the only place the number appears is the argument it passed.
+CALLED: Mapping[str, Any] = {
+    "id": "one-call",
+    "language": "vi",
+    "messages": [
+        {"role": "user", "content": "cho anh xin liên hệ của bạn ấy"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_0",
+                    "type": "function",
+                    "function": {
+                        "name": "SvcGetcontactinfo",
+                        "arguments": json.dumps(
+                            {"ten": NAME, "so": PHONE}, ensure_ascii=False
+                        ),
+                    },
+                }
+            ],
+        },
+    ],
+    "tools": [],
+    "label": [],
+}
+
 # What a model answers about the address, as the shape it is asked for.
 ADDRESS_FOUND: Mapping[str, str] = {"text": ADDRESS, "label": "ADDRESS"}
 
@@ -345,6 +373,45 @@ async def test_review_text_holds_the_turns_the_catalog_and_the_label() -> None:
         f'label: [{{"name": "OpenTicket", "arguments": {{"ma_khach": "{PHONE}"}}}}]'
     )
     assert len(find_occurrences(text, PHONE)) == 3
+
+
+def test_a_turn_that_called_a_tool_reads_as_the_call_and_what_it_was_passed() -> None:
+    """The turn this corpus is mostly made of, and the one nothing was reading.
+
+    An assistant that answers by calling a tool carries no content, so `role: content` rendered it
+    as a blank line: the tool's name and every argument value were in the record and in none of
+    the text the scans, the jurors or the reviewer are shown. The screen draws the call — so what
+    a reviewer read on the left and what the text said were already two different conversations.
+    """
+    text = build_review_text(CALLED)
+
+    assert f'call: SvcGetcontactinfo {{"ten": "{NAME}", "so": "{PHONE}"}}' in text
+
+
+def test_a_value_only_a_tool_call_carries_is_claimed_and_replaced() -> None:
+    """**What the blank line cost**: a number passed as an argument shipped un-redacted.
+
+    Nothing claimed it, because a claim is made off the review text; nothing replaced it, because
+    a replacement is made over a claim. The record always held it — `walk_record_strings` reaches
+    the arguments — so the whole of the miss was in what the text left out.
+    """
+    checker = ToolDecisionPersonalChecking(build_checking_config())
+    text = build_review_text(CALLED)
+    claimed = checker.pii_rule_detector.detect(text, "vi")
+    spans = find_and_number_spans(
+        CALLED, order_claims_by_class(text, claimed, checker.pii_rule_detector.classes)
+    )
+    redacted = replace_node(CALLED, group_spans_by_path(spans))
+
+    assert claimed == {PHONE: "PHONE"}
+    assert [tuple(span.path) for span in spans] == [
+        ("messages", 1, "tool_calls", 0, "function", "arguments")
+    ]
+    assert PHONE not in json.dumps(redacted, ensure_ascii=False)
+    assert (
+        redacted["messages"][1]["tool_calls"][0]["function"]["arguments"]
+        == f'{{"ten": "{NAME}", "so": "<PHONE_1>"}}'
+    )
 
 
 # ----------------------------------------------------------------- the two detectors

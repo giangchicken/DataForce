@@ -33,12 +33,46 @@ from agent_toolkit.string_utils import extract_json_from_text
 SPACES_PER_LEVEL = 2
 
 
+def read_named_function(entry: Any) -> Mapping[str, Any] | None:
+
+    if not isinstance(entry, Mapping):
+        return None
+    function = entry.get("function") if "function" in entry else entry
+    if isinstance(function, Mapping) and isinstance(function.get("name"), str):
+        return function
+    return None
+
+
 def list_conversation_turns(sample: Mapping[str, Any]) -> tuple[str, ...]:
-    """The conversation as the flat turns every part reads, `role: content` per message."""
-    return tuple(
-        f"{turn.get('role', '')}: {turn.get('content', '')}"
-        for turn in sample.get("messages") or ()
-    )
+    """The conversation as the flat turns every part reads: `role: content`, and the calls under it.
+
+    **A turn that called a tool is the turn, the call and its arguments.** A turn read as content
+    alone is blank wherever the assistant answered by calling something -- which is most of what
+    this corpus is about -- and the value it passed is where a phone number sits as surely as it
+    does in the label. Nothing that reads this text could see either.
+
+    The arguments verbatim where they arrive as text, which is how a provider writes them and how
+    the record keeps them -- re-encoding would put a value in the text spelled other than it is
+    spelled in the field a span has to replace it in.
+    """
+    turns: list[str] = []
+    for turn in sample.get("messages") or ():
+        lines = [f"{turn.get('role', '')}: {turn.get('content', '')}"]
+        for one in turn.get("tool_calls") or ():
+            function = read_named_function(one)
+            if function is None:
+                continue
+            arguments = function.get("arguments")
+            written = (
+                arguments
+                if isinstance(arguments, str)
+                else ""
+                if arguments is None
+                else json.dumps(arguments, ensure_ascii=False)
+            )
+            lines.append(f"call: {function['name']} {written}".rstrip())
+        turns.append("\n".join(lines))
+    return tuple(turns)
 
 
 def build_default_values_line(value: Any) -> str:
@@ -65,16 +99,6 @@ def needs_subfield_lines(spec: Mapping[str, Any]) -> bool:
         if (field.get("items") or {}).get("enum"):
             return True
     return False
-
-
-def read_named_function(entry: Any) -> Mapping[str, Any] | None:
-
-    if not isinstance(entry, Mapping):
-        return None
-    function = entry.get("function") if "function" in entry else entry
-    if isinstance(function, Mapping) and isinstance(function.get("name"), str):
-        return function
-    return None
 
 
 def list_required_parameters(spec: Mapping[str, Any]) -> set[str]:
@@ -164,8 +188,9 @@ def convert_tools_to_text(tools: Sequence[Any]) -> str:
 def build_review_text(sample: Mapping[str, Any]) -> str:
     """One sample as the single string every personal-data offset indexes.
 
-    The turns, then the catalog, then the label -- the catalog because an argument value in a
-    tool call is where a phone number sits, and the label because a label is a tool call.
+    The turns and the calls they made, then the catalog, then the label -- the calls and the
+    catalog because an argument value in a tool call is where a phone number sits, and the label
+    because a label is a tool call.
 
     Here rather than on the checking class because it is built twice from two sides: once over
     the sample a scan was handed, and once over the record a reviewer left, to say what that

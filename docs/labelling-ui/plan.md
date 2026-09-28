@@ -1686,6 +1686,45 @@ corpus outgrows one response what it needs is a stream.
 
 ---
 
+### T35 · A turn that called a tool reads as the call it made
+
+**Goal.** Nothing personal reaches the corpus because the text nobody could see it in.
+
+**Context.** Found by reading an exported sample beside its review text. `list_conversation_turns`
+rendered `role: content` and nothing else, so an assistant turn that answers by *calling* a tool —
+which is most of what this corpus is — came out as a blank line. The call's name and every argument
+value were in the record, and drawn on the reviewer's own screen by `drawCalls`, and in none of the
+text the two detectors, the jurors and the reviewer were handed.
+
+Measured on a sample whose only phone number sits in an argument: the rule scans claimed nothing,
+the detect answered no span, and the number shipped in the record. Written into the text, the same
+scans claim it at once. The reviewer's left pane showed the call the whole time, so the screen and
+the text had already come apart — which is the thing `utils.py` exists to prevent.
+
+**Approach.** A turn renders as its `role: content` line and one `call: <name> <arguments>` line per
+call under it, the arguments verbatim where they arrive as text — re-encoding would spell a value
+in the text other than the field a span has to replace it in. `read_named_function` is what reads
+the call, the same reader the catalog and `parse_text_to_tools` use.
+
+**Acceptance criteria.**
+- A value only a tool call carries is claimed, numbered against the field the call sits in, and
+  replaced there.
+- The text carries the tool's name, so a reviewer can tell which call an argument belongs to.
+
+**What it costs.** The jurors read this text too, so their prompt now carries the calls already
+made. That is more of the sample, not less, and it is the half of the conversation a question about
+*what to call next* was being asked without.
+
+**What it does not do.** A `tool` turn still reads as `tool: <content>` without naming which call
+answered it; the order pairs them, as it does for a person reading the screen.
+
+**Source.** `docs/tool-decision-pipeline/spec.md` Requirement 6.
+
+**Verify.** `make check`, then open a sample whose assistant calls a tool and read the text under
+card 1 against the turns on the left.
+
+---
+
 ## Phase 4 · The screen says what kind of thing each thing is
 
 What is left of the form, over a screen whose shape has stopped moving.

@@ -6,8 +6,9 @@ confirmation over the spans they earn. `replace_node` is the second, over the sp
 handed back: the replacement runs over the record's own fields rather than over the review text,
 because an offset indexes the text and `messages`, `tools` and `label` are other strings -- which
 is where the record's `new_` keys come from. `decide_replacement_outcome` says how far it got.
-What this task reads is `build_review_text`: the turns, the catalog *and* the label, because an
-argument value in a tool call is where a phone number sits and a label is a tool call.
+What this task reads is `build_review_text`: the turns and the calls they made, the catalog *and*
+the label, because an argument value in a tool call is where a phone number sits and a label is a
+tool call.
 """
 
 import re

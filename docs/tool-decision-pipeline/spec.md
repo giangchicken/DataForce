@@ -106,19 +106,26 @@ format's own shape, arguments as JSON text under one key ordering.
    detectors are built from it, so both exist before any record does, and a deployment's own scan
    function is a scan like any other.
 6. `review_text` is **what a detector and a reviewer read, and it indexes nothing** — for this
-   task the turns, the tool catalog and the label together, because an argument value in a tool
-   call is where personal data sits. Nothing afterwards may reorder or reflow it. **It is built one
-   way and there is no way back.** `build_review_text` is module-level rather than a method on a
+   task the turns **and the calls they made**, the tool catalog and the label together, because an
+   argument value in a tool call is where personal data sits. A turn that answers by calling a tool
+   carries no content, so turns rendered as `role: content` alone are a blank line exactly where
+   this corpus is most itself: the tool's name and every argument value were in the record and
+   drawn on the reviewer's screen, and in none of the text the scans, the jurors and the reviewer
+   were handed. A number passed as an argument mid-conversation was claimed by nobody and therefore
+   replaced by nothing — measured on a real sample, and the reason a call is a line of this text.
+   Nothing afterwards may reorder or reflow it. **It is built one way and there is no way back.**
+   `build_review_text` is module-level rather than a method on a
    checker, because it is built twice from two sides — over the sample a scan is handed, and over
    the record a reviewer left, to say what that record now reads as — and two spellings of it would
    be two frames of reference. A parser going the other way would be a second definition of what a
    turn and a call are.
    **So a span is located in the record and never in this text**, and the reason is measured rather
-   than argued. The text is a *rendering*: it never shows `tool_calls` at all, and it writes the
-   label through `json.dumps`, which escapes what a value may contain. Over one ordinary sample
-   `nam@vd.vn` occurs **twice in the text and three times in the record**, and `Nam` four times in
-   both — the two sequences disagree, and disagree by a different amount per value. Anything that
-   read *the k-th occurrence in the text* as *the k-th occurrence in the record* would replace a
+   than argued. The text is a *rendering*: it writes the label through `json.dumps`, which escapes
+   what a value may contain, and it puts `role: ` and `call: ` in front of strings the record holds
+   without them. A name spelled `Nguyễn "Nam" Văn` occurs **twice in the record and once in the
+   text**, because the label line spells it `Nguyễn \"Nam\" Văn` — the two sequences disagree, and
+   disagree by a different amount per value. Anything that read *the k-th occurrence in the text*
+   as *the k-th occurrence in the record* would replace a
    different string than the one a reviewer pointed at, and would do it silently. That is why
    replacement used to be by value, and it is why per-occurrence replacement has to walk the
    record.
