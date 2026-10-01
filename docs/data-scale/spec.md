@@ -7,13 +7,15 @@ A ninth step for `tool_decision`, and one act inside it.
 **The step.** Once the label is settled, every value the sample's tool calls pass becomes a numbered
 slot — `<SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1>` where `800 triệu` stood — so that one labelled
 conversation can be re-filled with a hundred different amounts afterwards and teach a model the
-argument rather than the number. Two detectors find them: a rule scan that takes the settled
-label's own argument values and searches the conversation for each, and a model for every mention
-that is *not* those characters — half a phone number, a number said wrongly, one district out of a
-longer location. A confirmation reads the numbered spans back, one at a time, and only what it
-confirms reaches the reviewer. What happens to the claims afterwards is the arithmetic the
-personal-data step already runs: the same numbering, the same containment rule, the same tick per
-place, the same replacement, the same outcome.
+argument rather than the number. Two detectors find them: a model reading the conversation for
+every mention of an argument's value, and a rule scan searching for the value the call spells out.
+**The model is the larger half, measured** — this corpus is transcribed speech, and a call passing
+`1000000000` sits beside a turn saying *một tỷ*. A confirmation reads the numbered spans back, one
+at a time, and only what it confirms reaches the reviewer. What happens to the claims afterwards is
+the arithmetic the personal-data step already runs — the same containment rule, the same tick per
+place, the same replacement, the same outcome — with one exception that is the heart of this step:
+**a placeholder is numbered per slot and not per value**, so *một tỷ* and `1000000000` wear the one
+name and can only be re-filled together.
 
 **The act.** From that slotted sample, a model writes **one** new conversation using the same
 catalog and the same slots. The reviewer edits it, runs the three cards over it, ticks its facets,
@@ -51,6 +53,31 @@ Taken on 2026-09-28 at `21edf7d`, over `tool_decision_dataset` — 40 stored row
   13 are still bare. Thirty of the 40 rows carry no bare argument value at all.
 - The placeholders for those kinds stand under `messages` 23 times and under `label` 6 times, and
   under `tools` never.
+- **Of the 13 bare values a verbatim search finds 7 and misses 6.** Five of the six are `faq_code`
+  — `gia_thiet_bi`, `thoi_gian_lap_dat`, `bao_hanh` — an enum slug nobody utters: the turn asks
+  *giá thiết bị bao nhiêu* and the call passes the code for it. The sixth is
+  `nationality: Việt Nam`. So the search reaches a little over half of what is left to reach, and
+  what it misses it misses completely rather than narrowly.
+- **The corpus is speech, and that is what decides the detectors.** Row `b81aac81` calls
+  `SvcCalculateinterest(principal_amount=1000000000, interest_rate=7.5, time_period=10)` over a
+  turn reading *anh vay một tỷ lãi suất bảy phẩy năm một năm trong vòng mười năm*. Not one of the
+  three values stands in the conversation as a single character of itself. A step that only
+  searched would be blind to every number this corpus says out loud, which is most of its
+  arguments.
+
+**And the same row settles what a placeholder is.** This is what the reviewer left, by hand:
+
+```
+messages.4   anh vay <SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1> lãi suất …
+  the call   {"principal_amount": <SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1>, …}
+```
+
+`một tỷ` and `1000000000` share no character, and the reviewer gave them **one placeholder**. Card
+1's arithmetic cannot produce that — `name_placeholders` keys by value, so two distinct values are
+two distinct names, always. The reviewer is right and that arithmetic is wrong for this step:
+whatever re-fills that slot has to move the words in the turn and the number in the call together,
+to the same amount. Two names are two things a filler can set apart, and a conversation saying
+*một tỷ* while its own call passes `3000000000` is the one defect this step exists to prevent.
 
 So the step specified here is one a reviewer has already been performing **by hand**, through card
 1's *Offer this kind* box, on three quarters of the corpus. This does not invent a practice; it
@@ -92,23 +119,28 @@ nothing in `data_quality/` asks or should learn to.
    placeholder stands inside `label` 6 times across the corpus, against 23 times inside `messages`
    — and the label is what card 2 is for. A scan run before the reviewer settled the label would
    read a call they were about to replace.
-2. **Two detectors over the same text, unioned — a rule scan and a model.** The same shape the
-   personal-data step has, for a different reason.
-   - **The rule scan is the label read back into the conversation.** It takes the argument values
-     the settled label and the turns' own calls carry — values the reviewer has already looked at
-     on card 2 — and searches for each one in the record. It is a search and not a guess: the call
-     says what the value is, so a place that holds it character for character is a slot with no
-     opinion in it.
-   - **The model is for every mention that is not that string.** A turn that says half the phone
-     number, says it wrongly, or says the district out of a longer location holds the argument and
-     holds none of its characters in a row. A search finds nothing there, and those are exactly the
-     rows § *Context* measures the reviewer filing by hand.
+2. **Two detectors over the same text — a model and a rule scan.** The same shape the
+   personal-data step has, for a different reason and in the opposite proportion.
+   - **The model is the larger half, and § *Context* measures why.** A turn says *một tỷ* where the
+     call passes `1000000000`, says half the phone number, says it wrongly, or says a district out
+     of a longer location. In each of those the turn holds the argument and holds none of its
+     characters in a row, so a search finds nothing. This corpus is transcribed speech: the spoken
+     form of a number and its written form share nothing at all, which makes the model not a
+     supplement here but where most of the answer comes from.
+   - **The rule scan is the label read back into the conversation**, kept for what it is certain
+     about. It takes the argument values the settled label and the turns' own calls carry — values
+     the reviewer has already looked at on card 2 — and searches for each one verbatim. Where a
+     value *is* spelled out there is nothing for a model to be wrong about, and the measurement
+     puts that at 7 of the 13 places left to find.
 
-   Where both claim one value the rule scan's class wins, on the same terms the personal-data step
-   settles an overlap. The model picker travels with card 3's button, like every other check's.
-3. **Neither detector answers an offset.** A detector answers a value and a class; where that value
-   stands, how many times, which nested span is dropped and which `<CLASS_N>` it gets are found by
-   searching afterwards, through the one function that does it for both steps. A model counting
+   **The two are not unioned afterwards; the model answers into the slots the search opened.** The
+   rule scan is what decides a slot exists, because a slot is an argument of a call and only a call
+   can say so. The model adds values to one, or opens a qualified one beside it, and can do neither
+   out of nothing — so there is no overlap to settle and no class for the two to disagree about.
+   The model picker travels with card 3's button, like every other check's.
+3. **Neither detector answers an offset.** A detector answers a value and the slot it belongs to;
+   where that value stands, how many times, which nested span is dropped and which `<CLASS_N>` it
+   gets are found by searching afterwards, through the one function that does it for both steps. A model counting
    characters is a model nothing here can check, and a value it did not copy character for
    character out of the text it was shown is dropped, because no offset can be found for it. This
    is what puts a `start` and an `end` on every row of card 3's table whichever detector claimed
@@ -121,16 +153,39 @@ nothing in `data_quality/` asks or should learn to.
    line can. It **only ever narrows**: an id no span carries is discarded, a span answered twice
    keeps the first answer, and a span nothing came back about is not confirmed, which is what a
    failed call and an answer of the wrong shape both come to. Nothing detected is nobody asked.
-5. **It runs over the record the personal-data redaction left**, not over the sample as it arrived.
-   The two steps replace into one document, and a span numbered against the unredacted strings
-   would index a string that no longer exists by the time it is applied.
-6. **After the claims, the arithmetic is card 1's, and it is the same code.** One placeholder per
-   distinct value numbered `<CLASS_N>`, one span per occurrence over the whole record, a span
-   inside a longer span dropped, a tick per place, replacement from the highest offset down, and
-   `outcome` measured by counting placeholders in the string each span's `path` names. None of
-   those is a decision that can differ between the two steps — they are facts about where a string
-   stands in a document — and a second spelling of any of them would be the two rotting apart
-   (`T-6`). **What may differ is everything above them**, and § *Design* draws the line.
+5. **Both steps read the sample as it arrived, and their spans meet only at approval.** Scaling
+   does not read what card 1 redacted. A partial mention is recognisable only beside the value it
+   is a partial mention of — the corpus holds `WRONG_PHONE` in one turn and the full `PHONE` two
+   turns later, as different characters in different places — and a scale detector handed
+   `<PHONE_1>` has had the one thing it needed to compare against taken away. Reading the raw text
+   is what a detector does: `pii_llm_detect` already does it, and the prohibition labelling-ui
+   states is about a juror and about the generator, not about a scan.
+
+   So the two produce two independent span sets over one frame of reference, and `POST /redact` is
+   handed both at once. Where they claim the same `(path, start, end)`, **scale wins** — a value
+   that is an argument is filed as the argument. Where they overlap without matching, containment
+   has already run and the longer span took the place; that is the rule as it stands, and it is
+   what stops a scale span shorter than a personal-data span from leaving a tail of a confirmed
+   value standing in the clear. **Priority settles a tie. It does not overrule containment.**
+6. **After the claims the arithmetic is card 1's and it is the same code — except the numbering.**
+   One span per occurrence over the whole record, a span inside a longer span dropped, a tick per
+   place, replacement from the highest offset down, and `outcome` measured by counting placeholders
+   in the string each span's `path` names. None of those is a decision that can differ between the
+   two steps — they are facts about where a string stands in a document — and a second spelling of
+   any of them would be the two rotting apart (`T-6`).
+
+   **The numbering does differ, and it is the heart of this step: a placeholder is per slot, not
+   per value.** A slot is one `(call, argument)` pair, and the values it owns are the value the
+   call spells out together with every mention a detector found of it. All of them get the one
+   `<CLASS_N>`. Card 1 numbers per value because two spellings of a name are two names and nothing
+   binds them; card 3 numbers per slot because *một tỷ* and `1000000000` are one amount and
+   everything binds them — whatever re-fills that slot has to move both, to the same number, or it
+   writes a conversation that contradicts its own call. `<CLASS_N>` still counts per class in claim
+   order, so one tool called twice with two amounts gets `_1` and `_2`, two slots and two names;
+   and a value two slots both own keeps the first, which is the rule the reviewer overrules on the
+   row.
+
+   **What may differ above them is everything else**, and § *Design* draws the line.
 
 ### What is claimed
 
@@ -139,12 +194,26 @@ nothing in `data_quality/` asks or should learn to.
    the corpus's `{name, arguments}` and the provider's
    `{function: {name, arguments: "<json text>"}}`, through `read_named_function` — the reader
    `utils.py` already owns, so what a call *is* stays defined once. The label is read **as the
-   reviewer settled it on card 2**, not as it arrived, which is the other half of Requirement 1.
-8. **The model claims what the rule scan cannot reach: a mention that is not the value.** It is
-   handed the review text, the arguments the rule scan read — tool, argument and value — **and the
-   catalog**, and answers with the stretches of the conversation that mean one of them, each with
-   its class and the reason written before it. Three cases, which are the ones the corpus already
-   holds by hand: part of a value, a value said wrongly, and one component of a longer value.
+   reviewer settled it on card 2**, not as it arrived, which is the other half of the rule putting
+   this step after the label. Each call-and-argument is one slot; the value the call spells out is
+   that slot's first value, and the model's mentions join it.
+8. **The model is asked one question per slot: where does this conversation mean this argument?**
+   It is handed the review text, the slots the rule scan read — tool, argument and the value the
+   call passed — **and the catalog**, and answers with the stretches of the conversation that mean
+   one of them, each naming the slot it belongs to and carrying the reason written before it.
+   **An answer either joins a slot or qualifies one, and it can do nothing else.** It *joins*
+   where the stretch is the argument's own value said another way — *một tỷ* for `1000000000` —
+   and then it is one more value of that slot, wearing the slot's one placeholder. It *qualifies*
+   where the stretch is a different string that the argument's value explains: half a phone
+   number, a number said wrongly, one district out of a longer location. A qualified mention opens
+   **its own** slot, under `<TOOL>__<QUALIFIER>_<ARG>`, because it is not that value and whatever
+   re-fills it has to put something else there.
+
+   The corpus holds both sides of this, which is how the line was drawn:
+   `SEARCH_PLACE_27D__LOCATION` and `SEARCH_PLACE_27D__DISTRICT_LOCATION` stand beside each other
+   as two slots on one argument, while *một tỷ* and `1000000000` stand inside one. So the model
+   never writes a class out of nothing — it answers a slot id, and optionally a qualifier — and
+   the reviewer overrules either on the row.
    **The catalog is what makes the qualifier a reading rather than a guess.** `time_period` is
    described as *đơn vị tính là năm*, `principal_amount` as *format thuần số, đơn vị VND* — so a
    model shown the argument's own description can say *this turn gave months where the argument
@@ -162,23 +231,32 @@ nothing in `data_quality/` asks or should learn to.
    row**, which is the reason the reviewer has been writing them that way. The qualifier is the
    model's to propose and the reviewer's to overrule; no rule reading the catalog could have
    invented one, and none tries.
-10. **A value already standing as a placeholder is claimed like any other, and re-filing it is the
-    point.** A customer's name passed as `SvcGetcontactinfo(name=…)` is personal data *and* an
-    argument: card 1 replaces it with `<NAME_1>`, and card 3 then claims `<NAME_1>` and replaces it
-    with `<SVCGETCONTACTINFO__NAME_1>` — which is exactly what the corpus already ships. The two
-    steps chain, and the second overwrites the first wherever the value is an argument. Nothing is
-    merged by this: `name_placeholders` keys by value, so two distinct placeholders are two distinct
-    values and stay two. Where the claim order is unchanged the re-file is the identity — `<X_1>`
-    comes back as `<X_1>` under its new class — and where it is not, the placeholder box on the row
-    is the override, as it is for anything else.
+10. **A value that is both personal data and an argument is claimed by both steps, and scale wins
+    the place.** A customer's name passed as `SvcGetcontactinfo(name=…)` is personal data *and* an
+    argument. Both detectors read the raw name, both claim it, and both answer a span at the same
+    `(path, start, end)`. At `POST /redact` the scale span is the one applied, so what ships is
+    `<SVCGETCONTACTINFO__NAME_1>` — exactly what the corpus already holds. There is no re-filing
+    and no second pass: the personal-data span was never applied, so nothing has to be undone.
+
+    **The superseded personal-data span is dropped from the `personal_data` key**, because it did
+    not happen. The corpus settles this too. Row `b81aac81` ships the name as
+    `<SVCGETCONTACTINFO__NAME_1>` and its facet reads `SVCCALCULATEINTEREST__INTEREST_RATE`,
+    `SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT`, `SVCCALCULATEINTEREST__TIME_PERIOD`,
+    `SVCGETCONTACTINFO__NAME` — the argument classes and no `NAME` beside them. The cost, stated
+    once: *which rows held a customer's name* stops being a question the `personal_data` facet
+    answers and becomes one only `tool_decision_record` can, off the claims the detector made.
+    That is a reporting loss and not a de-identification one — the name is out of what ships either
+    way, under whichever name.
 11. **A value is claimed only where it stands character for character** — for the rule scan, and
     for the model, whose answer is dropped where it did not copy what it saw. `arguments` is JSON
     *text*, so a value holding a quote, a backslash or a newline is spelled one way inside the call
     and another way in the turn that said it, and the search claims it at the second and not the
     first. This is the same disagreement the pipeline spec measures for `review_text`
     (`Nguyễn "Nam" Văn`, twice in the record and once in the text), read from the argument side. It
-    is stated rather than fixed: the reviewer sees one row fewer than they expected, which is a
-    missing slot and not a leak.
+    is stated rather than fixed, and under slot numbering it costs less than it did: the two
+    spellings are two values of **one** slot, so claiming both is one line and the place that was
+    missing comes back under the same `<CLASS_N>`. What stays true is that nothing searches for a
+    spelling nobody claimed.
 12. **A short value is claimed at every word boundary it stands on.** `time_period: 2` claims each
     standalone `2` in the conversation and not the `2` inside `12`. Nothing narrows it, because
     nothing here can tell the two apart; **the tick per place is the answer**, and it is the same
@@ -247,20 +325,19 @@ nothing in `data_quality/` asks or should learn to.
     sheet and readable on an opened row **with no schema change and no migration at all**. Making
     it a column later is one line in `FACETS` plus a rebuild of a derived table; making it a column
     now is that migration with nothing yet asking for it (`T-1`).
-25. **A personal-data placeholder that scale replaced still satisfies the personal-data
-    precondition.** This is the one thing Requirement 9 breaks and it has to be repaired here.
+25. **The personal-data precondition is not touched, and that is the merge paying for itself.**
     `build_sample` refuses a record where a confirmed personal-data span's placeholder is not
-    standing in the string its path names — and where card 3 re-filed that value, `<NAME_1>` is
-    gone on purpose, replaced by `<SVCGETCONTACTINFO__NAME_1>`. Left alone, **every row where a
-    customer's name is also an argument would be refused**, which is the commonest row this corpus
-    holds. So the precondition reads the chain: a personal-data placeholder that the `scale` key
-    claims as one of *its* values is satisfied by the scale placeholder that replaced it. The
-    question the check asks is unchanged — *is the value the reviewer confirmed out of what ships*
-    — and a placeholder swapped for another placeholder is still out. A record with no `scale` key
-    reads exactly as it reads today.
-26. **A generated row's `scale` is not empty, and that is how the chain stays readable.** A
-    conversation generated from slots carries slots as its argument values, so card 3 claims them
-    (Requirement 9), re-files each under the class it already wears, and replaces it with itself.
+    standing in the string its path names. A span scale won is not in `personal_data.spans` at all
+    — the step that lost the place does not record that it happened — so there is no placeholder
+    for the check to go looking for, and no record is refused for a reason that is not about it.
+    `find_surviving_spans`, `read_scanned_personal_data` and `find_claims_gained` are untouched by
+    this spec, and a record with no `scale` key reads exactly as it reads today. § *Design* says
+    what the chained alternative would have cost here.
+26. **A generated row's `scale` is not empty, and that is how the corpus stays readable across a
+    generation.** A conversation generated from slots carries slots as its argument values, so the
+    rule scan opens a slot holding `<SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1>` and finds it in the
+    turns that say it; the class it names is the one the placeholder already wears, and replacing
+    it is the identity.
     The facet therefore names the slots the row carries, the same as its parent's, and a corpus
     reader asking *which rows carry `SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT`* gets both. A
     generated row carrying a class its parent did not is one where the model invented a fresh
@@ -320,14 +397,14 @@ nothing in `data_quality/` asks or should learn to.
 
 | file | tag | holds |
 |---|---|---|
-| `modalities/text2text/value_spans.py` | `shape` | `ValueSpan`, the span both steps place, and the one field name the arithmetic reads |
-| `profile/tool_decision/value_spans.py` | `logic` | the nine functions § *Context* lists, moved out of `data_quality.py` and owned by neither step |
+| `profile/tool_decision/schema.py` | `shape` | gains `PlacedValue`, the carrier the arithmetic answers with |
+| `profile/tool_decision/span_arithmetic.py` | `logic` | eight of the nine functions § *Context* lists, plus `keep_winning_spans`; moved out of `data_quality.py` and owned by neither step |
 | `modalities/text2text/data_scale/schema.py` | `shape` | `ScaleSpan`, `ScaleDetected`, `ScaleRedacted`, `ScaleScanningConfig`, `ScaleScanningInput`, `ScaleLlmDetected` |
 | `modalities/text2text/data_scale/argument_scaling.py` | `logic` | `ValueScaling` — the socket `detect`, and the model detector's body |
-| `profile/tool_decision/data_scale.py` | `logic` | `read_argument_claims`, `name_argument_class`, the three prompts, `ToolDecisionValueScaling`, `ConversationGenerator` |
+| `profile/tool_decision/data_scale.py` | `logic` | `read_argument_slots`, `name_argument_class`, `name_slot_placeholders`, the three prompts, `ToolDecisionValueScaling`, `ConversationGenerator` |
 | `services/tool_decision/data_scale.py` | `logic` | one function per endpoint |
 | `modalities/.../dataset_management/schema.py` | `shape` | `ScaledValues` beside `ScannedPersonalData` |
-| `modalities/.../dataset_management/sample_building.py` | `logic` | the optional half of the precondition, and the chain Requirement 24 names |
+| `modalities/.../dataset_management/sample_building.py` | `logic` | the optional half of the precondition — `scale: null` stores, a `scale` that lies does not |
 | `ui/spans.js` | `adapter` | the keep table, drawn into the ids it is handed |
 | `ui/scale.js` | `adapter` | card 3's values: `scale-table`, `scale-verdict`, `run-scale`, … |
 | `ui/generating.js` | `adapter` | the box and the drafts: `gen-prompt`, `gen-run`, `gen-list`, … |
@@ -346,18 +423,54 @@ that neither copy holds a rule — only nouns.
 **What is *not* duplicated is the arithmetic, and that is the line.** Where a value stands in a
 document, which nested span is dropped, how `<CLASS_N>` is numbered and how a span is replaced are
 facts about strings, not judgements about values: they cannot diverge, so a second copy would only
-ever be the wrong one (`T-6`). They move to `profile/tool_decision/value_spans.py`, imported by
-`data_quality.py` and `data_scale.py` alike, owned by neither.
+ever be the wrong one (`T-6`). They move to `profile/tool_decision/span_arithmetic.py`, imported by
+`data_quality.py` and `data_scale.py` alike, owned by neither. The name says what is in the file:
+offsets and counting, no judgement about what a value *is*. `value_spans` was the earlier name and
+said too little — every span in this repository is a span of a value.
 
-**One base shape, so the arithmetic has a field to read.** `modalities/text2text/value_spans.py`
-declares `ValueSpan` — `id`, `path`, `start`, `end`, `value_class`, `placeholder`, `reason`.
-`PersonalDataSpan` and `ScaleSpan` each extend it and each alias `value_class` to their own name on
-the wire: `personal_data_class` and `scale_class`. The alias is what keeps the rename off what is
-already written — measured, so the scope is known rather than feared: the key
-`personal_data.spans[].personal_data_class` stands **102 times across the 40 documents in
-`tool_decision_record`, and nowhere else**. The exported corpus does not carry it (a `StoredSample`
-is the key, the input, the label and the facets — no spans), and `tool_decision_dataset` holds no
-span at all. The same pattern the router already uses for `declared_facets` aliased to `class`.
+**One function does not move, because it is the one that differs.** `name_placeholders` keys by
+value and belongs to card 1. `find_and_number_spans` therefore takes the placeholder map as an
+argument instead of building it:
+
+```python
+def find_and_number_spans(
+    record: Mapping[str, Any],
+    detected: Sequence[tuple[str, str]],
+    placeholders: Mapping[str, str],
+) -> tuple[PlacedValue, ...]: ...
+```
+
+One parameter wider, and it is the right parameter: *which name a value wears* is exactly the
+decision the two steps make differently, so handing it in is the seam rather than a leak through
+one. Card 1 passes `name_placeholders(detected)`; card 3 passes `name_slot_placeholders(slots)`.
+Everything downstream — `find_spans_in_text`, the containment drop, `replace_spans_in_text`,
+`decide_replacement_outcome` — reads a `Mapping[str, str]` from value to placeholder and cannot
+tell which built it. That the mapping is injective for one step and not for the other is a fact
+about the mapping and about nothing else.
+
+**No base shape, no alias, and no new folder.** An earlier draft declared a `ValueSpan` under
+`modalities/` that both span shapes extended, each aliasing `value_class` to its own wire name.
+That bought one thing — a field the shared arithmetic could read — and cost a module in the generic
+layer, an inheritance both steps have to agree about, and an alias a reader has to know is an
+alias. It is cheaper to have the arithmetic answer a carrier instead:
+
+```python
+class PlacedValue(NamedTuple):      # profile/tool_decision/schema.py, already tagged `shape`
+    path: tuple[str | int, ...]
+    start: int
+    end: int
+    value_class: str
+    placeholder: str
+```
+
+`find_spans_in_text` answers `PlacedValue`, and each step builds its own span out of one —
+`PersonalDataSpan(personal_data_class=…)`, `ScaleSpan(scale_class=…)`. The two span shapes are then
+fully independent, neither names the other, and **`personal_data_class` stays the field it has
+always been**: nothing moves in the 102 places the key stands across the 40 documents of
+`tool_decision_record`, and nothing moves on the wire. `PlacedValue` never leaves
+`profile/tool_decision/`, which is why it needs no module in `modalities/` and no folder of its
+own — `T-2` decides the boundary and cuts the file late, and a second text2text task wanting this
+arithmetic is what would move both files up together.
 
 ### The claims
 
@@ -370,14 +483,35 @@ def name_argument_class(tool: str, argument: str, qualifier: str = "") -> str:
     spelling and not two.
     """
 
-def read_argument_claims(sample: Mapping[str, Any]) -> Mapping[str, str]:
-    """Which class claims each value the sample's calls pass, keyed by value.
+class ArgumentSlot(NamedTuple):
+    """One `(call, argument)` pair and every way the sample spells its value."""
+
+    value_class: str
+    values: tuple[str, ...]
+
+
+def read_argument_slots(sample: Mapping[str, Any]) -> tuple[ArgumentSlot, ...]:
+    """One slot per argument of every call the sample makes, in the order the calls stand.
 
     Every call in `messages` and every call in `label` as it ships, both spellings, through
-    `read_named_function`. An empty value is left out -- it can carry no offset. A value already
-    standing as a placeholder is **not**: re-filing `<NAME_1>` under the argument that passed it is
-    what Requirement 9 is about. First claim wins, so a value two arguments pass keeps the first
-    argument's class, and the reviewer re-files it where that is wrong.
+    `read_named_function`. The slot opens holding one value, the one the call spells out; an empty
+    value opens no slot, because it can carry no offset. A value two slots both pass stays with the
+    first, and the reviewer re-files it on the row where that is wrong.
+    """
+
+
+def name_slot_placeholders(
+    text: str, slots: Sequence[ArgumentSlot]
+) -> Mapping[str, str]:
+    """Every value of a slot mapped to the slot's one `<CLASS_N>`.
+
+    `<CLASS_N>` counts per class, slots ordered by where their earliest value first stands in
+    `text` -- the same ordering rule `order_claims_by_class` applies to card 1's claims, read one
+    level up because here the thing being ordered is a slot and not a value.
+
+    This is the one place the two steps' arithmetic differs, and the difference is the whole point:
+    `name_placeholders` is injective and this is not. *một tỷ* and `1000000000` come back wearing
+    one name, so nothing can re-fill them apart.
     """
 ```
 
@@ -385,15 +519,19 @@ The model detector sends `config/prompts/profiles/tool_decision/argument_scale_d
 task's own file, beside `pii_llm_detect.txt` and on the same terms, `ConfigError` where it is
 missing. Four slots: `{language}`, `{review_text}`, `{tools}` (through `convert_tools_to_text`, so
 the model reads the catalog the reviewer reads and not a second rendering of it), and
-`{arguments}`, one `tool | argument | value` per line the way `build_pii_llm_confirm_prompt` writes
-its spans. It answers `ScaleLlmDetected` — a `{reason, text, label}` per mention, the reason
-written before the value, which is the rule every model answer on this flow follows. `text` must be
-copied out of the review text character for character or the claim is dropped, because that is the
-string an offset is searched in.
+`{slots}`, one `id | tool | argument | value` per line the way `build_pii_llm_confirm_prompt`
+writes its spans. It answers `ScaleLlmDetected` — a `{reason, text, slot}` per mention, the reason
+written before the value, which is the rule every model answer on this flow follows. **`slot` is
+an id off the lines it was shown, never a class the model wrote**: a mention is a value of a slot
+that already exists, and a model free to name one would be free to name a second placeholder for
+the amount the call already passed. A `slot` no line carries is dropped. `text` must be copied out
+of the review text character for character or the claim is dropped too, because that is the string
+an offset is searched in.
 
-The two are unioned the way the personal-data step unions its own, the rule scan's class winning an
-overlap, and the result goes to the same `order_claims_by_class` and `find_and_number_spans` the
-other step uses. No class is declared for this step, so every scale class orders after the declared
+The model's mentions join the slots the rule scan opened — each one appended to the slot its `slot`
+id names — so the union happens on the slot and not after it, and a value the rule scan already
+holds is not added twice. The filled slots then go to `name_slot_placeholders` and to the same
+`find_and_number_spans` the other step uses. No class is declared for this step, so every scale class orders after the declared
 ones in first-claim order — which is already what happens to a kind a reviewer types today.
 
 The confirmation sends `argument_scale_confirm.txt` — **the task's own file and not the modality's,
@@ -404,23 +542,43 @@ so it sits with the code that asks it. Three slots — `{language}`, `{review_te
 one `id | CLASS | value` per line — and it answers one `{id, reason, confirmed}` per span it was
 shown, read back through the same narrowing rule.
 
-### The precondition, and the chain
+### The merge, and what it saves the precondition
 
-`dataset_management/sample_building.py` gains two things, both small.
+The two span sets meet in one function, and it is the only new arithmetic the merge needs:
 
 ```python
-def read_replaced_placeholders(scaled: ScaledValues | None) -> Mapping[str, str]:
-    """Placeholder to the placeholder that replaced it, for every value scaling re-filed.
+def keep_winning_spans(
+    yielding: Sequence[PlacedValue], winning: Sequence[PlacedValue]
+) -> tuple[tuple[PlacedValue, ...], tuple[PlacedValue, ...]]:
+    """The two sets with every place settled, in the order they were handed in.
 
-    A scale claim whose value reads as a placeholder is the second step overwriting the first:
-    `<NAME_1>` claimed as `SVCGETCONTACTINFO__NAME` ships as `<SVCGETCONTACTINFO__NAME_1>`. Empty
-    where nothing scaled, which is every record written before this step existed.
+    Containment runs over the union, so the longer span takes a place it encloses -- that rule is
+    unchanged and it runs *before* the tie-break, which is what stops a short span from leaving a
+    tail of a longer confirmed value standing. Only then does a tie settle: at one
+    `(path, start, end)` the span from `winning` stays and the one from `yielding` is dropped out
+    of the set it came from, because it is not what ships there and the record must not say it was.
     """
 ```
 
-`find_surviving_spans` then counts a span satisfied where its own placeholder stands **or** where
-the one that replaced it does. Nothing else about the check moves: it still asks whether the value
-the reviewer confirmed is out of what ships, and it still refuses the record where it is not.
+**The function takes no view on which set wins**, which is why it sits in `span_arithmetic.py` with
+the rest: *a longer span encloses a shorter one* is a fact about strings, and *the scale step wins
+a tie* is a judgement this task makes. `services/tool_decision/data_scale.py` is where the two meet
+— it calls `keep_winning_spans(personal_data_spans, scale_spans)` and that argument order **is**
+the judgement, written once, at the only place that holds both sets.
+
+`POST /redact` applies the union; the two sets come back separately so each key reports its own
+`outcome` against the one redacted document.
+
+**And this is the merge paying for itself: the store's precondition needs nothing added.**
+`build_sample` refuses a record where a confirmed personal-data span's placeholder is not standing
+in the string its path names. An earlier draft of this spec had the two steps *chain* — card 1
+redacts, card 3 claims `<NAME_1>` and re-files it as `<SVCGETCONTACTINFO__NAME_1>` — and under that
+design the check would refuse **every row where a customer's name is also an argument**, which is
+the commonest row this corpus holds. Repairing it took a new function in `sample_building.py` whose
+whole job was to read one step's spans in order to explain the other's. Merging removes the
+problem instead of the symptom: a span scale won is not in `personal_data.spans` at all, so there
+is no placeholder to go looking for. `find_surviving_spans`, `read_scanned_personal_data` and
+`find_claims_gained` are untouched by this spec.
 
 ### The generation
 
@@ -441,19 +599,22 @@ empty answer — never a raise (`H-6`).
 Four landings, and each of the first three is usable on its own.
 
 1. **The extraction, with nothing new on the screen and nothing new in the API.** The nine
-   functions move to `profile/tool_decision/value_spans.py`; `ValueSpan` lands with
-   `PersonalDataSpan` extending it under the alias; `ui/spans.js` takes the keep-table drawing and
+   functions move to `profile/tool_decision/span_arithmetic.py` and answer `PlacedValue`;
+   `find_and_number_spans` takes its placeholder map as an argument and `data_quality.py` passes
+   `name_placeholders(detected)` into it; `ui/spans.js` takes the keep-table drawing and
    `held` grows a bucket per step so two cards can hold their own `claimed`, `keeps` and `stands`.
    **Every existing test passes unedited** — `tests/ui/page.js`, `tests/ui/reading.js`,
    `tests/profile/test_personal_data.py`, `tests/edge/test_endpoints.py`. That is the whole
    evidence that the personal-data step was made shareable without being changed, and there is no
    other way to get it. A commit that moves and edits in one proves neither.
 2. **The rule half of the scan.** `data_scale/` lands with its shapes and its socket,
-   `read_argument_claims` answers it, `POST /data-scale/values` runs the search alone, card 3
-   appears, `scale` joins the record and the facet, and the precondition learns the chain. **This
-   is the half that pays for itself**: the label's own values are three quarters of the slots, and
-   at this point the six rows in § *Context* can be re-reviewed and the corpus's charts come apart
-   correctly.
+   `read_argument_slots` and `name_slot_placeholders` answer it, `POST /data-scale/values` runs the
+   search alone, `keep_winning_spans` settles the two sets at `POST /redact`, card 3 appears, and
+   `scale` joins the record and the facet. **The merge lands here rather than later**, because two
+   span sets meeting is the thing the redaction route does and it cannot be added to it afterwards
+   without changing an answer a reviewer has already read. What this landing does *not* yet reach
+   is most of the slots: § *Context* measures the search finding 7 of 13, so card 3 is honest and
+   thin until the next landing.
 3. **The model half of the scan.** Two prompt files, the detector, the confirmation, the model
    picker on card 3's button. It goes third because a scan that answers without a model is a scan
    whose search half can be proved on its own — and because a table full of rule-scan rows is what
@@ -466,7 +627,7 @@ Four landings, and each of the first three is usable on its own.
 
 ## Decisions
 
-1. **Scaling is its own module with its own functions, and shares only the arithmetic.** The
+1. **Scaling is its own module with its own functions, and shares all the arithmetic but one.** The
    reviewer's call, and the reason is the one that matters: personal data and scalable values are
    different sets of values answering different questions, so the two steps will change
    separately. An earlier draft of this spec had scaling import the personal-data shapes and call
@@ -476,7 +637,9 @@ Four landings, and each of the first three is usable on its own.
    Rejected because the splitting is what would then be expensive, and because a shared shape is a
    standing invitation to put a scale rule inside a personal-data function. The cost is stated in
    § *Design*: six field declarations and three model classes written twice, with no rule in
-   either copy.
+   either copy. The one arithmetic function that is **not** shared is `name_placeholders`, and
+   that is not a concession, and the decision below headed *a placeholder is numbered per slot*
+   says why.
 2. **`scale` is a note and stays one.** Settled by the reviewer, not deferred. A column is one
    SQLite will not add to an existing table, so it costs dropping `tool_decision_dataset` and
    rebuilding it from `tool_decision_record`, for which no command exists — and it buys two things
@@ -485,14 +648,17 @@ Four landings, and each of the first three is usable on its own.
    readable on an opened row, for nothing. `direction` and `have_conversation_flow` have lived
    there since the store spec's own § *The page*, so this is the arrangement that already works
    rather than a concession.
-3. **The scan asks a model, and is not a search alone.** An earlier draft of this spec said it
-   asked none, on the grounds that the calls already say what the values are. That was wrong, and
-   the corpus says so: `SEARCH_PLACE_27D__DISTRICT_LOCATION`, `WRONG_PHONE` and `WRONG_ID_NUMBER`
-   are mentions that share no run of characters with the value the call passed, and a search
-   cannot reach any of them. The rule scan is kept beside the model rather than replaced by it,
-   because where a value *is* spelled out there is nothing for a model to be wrong about.
-   Alternative: the model alone. Then the cheapest and most certain half of the answer is paid
-   for, and a failed call loses the values the label was already holding in plain sight.
+3. **The model is the step's main detector and the search is the supplement, not the other way
+   round.** An earlier draft of this spec said the scan asked no model at all, on the grounds that
+   the calls already say what the values are; a later one kept the model but wrote it as the
+   remainder. Both were wrong and the measurement says by how much. A verbatim search finds 7 of
+   the 13 bare argument values in the corpus, and row `b81aac81` calls
+   `principal_amount=1000000000` over a turn saying *một tỷ* — **this corpus is transcribed
+   speech**, so the spoken form of a number and the written form a call passes share no characters
+   at all, and that is the ordinary case rather than the edge. The search is still kept, because
+   where a value *is* spelled out there is nothing for a model to be wrong about and a failed call
+   must not cost those places. Alternative: the model alone. Rejected for exactly that, and for
+   nothing else.
 4. **The step runs after the label, not before.** Alternative: fold it into card 1, so one scan
    claims both. Then the label's own arguments — where a slot placeholder already stands 6 times
    across the corpus — are read before the reviewer has said what the label is, and the two kinds
@@ -516,7 +682,38 @@ Four landings, and each of the first three is usable on its own.
    client is a page in this repository. Alternative rejected for the opposite reason: adding
    `/data-scale/spans` and `/data-scale/redact` beside the old pair is two URLs for one act, and
    `C-3` is about not leaving a rule for somebody to remember.
-8. **The already-stored rows are re-reviewed by hand, not backfilled.** The reviewer's decision.
+8. **The two steps merge; they do not chain.** The reviewer's design, and the corpus is what
+   decides it. Three rows carry `WRONG_PHONE` in one turn and the full `PHONE` two turns later, as
+   different characters in different places — a mention is recognisable as *a wrong version of
+   this value* only beside the value, so a scale detector reading the already-redacted record
+   would be handed `<PHONE_1>` and lose the comparison it needs. That is the case this step exists
+   to catch. Alternative: chain, which an earlier draft of this spec specified in full. It also
+   broke the store's precondition for the commonest row in the corpus and needed a function in
+   `sample_building.py` to repair it; merging deletes the problem and the repair together. The
+   cost of merging is one new function, `keep_winning_spans`, and the rule that containment runs
+   before priority — stated as an invariant because getting it backwards leaves half of a
+   confirmed value standing.
+9. **A placeholder is numbered per slot, not per value — and this is the one piece of arithmetic
+   the two steps do not share.** The reviewer's existing corpus is the argument: row `b81aac81`
+   gives `một tỷ` and `1000000000` the single name
+   `<SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1>`, which `name_placeholders` cannot produce because
+   it keys by value. It is not a shortcut the reviewer took. Whatever re-fills that slot must move
+   the words in the turn and the number in the call to the same amount, and two names are two
+   things it can move apart — a conversation saying *một tỷ* over a call passing `3000000000` is
+   the defect the whole step is built to prevent. Alternative: one name per value, with a filler
+   told which names go together. That is the same rule written down twice, once in a corpus and
+   once in a program nobody here owns (`T-6`), and the second copy is the one that would be wrong.
+10. **A personal-data span that scale wins is dropped rather than kept beside it.** The corpus
+    already does this — `b81aac81` lists `SVCGETCONTACTINFO__NAME` on `personal_data` and no `NAME`
+    — and it is what lets the store's precondition stay untouched. The cost is real and is stated
+    once: *which rows held a customer's name* stops being a question the facet answers, and becomes
+    one only `tool_decision_record` can answer from the claims the detector made. Alternative: keep
+    both spans and teach `find_surviving_spans` that one placeholder may stand for another. That
+    buys the facet back and puts a scale rule inside the store's de-identification check, which is
+    the one place in this repository where a rule from somewhere else is most expensive to have.
+    Reversible: the record keeps the claims, so a later facet can be computed from them without
+    re-reviewing a row.
+11. **The already-stored rows are re-reviewed by hand, not backfilled.** The reviewer's decision.
    A name-shaped rule would move 12 kinds and leave 8 — `CAR_PRICE`, `DOWN_PAYMENT`,
    `INTEREST_RATE`, `LOAN_TERM`, `WEIGHT`, `DELIVERY_OPTION` and the two `WRONG_` kinds are
    judgements about what a value *is*, not about how it is spelled. Six rows, and the record table
@@ -524,19 +721,25 @@ Four landings, and each of the first three is usable on its own.
 
 ## Invariants
 
-- A raw value is never reached by the scale step. Check: scaling runs over the record the
-  personal-data redaction left, so a confirmed personal-data value is already a placeholder when
-  scaling reads it. What scaling re-files is that placeholder, never what stood under it.
-- Two distinct values never share a placeholder, through either step or across both. Check:
-  `name_placeholders` keys by value, so `<NAME_1>` and `<NAME_2>` re-filed under one class come
-  back as two placeholders and stay co-referent to two things.
-- One rule numbers a placeholder, and both steps go through it. Check: `name_placeholders` is
-  called from one place, `find_and_number_spans`, and both steps reach it through the one
-  `value_spans` module that neither owns.
-- A personal-data value the reviewer confirmed is out of what ships, whether or not scaling
-  overwrote its placeholder. Check: `find_surviving_spans` counts the span's own placeholder or
-  the one `read_replaced_placeholders` says replaced it, and a record with no `scale` reads
-  exactly as it read before this step existed.
+- No raw value reaches what ships, whichever step claimed it. Check: both detectors read the sample
+  as it arrived, `keep_winning_spans` settles every place between them, and `POST /redact` applies
+  the union to one document. A place either step confirmed is replaced; which class it is replaced
+  under is the only thing priority decides.
+- A place a detector claimed is never left half replaced. Check: containment runs over the union
+  before priority, so the longer span takes a place it encloses and a shorter span inside it is
+  dropped rather than applied. Priority settles only an exact `(path, start, end)` tie, where
+  there is no tail to leave behind.
+- Every value of one slot wears one placeholder, and no two slots share one. Check:
+  `name_slot_placeholders` maps each of a slot's values to the slot's single `<CLASS_N>`, and
+  numbers `<CLASS_N>` per class across slots, so a filler cannot move *một tỷ* without moving the
+  `1000000000` beside it and cannot move two slots together.
+- Card 1's numbering is unchanged by all of this. Check: `name_placeholders` still keys by value
+  and is still the only thing the personal-data step passes to `find_and_number_spans`; the slot
+  rule lives in `data_scale.py` and the personal-data tests pass unedited across the extraction.
+- A personal-data value the reviewer confirmed is out of what ships. Check: `find_surviving_spans`
+  unchanged — a span scale won is not in `personal_data.spans`, so the check is never asked about a
+  placeholder that was deliberately not applied, and a record with no `scale` reads exactly as it
+  read before this step existed.
 - The `scale` facet and the `scale` key on the record cannot disagree. Check: the facet is
   `read_redacted_classes` over the key's own spans, computed at write time, the way
   `personal_data` already is.
@@ -550,8 +753,9 @@ Four landings, and each of the first three is usable on its own.
   forbidding a declared class name in `ui/` source sweeps every file under `ui/`, so it covers the
   new modules with nothing added.
 - The wire and the stored documents keep the field names they have. Check: `PersonalDataSpan`
-  serialises `value_class` as `personal_data_class` under its alias, and a record written before
-  this step reads back unchanged.
+  declares `personal_data_class` as it always has — no base class, no alias — and the 102 places
+  that key stands across `tool_decision_record` are not touched by this spec. `ScaleSpan` declares
+  `scale_class` and neither shape imports the other.
 - The generated conversation offers the source's catalog unchanged. Check: the route copies `tools`
   from the request and the prompt asks for turns only.
 - No raw value reaches the generator. Check: the page posts `held…shipped.sample`, and the route's
@@ -571,9 +775,12 @@ Four landings, and each of the first three is usable on its own.
   prompts that came before them: a deployment with no prompt is not a provider having a bad day.
 - **A failed model call in the scan leaves the rule scan's claims standing**, the same way a failed
   `pii_llm_detect` leaves the rule scans' values. One structured event on stdout naming the step
-  (`H-6`), no raise, and a card 3 holding every slot the label spelled out — which is most of them.
-  Nothing on the card says *refused*, because nothing was: the reviewer is looking at a shorter
-  table and the button re-runs it.
+  (`H-6`), no raise, and a card 3 holding the slots the calls spelled out. **This costs more here
+  than it does on card 1**, and the measurement says how much: a verbatim search reaches 7 of the
+  13 bare values in the corpus and none of the ones a turn said in words, so a failed model is a
+  table missing most of what the step is for. Nothing on the card says *refused*, because nothing
+  was — but the card says the model did not answer, which card 1 does not have to, and the button
+  re-runs it.
 - **A failed confirmation confirms nothing, and card 3 comes back empty rather than wrong.** This
   is the one place the two steps' failures differ in what they cost: a personal-data confirmation
   that fails leaves every claimed value standing in the copy, which is a record held back; a scale
@@ -587,32 +794,47 @@ Four landings, and each of the first three is usable on its own.
 - A record refused by the store during a multi-conversation Submit stops that conversation and no
   other. The line beside it says the service's own words; the ones already written stay written;
   pressing Submit again rewrites every key rather than making second rows.
-- A sample with no calls at all is an empty claim set, not an error. Card 3 says *nothing to vary*,
-  which is a finished card — 30 of 40 rows in the corpus already have nothing left to find.
+- A sample with no calls at all opens no slot, which is not an error. Card 3 says *nothing to
+  vary*, and that is a finished card — 30 of the 40 rows in the corpus already carry no bare
+  argument value.
+- A mention the model attributes to a slot id no line carries is dropped on its own, and so is one
+  whose `text` is not in the review text. Neither costs the rest of the answer.
 
 ## Testing Strategy
 
-- `read_argument_claims` over a hand-written sample: both call spellings read; a call in the label
-  read as readily as one in a turn; an empty value left out; a value already standing as `<NAME_1>`
-  **claimed, and claimed under the argument that passed it**; two arguments passing one value
-  settled by first claim; a tool name lower-cased in the catalog claimed under its upper-cased
-  class. Each assertion proved by mutating the source and confirming exactly the expected claims
-  go red.
-- The model half with `complete` stubbed: a mention sharing no characters with the value is
-  claimed under the class the model proposed; an answer whose `text` is not in the review text is
-  dropped; a class the rule scan also claimed keeps the rule scan's; a failed call leaves the rule
-  scan's claims standing and writes one event. The prompt is pinned to carry the catalog, because
-  a slot silently unfilled is a model told less with nothing saying so.
+- `read_argument_slots` over a hand-written sample: both call spellings read; a call in the label
+  read as readily as one in a turn; an empty value opening no slot; one call with three arguments
+  opening three slots; two slots passing one value settled by the first; a tool name lower-cased in
+  the catalog claimed under its upper-cased class. Each assertion proved by mutating the source and
+  confirming exactly the expected slots go red.
+- **`name_slot_placeholders`, which is the test this step exists for.** A slot holding `một tỷ` and
+  `1000000000` answers **one** `<SVCCALCULATEINTEREST__PRINCIPAL_AMOUNT_1>` for both, and the
+  redacted record carries that one name in the turn and in the call. Pinned beside
+  `name_placeholders` over the same two values answering two names, so the two rules are legible
+  as two and a change to either is visible as one.
+- `keep_winning_spans`: a name claimed by both steps at one place ships as the scale class and
+  leaves `personal_data.spans` without it; a scale span enclosed by a longer personal-data span is
+  dropped by containment and the personal-data span is what ships, which is the case where priority
+  must *not* win; two spans that merely overlap settle by containment and never by step.
+- The model half with `complete` stubbed, and the two answers it is allowed to give pinned apart:
+  a mention sharing no characters with the value — *một tỷ* against `1000000000` — **joins** the
+  slot it names and comes back wearing that slot's placeholder; a mention the model qualifies
+  **opens** a second slot under `<TOOL>__<QUALIFIER>_<ARG>` and gets a placeholder of its own. Then
+  the refusals: an answer whose `slot` no line carries is dropped; an answer whose `text` is not in
+  the review text is dropped; a value the rule scan already holds is not added to the slot twice;
+  a failed call leaves the rule scan's slots standing and writes one event. The prompt is pinned to
+  carry the catalog, because a slot silently unfilled is a model told less with nothing saying so.
 - The confirmation with `complete` stubbed, over the same four rules the personal-data one is
   pinned to: an id no span carries is discarded, a span answered twice keeps the first answer, a
   span nothing came back about is not confirmed, and an empty span list asks nothing at all.
 - `name_argument_class` with and without a qualifier, pinned against the three the corpus already
   holds — `SEARCH_PLACE_27D__DISTRICT_LOCATION` is the one that proves the qualifier goes in front
   of the argument and not behind the tool.
-- **The chain, over one record**: a name that is both personal data and an argument ships as
-  `<SVCGETCONTACTINFO__NAME_1>`, the `personal_data` key still names its `<NAME_1>` span, and
-  `build_sample` stores the row rather than refusing it. Proved red first, by writing the test
-  against the precondition as it stands today.
+- **The merge, over one record**: a name that is both personal data and an argument ships as
+  `<SVCGETCONTACTINFO__NAME_1>`, the `personal_data` key does **not** carry a span for it, the
+  `scale` key does, and `build_sample` stores the row with `find_surviving_spans` unedited. The
+  same record run with the scale step skipped ships `<NAME_1>` and stores too — one sample, two
+  outcomes, which is what proves the steps are independent rather than ordered.
 - The full masking half over the sample § *Context* quotes: `SvcCalculateinterest`'s three
   arguments claimed, each one spanning the turn that said it, the call that passed it and the reply
   that repeated it, and the redacted copy reading as the corpus already stores it.
@@ -683,10 +905,15 @@ current truth.
 
 ## Open
 
-- **Whether `personal_data_class` should stop being an alias and become the field.** § *Design*
-  keeps it as a wire and storage name over `ValueSpan.value_class`, so nothing already written
-  moves. The alias is one line, and it is also one more thing a reader has to hold: the class says
-  `value_class`, a response says `personal_data_class`, and knowing they are one thing is
-  knowledge rather than code. Dropping it means rewriting that key in 102 spans across 40
-  documents of `tool_decision_record`, which is a morning's work today and more every week. It is
-  the only thing this spec leaves undecided.
+- **Whether card 1 should say that a row of its table is about to lose its place to card 3.** The
+  two cards draw one table and each holds its own claims, so a customer's name that is also an
+  argument appears on both — ticked on card 1 as `NAME`, ticked on card 3 as
+  `SVCGETCONTACTINFO__NAME` — and only the second one ships. Nothing on card 1 says so. Leaving it
+  is honest about what card 1 decided and silent about what happens to it; marking it means card 1
+  reading card 3's state, which is the first thing on this page that would. It is decided by
+  watching a reviewer use it once, not by argument, so it waits until the screen exists.
+- **Whether a generated draft should survive a reload.** Requirement 33 says a draft lives on the
+  page and nowhere else, and says so on the screen rather than leaving it to be discovered. Making
+  one durable is a second store for a thing the queue already stores, and Decision 5 is why it is
+  not that today. If reviewers lose work to a closed tab it becomes a queue row written on accept
+  and read back on open, which is one route that already exists.
